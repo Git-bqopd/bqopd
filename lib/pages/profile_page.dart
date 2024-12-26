@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../components/post_tile.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'upload_image_widget.dart'; // Ensure this import statement is correct
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -11,10 +12,10 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  // current logged in user
+  // Current logged in user
   User? currentUser = FirebaseAuth.instance.currentUser;
 
-  // future for user details
+  // Future for user details
   Future<DocumentSnapshot<Map<String, dynamic>>> getUserDetails() async {
     return await FirebaseFirestore.instance
         .collection("Users")
@@ -22,12 +23,13 @@ class _ProfilePageState extends State<ProfilePage> {
         .get();
   }
 
-  // stream for user posts
-  Stream<QuerySnapshot> getUserPostsStream() {
-    return FirebaseFirestore.instance
-        .collection('Posts')
-        .where('UserEmail', isEqualTo: currentUser!.email)
-        .snapshots();
+  // Future for user images
+  Future<List<String>> getUserImages() async {
+    final ListResult result = await FirebaseStorage.instance
+        .ref('uploads/${currentUser!.email}')
+        .listAll();
+    final List<String> urls = await Future.wait(result.items.map((ref) => ref.getDownloadURL()).toList());
+    return urls;
   }
 
   @override
@@ -37,40 +39,41 @@ class _ProfilePageState extends State<ProfilePage> {
       body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         future: getUserDetails(),
         builder: (context, snapshot) {
-          // loading..
+          // Loading
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(),
             );
           }
 
-          // error
+          // Error
           else if (snapshot.hasError) {
             return Text("Error: ${snapshot.error}");
           }
 
-          // data received
+          // Data received
           else if (snapshot.hasData) {
-            // extract data
+            // Extract data
             Map<String, dynamic>? user = snapshot.data!.data();
 
-            return StreamBuilder<QuerySnapshot>(
-              stream: getUserPostsStream(),
+            return FutureBuilder<List<String>>(
+              future: getUserImages(),
               builder: (context, snapshot) {
-                // show loading circle
+                // Show loading circle
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(),
                   );
                 }
 
-                // display any errors
+                // Display any errors
                 else if (snapshot.hasError) {
                   return Text("Error: ${snapshot.error}");
                 }
 
-                // get data
+                // Get data
                 else if (snapshot.hasData) {
+                  final imageUrls = snapshot.data!;
                   return ListView(
                     padding: EdgeInsets.zero,
                     children: [
@@ -78,10 +81,10 @@ class _ProfilePageState extends State<ProfilePage> {
                         color: Theme.of(context).colorScheme.surface,
                         child: Column(
                           children: [
-                            // back button
+                            // Back button
                             const BackButton(),
 
-                            // profile pic
+                            // Profile pic
                             Container(
                               decoration: BoxDecoration(
                                 color: Theme.of(context).colorScheme.primary,
@@ -96,7 +99,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                             const SizedBox(height: 25),
 
-                            // user name
+                            // User name
                             Text(
                               user!['username'] ?? '@username',
                               style: const TextStyle(
@@ -107,44 +110,59 @@ class _ProfilePageState extends State<ProfilePage> {
 
                             const SizedBox(height: 10),
 
-                            // email
+                            // Email
                             Text(
                               user['email'] ?? 'email',
                               style: TextStyle(color: Colors.grey[600]),
                             ),
 
                             const SizedBox(height: 25),
+
+                            // Upload Image button
+                            ElevatedButton(
+                              onPressed: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  builder: (context) => UploadImageWidget(),
+                                );
+                              },
+                              child: Text('Upload Image'),
+                            ),
+
+                            const SizedBox(height: 25),
                           ],
                         ),
                       ),
-                      ListView.builder(
+                      GridView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: snapshot.data!.docs.length,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 4.0,
+                          mainAxisSpacing: 4.0,
+                        ),
+                        itemCount: imageUrls.isEmpty ? 6 : imageUrls.length, // Show 6 placeholders if empty
                         itemBuilder: (context, index) {
-                          DocumentSnapshot post = snapshot.data!.docs[index];
-
-                          String postMessage = post['PostMessage'];
-                          String userEmail = post['UserEmail'];
-                          Timestamp timestamp = post['TimeStamp'];
-                          String postId = post.id;
-                          List<String> likes =
-                          List<String>.from(post['Likes'] ?? []);
-
-                          return PostTile(
-                            message: postMessage,
-                            userEmail: userEmail,
-                            timestamp: timestamp,
-                            postId: postId,
-                            likes: likes,
-                          );
+                          if (imageUrls.isEmpty) {
+                            // Placeholder images
+                            return Container(
+                              color: Colors.grey[300],
+                              child: Icon(Icons.image, color: Colors.grey[700]),
+                            );
+                          } else {
+                            // Actual uploaded images
+                            return Image.network(
+                              imageUrls[index],
+                              fit: BoxFit.cover,
+                            );
+                          }
                         },
                       ),
                     ],
                   );
                 } else {
-                  return const Text('No data');
+                  return const Text('No images found');
                 }
               },
             );

@@ -1,7 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../components/button.dart';
-import '../components/textfield.dart';
 import '../helper/helper_functions.dart';
 import 'package:bqopd/responsive/desktop_body.dart';
 import 'package:bqopd/responsive/mobile_body.dart';
