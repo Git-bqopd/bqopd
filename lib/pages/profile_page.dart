@@ -1,175 +1,64 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'upload_image_widget.dart'; // Ensure this import statement is correct
+import '../widgets/profile_widget.dart';
 
-class ProfilePage extends StatefulWidget {
+class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
-}
-
-class _ProfilePageState extends State<ProfilePage> {
-  // Current logged in user
-  User? currentUser = FirebaseAuth.instance.currentUser;
-
-  // Future for user details
-  Future<DocumentSnapshot<Map<String, dynamic>>> getUserDetails() async {
-    return await FirebaseFirestore.instance
-        .collection("Users")
-        .doc(currentUser!.email)
-        .get();
-  }
-
-  // Future for user images
-  Future<List<String>> getUserImages() async {
-    final ListResult result = await FirebaseStorage.instance
-        .ref('uploads/${currentUser!.email}')
-        .listAll();
-    final List<String> urls = await Future.wait(result.items.map((ref) => ref.getDownloadURL()).toList());
-    return urls;
-  }
-
-  @override
   Widget build(BuildContext context) {
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        future: getUserDetails(),
-        builder: (context, snapshot) {
-          // Loading
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
+      backgroundColor: Colors.grey[200],
+      body: SafeArea(
+        child: GridView.count(
+          crossAxisCount: 2,
+          padding: const EdgeInsets.all(8.0),
+          mainAxisSpacing: 8.0,
+          crossAxisSpacing: 8.0,
+          childAspectRatio: 5 / 8,
+          children: <Widget>[
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12.0),
+                child: const ProfileWidget(),
+              ),
+            ),
 
-          // Error
-          else if (snapshot.hasError) {
-            return Text("Error: ${snapshot.error}");
-          }
+            _buildImagePlaceholder(Colors.blueGrey, 'Image 1'),
+            _buildImagePlaceholder(Colors.teal, 'Image 2'),
+            _buildImagePlaceholder(Colors.amber, 'Image 3'),
+            _buildImagePlaceholder(Colors.deepOrange, 'Image 4'),
+            _buildImagePlaceholder(Colors.purple, 'Image 5'),
+          ],
+        ),
+      ),
+    );
+  }
 
-          // Data received
-          else if (snapshot.hasData) {
-            // Extract data
-            Map<String, dynamic>? user = snapshot.data!.data();
-
-            return FutureBuilder<List<String>>(
-              future: getUserImages(),
-              builder: (context, snapshot) {
-                // Show loading circle
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
-                // Display any errors
-                else if (snapshot.hasError) {
-                  return Text("Error: ${snapshot.error}");
-                }
-
-                // Get data
-                else if (snapshot.hasData) {
-                  final imageUrls = snapshot.data!;
-                  return ListView(
-                    padding: EdgeInsets.zero,
-                    children: [
-                      Container(
-                        color: Theme.of(context).colorScheme.surface,
-                        child: Column(
-                          children: [
-                            // Back button
-                            const BackButton(),
-
-                            // Profile pic
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              padding: const EdgeInsets.all(25),
-                              child: const Icon(
-                                Icons.person,
-                                size: 64,
-                              ),
-                            ),
-
-                            const SizedBox(height: 25),
-
-                            // User name
-                            Text(
-                              user!['username'] ?? '@username',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-
-                            const SizedBox(height: 10),
-
-                            // Email
-                            Text(
-                              user['email'] ?? 'email',
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-
-                            const SizedBox(height: 25),
-
-                            // Upload Image button
-                            ElevatedButton(
-                              onPressed: () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  builder: (context) => UploadImageWidget(),
-                                );
-                              },
-                              child: Text('Upload Image'),
-                            ),
-
-                            const SizedBox(height: 25),
-                          ],
-                        ),
-                      ),
-                      GridView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 4.0,
-                          mainAxisSpacing: 4.0,
-                        ),
-                        itemCount: imageUrls.isEmpty ? 6 : imageUrls.length, // Show 6 placeholders if empty
-                        itemBuilder: (context, index) {
-                          if (imageUrls.isEmpty) {
-                            // Placeholder images
-                            return Container(
-                              color: Colors.grey[300],
-                              child: Icon(Icons.image, color: Colors.grey[700]),
-                            );
-                          } else {
-                            // Actual uploaded images
-                            return Image.network(
-                              imageUrls[index],
-                              fit: BoxFit.cover,
-                            );
-                          }
-                        },
-                      ),
-                    ],
-                  );
-                } else {
-                  return const Text('No images found');
-                }
-              },
-            );
-          } else {
-            return const Text('No data');
-          }
-        },
+  // Helper widget for image placeholders (same as in LoginPage)
+  Widget _buildImagePlaceholder(Color color, String text) {
+    // This container will be forced into the 5/8 aspect ratio by the GridView
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Text(
+          text,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }

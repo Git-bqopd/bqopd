@@ -7,7 +7,6 @@ import 'auth/auth.dart';
 import 'auth/login_or_register.dart';
 import 'pages/home_page.dart';
 import 'pages/profile_page.dart';
-import 'pages/sandbox.dart';
 import 'pages/users_page.dart';
 import 'theme/dark_mode.dart';
 import 'theme/light_mode.dart';
@@ -40,7 +39,6 @@ class MyApp extends StatelessWidget {
             '/profile_page': (context) => const ProfilePage(),
             '/game_page': (context) => const MooScreen(),
             '/user_page': (context) => const UserPage(),
-            '/sandbox': (context) => const Sandbox(),
         },
       ),
     );

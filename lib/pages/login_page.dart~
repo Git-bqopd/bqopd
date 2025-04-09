@@ -38,31 +38,21 @@ class LoginPage extends StatelessWidget {
                 ),
               ),
             ),
-            _buildImageAssetPlaceholder('assets/THREE - 01.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 02.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 03.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 04.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 05.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 06.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 07.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 08.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 09.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 10.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 11.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 12.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 13.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 14.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 15.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 16.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 17.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 18.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 19.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 20.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 21.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 22.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 23.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 24.jpg'),
-            _buildImageAssetPlaceholder('assets/THREE - 25.jpg'),
+
+            // --- Cell 2: Image Asset Placeholder ---
+            _buildImageAssetPlaceholder('assets/CON - 01.jpg'), // Use new helper
+
+            // --- Cell 3: Image Asset Placeholder ---
+            _buildImageAssetPlaceholder('assets/CON - 02.jpg'), // Use new helper
+
+            // --- Cell 4: Image Asset Placeholder ---
+            _buildImageAssetPlaceholder('assets/CON - 03.jpg'), // Use new helper
+
+            // --- Cell 5: Original Color Placeholder ---
+            _buildColorPlaceholder(Colors.deepOrange, 'Image 4'), // Use original helper
+
+            // --- Cell 6: Original Color Placeholder ---
+            _buildColorPlaceholder(Colors.purple, 'Image 5'), // Use original helper
           ],
         ),
       ),
