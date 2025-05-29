@@ -1,117 +1,115 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart'; // For TapGestureRecognizer
+import 'dart:math' as Math; // For Math.min in _FanzineListItem
 import 'package:flutter/material.dart';
-// Import the My Info page to navigate to it
-import '../pages/my_info_page.dart'; // Adjust path if needed
+import 'package:cloud_firestore/cloud_firestore.dart';
+// Import FanzineReaderPage for navigation
+import '../pages/fanzine_reader_page.dart'; // Adjust path if needed
 
-// This widget now primarily displays the username and a link to more info.
-// It includes its own background color and rounded corners.
+// Special constant for _FanzineListItem, if needed (not strictly required if it's simple)
+// const String _authorDetailsPlaceholder = "##AUTHOR_DETAILS_PLACEHOLDER##"; // Not used in this version of item
+
 class ProfileWidget extends StatefulWidget {
-  const ProfileWidget({super.key});
+  final String userId;
+  final String username; // Username is passed directly
+
+  const ProfileWidget({
+    super.key,
+    required this.userId,
+    required this.username,
+  });
 
   @override
   State<ProfileWidget> createState() => _ProfileWidgetState();
 }
 
 class _ProfileWidgetState extends State<ProfileWidget> {
-  final User? currentUser = FirebaseAuth.instance.currentUser;
-
-  // Simplified state: only need username and loading state
-  String _username = '';
-  bool _isLoadingData = true;
-  String? _errorMessage; // Optional: for error display
+  Stream<QuerySnapshot>? _userFanzinesStream;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _initFanzinesStream();
   }
 
-  // --- Simplified Load User Data Method ---
-  Future<void> _loadUserData() async {
-    // ... (load user data logic remains the same) ...
-    if (!mounted) return;
-    setState(() { _isLoadingData = true; _errorMessage = null; });
-    if (currentUser != null) {
-      try {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.email).get();
-        if (userDoc.exists && mounted) {
-          final data = userDoc.data() as Map<String, dynamic>;
-          setStateIfMounted(() { _username = data['username'] ?? 'N/A'; });
-        } else if (mounted) {
-          print("User document not found for ${currentUser!.email}");
-          setStateIfMounted(() { _username = 'N/A'; });
-        }
-      } catch (e) {
-        print("Error loading username: $e");
-        if(mounted) { setStateIfMounted(() { _username = 'Error'; }); }
-      } finally { setStateIfMounted(() { _isLoadingData = false; }); }
-    } else {
-      print("Error: No current user found.");
-      setStateIfMounted(() { _username = 'N/A'; _isLoadingData = false; });
-    }
+  void _initFanzinesStream() {
+    // No need for setState here as StreamBuilder will react to stream changes
+    _userFanzinesStream = FirebaseFirestore.instance
+        .collection('fanzines')
+        .where('authorID', isEqualTo: widget.userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+    print("Fanzine stream initialized for user ID: ${widget.userId}");
   }
 
-  // Helper to avoid multiple mounted checks
-  void setStateIfMounted(VoidCallback fn) {
-    if (mounted) { setState(fn); }
-  }
-
-  // --- Navigate to My Info Page Method ---
-  void goToMyInfoPage() {
-    Navigator.push( context, MaterialPageRoute(builder: (context) => const MyInfoPage()), );
-  }
-
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  // --- Simplified Build Method ---
   @override
   Widget build(BuildContext context) {
-    final linkStyle = TextStyle( fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, );
-    final borderRadius = BorderRadius.circular(12.0); // Consistent radius
+    final borderRadius = BorderRadius.circular(12.0);
 
-    // *** ADDED Container for background and rounded corners ***
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF1B255), // Set background color
+        color: const Color(0xFFF1B255), // Background color from original ProfileWidget
         borderRadius: borderRadius,
       ),
-      // *** ADDED ClipRRect to ensure content respects corners ***
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: Center( // Center the content vertically and horizontally
-          child: Padding(
-            padding: const EdgeInsets.all(25.0), // Keep some padding
-            child: _isLoadingData
-                ? const CircularProgressIndicator()
-                : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Display Username
-                Text(
-                  'Username: $_username',
-                  style: const TextStyle(fontSize: 16),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0), // Adjusted padding
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Display Username (passed via constructor)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  widget.username,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 20), // Spacing
-
-                // Link to My Info Page
-                RichText(
-                  text: TextSpan(
-                    text: '[my info]', // Link text
-                    style: linkStyle,
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = goToMyInfoPage, // Navigate on tap
-                  ),
+              ),
+              const Divider(color: Colors.black54),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  "${widget.username}'s Fanzines",
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87),
+                  textAlign: TextAlign.center,
                 ),
-              ],
-            ),
+              ),
+              Expanded( // Fanzine list takes remaining space
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: _userFanzinesStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator(color: Colors.black54,));
+                    }
+                    if (snapshot.hasError) {
+                      print("Error in StreamBuilder for user ${widget.userId}: ${snapshot.error}");
+                      return Center(child: Text('Error loading fanzines: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+                    }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Center(child: Text("No fanzines found for this user.", style: TextStyle(color: Colors.black54)));
+                    }
+
+                    final fanzines = snapshot.data!.docs;
+
+                    return GridView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 8.0,
+                        mainAxisSpacing: 8.0,
+                        childAspectRatio: 0.75, // Same as MyInfoWidget's fanzine list
+                      ),
+                      itemCount: fanzines.length,
+                      itemBuilder: (context, index) {
+                        // Using the copied _FanzineListItem logic directly here
+                        return _FanzineListItem(fanzineDoc: fanzines[index]);
+                      },
+                      // Removed scrollDirection: Axis.horizontal, GridView in Column usually scrolls vertically
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -119,10 +117,80 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   }
 }
 
-// Helper function (can be removed if not used for errors)
-void displayMessageToUser(String message, BuildContext context) {
-  // ... (display message logic remains the same) ...
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).removeCurrentSnackBar();
-  ScaffoldMessenger.of(context).showSnackBar( SnackBar( content: Text(message), duration: const Duration(seconds: 3), ), );
+// --- Copied _FanzineListItem Widget ---
+// (Copied from my_info_widget.dart and adapted for ProfileWidget context)
+class _FanzineListItem extends StatelessWidget {
+  final QueryDocumentSnapshot fanzineDoc;
+
+  const _FanzineListItem({required this.fanzineDoc}); // Removed key
+
+  @override
+  Widget build(BuildContext context) {
+    final data = fanzineDoc.data() as Map<String, dynamic>;
+    final String title = data['title'] ?? 'Untitled Fanzine';
+    final String? coverImageURL = data['coverImageURL'];
+    final String fanzineId = fanzineDoc.id;
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FanzineReaderPage( // Ensure FanzineReaderPage is imported
+              fanzineID: fanzineId,
+              fanzineTitle: title,
+            ),
+          ),
+        );
+      },
+      child: Card(
+        elevation: 3.0,
+        clipBehavior: Clip.antiAlias, 
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: (coverImageURL != null && coverImageURL.isNotEmpty)
+                  ? Image.network(
+                      coverImageURL,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.0,
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: Center(child: Icon(Icons.broken_image_rounded, color: Colors.grey[600], size: 40)),
+                        );
+                      },
+                    )
+                  : Container( 
+                      color: Colors.grey[300],
+                      child: Center(child: Icon(Icons.collections_bookmark_rounded, color: Colors.grey[600], size: 40)),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

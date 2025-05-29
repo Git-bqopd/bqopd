@@ -76,6 +76,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
       await usersCollection.doc(userCredential!.user!.email).set({
         'email': userCredential.user!.email,
         'username': userNameController.text.trim(),
+        'uid': userCredential.user!.uid, // <<< ADDED Firebase Auth UID
         'createdAt': FieldValue.serverTimestamp(),
       });
     } else {
