@@ -45,6 +45,7 @@ dependencies:
   flutter_floating_bottom_bar: ^1.2.0
   flutter_lints: ^5.0.0
   file_picker: ^10.0.0
+  cached_network_image: ^3.3.1
   # share_plus: ^9.0.0 # Reverted share_plus package
 
 dev_dependencies:
