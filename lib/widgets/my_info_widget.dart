@@ -122,42 +122,40 @@ class _MyInfoWidgetState extends State<MyInfoWidget> {
                   const SizedBox(height: 10),
 
                   // *** Link 3: Upload Image ***
-                  // *** Link 3: Upload Image ***
-                  // Modified to be an ElevatedButton for now
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondary, // Example color
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: () {
-                      if (currentUser?.uid == null && currentUser?.email == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('You must be logged in to upload images.')),
-                        );
-                        return;
-                      }
-                      // Use UID if available, otherwise fallback to email for userId.
-                      // Firebase UID is the preferred unique identifier for users.
-                      final String userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
+                  RichText(
+                    text: TextSpan(
+                      text: 'upload image', // Changed text
+                      style: linkStyle, // Applied same style as other links
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () {
+                          if (currentUser?.uid == null && currentUser?.email == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('You must be logged in to upload images.')),
+                            );
+                            return;
+                          }
+                          // Use UID if available, otherwise fallback to email for userId.
+                          // Firebase UID is the preferred unique identifier for users.
+                          final String userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
 
-                      print('Upload Image button tapped by user: $userId');
-                      showDialog(
-                        context: context,
-                        barrierDismissible: false, // User must tap button to close
-                        builder: (BuildContext dialogContext) {
-                          return ImageUploadModal(userId: userId);
+                          print('Upload Image link tapped by user: $userId'); // Updated log message
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false, // User must tap button to close
+                            builder: (BuildContext dialogContext) {
+                              return ImageUploadModal(userId: userId);
+                            },
+                          ).then((success) {
+                            if (success == true) {
+                              // Optional: Refresh data or show a confirmation that's not a snackbar
+                              print("Modal closed with success");
+                            } else {
+                              // Optional: Handle cancellation or failure if needed
+                              print("Modal closed without explicit success");
+                            }
+                          });
                         },
-                      ).then((success) {
-                        if (success == true) {
-                          // Optional: Refresh data or show a confirmation that's not a snackbar
-                          print("Modal closed with success");
-                        } else {
-                          // Optional: Handle cancellation or failure if needed
-                           print("Modal closed without explicit success");
-                        }
-                      });
-                    },
-                    child: const Text('Upload Image'),
+                    ),
                   ),
                 ],
               ),
