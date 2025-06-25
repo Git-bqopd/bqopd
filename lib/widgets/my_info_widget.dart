@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 // Import the pages to navigate to
 import '../pages/profile_page.dart'; // <<< CHECK THIS PATH
 import '../pages/edit_info_page.dart'; // <<< CHECK THIS PATH
+import 'image_upload_modal.dart'; // Import the modal
 
 class MyInfoWidget extends StatefulWidget {
   const MyInfoWidget({super.key});
@@ -121,10 +122,43 @@ class _MyInfoWidgetState extends State<MyInfoWidget> {
                   const SizedBox(height: 10),
 
                   // *** Link 3: Upload Image ***
-                  RichText( text: TextSpan( text: 'upload image', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
-                    print('Upload image tapped (placeholder)');
-                    ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Upload not implemented yet.')), );
-                  }, ), ),
+                  // *** Link 3: Upload Image ***
+                  // Modified to be an ElevatedButton for now
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.secondary, // Example color
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () {
+                      if (currentUser?.uid == null && currentUser?.email == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('You must be logged in to upload images.')),
+                        );
+                        return;
+                      }
+                      // Use UID if available, otherwise fallback to email for userId.
+                      // Firebase UID is the preferred unique identifier for users.
+                      final String userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
+
+                      print('Upload Image button tapped by user: $userId');
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false, // User must tap button to close
+                        builder: (BuildContext dialogContext) {
+                          return ImageUploadModal(userId: userId);
+                        },
+                      ).then((success) {
+                        if (success == true) {
+                          // Optional: Refresh data or show a confirmation that's not a snackbar
+                          print("Modal closed with success");
+                        } else {
+                          // Optional: Handle cancellation or failure if needed
+                           print("Modal closed without explicit success");
+                        }
+                      });
+                    },
+                    child: const Text('Upload Image'),
+                  ),
                 ],
               ),
             ],
