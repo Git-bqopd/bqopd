@@ -95,7 +95,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
               children: [
                 // Display Username
                 Text(
-                  'Username: $_username',
+                  'username: $_username',
                   style: const TextStyle(fontSize: 16),
                   textAlign: TextAlign.center,
                 ),
@@ -104,7 +104,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                 // Link to My Info Page
                 RichText(
                   text: TextSpan(
-                    text: '[my info]', // Link text
+                    text: 'my info', // Link text
                     style: linkStyle,
                     recognizer: TapGestureRecognizer()
                       ..onTap = goToMyInfoPage, // Navigate on tap

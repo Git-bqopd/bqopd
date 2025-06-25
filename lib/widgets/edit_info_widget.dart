@@ -166,29 +166,28 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               // mainAxisSize: MainAxisSize.min,
               children: [
                 // --- Header ---
-                Text( 'Edit Your Profile', style: TextStyle( fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, ), ),
+                Text( 'edit your profile', style: TextStyle( fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, ), ),
                 const SizedBox(height: 20),
 
                 // --- All the TextFields ---
                 // (Code for TextFields remains exactly the same)
-                TextField( controller: emailController, enabled: false, decoration: defaultDecoration.copyWith( hintText: "Email", fillColor: Colors.grey[200], ), style: TextStyle(color: Colors.grey[700]), ), const SizedBox(height: 10),
+                TextField( controller: emailController, enabled: false, decoration: defaultDecoration.copyWith( hintText: "email", fillColor: Colors.grey[200], ), style: TextStyle(color: Colors.grey[700]), ), const SizedBox(height: 10),
                 MyTextField( controller: userNameController, hintText: "Username", obscureText: false, ), const SizedBox(height: 10),
-                TextField( controller: bioController, maxLines: 3, decoration: defaultDecoration.copyWith( hintText: "Bio (Tell us about yourself!)", ), keyboardType: TextInputType.multiline, ), const SizedBox(height: 25),
-                Text( 'Mailing Address', style: TextStyle( fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, ), ), const SizedBox(height: 15),
-                TextField( controller: firstNameController, decoration: defaultDecoration.copyWith(hintText: "First Name"), keyboardType: TextInputType.name, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
-                TextField( controller: lastNameController, decoration: defaultDecoration.copyWith(hintText: "Last Name"), keyboardType: TextInputType.name, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
-                TextField( controller: street1Controller, decoration: defaultDecoration.copyWith(hintText: "Street Address 1"), keyboardType: TextInputType.streetAddress, ), const SizedBox(height: 10),
-                TextField( controller: street2Controller, decoration: defaultDecoration.copyWith(hintText: "Street Address 2 (Optional)"), keyboardType: TextInputType.streetAddress, ), const SizedBox(height: 10),
-                TextField( controller: cityController, decoration: defaultDecoration.copyWith(hintText: "City"), keyboardType: TextInputType.text, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
-                TextField( controller: stateController, decoration: defaultDecoration.copyWith(hintText: "State / Province / Region"), keyboardType: TextInputType.text, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
-                TextField( controller: zipController, decoration: defaultDecoration.copyWith(hintText: "ZIP / Postal Code"), keyboardType: TextInputType.streetAddress, ), const SizedBox(height: 10),
-                TextField( controller: countryController, decoration: defaultDecoration.copyWith(hintText: "Country"), keyboardType: TextInputType.text, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 25),
+                TextField( controller: bioController, maxLines: 3, decoration: defaultDecoration.copyWith( hintText: "Bio (tell us about yourself!)", ), keyboardType: TextInputType.multiline, ), const SizedBox(height: 25),
+                Text( 'mailing address', style: TextStyle( fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, ), ), const SizedBox(height: 15),
+                TextField( controller: firstNameController, decoration: defaultDecoration.copyWith(hintText: "first Name"), keyboardType: TextInputType.name, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
+                TextField( controller: lastNameController, decoration: defaultDecoration.copyWith(hintText: "last Name"), keyboardType: TextInputType.name, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
+                TextField( controller: street1Controller, decoration: defaultDecoration.copyWith(hintText: "street address 1"), keyboardType: TextInputType.streetAddress, ), const SizedBox(height: 10),
+                TextField( controller: street2Controller, decoration: defaultDecoration.copyWith(hintText: "street address 2 (Optional)"), keyboardType: TextInputType.streetAddress, ), const SizedBox(height: 10),
+                TextField( controller: cityController, decoration: defaultDecoration.copyWith(hintText: "city"), keyboardType: TextInputType.text, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
+                TextField( controller: stateController, decoration: defaultDecoration.copyWith(hintText: "state"), keyboardType: TextInputType.text, textCapitalization: TextCapitalization.words, ), const SizedBox(height: 10),
+                TextField( controller: zipController, decoration: defaultDecoration.copyWith(hintText: "zip / postal code"), keyboardType: TextInputType.streetAddress, ), const SizedBox(height: 25),
 
                 // --- Buttons ---
                 // (Code for Buttons remains exactly the same)
-                MyButton( text: _isSaving ? "Saving..." : "Save Profile", onTap: _isSaving ? null : saveProfile, ), const SizedBox(height: 15),
-                MyButton( text: "My Info", onTap: goToMyInfoPage, ), const SizedBox(height: 15),
-                MyButton( text: "Logout", onTap: logout, ),
+                MyButton( text: _isSaving ? "saving..." : "save profile", onTap: _isSaving ? null : saveProfile, ), const SizedBox(height: 15),
+                MyButton( text: "my info", onTap: goToMyInfoPage, ), const SizedBox(height: 15),
+                MyButton( text: "logout", onTap: logout, ),
 
                 // *** REMOVED Spacer ***
                 // const Spacer(), // Not needed with SingleChildScrollView

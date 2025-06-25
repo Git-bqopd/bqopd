@@ -94,7 +94,7 @@ class _MyInfoWidgetState extends State<MyInfoWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text('Username: $_username'), const SizedBox(height: 4), Text('Email: $_email'), const SizedBox(height: 12),
-                  if (_buildFormattedAddress().isNotEmpty) ...[ const Text('Address:', style: TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(_buildFormattedAddress()), ]
+                  if (_buildFormattedAddress().isNotEmpty) ...[ const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(_buildFormattedAddress()), ]
                   else ... [ const Text('Address: Not Provided'), ]
                 ],
               ),),
@@ -106,14 +106,14 @@ class _MyInfoWidgetState extends State<MyInfoWidget> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // *** Link 1: View Profile ***
-                  RichText( text: TextSpan( text: '[view profile]', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
+                  RichText( text: TextSpan( text: 'view profile', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
                     print('View Profile tapped');
                     Navigator.push( context, MaterialPageRoute(builder: (context) => const ProfilePage()), ); // Navigates to ProfilePage
                   }, ), ),
                   const SizedBox(height: 10),
 
                   // *** Link 2: Edit Info ***
-                  RichText( text: TextSpan( text: '[edit info]', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
+                  RichText( text: TextSpan( text: 'edit info', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
                     print('Edit info tapped');
                     // Ensure EditInfoPage is defined and imported correctly
                     Navigator.push( context, MaterialPageRoute(builder: (context) => const EditInfoPage()), ); // Navigates to EditInfoPage
@@ -121,7 +121,7 @@ class _MyInfoWidgetState extends State<MyInfoWidget> {
                   const SizedBox(height: 10),
 
                   // *** Link 3: Upload Image ***
-                  RichText( text: TextSpan( text: '[upload image]', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
+                  RichText( text: TextSpan( text: 'upload image', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
                     print('Upload image tapped (placeholder)');
                     ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Upload not implemented yet.')), );
                   }, ), ),
