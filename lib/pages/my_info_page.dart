@@ -44,7 +44,7 @@ class MyInfoPage extends StatelessWidget {
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('images')
-                      .where('uploaderId', isEqualTo: userEmail)
+                      .where('uploaderId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
                       .orderBy('timestamp', descending: true) // Optional: order by timestamp
                       .snapshots(),
                   builder: (context, snapshot) {
@@ -52,22 +52,19 @@ class MyInfoPage extends StatelessWidget {
                       return const Center(child: CircularProgressIndicator());
                     }
                     if (snapshot.hasError) {
-                      return Center(child: Text('Error: ${snapshot.error}'));
-                    }
+                      print('🔥 Firestore error: ${snapshot.error}');
+                      return Text('Something went wrong');                    }
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Text(
-                            "You haven't uploaded anything yet.",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 16),
-                          ),
-                        ),
-                      );
+                      return const Center(child: Text("No images uploaded yet."));
                     }
 
                     final images = snapshot.data!.docs;
+
+                    print('🖼️ Found ${images.length} images');
+                    for (var doc in images) {
+                      final data = doc.data() as Map<String, dynamic>?;
+                      print('📷 ${data?['fileUrl']}');
+                    }
 
                     return GridView.count(
                       crossAxisCount: 3, // Three columns
@@ -77,8 +74,8 @@ class MyInfoPage extends StatelessWidget {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       children: images.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final imageUrl = data['fileUrl'] as String?;
+                        final data = doc.data() as Map<String, dynamic>?;
+                        final imageUrl = data?['fileUrl'] as String?;
                         // final title = data['title'] as String? ?? 'Untitled'; // If you want to display title
 
                         if (imageUrl == null || imageUrl.isEmpty) {
@@ -91,6 +88,8 @@ class MyInfoPage extends StatelessWidget {
                             child: const Center(child: Icon(Icons.broken_image, color: Colors.white)),
                           );
                         }
+
+                        print('📸 Attempting to load: $imageUrl');
 
                         return ClipRRect(
                           borderRadius: BorderRadius.circular(12.0), // Apply rounding to image
@@ -108,6 +107,8 @@ class MyInfoPage extends StatelessWidget {
                               );
                             },
                             errorBuilder: (BuildContext context, Object exception, StackTrace? stackTrace) {
+                              print('❌ Image failed to load: $imageUrl');
+                              print('⚠️ Exception: $exception');
                               return Container(
                                 decoration: BoxDecoration(
                                   color: Colors.grey[300],
