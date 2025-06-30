@@ -1,26 +1,27 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart'; // For TapGestureRecognizer
+import 'package:flutter/gestures.dart'; // Required for TapGestureRecognizer
 import 'package:flutter/material.dart';
-// Import the My Info page to navigate to it
-import '../pages/my_info_page.dart'; // Adjust path if needed
+// Import the pages to navigate to
+import '../pages/fanzine_page.dart'; // <<< CHECK THIS PATH
+import '../pages/edit_info_page.dart'; // <<< CHECK THIS PATH
+import 'image_upload_modal.dart'; // Import the modal
 
-// This widget now primarily displays the username and a link to more info.
-// It includes its own background color and rounded corners.
-class ProfileWidget extends StatefulWidget {
-  const ProfileWidget({super.key});
+class MyInfoWidget extends StatefulWidget {
+  const MyInfoWidget({super.key});
 
   @override
-  State<ProfileWidget> createState() => _ProfileWidgetState();
+  State<MyInfoWidget> createState() => _MyInfoWidgetState();
 }
 
-class _ProfileWidgetState extends State<ProfileWidget> {
+class _MyInfoWidgetState extends State<MyInfoWidget> {
+  // All logic and state variables remain the same as v3
   final User? currentUser = FirebaseAuth.instance.currentUser;
-
-  // Simplified state: only need username and loading state
-  String _username = '';
-  bool _isLoadingData = true;
-  String? _errorMessage; // Optional: for error display
+  String _username = ''; String _email = ''; String _firstName = '';
+  String _lastName = ''; String _street1 = ''; String _street2 = '';
+  String _city = ''; String _stateName = ''; String _zipCode = '';
+  String _country = '';
+  bool _isLoading = true; String? _errorMessage;
 
   @override
   void initState() {
@@ -28,101 +29,140 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     _loadUserData();
   }
 
-  // --- Simplified Load User Data Method ---
   Future<void> _loadUserData() async {
-    // ... (load user data logic remains the same) ...
+    // ... load user data logic ...
     if (!mounted) return;
-    setState(() { _isLoadingData = true; _errorMessage = null; });
+    setState(() { _isLoading = true; _errorMessage = null; });
     if (currentUser != null) {
       try {
         final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.email).get();
         if (userDoc.exists && mounted) {
           final data = userDoc.data() as Map<String, dynamic>;
-          setStateIfMounted(() { _username = data['username'] ?? 'N/A'; });
+          setState(() {
+            _email = currentUser!.email ?? ''; _username = data['username'] ?? '';
+            _firstName = data['firstName'] ?? ''; _lastName = data['lastName'] ?? '';
+            _street1 = data['street1'] ?? ''; _street2 = data['street2'] ?? '';
+            _city = data['city'] ?? ''; _stateName = data['state'] ?? '';
+            _zipCode = data['zipCode'] ?? ''; _country = data['country'] ?? '';
+          });
         } else if (mounted) {
-          print("User document not found for ${currentUser!.email}");
-          setStateIfMounted(() { _username = 'N/A'; });
+          setState(() { _email = currentUser!.email ?? 'N/A'; _errorMessage = "Profile data not found."; });
         }
       } catch (e) {
-        print("Error loading username: $e");
-        if(mounted) { setStateIfMounted(() { _username = 'Error'; }); }
-      } finally { setStateIfMounted(() { _isLoadingData = false; }); }
+        print("Error loading user data: $e");
+        if (mounted) { setState(() { _errorMessage = "Error loading data."; }); }
+      } finally { if (mounted) { setState(() { _isLoading = false; }); } }
     } else {
       print("Error: No current user found.");
-      setStateIfMounted(() { _username = 'N/A'; _isLoadingData = false; });
+      if (mounted) { setState(() { _errorMessage = "Not logged in."; _isLoading = false; }); }
     }
   }
 
-  // Helper to avoid multiple mounted checks
-  void setStateIfMounted(VoidCallback fn) {
-    if (mounted) { setState(fn); }
+  String _buildFormattedAddress() {
+    // ... address formatting logic ...
+    List<String> parts = [];
+    if (_firstName.isNotEmpty || _lastName.isNotEmpty) { parts.add('$_firstName $_lastName'.trim()); }
+    if (_street1.isNotEmpty) parts.add(_street1); if (_street2.isNotEmpty) parts.add(_street2);
+    String cityStateZip = '$_city, $_stateName $_zipCode'.trim();
+    cityStateZip = cityStateZip.replaceAll(RegExp(r'^,\s*'), '').replaceAll(RegExp(r'\s*,\s*$'), '').trim();
+    if (cityStateZip.isNotEmpty && cityStateZip != ',') parts.add(cityStateZip);
+    if (_country.isNotEmpty) parts.add(_country);
+    return parts.join('\n');
   }
 
-  // --- Navigate to My Info Page Method ---
-  void goToMyInfoPage() {
-    Navigator.push( context, MaterialPageRoute(builder: (context) => const MyInfoPage()), );
-  }
-
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  // --- Simplified Build Method ---
   @override
   Widget build(BuildContext context) {
+    // ... linkStyle and borderRadius definitions ...
     final linkStyle = TextStyle( fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, );
-    final borderRadius = BorderRadius.circular(12.0); // Consistent radius
+    final borderRadius = BorderRadius.circular(12.0);
 
-    // *** ADDED Container for background and rounded corners ***
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1B255), // Set background color
-        borderRadius: borderRadius,
-      ),
-      // *** ADDED ClipRRect to ensure content respects corners ***
+      // ... Container decoration ...
+      decoration: BoxDecoration( color: const Color(0xFFF1B255), borderRadius: borderRadius, ),
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: Center( // Center the content vertically and horizontally
-          child: Padding(
-            padding: const EdgeInsets.all(25.0), // Keep some padding
-            child: _isLoadingData
-                ? const CircularProgressIndicator()
-                : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Display Username
-                Text(
-                  'username: $_username',
-                  style: const TextStyle(fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20), // Spacing
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _errorMessage != null
+              ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
+              : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- Left Side: Profile Info ---
+              Expanded( child: Column( /* ... profile info Text widgets ... */
+                crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Username: $_username'), const SizedBox(height: 4), Text('Email: $_email'), const SizedBox(height: 12),
+                  if (_buildFormattedAddress().isNotEmpty) ...[ const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(_buildFormattedAddress()), ]
+                  else ... [ const Text('Address: Not Provided'), ]
+                ],
+              ),),
+              const SizedBox(width: 20),
 
-                // Link to My Info Page
-                RichText(
-                  text: TextSpan(
-                    text: 'my info', // Link text
-                    style: linkStyle,
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = goToMyInfoPage, // Navigate on tap
+              // --- Right Side: Action Links ---
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // *** Link 1: View Profile ***
+                  RichText( text: TextSpan( text: 'view profile', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
+                    print('View Profile tapped');
+                    Navigator.push( context, MaterialPageRoute(builder: (context) => const FanzinePage()), ); // Navigates to ProfilePage
+                  }, ), ),
+                  const SizedBox(height: 10),
+
+                  // *** Link 2: Edit Info ***
+                  RichText( text: TextSpan( text: 'edit info', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
+                    print('Edit info tapped');
+                    // Ensure EditInfoPage is defined and imported correctly
+                    Navigator.push( context, MaterialPageRoute(builder: (context) => const EditInfoPage()), ); // Navigates to EditInfoPage
+                  }, ), ),
+                  const SizedBox(height: 10),
+
+                  // *** Link 3: Upload Image ***
+                  RichText(
+                    text: TextSpan(
+                      text: 'upload image', // Changed text
+                      style: linkStyle, // Applied same style as other links
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () {
+                          if (currentUser?.uid == null && currentUser?.email == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('You must be logged in to upload images.')),
+                            );
+                            return;
+                          }
+                          // Use UID if available, otherwise fallback to email for userId.
+                          // Firebase UID is the preferred unique identifier for users.
+                          final String userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
+
+                          print('Upload Image link tapped by user: $userId'); // Updated log message
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false, // User must tap button to close
+                            builder: (BuildContext dialogContext) {
+                              return ImageUploadModal(userId: userId);
+                            },
+                          ).then((success) {
+                            if (success == true) {
+                              // Optional: Refresh data or show a confirmation that's not a snackbar
+                              print("Modal closed with success");
+                            } else {
+                              // Optional: Handle cancellation or failure if needed
+                              print("Modal closed without explicit success");
+                            }
+                          });
+                        },
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
-}
-
-// Helper function (can be removed if not used for errors)
-void displayMessageToUser(String message, BuildContext context) {
-  // ... (display message logic remains the same) ...
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).removeCurrentSnackBar();
-  ScaffoldMessenger.of(context).showSnackBar( SnackBar( content: Text(message), duration: const Duration(seconds: 3), ), );
 }

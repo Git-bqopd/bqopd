@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'auth/auth.dart';
 import 'auth/login_or_register.dart';
-import 'pages/profile_page.dart';
+import 'pages/fanzine_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
         home: const AuthPage(),
         routes: {
           '/login_register_page': (context) => const LoginOrRegister(),
-          '/profile_page': (context) => const ProfilePage(),
+          '/profile_page': (context) => const FanzinePage(),
         },
       ),
     );

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../components/button.dart'; // Assuming MyButton is here
 import '../components/textfield.dart'; // Assuming MyTextField is here (used for Username)
 // Import the My Info page to navigate to it
-import '../pages/my_info_page.dart'; // Adjust path if needed
+import '../pages/profile_page.dart'; // Adjust path if needed
 
 class EditInfoWidget extends StatefulWidget {
   const EditInfoWidget({super.key});
@@ -110,7 +110,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
   void goToMyInfoPage() {
     // ... (navigation logic remains the same) ...
-    Navigator.push( context, MaterialPageRoute(builder: (context) => const MyInfoPage()), );
+    Navigator.push( context, MaterialPageRoute(builder: (context) => const ProfilePage()), );
   }
 
   void logout() async {
