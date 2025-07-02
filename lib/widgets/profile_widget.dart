@@ -7,14 +7,23 @@ import '../pages/fanzine_page.dart'; // <<< CHECK THIS PATH
 import '../pages/edit_info_page.dart'; // <<< CHECK THIS PATH
 import 'image_upload_modal.dart'; // Import the modal
 
-class MyInfoWidget extends StatefulWidget {
-  const MyInfoWidget({super.key});
+class ProfileWidget extends StatefulWidget {
+  final int currentIndex;
+  final VoidCallback onFanzinesTapped;
+  final VoidCallback onPagesTapped;
+
+  const ProfileWidget({
+    super.key,
+    required this.currentIndex,
+    required this.onFanzinesTapped,
+    required this.onPagesTapped,
+  });
 
   @override
-  State<MyInfoWidget> createState() => _MyInfoWidgetState();
+  State<ProfileWidget> createState() => _ProfileWidgetState();
 }
 
-class _MyInfoWidgetState extends State<MyInfoWidget> {
+class _ProfileWidgetState extends State<ProfileWidget> {
   // All logic and state variables remain the same as v3
   final User? currentUser = FirebaseAuth.instance.currentUser;
   String _username = ''; String _email = ''; String _firstName = '';
@@ -90,74 +99,133 @@ class _MyInfoWidgetState extends State<MyInfoWidget> {
               : Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- Left Side: Profile Info ---
-              Expanded( child: Column( /* ... profile info Text widgets ... */
-                crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Username: $_username'), const SizedBox(height: 4), Text('Email: $_email'), const SizedBox(height: 12),
-                  if (_buildFormattedAddress().isNotEmpty) ...[ const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(_buildFormattedAddress()), ]
-                  else ... [ const Text('Address: Not Provided'), ]
-                ],
-              ),),
-              const SizedBox(width: 20),
-
-              // --- Right Side: Action Links ---
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // *** Link 1: View Profile ***
-                  RichText( text: TextSpan( text: 'view profile', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
-                    print('View Profile tapped');
-                    Navigator.push( context, MaterialPageRoute(builder: (context) => const FanzinePage()), ); // Navigates to ProfilePage
-                  }, ), ),
-                  const SizedBox(height: 10),
-
-                  // *** Link 2: Edit Info ***
-                  RichText( text: TextSpan( text: 'edit info', style: linkStyle, recognizer: TapGestureRecognizer() ..onTap = () {
-                    print('Edit info tapped');
-                    // Ensure EditInfoPage is defined and imported correctly
-                    Navigator.push( context, MaterialPageRoute(builder: (context) => const EditInfoPage()), ); // Navigates to EditInfoPage
-                  }, ), ),
-                  const SizedBox(height: 10),
-
-                  // *** Link 3: Upload Image ***
-                  RichText(
-                    text: TextSpan(
-                      text: 'upload image', // Changed text
-                      style: linkStyle, // Applied same style as other links
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = () {
-                          if (currentUser?.uid == null && currentUser?.email == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('You must be logged in to upload images.')),
-                            );
-                            return;
-                          }
-                          // Use UID if available, otherwise fallback to email for userId.
-                          // Firebase UID is the preferred unique identifier for users.
-                          final String userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
-
-                          print('Upload Image link tapped by user: $userId'); // Updated log message
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false, // User must tap button to close
-                            builder: (BuildContext dialogContext) {
-                              return ImageUploadModal(userId: userId);
-                            },
-                          ).then((success) {
-                            if (success == true) {
-                              // Optional: Refresh data or show a confirmation that's not a snackbar
-                              print("Modal closed with success");
-                            } else {
-                              // Optional: Handle cancellation or failure if needed
-                              print("Modal closed without explicit success");
-                            }
-                          });
-                        },
+              // This Column will now wrap the existing content and the new navigation row
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch, // Make column take full width for centering Row
+                  children: [
+                    // Existing content (Profile Info and Action Links)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // --- Left Side: Profile Info ---
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('Username: $_username'),
+                              const SizedBox(height: 4),
+                              Text('Email: $_email'),
+                              const SizedBox(height: 12),
+                              if (_buildFormattedAddress().isNotEmpty) ...[
+                                const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Text(_buildFormattedAddress()),
+                              ] else ...[
+                                const Text('Address: Not Provided'),
+                              ]
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        // --- Right Side: Action Links ---
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            RichText(
+                              text: TextSpan(
+                                text: 'view profile',
+                                style: linkStyle,
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    print('View Profile tapped');
+                                    Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage()));
+                                  },
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            RichText(
+                              text: TextSpan(
+                                text: 'edit info',
+                                style: linkStyle,
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    print('Edit info tapped');
+                                    Navigator.push(context, MaterialPageRoute(builder: (context) => const EditInfoPage()));
+                                  },
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            RichText(
+                              text: TextSpan(
+                                text: 'upload image',
+                                style: linkStyle,
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    if (currentUser?.uid == null && currentUser?.email == null) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('You must be logged in to upload images.')),
+                                      );
+                                      return;
+                                    }
+                                    final String userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
+                                    print('Upload Image link tapped by user: $userId');
+                                    showDialog(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (BuildContext dialogContext) {
+                                        return ImageUploadModal(userId: userId);
+                                      },
+                                    );
+                                  },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    // Spacer to push the new navigation links to the bottom of the card area if content is short
+                    const Spacer(),
+                    // New Navigation Links Row
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0), // Add some space above the links
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: widget.onFanzinesTapped,
+                            child: Text(
+                              'fanzines',
+                              style: TextStyle(
+                                color: Theme.of(context).primaryColorDark,
+                                fontWeight: widget.currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Text(
+                              '|',
+                              style: TextStyle(color: Theme.of(context).primaryColorDark),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: widget.onPagesTapped,
+                            child: Text(
+                              'pages',
+                              style: TextStyle(
+                                color: Theme.of(context).primaryColorDark,
+                                fontWeight: widget.currentIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
