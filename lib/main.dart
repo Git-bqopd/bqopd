@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
         home: const AuthPage(),
         routes: {
           '/login_register_page': (context) => const LoginOrRegister(),
-          '/profile_page': (context) => const FanzinePage(),
+          '/fanzine_page': (context) => const FanzinePage(),
         },
       ),
     );

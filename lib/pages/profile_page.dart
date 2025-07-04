@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// Import the widget for the top section
 import '../widgets/profile_widget.dart'; // Adjust path if needed
 
 class ProfilePage extends StatefulWidget {
@@ -38,33 +37,23 @@ class _ProfilePageState extends State<ProfilePage> {
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3, // Three columns, similar to the images grid
-        childAspectRatio: 5 / 8, // Corrected aspect ratio: Taller than wide
+        childAspectRatio: 5 / 8, // Taller than wide
         mainAxisSpacing: 8.0,
         crossAxisSpacing: 8.0,
       ),
       itemCount: 6, // Display 6 placeholders
       itemBuilder: (context, index) {
-        // The AspectRatio widget for each item is now driven by the gridDelegate's childAspectRatio
-        // So, we don't strictly need another AspectRatio widget here if the Container respects it.
-        // However, to be absolutely explicit and ensure it, we can keep it or rely on the delegate.
-        // For simplicity and consistency with how GridView.count works, let's rely on childAspectRatio
-        // in the delegate and ensure the Container fills its allocated space.
         return Container(
           decoration: BoxDecoration(
-            color: Colors.grey[300], // Light gray color
-              borderRadius: BorderRadius.circular(12.0), // Match image rounding
-            ),
-            // You could add a child here if you want text or an icon inside the placeholder
-            // child: Center(child: Text('Fanzine ${index + 1}')),
+            color: Colors.grey[300],
+            borderRadius: BorderRadius.circular(12.0),
           ),
         );
       },
-      // The padding for the GridView itself is handled by the Padding widget wrapping the PageView
     );
   }
 
   Widget _buildPagesView() {
-    // This is the existing StreamBuilder logic for displaying images
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('images')
@@ -76,7 +65,6 @@ class _ProfilePageState extends State<ProfilePage> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          print('🔥 Firestore error: ${snapshot.error}');
           return const Center(child: Text('Something went wrong loading images.'));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -85,15 +73,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
         final images = snapshot.data!.docs;
 
-        // print('🖼️ Found ${images.length} images for Pages view'); // Debug log
-
         return GridView.count(
-          crossAxisCount: 3, // Three columns
-          childAspectRatio: 5 / 8, // Aspect ratio for grid items (width/height)
+          crossAxisCount: 3,
+          childAspectRatio: 5 / 8,
           mainAxisSpacing: 8.0,
           crossAxisSpacing: 8.0,
-          // shrinkWrap: true, // Not needed here as PageView handles scroll
-          // physics: const NeverScrollableScrollPhysics(), // Not needed here
           children: images.map((doc) {
             final data = doc.data() as Map<String, dynamic>?;
             final imageUrl = data?['fileUrl'] as String?;
@@ -108,14 +92,12 @@ class _ProfilePageState extends State<ProfilePage> {
               );
             }
 
-            // print('📸 Pages view: Attempting to load: $imageUrl'); // Debug log
-
             return ClipRRect(
               borderRadius: BorderRadius.circular(12.0),
               child: Image.network(
                 imageUrl,
                 fit: BoxFit.cover,
-                loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
                   return Center(
                     child: CircularProgressIndicator(
@@ -125,9 +107,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   );
                 },
-                errorBuilder: (BuildContext context, Object exception, StackTrace? stackTrace) {
-                  // print('❌ Pages view: Image failed to load: $imageUrl'); // Debug log
-                  // print('⚠️ Pages view: Exception: $exception'); // Debug log
+                errorBuilder: (context, exception, stackTrace) {
                   return Container(
                     decoration: BoxDecoration(
                       color: Colors.grey[300],
@@ -157,21 +137,16 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
 
-    // final userEmail = currentUser.email!; // Not directly used in this structure anymore, but good to keep if needed later
-
     return Scaffold(
-      backgroundColor: Colors.grey[200], // Match other pages background
+      backgroundColor: Colors.grey[200],
       body: SafeArea(
-        // Removed SingleChildScrollView as PageView handles scrolling for its content
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch, // Stretch children horizontally
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // --- Top Section (Profile Info) ---
             Padding(
               padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0.0),
               child: AspectRatio(
-                aspectRatio: 8 / 5, // Wide aspect ratio
-                // Use ProfileWidget and pass the required parameters
+                aspectRatio: 8 / 5,
                 child: ProfileWidget(
                   currentIndex: _currentIndex,
                   onFanzinesTapped: () {
@@ -191,16 +166,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-
-            // --- Bottom Section (PageView for Fanzines/Uploads Grid) ---
-            Expanded( // PageView needs to be in an Expanded widget if inside a Column
+            Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: PageView(
                   controller: _pageController,
                   children: [
-                    _buildFanzinesView(), // To be implemented
-                    _buildPagesView(), // To be implemented (will contain the StreamBuilder and GridView)
+                    _buildFanzinesView(),
+                    _buildPagesView(),
                   ],
                 ),
               ),

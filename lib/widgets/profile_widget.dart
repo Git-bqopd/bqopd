@@ -1,11 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart'; // Required for TapGestureRecognizer
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-// Import the pages to navigate to
-import '../pages/fanzine_page.dart'; // <<< CHECK THIS PATH
-import '../pages/edit_info_page.dart'; // <<< CHECK THIS PATH
-import 'image_upload_modal.dart'; // Import the modal
+import '../pages/fanzine_page.dart';
+import '../pages/edit_info_page.dart';
+import 'image_upload_modal.dart';
 
 class ProfileWidget extends StatefulWidget {
   final int currentIndex;
@@ -24,13 +23,10 @@ class ProfileWidget extends StatefulWidget {
 }
 
 class _ProfileWidgetState extends State<ProfileWidget> {
-  // All logic and state variables remain the same as v3
   final User? currentUser = FirebaseAuth.instance.currentUser;
-  String _username = ''; String _email = ''; String _firstName = '';
-  String _lastName = ''; String _street1 = ''; String _street2 = '';
-  String _city = ''; String _stateName = ''; String _zipCode = '';
-  String _country = '';
-  bool _isLoading = true; String? _errorMessage;
+  String _username = '', _email = '', _firstName = '', _lastName = '', _street1 = '', _street2 = '', _city = '', _stateName = '', _zipCode = '', _country = '';
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -39,7 +35,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   }
 
   Future<void> _loadUserData() async {
-    // ... load user data logic ...
     if (!mounted) return;
     setState(() { _isLoading = true; _errorMessage = null; });
     if (currentUser != null) {
@@ -59,21 +54,22 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         }
       } catch (e) {
         print("Error loading user data: $e");
-        if (mounted) { setState(() { _errorMessage = "Error loading data."; }); }
-      } finally { if (mounted) { setState(() { _isLoading = false; }); } }
+        if (mounted) setState(() { _errorMessage = "Error loading data."; });
+      } finally {
+        if (mounted) setState(() { _isLoading = false; });
+      }
     } else {
       print("Error: No current user found.");
-      if (mounted) { setState(() { _errorMessage = "Not logged in."; _isLoading = false; }); }
+      if (mounted) setState(() { _errorMessage = "Not logged in."; _isLoading = false; });
     }
   }
 
   String _buildFormattedAddress() {
-    // ... address formatting logic ...
     List<String> parts = [];
-    if (_firstName.isNotEmpty || _lastName.isNotEmpty) { parts.add('$_firstName $_lastName'.trim()); }
-    if (_street1.isNotEmpty) parts.add(_street1); if (_street2.isNotEmpty) parts.add(_street2);
-    String cityStateZip = '$_city, $_stateName $_zipCode'.trim();
-    cityStateZip = cityStateZip.replaceAll(RegExp(r'^,\s*'), '').replaceAll(RegExp(r'\s*,\s*$'), '').trim();
+    if (_firstName.isNotEmpty || _lastName.isNotEmpty) parts.add('$_firstName $_lastName'.trim());
+    if (_street1.isNotEmpty) parts.add(_street1);
+    if (_street2.isNotEmpty) parts.add(_street2);
+    String cityStateZip = '$_city, $_stateName $_zipCode'.trim().replaceAll(RegExp(r'^,\s*|\s*,\s*\$'), '');
     if (cityStateZip.isNotEmpty && cityStateZip != ',') parts.add(cityStateZip);
     if (_country.isNotEmpty) parts.add(_country);
     return parts.join('\n');
@@ -81,13 +77,11 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // ... linkStyle and borderRadius definitions ...
-    final linkStyle = TextStyle( fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, );
+    final linkStyle = TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark);
     final borderRadius = BorderRadius.circular(12.0);
 
     return Container(
-      // ... Container decoration ...
-      decoration: BoxDecoration( color: const Color(0xFFF1B255), borderRadius: borderRadius, ),
+      decoration: BoxDecoration(color: const Color(0xFFF1B255), borderRadius: borderRadius),
       child: ClipRRect(
         borderRadius: borderRadius,
         child: Padding(
@@ -96,132 +90,116 @@ class _ProfileWidgetState extends State<ProfileWidget> {
               ? const Center(child: CircularProgressIndicator())
               : _errorMessage != null
               ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
-              : Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+              : Column(
             children: [
-              // This Column will now wrap the existing content and the new navigation row
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch, // Make column take full width for centering Row
-                  children: [
-                    // Existing content (Profile Info and Action Links)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // --- Left Side: Profile Info ---
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text('Username: $_username'),
-                              const SizedBox(height: 4),
-                              Text('Email: $_email'),
-                              const SizedBox(height: 12),
-                              if (_buildFormattedAddress().isNotEmpty) ...[
-                                const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
-                                Text(_buildFormattedAddress()),
-                              ] else ...[
-                                const Text('Address: Not Provided'),
-                              ]
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        // --- Right Side: Action Links ---
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisAlignment: MainAxisAlignment.center,
+                child: Center(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            RichText(
-                              text: TextSpan(
-                                text: 'view profile',
-                                style: linkStyle,
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    print('View Profile tapped');
-                                    Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage()));
-                                  },
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text('Username: $_username'),
+                                  const SizedBox(height: 4),
+                                  Text('Email: $_email'),
+                                  const SizedBox(height: 12),
+                                  if (_buildFormattedAddress().isNotEmpty) ...[
+                                    const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Text(_buildFormattedAddress()),
+                                  ] else ...[
+                                    const Text('Address: Not Provided'),
+                                  ],
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            RichText(
-                              text: TextSpan(
-                                text: 'edit info',
-                                style: linkStyle,
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    print('Edit info tapped');
-                                    Navigator.push(context, MaterialPageRoute(builder: (context) => const EditInfoPage()));
-                                  },
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            RichText(
-                              text: TextSpan(
-                                text: 'upload image',
-                                style: linkStyle,
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    if (currentUser?.uid == null && currentUser?.email == null) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('You must be logged in to upload images.')),
-                                      );
-                                      return;
-                                    }
-                                    final String userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
-                                    print('Upload Image link tapped by user: $userId');
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (BuildContext dialogContext) {
-                                        return ImageUploadModal(userId: userId);
+                            const SizedBox(width: 20),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                RichText(
+                                  text: TextSpan(
+                                    text: 'view profile',
+                                    style: linkStyle,
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage())),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                RichText(
+                                  text: TextSpan(
+                                    text: 'edit info',
+                                    style: linkStyle,
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const EditInfoPage())),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                RichText(
+                                  text: TextSpan(
+                                    text: 'upload image',
+                                    style: linkStyle,
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () {
+                                        if (currentUser?.uid == null && currentUser?.email == null) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('You must be logged in to upload images.')),
+                                          );
+                                          return;
+                                        }
+                                        final userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (BuildContext dialogContext) => ImageUploadModal(userId: userId),
+                                        );
                                       },
-                                    );
-                                  },
-                              ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: widget.onFanzinesTapped,
+                      child: Text(
+                        'fanzines',
+                        style: TextStyle(
+                          color: Theme.of(context).primaryColorDark,
+                          fontWeight: widget.currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
                     ),
-                    // Spacer to push the new navigation links to the bottom of the card area if content is short
-                    const Spacer(),
-                    // New Navigation Links Row
                     Padding(
-                      padding: const EdgeInsets.only(top: 16.0), // Add some space above the links
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          GestureDetector(
-                            onTap: widget.onFanzinesTapped,
-                            child: Text(
-                              'fanzines',
-                              style: TextStyle(
-                                color: Theme.of(context).primaryColorDark,
-                                fontWeight: widget.currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                            child: Text(
-                              '|',
-                              style: TextStyle(color: Theme.of(context).primaryColorDark),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: widget.onPagesTapped,
-                            child: Text(
-                              'pages',
-                              style: TextStyle(
-                                color: Theme.of(context).primaryColorDark,
-                                fontWeight: widget.currentIndex == 1 ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            ),
-                          ),
-                        ],
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
+                    ),
+                    GestureDetector(
+                      onTap: widget.onPagesTapped,
+                      child: Text(
+                        'pages',
+                        style: TextStyle(
+                          color: Theme.of(context).primaryColorDark,
+                          fontWeight: widget.currentIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                        ),
                       ),
                     ),
                   ],
