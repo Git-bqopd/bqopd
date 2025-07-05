@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/profile_widget.dart'; // Adjust path if needed
+import '../widgets/new_fanzine_modal.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -14,6 +15,10 @@ class _ProfilePageState extends State<ProfilePage> {
   late PageController _pageController;
   int _currentIndex = 0; // 0 for Fanzines, 1 for Pages
 
+  bool _isEditor = false;
+  bool _isLoadingCurrentUser = true;
+  User? _currentUser;
+
   @override
   void initState() {
     super.initState();
@@ -25,6 +30,47 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     });
+    _loadCurrentUserEditorStatus();
+  }
+
+  Future<void> _loadCurrentUserEditorStatus() async {
+    setState(() {
+      _isLoadingCurrentUser = true;
+    });
+    _currentUser = FirebaseAuth.instance.currentUser;
+    if (_currentUser != null && _currentUser!.email != null) {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('Users')
+            .doc(_currentUser!.email)
+            .get();
+        if (userDoc.exists && mounted) {
+          final data = userDoc.data() as Map<String, dynamic>;
+          setState(() {
+            _isEditor = (data['Editor'] == true); // Default to false if null or not true
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error loading editor status: ${e.toString()}')),
+          );
+        }
+        print("Error loading user editor status: $e");
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoadingCurrentUser = false;
+          });
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoadingCurrentUser = false;
+        });
+      }
+    }
   }
 
   @override
@@ -33,7 +79,27 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  void _showNewFanzineModal() {
+    if (_currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in to create a fanzine.')),
+      );
+      return;
+    }
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User must explicitly cancel or save
+      builder: (BuildContext dialogContext) {
+        return NewFanzineModal(userId: _currentUser!.uid);
+      },
+    );
+  }
+
   Widget _buildFanzinesView() {
+    if (_isLoadingCurrentUser) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3, // Three columns, similar to the images grid
@@ -43,6 +109,22 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       itemCount: 6, // Display 6 placeholders
       itemBuilder: (context, index) {
+        if (index == 0 && _isEditor) {
+          return TextButton(
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.blueAccent, // Example color
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.0),
+              ),
+            ),
+            onPressed: _showNewFanzineModal,
+            child: const Text(
+              "make new fanzine",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white),
+            ),
+          );
+        }
         return Container(
           decoration: BoxDecoration(
             color: Colors.grey[300],
