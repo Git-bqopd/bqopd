@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart'; // Added for date formatting
 import '../widgets/profile_widget.dart'; // Adjust path if needed
 import '../widgets/new_fanzine_modal.dart';
 
@@ -95,41 +96,150 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _showFanzineDetailsModal(BuildContext context, Map<String, dynamic> fanzineData) {
+    String title = fanzineData['title'] ?? 'N/A';
+    String editorId = fanzineData['editorId'] ?? 'N/A';
+    String formattedDate = 'Date N/A';
+
+    if (fanzineData['creationDate'] != null && fanzineData['creationDate'] is Timestamp) {
+      DateTime creationDateTime = (fanzineData['creationDate'] as Timestamp).toDate();
+      // Format: July 4, 2025 at 9:20:52 PM UTC-5
+      // Using 'en_US' locale for consistent month/AM-PM formatting.
+      // The 'z' pattern should give the timezone offset like UTC-5, but this can be platform dependent.
+      // For more robust timezone name display, a more comprehensive timezone package might be needed,
+      // but Firestore Timestamps are typically UTC.
+      formattedDate = DateFormat('MMMM d, yyyy \'at\' h:mm:ss a z', 'en_US').format(creationDateTime.toLocal());
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: SingleChildScrollView( // In case content is too long
+            child: ListBody(
+              children: <Widget>[
+                Text('Title: $title'),
+                Text('Editor ID: $editorId'),
+                Text('Creation Date: $formattedDate'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Close'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildFanzinesView() {
     if (_isLoadingCurrentUser) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3, // Three columns, similar to the images grid
-        childAspectRatio: 5 / 8, // Taller than wide
-        mainAxisSpacing: 8.0,
-        crossAxisSpacing: 8.0,
-      ),
-      itemCount: 6, // Display 6 placeholders
-      itemBuilder: (context, index) {
-        if (index == 0 && _isEditor) {
-          return TextButton(
-            style: TextButton.styleFrom(
-              backgroundColor: Colors.blueAccent, // Example color
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.0),
+    // Ensure _currentUser is not null before attempting to use _currentUser.uid
+    if (_currentUser == null) {
+      // This case should ideally be handled by the main page logic
+      // redirecting to login if no user, but as a safeguard here:
+      return const Center(child: Text("User not loaded. Please try again."));
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('fanzines')
+          .where('editorId', isEqualTo: _currentUser!.uid)
+          .orderBy('creationDate', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          print("Error fetching fanzines: ${snapshot.error}"); // Log error
+          return const Center(child: Text('Error loading fanzines.'));
+        }
+
+        List<Widget> displayItems = [];
+
+        // Add "make new fanzine" button if the user is an editor
+        if (_isEditor) {
+          displayItems.add(
+            TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
               ),
-            ),
-            onPressed: _showNewFanzineModal,
-            child: const Text(
-              "make new fanzine",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white),
+              onPressed: _showNewFanzineModal,
+              child: const Text(
+                "make new fanzine",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           );
         }
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[300],
-            borderRadius: BorderRadius.circular(12.0),
+
+        // Add fanzine buttons
+        if (snapshot.hasData) {
+          final fanzineDocs = snapshot.data!.docs;
+          for (var doc in fanzineDocs) {
+            final fanzineData = doc.data() as Map<String, dynamic>;
+            final String title = fanzineData['title'] ?? 'Untitled Fanzine';
+            // Add document ID to fanzineData if not already present, for potential future use
+            fanzineData['id'] = doc.id;
+
+
+            displayItems.add(
+              TextButton(
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.blueAccent, // Same style
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                ),
+                onPressed: () {
+                  _showFanzineDetailsModal(context, fanzineData);
+                },
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white),
+                  overflow: TextOverflow.ellipsis, // Handle long titles
+                ),
+              ),
+            );
+          }
+        }
+
+        return GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: 5 / 8,
+            mainAxisSpacing: 8.0,
+            crossAxisSpacing: 8.0,
           ),
+          itemCount: 6, // Always 6 items to include placeholders
+          itemBuilder: (context, index) {
+            if (index < displayItems.length) {
+              return displayItems[index];
+            } else {
+              // Display placeholder for remaining slots
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+              );
+            }
+          },
         );
       },
     );
