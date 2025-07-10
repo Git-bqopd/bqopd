@@ -46,6 +46,7 @@ dependencies:
   flutter_floating_bottom_bar: ^1.2.0
   flutter_lints: ^5.0.0
   file_picker: ^10.0.0
+  nanoid2: ^2.0.0
 
 dev_dependencies:
   flutter_test:
