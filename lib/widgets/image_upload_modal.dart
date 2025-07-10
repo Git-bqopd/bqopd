@@ -1,19 +1,19 @@
 import 'dart:typed_data';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:path/path.dart' as p; // For path manipulation
+import 'package:bqopd/utils/shortcode_generator.dart'; // Added for shortcode generation
 
 class ImageUploadModal extends StatefulWidget {
   final String userId;
-  // final Function(String title, String description, PlatformFile file) onSubmit; // No longer needed
 
   const ImageUploadModal({
     super.key,
     required this.userId,
-    // required this.onSubmit, // No longer needed
   });
 
   @override
@@ -105,25 +105,48 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
       final TaskSnapshot snapshot = await uploadTask;
       final String downloadUrl = await snapshot.ref.getDownloadURL();
 
-      // 2. Store metadata in Firestore
-      await FirebaseFirestore.instance.collection('images').add({
+      // 2. Generate Document ID for the new image
+      final newImageRef = FirebaseFirestore.instance.collection('images').doc();
+      final String imageId = newImageRef.id;
+
+      // 3. Assign Shortcode
+      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      final String? shortcode = await assignShortcode(firestore, 'image', imageId);
+
+      if (shortcode == null) {
+        // Halt process if shortcode generation fails
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to generate a unique shortcode. Please try again.')),
+          );
+        }
+        // Optionally, delete the uploaded file from storage if shortcode assignment is critical
+        // await storageRef.delete();
+        // print('Uploaded file deleted due to shortcode assignment failure.');
+        setState(() { _isLoading = false; });
+        return; // Stop execution
+      }
+
+      // 4. Store metadata in Firestore, including the shortcode
+      await newImageRef.set({
         'title': title,
         'description': description,
         'fileUrl': downloadUrl,
         'uploaderId': widget.userId,
-        'fileName': fileName, // Good to store original filename too
+        'fileName': fileName,
+        'shortcode': shortcode, // Added shortcode
         'timestamp': FieldValue.serverTimestamp(),
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image uploaded successfully!')),
+          const SnackBar(content: Text('Image uploaded successfully! Shortcode: $shortcode')),
         );
         Navigator.of(context).pop(true); // Pop with a success indicator
       }
 
     } catch (e) {
-      print("Error uploading image: $e");
+      print("Error uploading image or assigning shortcode: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error uploading image: ${e.toString()}')),
