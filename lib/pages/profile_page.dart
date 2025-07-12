@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart'; // Added for date formatting
 import '../widgets/profile_widget.dart'; // Adjust path if needed
 import '../widgets/new_fanzine_modal.dart';
+import '../widgets/image_view_modal.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -284,30 +285,42 @@ class _ProfilePageState extends State<ProfilePage> {
               );
             }
 
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(12.0),
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Center(
-                    child: CircularProgressIndicator(
-                      value: loadingProgress.expectedTotalBytes != null
-                          ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                          : null,
-                    ),
-                  );
-                },
-                errorBuilder: (context, exception, stackTrace) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(child: Icon(Icons.error_outline, color: Colors.red)),
-                  );
-                },
+            return GestureDetector(
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => ImageViewModal(
+                    imageUrl: imageUrl,
+                    imageText: data?['text'],
+                    shortCode: data?['shortCode'],
+                  ),
+                );
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12.0),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                            : null,
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, exception, stackTrace) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(child: Icon(Icons.error_outline, color: Colors.red)),
+                    );
+                  },
+                ),
               ),
             );
           }).toList(),
