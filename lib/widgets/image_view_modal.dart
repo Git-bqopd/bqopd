@@ -80,7 +80,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
               padding: EdgeInsets.all(8.0),
               child: TextField(
                 decoration: InputDecoration(
-                  hintText: 'Leave a comment...',
+                  hintText: 'leave a comment...',
                 ),
               ),
             ),
@@ -89,14 +89,18 @@ class _ImageViewModalState extends State<ImageViewModal> {
             visible: _showText,
             child: Padding(
               padding: const EdgeInsets.all(8.0),
-              child: Text(widget.imageText ?? 'No text available.'),
+              child: Text(widget.imageText ?? 'no text available.'),
             ),
           ),
           Visibility(
             visible: _showShortCode,
             child: Padding(
               padding: const EdgeInsets.all(8.0),
-              child: Text(widget.shortCode ?? 'No shortcode available.'),
+              child: SelectableText(
+                widget.shortCode != null
+                    ? 'the short code is: ${widget.shortCode}'
+                    : 'no shortcode available.',
+              ),
             ),
           ),
         ],

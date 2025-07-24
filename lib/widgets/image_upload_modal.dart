@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -134,13 +133,13 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
         'fileUrl': downloadUrl,
         'uploaderId': widget.userId,
         'fileName': fileName,
-        'shortcode': shortcode, // Added shortcode
+        'shortCode': shortcode, // Added shortcode
         'timestamp': FieldValue.serverTimestamp(),
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image uploaded successfully! Shortcode: $shortcode')),
+          SnackBar(content: Text('Image uploaded successfully! Shortcode: $shortcode')),
         );
         Navigator.of(context).pop(true); // Pop with a success indicator
       }
