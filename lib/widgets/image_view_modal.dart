@@ -61,15 +61,17 @@ class _ImageViewModalState extends State<ImageViewModal> {
                 onPressed: () => setState(() => _isLiked = !_isLiked),
               ),
               IconButton(
-                icon: const Icon(Icons.add_comment),
+                icon: const Icon(Icons.comment),
                 onPressed: _toggleComments,
               ),
               IconButton(
-                icon: const Icon(Icons.article),
+                icon: const Icon(Icons.newspaper),
                 onPressed: _toggleText,
               ),
+              Icon(Icons.remove_red_eye),
+              Icon(Icons.print),
               IconButton(
-                icon: const Icon(Icons.bubble_chart),
+                icon: const Icon(Icons.link),
                 onPressed: _toggleShortCode,
               ),
             ],
