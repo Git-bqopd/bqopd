@@ -5,6 +5,7 @@ import 'package:intl/intl.dart'; // Added for date formatting
 import '../widgets/profile_widget.dart'; // Adjust path if needed
 import '../widgets/new_fanzine_modal.dart';
 import '../widgets/image_view_modal.dart';
+import 'fanzine_editor_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -207,7 +208,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 onPressed: () {
-                  _showFanzineDetailsModal(context, fanzineData);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FanzineEditorPage(fanzineId: doc.id),
+                    ),
+                  );
                 },
                 child: Text(
                   title,
