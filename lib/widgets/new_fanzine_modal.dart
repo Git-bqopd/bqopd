@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../utils/shortcode_generator.dart';
 
 class NewFanzineModal extends StatefulWidget {
-  final String userId; // While editorId will be current user's UID, good to pass for consistency or future use
+  final String userId;
 
   const NewFanzineModal({
     super.key,
@@ -38,20 +39,27 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
 
     try {
       final String title = _titleController.text;
-      final String editorId = currentUser.uid; // Use current user's UID as editorId
+      final String editorId = currentUser.uid;
 
-      await FirebaseFirestore.instance.collection('fanzines').add({
-        'title': title,
-        'editorId': editorId,
-        'creationDate': FieldValue.serverTimestamp(),
-        // publicationDate and pages will be added later
-      });
+      final newFanzineRef = FirebaseFirestore.instance.collection('fanzines').doc();
+      final String? shortCode = await assignShortcode(FirebaseFirestore.instance, 'fanzine', newFanzineRef.id);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fanzine created successfully!')),
-        );
-        Navigator.of(context).pop(true); // Pop with a success indicator
+      if (shortCode != null) {
+        await newFanzineRef.set({
+          'title': title,
+          'editorId': editorId,
+          'creationDate': FieldValue.serverTimestamp(),
+          'shortCode': shortCode,
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Fanzine created successfully!')),
+          );
+          Navigator.of(context).pop(true);
+        }
+      } else {
+        throw Exception('Failed to generate a unique shortcode.');
       }
     } catch (e) {
       print("Error creating fanzine: $e");

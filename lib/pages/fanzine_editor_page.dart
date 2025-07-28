@@ -15,9 +15,6 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Fanzine Editor'),
-      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('fanzines')

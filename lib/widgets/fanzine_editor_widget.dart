@@ -21,37 +21,78 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(8.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final fanzineData = snapshot.data!.data() as Map<String, dynamic>;
+        final title = fanzineData['title'] ?? 'No Title';
+        final shortCode = fanzineData['shortCode'];
+
+        return Container(
+          padding: const EdgeInsets.all(8.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 5,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          TextField(
-            controller: _shortcodeController,
-            decoration: const InputDecoration(
-              hintText: 'Paste image shortcode',
-              border: OutlineInputBorder(),
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // First Row: Title
+              Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8.0),
+
+              // Second Row: Add Page
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _shortcodeController,
+                      decoration: const InputDecoration(
+                        hintText: 'Paste image shortcode',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8.0),
+                  ElevatedButton(
+                    onPressed: _addPage,
+                    child: const Text('Add Page'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8.0),
+
+              // Third Row: Shortcode
+              SelectableText(
+                shortCode != null
+                    ? 'the short code is: $shortCode'
+                    : 'no shortcode available.',
+              ),
+              const SizedBox(height: 8.0),
+
+              // Fourth Row: Save Button
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Save'),
+              ),
+            ],
           ),
-          const SizedBox(height: 8.0),
-          ElevatedButton(
-            onPressed: _addPage,
-            child: const Text('Add Page'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
