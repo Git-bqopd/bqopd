@@ -17,7 +17,10 @@ class FanzineWidget extends StatefulWidget {
 class _FanzineWidgetState extends State<FanzineWidget> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
-  // Simplified state: only need username and loading state
+  // Page controller for the tabbed view
+  final PageController _pageController = PageController();
+  int _currentPage = 0; // To track the current page
+
   String _username = '';
   bool _isLoadingData = true;
   String? _errorMessage; // Optional: for error display
@@ -66,55 +69,115 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   @override
   void dispose() {
+    _pageController.dispose(); // Dispose the controller
     super.dispose();
   }
 
-  // --- Simplified Build Method ---
+  // --- Build Method ---
   @override
   Widget build(BuildContext context) {
-    final linkStyle = TextStyle( fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, );
-    final borderRadius = BorderRadius.circular(12.0); // Consistent radius
+    final linkStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      color: Theme.of(context).primaryColorDark,
+    );
+    final borderRadius = BorderRadius.circular(12.0);
 
-    // *** ADDED Container for background and rounded corners ***
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF1B255), // Set background color
+        color: const Color(0xFFF1B255),
         borderRadius: borderRadius,
       ),
-      // *** ADDED ClipRRect to ensure content respects corners ***
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: Center( // Center the content vertically and horizontally
-          child: Padding(
-            padding: const EdgeInsets.all(25.0), // Keep some padding
-            child: _isLoadingData
-                ? const CircularProgressIndicator()
-                : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Display Username
-                Text(
-                  'username: $_username',
-                  style: const TextStyle(fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20), // Spacing
+        child: Padding(
+          padding: const EdgeInsets.all(16.0), // Consistent padding
+          child: _isLoadingData
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // --- Top Row: Profile Link ---
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'profile: ',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        RichText(
+                          text: TextSpan(
+                            text: _username,
+                            style: linkStyle,
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = goToProfilePage,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20), // Spacing
 
-                // Link to Profile Page
-                RichText(
-                  text: TextSpan(
-                    text: 'profile', // Link text
-                    style: linkStyle,
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = goToProfilePage, // Navigate on tap
-                  ),
+                    // --- Second Row: Tab Navigation ---
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildTab('indicia', 0),
+                        _buildTabSeparator(),
+                        _buildTab('creators', 1),
+                        _buildTabSeparator(),
+                        _buildTab('stats', 2),
+                      ],
+                    ),
+                    const SizedBox(height: 10), // Spacing
+
+                    // --- Third Row: PageView ---
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentPage = index;
+                          });
+                        },
+                        children: const [
+                          Center(child: Text('This is the indicia page.')),
+                          Center(child: Text('This is the creators page.')),
+                          Center(child: Text('This is the stats page.')),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
         ),
       ),
+    );
+  }
+
+  // --- Helper to build a tab ---
+  Widget _buildTab(String text, int index) {
+    return GestureDetector(
+      onTap: () {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      },
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: _currentPage == index ? FontWeight.bold : FontWeight.normal,
+          color: _currentPage == index ? Colors.black : Colors.black54,
+        ),
+      ),
+    );
+  }
+
+    // --- Helper for tab separator ---
+  Widget _buildTabSeparator() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: Text('|', style: TextStyle(fontSize: 16, color: Colors.black54)),
     );
   }
 }
