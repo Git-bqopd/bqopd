@@ -6,6 +6,7 @@ import '../widgets/profile_widget.dart'; // Adjust path if needed
 import '../widgets/new_fanzine_modal.dart';
 import '../widgets/image_view_modal.dart';
 import 'fanzine_editor_page.dart';
+import 'settings_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -182,6 +183,27 @@ class _ProfilePageState extends State<ProfilePage> {
               onPressed: _showNewFanzineModal,
               child: const Text(
                 "make new fanzine",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          );
+          displayItems.add(
+            TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.grey,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsPage()),
+                );
+              },
+              child: const Text(
+                "settings",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white),
               ),
