@@ -47,8 +47,9 @@ dependencies:
   flutter_lints: ^5.0.0
   file_picker: ^10.0.0
   nanoid2: ^2.0.0
-  go_router: ^14.2.1
+  go_router: ^16.1.0
   qr_flutter: ^4.1.0
+  qr: ^3.0.2
 
 dev_dependencies:
   flutter_test:
