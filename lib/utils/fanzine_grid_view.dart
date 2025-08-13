@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../widgets/image_view_modal.dart';
+
 class FanzineGridView extends StatelessWidget {
   final String shortCode;
   final Widget uiWidget;
@@ -62,11 +64,25 @@ class FanzineGridView extends StatelessWidget {
                 final page = pages[index - 1];
                 final data = page.data() as Map<String, dynamic>;
                 final imageUrl = data['imageUrl'] ?? '';
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(12.0),
-                  child: imageUrl.isNotEmpty
-                      ? Image.network(imageUrl, fit: BoxFit.cover)
-                      : Container(color: Colors.grey[300]),
+                final imageText = data['imageText'];
+                final shortCode = data['shortCode'];
+
+                if (imageUrl.isEmpty) {
+                  return Container(color: Colors.grey[300]);
+                }
+
+                return GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => ImageViewModal(
+                        imageUrl: imageUrl,
+                        imageText: imageText,
+                        shortCode: shortCode,
+                      ),
+                    );
+                  },
+                  child: Image.network(imageUrl, fit: BoxFit.cover),
                 );
               },
             );
