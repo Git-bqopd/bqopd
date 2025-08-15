@@ -23,12 +23,12 @@ class RegisterPage extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('Settings not found.'));
+              return Center(child: RegisterWidget(onTap: onTap));
             }
             final data = snapshot.data!.data() as Map<String, dynamic>;
             final shortCode = data['register_zine_shortcode'] as String?;
             if (shortCode == null) {
-              return const Center(child: Text('No register zine configured.'));
+              return Center(child: RegisterWidget(onTap: onTap));
             }
             return FanzineGridView(
               shortCode: shortCode,

@@ -24,13 +24,13 @@ class LoginPage extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('Settings not found.'));
+              return Center(child: LoginWidget(onTap: onTap));
             }
 
             final data = snapshot.data!.data() as Map<String, dynamic>;
             final shortCode = data['login_zine_shortcode'] as String?;
             if (shortCode == null) {
-              return const Center(child: Text('No login zine configured.'));
+              return Center(child: LoginWidget(onTap: onTap));
             }
 
             return FanzineGridView(
