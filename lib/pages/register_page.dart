@@ -22,36 +22,37 @@ class RegisterPage extends StatelessWidget {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
+
+            // Base register widget shown when remote settings are unavailable
+            final registerUi = Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12.0),
+                child: RegisterWidget(onTap: onTap),
+              ),
+            );
+
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('Settings not found.'));
+              return Center(child: registerUi);
             }
+
             final data = snapshot.data!.data() as Map<String, dynamic>;
             final shortCode = data['register_zine_shortcode'] as String?;
             if (shortCode == null) {
-              return const Center(child: Text('No register zine configured.'));
+              return Center(child: registerUi);
             }
-            return FanzineGridView(
-              shortCode: shortCode,
-              uiWidget: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      spreadRadius: 1,
-                      blurRadius: 5,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12.0),
-                  child: RegisterWidget(
-                    onTap: onTap,
-                  ),
-                ),
-              ),
-            );
+
+            return FanzineGridView(shortCode: shortCode, uiWidget: registerUi);
           },
         ),
       ),

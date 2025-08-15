@@ -23,38 +23,39 @@ class LoginPage extends StatelessWidget {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
+
+            // Base login widget used when remote settings are missing
+            final loginUi = Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12.0),
+                child: LoginWidget(onTap: onTap),
+              ),
+            );
+
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('Settings not found.'));
+              // If settings aren't available yet, still show the login form
+              return Center(child: loginUi);
             }
 
             final data = snapshot.data!.data() as Map<String, dynamic>;
             final shortCode = data['login_zine_shortcode'] as String?;
             if (shortCode == null) {
-              return const Center(child: Text('No login zine configured.'));
+              // Fallback to plain login when no shortcode is configured
+              return Center(child: loginUi);
             }
 
-            return FanzineGridView(
-              shortCode: shortCode,
-              uiWidget: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      spreadRadius: 1,
-                      blurRadius: 5,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12.0),
-                  child: LoginWidget(
-                    onTap: onTap,
-                  ),
-                ),
-              ),
-            );
+            return FanzineGridView(shortCode: shortCode, uiWidget: loginUi);
           },
         ),
       ),
