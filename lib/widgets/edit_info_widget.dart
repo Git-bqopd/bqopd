@@ -50,7 +50,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
         emailController.text = currentUser!.email ?? 'No Email Found';
         final userDoc = await FirebaseFirestore.instance
             .collection('Users')
-            .doc(currentUser!.email)
+            .doc(currentUser!.uid)
             .get();
 
         if (userDoc.exists && mounted) {
@@ -64,7 +64,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
             firstNameController.text = data['firstName'] ?? ''; lastNameController.text = data['lastName'] ?? '';
           });
         } else if (mounted) {
-          print("User document not found in Firestore for ${currentUser!.email}");
+          print("User document not found in Firestore for ${currentUser!.uid}");
           setStateIfMounted(() { userNameController.text = currentUser!.displayName ?? ''; });
         }
       } catch (e) {
@@ -96,7 +96,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           'city': cityController.text.trim(), 'state': stateController.text.trim(),
           'zipCode': zipController.text.trim(), 'country': countryController.text.trim(),
         };
-        await FirebaseFirestore.instance.collection('Users').doc(currentUser!.email).set(dataToUpdate, SetOptions(merge: true));
+        await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).set(dataToUpdate, SetOptions(merge: true));
         _initialUsername = userNameController.text.trim();
         if(mounted) { displayMessageToUser("Profile Saved!", context); }
       } else { if(mounted) { displayMessageToUser("Error: No user logged in.", context); } }

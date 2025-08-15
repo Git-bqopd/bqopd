@@ -39,7 +39,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     setState(() { _isLoading = true; _errorMessage = null; });
     if (currentUser != null) {
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.email).get();
+        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
         if (userDoc.exists && mounted) {
           final data = userDoc.data() as Map<String, dynamic>;
           setState(() {
@@ -149,13 +149,13 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                     style: linkStyle,
                                     recognizer: TapGestureRecognizer()
                                       ..onTap = () {
-                                        if (currentUser?.uid == null && currentUser?.email == null) {
+                                        if (currentUser?.uid == null) {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             const SnackBar(content: Text('You must be logged in to upload images.')),
                                           );
                                           return;
                                         }
-                                        final userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
+                                        final userId = currentUser!.uid;
                                         showDialog(
                                           context: context,
                                           barrierDismissible: false,

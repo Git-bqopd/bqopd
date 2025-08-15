@@ -42,11 +42,11 @@ class _ProfilePageState extends State<ProfilePage> {
       _isLoadingCurrentUser = true;
     });
     _currentUser = FirebaseAuth.instance.currentUser;
-    if (_currentUser != null && _currentUser!.email != null) {
+    if (_currentUser != null) {
       try {
         final userDoc = await FirebaseFirestore.instance
             .collection('Users')
-            .doc(_currentUser!.email)
+            .doc(_currentUser!.uid)
             .get();
         if (userDoc.exists && mounted) {
           final data = userDoc.data() as Map<String, dynamic>;
@@ -361,7 +361,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
 
-    if (currentUser == null || currentUser.email == null) {
+    if (currentUser == null) {
       return Scaffold(
         backgroundColor: Colors.grey[200],
         body: const Center(

@@ -38,12 +38,12 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     setState(() { _isLoadingData = true; _errorMessage = null; });
     if (currentUser != null) {
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.email).get();
+        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
         if (userDoc.exists && mounted) {
           final data = userDoc.data() as Map<String, dynamic>;
           setStateIfMounted(() { _username = data['username'] ?? 'N/A'; });
         } else if (mounted) {
-          print("User document not found for ${currentUser!.email}");
+          print("User document not found for ${currentUser!.uid}");
           setStateIfMounted(() { _username = 'N/A'; });
         }
       } catch (e) {

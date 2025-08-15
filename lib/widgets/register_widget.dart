@@ -71,15 +71,15 @@ class _RegisterWidgetState extends State<RegisterWidget> {
 
   // --- Create User Document Method ---
   Future<void> createUserDocument(UserCredential? userCredential) async {
-    if (userCredential?.user?.email != null) {
+    if (userCredential?.user != null) {
       final usersCollection = FirebaseFirestore.instance.collection('Users');
-      await usersCollection.doc(userCredential!.user!.email).set({
+      await usersCollection.doc(userCredential!.user!.uid).set({
         'email': userCredential.user!.email,
         'username': userNameController.text.trim(),
         'createdAt': FieldValue.serverTimestamp(),
       });
     } else {
-      print("Error: User credential or user email was null. Document not created.");
+      print("Error: User credential was null. Document not created.");
     }
   }
 
