@@ -1,13 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../utils/fanzine_grid_view.dart';
 import '../widgets/login_widget.dart';
 
 class LoginPage extends StatelessWidget {
-  final void Function()? onTap;
-
-  const LoginPage({super.key, required this.onTap});
+  const LoginPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +23,22 @@ class LoginPage extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('Settings not found.'));
+              return Center(
+                child: LoginWidget(
+                  onTap: () => context.go('/register'),
+                ),
+              );
             }
 
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-            final shortCode = data['login_zine_shortcode'] as String?;
+            final data = snapshot.data!.data() as Map<String, dynamic>?;
+            final shortCode = data?['login_zine_shortcode'] as String?;
+
             if (shortCode == null) {
-              return const Center(child: Text('No login zine configured.'));
+              return Center(
+                child: LoginWidget(
+                  onTap: () => context.go('/register'),
+                ),
+              );
             }
 
             return FanzineGridView(
@@ -50,7 +58,7 @@ class LoginPage extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12.0),
                   child: LoginWidget(
-                    onTap: onTap,
+                    onTap: () => context.go('/register'),
                   ),
                 ),
               ),

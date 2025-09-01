@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../widgets/register_widget.dart';
+import 'package:go_router/go_router.dart';
+
 import '../utils/fanzine_grid_view.dart';
+import '../widgets/register_widget.dart';
 
 class RegisterPage extends StatelessWidget {
-  final void Function()? onTap;
-
-  const RegisterPage({super.key, required this.onTap});
+  const RegisterPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -23,12 +23,20 @@ class RegisterPage extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('Settings not found.'));
+              return Center(
+                child: RegisterWidget(
+                  onTap: () => context.go('/login'),
+                ),
+              );
             }
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-            final shortCode = data['register_zine_shortcode'] as String?;
+            final data = snapshot.data!.data() as Map<String, dynamic>?;
+            final shortCode = data?['register_zine_shortcode'] as String?;
             if (shortCode == null) {
-              return const Center(child: Text('No register zine configured.'));
+              return Center(
+                child: RegisterWidget(
+                  onTap: () => context.go('/login'),
+                ),
+              );
             }
             return FanzineGridView(
               shortCode: shortCode,
@@ -47,7 +55,7 @@ class RegisterPage extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12.0),
                   child: RegisterWidget(
-                    onTap: onTap,
+                    onTap: () => context.go('/login'),
                   ),
                 ),
               ),
