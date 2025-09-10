@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../components/button.dart';
 import '../components/textfield.dart';
 
@@ -36,7 +38,8 @@ class _LoginWidgetState extends State<LoginWidget> {
         email: emailController.text.trim(), // Trim whitespace from email
         password: passwordController.text,
       );
-      // Login successful: Navigation or state updates should be handled elsewhere
+      // Navigate to the fanzine page on successful login
+      if (mounted) context.go('/');
     } on FirebaseAuthException catch (e) {
       // Handle Firebase authentication errors
       if (mounted) {

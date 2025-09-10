@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../components/button.dart';
 import '../components/textfield.dart';
 
@@ -50,7 +52,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
     // Try creating user
     try {
       UserCredential? userCredential =
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: emailController.text.trim(),
         password: pwController.text,
       );
@@ -58,8 +60,11 @@ class _RegisterWidgetState extends State<RegisterWidget> {
       // Create Firestore document
       await createUserDocument(userCredential);
 
-      // Pop loading circle on success
-      if (mounted) Navigator.pop(context);
+      // Pop loading circle on success and navigate to fanzine page
+      if (mounted) {
+        Navigator.pop(context);
+        context.go('/');
+      }
 
     } on FirebaseAuthException catch (e) {
       // Pop loading circle on error

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../components/button.dart'; // Assuming MyButton is here
 import '../components/textfield.dart'; // Assuming MyTextField is here (used for Username)
 // Import the My Info page to navigate to it
@@ -117,7 +119,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     // ... (logout logic remains the same) ...
     try {
       await FirebaseAuth.instance.signOut();
-      if (mounted) { Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil( '/login_or_register', (Route<dynamic> route) => false, ); }
+      if (mounted) context.go('/login');
     } catch (e) {
       print("Error logging out: $e");
       if (mounted) { displayMessageToUser("Error logging out: ${e.toString()}", context); }
