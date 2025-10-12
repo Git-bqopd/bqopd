@@ -6,10 +6,41 @@ import '../utils/fanzine_grid_view.dart';
 import '../widgets/fanzine_widget.dart';
 
 class FanzinePage extends StatelessWidget {
-  const FanzinePage({super.key});
+  final String? shortcode;
+  const FanzinePage({
+    super.key,
+    this.shortcode,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (shortcode != null) {
+      return Scaffold(
+        backgroundColor: Colors.grey[200],
+        body: SafeArea(
+          child: FanzineGridView(
+            shortCode: shortcode!,
+            uiWidget: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12.0),
+                child: const FanzineWidget(),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       return const Scaffold(
