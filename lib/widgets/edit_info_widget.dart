@@ -7,7 +7,9 @@ import '../components/textfield.dart'; // Assuming MyTextField is here (used for
 import '../pages/profile_page.dart'; // Adjust path if needed
 
 class EditInfoWidget extends StatefulWidget {
-  const EditInfoWidget({super.key});
+  final String fanzineId;
+
+  const EditInfoWidget({super.key, required this.fanzineId});
 
   @override
   State<EditInfoWidget> createState() => _EditInfoWidgetState();
@@ -166,7 +168,14 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               // mainAxisSize: MainAxisSize.min,
               children: [
                 // --- Header ---
-                Text( 'edit your profile', style: TextStyle( fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark, ), ),
+                Text(
+                  'edit your profile',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColorDark,
+                  ),
+                ),
                 const SizedBox(height: 20),
 
                 // --- All the TextFields ---

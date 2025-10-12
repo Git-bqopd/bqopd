@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../widgets/edit_info_widget.dart'; // Adjust path if needed
 
 class EditInfoPage extends StatelessWidget {
-  const EditInfoPage({super.key});
+  final String fanzineId;
+
+  const EditInfoPage({super.key, required this.fanzineId});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +22,7 @@ class EditInfoPage extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0.0), // LTR padding, no B
                 child: AspectRatio(
                   aspectRatio: 8 / 5, // Wide aspect ratio
-                  child: EditInfoWidget(), // Embed the edit widget
+                  child: EditInfoWidget(fanzineId: fanzineId), // Embed the edit widget
                 ),
               ),
 
