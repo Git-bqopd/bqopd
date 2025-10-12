@@ -90,11 +90,8 @@ final GoRouter router = GoRouter(
       },
     ),
     GoRoute(
-      path: '/edit-info/:fanzineId',
-      builder: (context, state) {
-        final fanzineId = state.pathParameters['fanzineId']!;
-        return EditInfoPage(fanzineId: fanzineId);
-      },
+      path: '/edit-info',
+      builder: (context, state) => const EditInfoPage(),
     ),
   ],
 );
