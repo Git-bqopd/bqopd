@@ -23,11 +23,23 @@ class LoginPage extends StatelessWidget {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
+
+            // ✅ Show Firestore errors instead of silently failing
+            if (snapshot.hasError) {
+              return Center(
+                child: Text('Firestore error: ${snapshot.error}'),
+              );
+            }
+
             if (!snapshot.hasData || !snapshot.data!.exists) {
               return const Center(child: Text('Settings not found.'));
             }
 
             final data = snapshot.data!.data() as Map<String, dynamic>;
+
+            // Debug print to verify the doc content
+            debugPrint('🔥 login_zine_shortcode = ${data['login_zine_shortcode']}');
+
             final shortCode = data['login_zine_shortcode'] as String?;
             if (shortCode == null) {
               return const Center(child: Text('No login zine configured.'));
@@ -49,9 +61,7 @@ class LoginPage extends StatelessWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12.0),
-                  child: LoginWidget(
-                    onTap: onTap,
-                  ),
+                  child: LoginWidget(onTap: onTap),
                 ),
               ),
             );
@@ -61,4 +71,3 @@ class LoginPage extends StatelessWidget {
     );
   }
 }
-

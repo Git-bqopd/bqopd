@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../components/button.dart';
 import '../components/textfield.dart';
+import '../services/user_bootstrap.dart';
 
 class LoginWidget extends StatefulWidget {
   // Callback function to trigger switching to the register page
@@ -36,6 +37,7 @@ class _LoginWidgetState extends State<LoginWidget> {
         email: emailController.text.trim(), // Trim whitespace from email
         password: passwordController.text,
       );
+      await ensureUserDocument();
       // Login successful: Navigation or state updates should be handled elsewhere
     } on FirebaseAuthException catch (e) {
       // Handle Firebase authentication errors
