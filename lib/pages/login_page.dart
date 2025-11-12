@@ -1,3 +1,4 @@
+import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -14,58 +15,52 @@ class LoginPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
-        child: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('app_settings')
-              .doc('main_settings')
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        child: PageWrapper(
+          maxWidth: 1000,
+          scroll: false,
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('app_settings')
+                .doc('main_settings')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData || !snapshot.data!.exists) {
+                return const Center(child: Text('Settings not found.'));
+              }
 
-            // ✅ Show Firestore errors instead of silently failing
-            if (snapshot.hasError) {
-              return Center(
-                child: Text('Firestore error: ${snapshot.error}'),
-              );
-            }
+              final data = snapshot.data!.data() as Map<String, dynamic>;
+              final shortCode = data['login_zine_shortcode'] as String?;
+              if (shortCode == null) {
+                return const Center(child: Text('No login zine configured.'));
+              }
 
-            if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('Settings not found.'));
-            }
-
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-
-            // Debug print to verify the doc content
-            debugPrint('🔥 login_zine_shortcode = ${data['login_zine_shortcode']}');
-
-            final shortCode = data['login_zine_shortcode'] as String?;
-            if (shortCode == null) {
-              return const Center(child: Text('No login zine configured.'));
-            }
-
-            return FanzineGridView(
-              shortCode: shortCode,
-              uiWidget: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      spreadRadius: 1,
-                      blurRadius: 5,
-                      offset: const Offset(0, 3),
+              return FanzineGridView(
+                shortCode: shortCode,
+                uiWidget: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 5,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12.0),
+                    child: LoginWidget(
+                      onTap: onTap,
                     ),
-                  ],
+                  ),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12.0),
-                  child: LoginWidget(onTap: onTap),
-                ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

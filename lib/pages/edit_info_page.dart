@@ -1,3 +1,4 @@
+import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:flutter/material.dart';
 // Import the widget for the top section
 import '../widgets/edit_info_widget.dart'; // Adjust path if needed
@@ -11,7 +12,9 @@ class EditInfoPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
-        child: SingleChildScrollView( // Make page scrollable
+        child: PageWrapper(
+          maxWidth: 1000,
+          scroll: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

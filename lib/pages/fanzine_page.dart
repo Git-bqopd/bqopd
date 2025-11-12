@@ -1,3 +1,4 @@
+import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -26,42 +27,46 @@ class FanzinePage extends StatelessWidget {
       backgroundColor: Colors.grey[200],
       body: SafeArea(
         // 1) Try Users/{email}
-        child: StreamBuilder<DocumentSnapshot>(
-          stream: emailDocRef.snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Text('Users read error (email doc): ${snapshot.error}'),
+        child: PageWrapper(
+          maxWidth: 1000,
+          scroll: false,
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: emailDocRef.snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text('Users read error (email doc): ${snapshot.error}'),
+                );
+              }
+
+              // If the email doc exists, use it.
+              if (snapshot.hasData && snapshot.data!.exists) {
+                return _buildFanzineFromUserDoc(snapshot.data!);
+              }
+
+              // 2) Fallback to Users/{uid}
+              return StreamBuilder<DocumentSnapshot>(
+                stream: uidDocRef.snapshots(),
+                builder: (context, uidSnap) {
+                  if (uidSnap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (uidSnap.hasError) {
+                    return Center(
+                      child: Text('Users read error (uid doc): ${uidSnap.error}'),
+                    );
+                  }
+                  if (!uidSnap.hasData || !uidSnap.data!.exists) {
+                    return const Center(child: Text('User not found.'));
+                  }
+                  return _buildFanzineFromUserDoc(uidSnap.data!);
+                },
               );
-            }
-
-            // If the email doc exists, use it.
-            if (snapshot.hasData && snapshot.data!.exists) {
-              return _buildFanzineFromUserDoc(snapshot.data!);
-            }
-
-            // 2) Fallback to Users/{uid}
-            return StreamBuilder<DocumentSnapshot>(
-              stream: uidDocRef.snapshots(),
-              builder: (context, uidSnap) {
-                if (uidSnap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (uidSnap.hasError) {
-                  return Center(
-                    child: Text('Users read error (uid doc): ${uidSnap.error}'),
-                  );
-                }
-                if (!uidSnap.hasData || !uidSnap.data!.exists) {
-                  return const Center(child: Text('User not found.'));
-                }
-                return _buildFanzineFromUserDoc(uidSnap.data!);
-              },
-            );
-          },
+            },
+          ),
         ),
       ),
     );
