@@ -1,14 +1,14 @@
 import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../utils/fanzine_grid_view.dart';
 import '../widgets/login_widget.dart';
 
 class LoginPage extends StatelessWidget {
-  final void Function()? onTap;
 
-  const LoginPage({super.key, required this.onTap});
+  const LoginPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +54,7 @@ class LoginPage extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12.0),
                     child: LoginWidget(
-                      onTap: onTap,
+                      onTap: () => context.go('/register'),
                     ),
                   ),
                 ),

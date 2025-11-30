@@ -59,8 +59,6 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
                   // Simple responsive breakpoints
                   final width = constraints.maxWidth;
                   int crossAxisCount = 2;
-                  if (width >= 1200) crossAxisCount = 4;
-                  else if (width >= 900) crossAxisCount = 3;
 
                   return GridView.builder(
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -81,7 +79,7 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
                       final pageNum = data['pageNumber'];
 
                       return DragTarget<QueryDocumentSnapshot>(
-                        onWillAccept: (incoming) => incoming != null,
+                        onWillAccept: (incoming) => incoming != null && incoming.id != page.id,
                         onAccept: (draggedPage) => _onReorder(draggedPage, page),
                         builder: (context, candidate, rejected) {
                           final highlight = candidate.isNotEmpty;
@@ -154,30 +152,59 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
     );
   }
 
-  void _onReorder(
+  Future<void> _onReorder(
       QueryDocumentSnapshot draggedPage,
       QueryDocumentSnapshot targetPage,
-      ) {
-    final batch = FirebaseFirestore.instance.batch();
-
+      ) async {
     final draggedData = draggedPage.data() as Map<String, dynamic>;
     final targetData = targetPage.data() as Map<String, dynamic>;
 
-    final draggedRef = FirebaseFirestore.instance
+    final int oldPageNum = draggedData['pageNumber'];
+    final int newPageNum = targetData['pageNumber'];
+
+    // If dropped on itself, do nothing
+    if (oldPageNum == newPageNum) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final pagesRef = FirebaseFirestore.instance
         .collection('fanzines')
         .doc(widget.fanzineId)
-        .collection('pages')
-        .doc(draggedPage.id);
+        .collection('pages');
 
-    final targetRef = FirebaseFirestore.instance
-        .collection('fanzines')
-        .doc(widget.fanzineId)
-        .collection('pages')
-        .doc(targetPage.id);
+    // CASE 1: Dragging Down (e.g., Page 1 -> Page 3)
+    // We need to shift pages (1 < p <= 3) DOWN by 1 (decrement their pageNumber)
+    // so Page 2 becomes 1, Page 3 becomes 2, and dragged Item takes spot 3.
+    if (oldPageNum < newPageNum) {
+      final query = await pagesRef
+          .where('pageNumber', isGreaterThan: oldPageNum)
+          .where('pageNumber', isLessThanOrEqualTo: newPageNum)
+          .get();
 
-    batch.update(draggedRef, {'pageNumber': targetData['pageNumber']});
-    batch.update(targetRef, {'pageNumber': draggedData['pageNumber']});
+      for (final doc in query.docs) {
+        batch.update(doc.reference, {
+          'pageNumber': FieldValue.increment(-1),
+        });
+      }
+    }
+    // CASE 2: Dragging Up (e.g., Page 3 -> Page 1)
+    // We need to shift pages (1 <= p < 3) UP by 1 (increment their pageNumber)
+    // so Page 1 becomes 2, Page 2 becomes 3, and dragged Item takes spot 1.
+    else {
+      final query = await pagesRef
+          .where('pageNumber', isGreaterThanOrEqualTo: newPageNum)
+          .where('pageNumber', isLessThan: oldPageNum)
+          .get();
 
-    batch.commit();
+      for (final doc in query.docs) {
+        batch.update(doc.reference, {
+          'pageNumber': FieldValue.increment(1),
+        });
+      }
+    }
+
+    // Finally, set the dragged page to the new target number
+    batch.update(draggedPage.reference, {'pageNumber': newPageNum});
+
+    await batch.commit();
   }
 }
