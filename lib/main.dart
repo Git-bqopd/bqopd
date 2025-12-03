@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -46,33 +47,56 @@ class MyApp extends StatelessWidget {
       refreshListenable:
       GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
 
-      redirect: (context, state) {
+      redirect: (context, state) async { // Async redirect
         final user = FirebaseAuth.instance.currentUser;
-        // fullPath might be null on startup, default to root
         final path = state.fullPath ?? '/';
 
-        // 1. Identify the type of route we are on
         final isLoggingIn = path == '/login' || path == '/register';
         final isRoot = path == '/';
         final isProtected = path == '/fanzine' || path == '/profile';
 
-        // 2. Logic for Unauthenticated Users
+        // 1. Unauthenticated User Logic
         if (user == null) {
-          // If trying to go to Root OR a Protected route, force Login
           if (isRoot || isProtected) {
             return '/login';
           }
-          // Allow access to Login, Register, and Shortlinks (/:code)
+          // Allow public access to login, register, and shortlinks
           return null;
         }
 
-        // 3. Logic for Authenticated Users
+        // 2. Authenticated User Logic
         if (user != null) {
-          // If trying to go to Root, Login, or Register, send to Home (Fanzine)
-          if (isRoot || isLoggingIn) {
-            return '/fanzine';
+          // If going to Root, Login, Register, OR the old /fanzine route
+          if (isRoot || isLoggingIn || path == '/fanzine') {
+
+            // Fetch the user's shortcode preference
+            try {
+              final doc = await FirebaseFirestore.instance
+                  .collection('Users')
+                  .doc(user.uid)
+                  .get();
+
+              if (doc.exists) {
+                final data = doc.data();
+                final shortCode = data?['newFanzine'] as String?;
+
+                // If they have a shortcode, send them there!
+                if (shortCode != null && shortCode.isNotEmpty) {
+                  return '/$shortCode';
+                }
+              }
+            } catch (e) {
+              print("Error fetching user shortcode for redirect: $e");
+            }
+
+            // Fallback if no shortcode found or error
+            // We can send them to a generic 'fanzine' route, or keep them on current path
+            // But to avoid infinite loops, if we are already at /fanzine, return null.
+            if (path != '/fanzine') {
+              return '/fanzine';
+            }
           }
-          // Allow access to Profile, Fanzine, and Shortlinks
+          // Allow access to Profile and other pages
           return null;
         }
 
@@ -83,7 +107,6 @@ class MyApp extends StatelessWidget {
         GoRoute(
           path: '/',
           name: 'root',
-          // This builder is only seen briefly while the redirect logic decides where to go
           builder: (context, state) => const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           ),
@@ -98,6 +121,7 @@ class MyApp extends StatelessWidget {
           name: 'register',
           builder: (context, state) => const RegisterPage(),
         ),
+        // Keep /fanzine as a fallback route
         GoRoute(
           path: '/fanzine',
           name: 'fanzine',
@@ -109,7 +133,7 @@ class MyApp extends StatelessWidget {
           builder: (context, state) => const ProfilePage(),
         ),
 
-        // PUBLIC: /:code (either a fanzine shortcode or a username)
+        // PUBLIC: /:code
         GoRoute(
           path: '/:code',
           name: 'shortlink',

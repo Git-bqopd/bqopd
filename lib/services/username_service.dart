@@ -13,30 +13,41 @@ Future<String?> claimHandle(String desiredRaw) async {
 
   final db = FirebaseFirestore.instance;
 
-  // Optional: prevent conflicts with existing shortcodes
-  final short = await db.collection('shortcodes').doc(handle).get();
+  // 1. Check conflicts using UPPERCASE key
+  // This ensures a user can't claim 'abc' if 'ABC' is already a shortcode
+  final shortCodeKey = handle.toUpperCase();
+  final short = await db.collection('shortcodes').doc(shortCodeKey).get();
   if (short.exists) return 'Handle is reserved';
 
   final ref = db.collection('usernames').doc(handle);
   final batch = db.batch();
 
-  // Try to create usernames/{handle} with your uid
+  // 2. Create usernames/{handle}
   batch.set(ref, {
     'uid': user.uid,
     'createdAt': FieldValue.serverTimestamp(),
   });
 
-  // Also mirror on the user's doc (by email for your current app)
-  final userDoc = db.collection('Users').doc(user.email);
+  // 3. Mirror on the user's doc (using UID)
+  final userDoc = db.collection('Users').doc(user.uid);
   batch.set(userDoc, {
     'uid': user.uid,
     'username': handle,
+    'email': user.email,
     'updatedAt': FieldValue.serverTimestamp(),
   }, SetOptions(merge: true));
 
+  // 4. Add to Master Lookup as UPPERCASE
+  final shortcodeRef = db.collection('shortcodes').doc(shortCodeKey);
+  batch.set(shortcodeRef, {
+    'type': 'user',
+    'contentId': user.uid,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+
   try {
-    await batch.commit(); // will fail if rule denies because handle exists
-    return null; // success
+    await batch.commit();
+    return null;
   } on FirebaseException catch (e) {
     return e.message ?? 'Could not claim handle';
   }

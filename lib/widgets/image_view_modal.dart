@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ImageViewModal extends StatefulWidget {
   final String imageUrl;
   final String? imageText;
   final String? shortCode;
+  final String imageId; // REQUIRED: Need this to save reference to DB
 
   const ImageViewModal({
     super.key,
     required this.imageUrl,
+    required this.imageId, // Add this to your constructor call
     this.imageText,
     this.shortCode,
   });
@@ -46,25 +50,135 @@ class _ImageViewModalState extends State<ImageViewModal> {
     });
   }
 
+  /// Opens the "Add to Fanzine" bottom sheet
+  void _showAddToFanzineSheet() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          // Limit height so it doesn't cover the whole screen
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Add to Fanzine',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  // Query fanzines owned by this user
+                  stream: FirebaseFirestore.instance
+                      .collection('fanzines')
+                      .where('editorId', isEqualTo: user.uid)
+                      .orderBy('creationDate', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final docs = snapshot.data?.docs ?? [];
+                    if (docs.isEmpty) {
+                      return const Center(
+                        child: Text("You haven't created any fanzines yet."),
+                      );
+                    }
+
+                    return ListView.builder(
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final fanzineData = docs[index].data() as Map<String, dynamic>;
+                        final fanzineId = docs[index].id;
+                        final String title = fanzineData['title'] ?? 'Untitled Fanzine';
+
+                        // Check if image is already in this fanzine (optional UI polish)
+                        final List existingImages = fanzineData['imageIds'] ?? [];
+                        final bool alreadyAdded = existingImages.contains(widget.imageId);
+
+                        return ListTile(
+                          leading: const Icon(Icons.book, color: Colors.indigo),
+                          title: Text(title),
+                          subtitle: Text(alreadyAdded ? 'Image already added' : 'Tap + to add'),
+                          trailing: IconButton(
+                            icon: Icon(
+                              alreadyAdded ? Icons.check : Icons.add_circle_outline,
+                              color: alreadyAdded ? Colors.green : null,
+                            ),
+                            onPressed: alreadyAdded
+                                ? null
+                                : () => _addToFanzine(fanzineId, title),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _addToFanzine(String fanzineId, String fanzineTitle) async {
+    try {
+      // Add the image ID to the 'imageIds' array in the fanzine document
+      // FieldValue.arrayUnion ensures no duplicates are added
+      await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).update({
+        'imageIds': FieldValue.arrayUnion([widget.imageId]),
+      });
+
+      if (mounted) {
+        Navigator.pop(context); // Close the sheet
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Added to "$fanzineTitle"!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error adding to fanzine: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    // Check if user is logged in (an "Editor")
+    final bool isEditor = FirebaseAuth.instance.currentUser != null;
 
     return Dialog(
-      insetPadding: const EdgeInsets.all(16), // nice side margins on desktop
+      insetPadding: const EdgeInsets.all(16),
       backgroundColor: Colors.white,
       child: ConstrainedBox(
-        // Prevent "RenderFlex overflowed" by capping dialog dimensions
         constraints: BoxConstraints(
-          maxWidth: 1000,                   // <- side white space on large screens
-          maxHeight: size.height * 0.9,     // <- keep inside viewport
+          maxWidth: 1000,
+          maxHeight: size.height * 0.9,
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // IMAGE AREA — expands to available height but never overflows
+              // IMAGE AREA
               Expanded(
                 child: Container(
                   color: Colors.grey[100],
@@ -112,8 +226,17 @@ class _ImageViewModalState extends State<ImageViewModal> {
                         onPressed: _toggleText,
                         tooltip: 'Text',
                       ),
-                      const Icon(Icons.remove_red_eye), // placeholder
-                      const Icon(Icons.print),          // placeholder
+
+                      // --- NEW BUTTON: ADD TO FANZINE ---
+                      if (isEditor)
+                        IconButton(
+                          icon: const Icon(Icons.bookmark_add_outlined),
+                          onPressed: _showAddToFanzineSheet,
+                          tooltip: 'Add to Fanzine',
+                        ),
+                      // ----------------------------------
+
+                      const Icon(Icons.print), // placeholder
                       IconButton(
                         icon: const Icon(Icons.link),
                         onPressed: _toggleShortCode,
@@ -124,7 +247,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
                 ),
               ),
 
-              // DETAILS AREA — becomes scrollable if tall
+              // DETAILS AREA
               AnimatedSize(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeInOut,
@@ -141,9 +264,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
     final showAnything = _showComments || _showText || _showShortCode;
     if (!showAnything) return const SizedBox.shrink();
 
-    // Wrap in SizedBox + SingleChildScrollView so long text/comments never overflow.
     return SizedBox(
-      // Give the details area up to ~40% of the dialog height when needed.
       height: 240,
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),

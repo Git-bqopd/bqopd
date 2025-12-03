@@ -1,12 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart'; // For TapGestureRecognizer
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-// Import the My Info page to navigate to it
-import '../pages/profile_page.dart'; // Adjust path if needed
+import '../pages/profile_page.dart';
 
-// This widget now primarily displays the username and a link to more info.
-// It includes its own background color and rounded corners.
 class FanzineWidget extends StatefulWidget {
   const FanzineWidget({super.key});
 
@@ -16,14 +13,11 @@ class FanzineWidget extends StatefulWidget {
 
 class _FanzineWidgetState extends State<FanzineWidget> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
-
-  // Page controller for the tabbed view
   final PageController _pageController = PageController();
-  int _currentPage = 0; // To track the current page
+  int _currentPage = 0;
 
-  String _username = '';
+  String _displayUrl = 'bqopd.com/...'; // Default placeholder
   bool _isLoadingData = true;
-  String? _errorMessage; // Optional: for error display
 
   @override
   void initState() {
@@ -31,54 +25,75 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     _loadUserData();
   }
 
-  // --- Simplified Load User Data Method ---
   Future<void> _loadUserData() async {
-    // ... (load user data logic remains the same) ...
     if (!mounted) return;
-    setState(() { _isLoadingData = true; _errorMessage = null; });
+    setState(() { _isLoadingData = true; });
+
     if (currentUser != null) {
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.email).get();
+        // 1. Try fetching from the new UID document first
+        final userDoc = await FirebaseFirestore.instance
+            .collection('Users')
+            .doc(currentUser!.uid)
+            .get();
+
         if (userDoc.exists && mounted) {
           final data = userDoc.data() as Map<String, dynamic>;
-          setStateIfMounted(() { _username = data['username'] ?? 'N/A'; });
-        } else if (mounted) {
-          print("User document not found for ${currentUser!.email}");
-          setStateIfMounted(() { _username = 'N/A'; });
+          final username = data['username'] as String?;
+
+          setState(() {
+            if (username != null && username.isNotEmpty) {
+              _displayUrl = 'bqopd.com/$username';
+            } else {
+              _displayUrl = 'bqopd.com/user'; // Fallback if username missing
+            }
+          });
+        } else {
+          // Fallback: Try legacy email doc if UID doc is missing
+          final emailDoc = await FirebaseFirestore.instance
+              .collection('Users')
+              .doc(currentUser!.email)
+              .get();
+
+          if (emailDoc.exists && mounted) {
+            final data = emailDoc.data() as Map<String, dynamic>;
+            final username = data['username'] as String?;
+            setState(() {
+              if (username != null && username.isNotEmpty) {
+                _displayUrl = 'bqopd.com/$username';
+              }
+            });
+          }
         }
       } catch (e) {
         print("Error loading username: $e");
-        if(mounted) { setStateIfMounted(() { _username = 'Error'; }); }
-      } finally { setStateIfMounted(() { _isLoadingData = false; }); }
+      } finally {
+        if (mounted) setState(() { _isLoadingData = false; });
+      }
     } else {
-      print("Error: No current user found.");
-      setStateIfMounted(() { _username = 'N/A'; _isLoadingData = false; });
+      if (mounted) setState(() { _isLoadingData = false; });
     }
   }
 
-  // Helper to avoid multiple mounted checks
-  void setStateIfMounted(VoidCallback fn) {
-    if (mounted) { setState(fn); }
-  }
-
-  // --- Navigate to Profile Page Method ---
   void goToProfilePage() {
-    Navigator.push( context, MaterialPageRoute(builder: (context) => const ProfilePage()), );
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProfilePage()),
+    );
   }
-
 
   @override
   void dispose() {
-    _pageController.dispose(); // Dispose the controller
+    _pageController.dispose();
     super.dispose();
   }
 
-  // --- Build Method ---
   @override
   Widget build(BuildContext context) {
     final linkStyle = TextStyle(
       fontWeight: FontWeight.bold,
       color: Theme.of(context).primaryColorDark,
+      fontSize: 16,
     );
     final borderRadius = BorderRadius.circular(12.0);
 
@@ -90,69 +105,72 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       child: ClipRRect(
         borderRadius: borderRadius,
         child: Padding(
-          padding: const EdgeInsets.all(16.0), // Consistent padding
+          padding: const EdgeInsets.all(16.0),
           child: _isLoadingData
               ? const Center(child: CircularProgressIndicator())
               : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // --- Top Row: Profile Link ---
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'profile: ',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        RichText(
-                          text: TextSpan(
-                            text: _username,
-                            style: linkStyle,
-                            recognizer: TapGestureRecognizer()
-                              ..onTap = goToProfilePage,
-                          ),
-                        ),
-                      ],
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // --- Top Row: Profile Link (Updated) ---
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center, // Centered
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      text: _displayUrl,
+                      style: linkStyle,
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = goToProfilePage,
                     ),
-                    const SizedBox(height: 20), // Spacing
+                  ),
+                ],
+              ),
 
-                    // --- Second Row: Tab Navigation ---
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildTab('indicia', 0),
-                        _buildTabSeparator(),
-                        _buildTab('creators', 1),
-                        _buildTabSeparator(),
-                        _buildTab('stats', 2),
-                      ],
-                    ),
-                    const SizedBox(height: 10), // Spacing
+              const SizedBox(height: 10),
+              // Single pixel horizontal line
+              const Divider(
+                height: 1,
+                thickness: 1,
+                color: Colors.black54, // Matches the '|' separators below
+              ),
+              const SizedBox(height: 20),
 
-                    // --- Third Row: PageView ---
-                    Expanded(
-                      child: PageView(
-                        controller: _pageController,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentPage = index;
-                          });
-                        },
-                        children: const [
-                          Center(child: Text('This is the indicia page.')),
-                          Center(child: Text('This is the creators page.')),
-                          Center(child: Text('This is the stats page.')),
-                        ],
-                      ),
-                    ),
+              // --- Second Row: Tab Navigation ---
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildTab('indicia', 0),
+                  _buildTabSeparator(),
+                  _buildTab('creators', 1),
+                  _buildTabSeparator(),
+                  _buildTab('stats', 2),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // --- Third Row: PageView ---
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    setState(() {
+                      _currentPage = index;
+                    });
+                  },
+                  children: const [
+                    Center(child: Text('This is the indicia page.')),
+                    Center(child: Text('This is the creators page.')),
+                    Center(child: Text('This is the stats page.')),
                   ],
                 ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // --- Helper to build a tab ---
   Widget _buildTab(String text, int index) {
     return GestureDetector(
       onTap: () {
@@ -173,19 +191,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     );
   }
 
-    // --- Helper for tab separator ---
   Widget _buildTabSeparator() {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: Text('|', style: TextStyle(fontSize: 16, color: Colors.black54)),
     );
   }
-}
-
-// Helper function (can be removed if not used for errors)
-void displayMessageToUser(String message, BuildContext context) {
-  // ... (display message logic remains the same) ...
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).removeCurrentSnackBar();
-  ScaffoldMessenger.of(context).showSnackBar( SnackBar( content: Text(message), duration: const Duration(seconds: 3), ), );
 }

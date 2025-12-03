@@ -18,51 +18,55 @@ class FanzinePage extends StatelessWidget {
       );
     }
 
-    final emailDocRef =
-    FirebaseFirestore.instance.collection('Users').doc(currentUser.email);
+    // Define both references
     final uidDocRef =
     FirebaseFirestore.instance.collection('Users').doc(currentUser.uid);
+    final emailDocRef =
+    FirebaseFirestore.instance.collection('Users').doc(currentUser.email);
 
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
-        // 1) Try Users/{email}
         child: PageWrapper(
           maxWidth: 1000,
           scroll: false,
+          // 1) CHECK UID FIRST (The New Standard)
           child: StreamBuilder<DocumentSnapshot>(
-            stream: emailDocRef.snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+            stream: uidDocRef.snapshots(),
+            builder: (context, uidSnapshot) {
+              if (uidSnapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              if (snapshot.hasError) {
+              if (uidSnapshot.hasError) {
                 return Center(
-                  child: Text('Users read error (email doc): ${snapshot.error}'),
+                  child: Text('Users read error (uid doc): ${uidSnapshot.error}'),
                 );
               }
 
-              // If the email doc exists, use it.
-              if (snapshot.hasData && snapshot.data!.exists) {
-                return _buildFanzineFromUserDoc(snapshot.data!);
+              // If the UID doc exists, use it!
+              if (uidSnapshot.hasData && uidSnapshot.data!.exists) {
+                return _buildFanzineFromUserDoc(uidSnapshot.data!);
               }
 
-              // 2) Fallback to Users/{uid}
+              // 2) FALLBACK TO EMAIL (Legacy)
+              // Only runs if the UID document was NOT found.
               return StreamBuilder<DocumentSnapshot>(
-                stream: uidDocRef.snapshots(),
-                builder: (context, uidSnap) {
-                  if (uidSnap.connectionState == ConnectionState.waiting) {
+                stream: emailDocRef.snapshots(),
+                builder: (context, emailSnapshot) {
+                  if (emailSnapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (uidSnap.hasError) {
+                  if (emailSnapshot.hasError) {
                     return Center(
-                      child: Text('Users read error (uid doc): ${uidSnap.error}'),
+                      child:
+                      Text('Users read error (email doc): ${emailSnapshot.error}'),
                     );
                   }
-                  if (!uidSnap.hasData || !uidSnap.data!.exists) {
-                    return const Center(child: Text('User not found.'));
+                  if (!emailSnapshot.hasData || !emailSnapshot.data!.exists) {
+                    return const Center(child: Text('User profile not found.'));
                   }
-                  return _buildFanzineFromUserDoc(uidSnap.data!);
+                  // If we found the old email doc, use that
+                  return _buildFanzineFromUserDoc(emailSnapshot.data!);
                 },
               );
             },

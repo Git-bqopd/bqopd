@@ -34,11 +34,13 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoadingCurrentUser = true);
     _currentUser = FirebaseAuth.instance.currentUser;
 
-    if (_currentUser != null && _currentUser!.email != null) {
+    // CHANGED: We now rely on UID, so strictly check for currentUser
+    if (_currentUser != null) {
       try {
+        // CHANGED: Fetch from 'Users' using the UID, not email
         final userDoc = await FirebaseFirestore.instance
             .collection('Users')
-            .doc(_currentUser!.email)
+            .doc(_currentUser!.uid) // <--- CRITICAL FIX HERE
             .get();
 
         if (userDoc.exists && mounted) {
@@ -73,6 +75,9 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // ... rest of your code remains the same ...
+  // (Helper functions, View Builders, etc.)
+
   void _showFanzineDetailsModal(BuildContext context, Map<String, dynamic> fanzineData) {
     final title = fanzineData['title'] ?? 'N/A';
     final editorId = fanzineData['editorId'] ?? 'N/A';
@@ -106,7 +111,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ---------- Helpers ----------
   int _calcCols(double w) => w >= 1200 ? 4 : (w >= 900 ? 3 : 2);
 
   ButtonStyle get _blueButtonStyle => TextButton.styleFrom(
@@ -119,7 +123,6 @@ class _ProfilePageState extends State<ProfilePage> {
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
 
-  // ---------- Views ----------
   Widget _buildFanzinesSection() {
     if (_isLoadingCurrentUser) {
       return const Padding(
@@ -216,7 +219,6 @@ class _ProfilePageState extends State<ProfilePage> {
             final cols = _calcCols(c.maxWidth);
             final itemCount = displayItems.isEmpty ? 6 : displayItems.length.clamp(6, 9999);
             return GridView.builder(
-              // IMPORTANT: make the grid participate in the parent's scroll
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -275,7 +277,6 @@ class _ProfilePageState extends State<ProfilePage> {
           builder: (context, c) {
             final cols = _calcCols(c.maxWidth);
             return GridView.builder(
-              // IMPORTANT: make the grid participate in the parent's scroll
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -307,6 +308,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         imageUrl: imageUrl,
                         imageText: data?['text'],
                         shortCode: data?['shortCode'],
+                        imageId: images[i].id,
                       ),
                     );
                   },
@@ -344,12 +346,11 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ---------- Scaffold ----------
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
 
-    if (currentUser == null || currentUser.email == null) {
+    if (currentUser == null) {
       return Scaffold(
         backgroundColor: Colors.grey[200],
         body: const Center(child: Text('Please log in to see your profile.')),
@@ -361,12 +362,11 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SafeArea(
         child: PageWrapper(
           maxWidth: 1000,
-          scroll: true, // one unified scroller so the Envelope scrolls away
+          scroll: true,
           padding: const EdgeInsets.all(8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // The "Envelope" header – part of the same scroll now
               AspectRatio(
                 aspectRatio: 8 / 5,
                 child: ProfileWidget(
@@ -376,9 +376,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               const SizedBox(height: 8),
-
-              // Body switches between Fanzines and Pages,
-              // each rendered as a non-scrolling, shrink-wrapped grid.
               if (_currentIndex == 0) _buildFanzinesSection() else _buildPagesSection(),
             ],
           ),

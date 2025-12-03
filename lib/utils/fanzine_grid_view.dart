@@ -162,6 +162,7 @@ class _FanzinePagesGrid extends StatelessWidget {
                     imageUrl: imageUrl,
                     imageText: imageText,
                     shortCode: pageShortCode,
+                    imageId: data['_id'],
                   ),
                 );
               },

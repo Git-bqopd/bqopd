@@ -37,20 +37,47 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   Future<void> _loadUserData() async {
     if (!mounted) return;
     setState(() { _isLoading = true; _errorMessage = null; });
+
     if (currentUser != null) {
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.email).get();
+        // CHANGED: Query by UID, not Email
+        final userDoc = await FirebaseFirestore.instance
+            .collection('Users')
+            .doc(currentUser!.uid) // <--- CRITICAL FIX
+            .get();
+
         if (userDoc.exists && mounted) {
           final data = userDoc.data() as Map<String, dynamic>;
           setState(() {
-            _email = currentUser!.email ?? ''; _username = data['username'] ?? '';
-            _firstName = data['firstName'] ?? ''; _lastName = data['lastName'] ?? '';
-            _street1 = data['street1'] ?? ''; _street2 = data['street2'] ?? '';
-            _city = data['city'] ?? ''; _stateName = data['state'] ?? '';
-            _zipCode = data['zipCode'] ?? ''; _country = data['country'] ?? '';
+            _email = currentUser!.email ?? '';
+            _username = data['username'] ?? '';
+            _firstName = data['firstName'] ?? '';
+            _lastName = data['lastName'] ?? '';
+            _street1 = data['street1'] ?? '';
+            _street2 = data['street2'] ?? '';
+            _city = data['city'] ?? '';
+            _stateName = data['state'] ?? '';
+            _zipCode = data['zipCode'] ?? '';
+            _country = data['country'] ?? '';
           });
         } else if (mounted) {
-          setState(() { _email = currentUser!.email ?? 'N/A'; _errorMessage = "Profile data not found."; });
+          // Fallback logic: If UID doc doesn't exist, check Email (legacy)
+          // This helps during your migration phase
+          final emailDoc = await FirebaseFirestore.instance
+              .collection('Users')
+              .doc(currentUser!.email)
+              .get();
+
+          if (emailDoc.exists) {
+            final data = emailDoc.data() as Map<String, dynamic>;
+            setState(() {
+              _email = currentUser!.email ?? '';
+              _username = data['username'] ?? '';
+              // ... (copy other fields if needed, or just rely on UID going forward)
+            });
+          } else {
+            setState(() { _email = currentUser!.email ?? 'N/A'; _errorMessage = "Profile data not found."; });
+          }
         }
       } catch (e) {
         print("Error loading user data: $e");
@@ -155,7 +182,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                           );
                                           return;
                                         }
-                                        final userId = currentUser!.uid.isNotEmpty ? currentUser!.uid : currentUser!.email!;
+                                        // Always use UID now for uploads too!
+                                        final userId = currentUser!.uid;
                                         showDialog(
                                           context: context,
                                           barrierDismissible: false,

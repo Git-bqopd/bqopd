@@ -20,6 +20,15 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
   final _titleController = TextEditingController();
   bool _isLoading = false;
 
+  /// Check if this user gets special "bqopd" codes
+  bool _isVanityEligible(User? user) {
+    if (user == null || user.email == null) return false;
+
+    // Check for your specific email or any "bqopd" email
+    return user.email == 'kevin@712liberty.com' ||
+        user.email!.contains('bqopd');
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -40,21 +49,30 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
     try {
       final String title = _titleController.text;
       final String editorId = currentUser.uid;
+      final bool useVanity = _isVanityEligible(currentUser);
 
       final newFanzineRef = FirebaseFirestore.instance.collection('fanzines').doc();
-      final String? shortCode = await assignShortcode(FirebaseFirestore.instance, 'fanzine', newFanzineRef.id);
+
+      // Pass the isVanity flag to our new generator
+      final String? shortCode = await assignShortcode(
+        FirebaseFirestore.instance,
+        'fanzine',
+        newFanzineRef.id,
+        isVanity: useVanity,
+      );
 
       if (shortCode != null) {
         await newFanzineRef.set({
           'title': title,
           'editorId': editorId,
           'creationDate': FieldValue.serverTimestamp(),
-          'shortCode': shortCode,
+          'shortCode': shortCode, // Saves "N7bqopd4" (Display version)
+          'shortCodeKey': shortCode.toUpperCase(), // Normalized key for searching
         });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Fanzine created successfully!')),
+            SnackBar(content: Text('Fanzine created! Code: $shortCode')),
           );
           Navigator.of(context).pop(true);
         }
@@ -65,7 +83,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
       print("Error creating fanzine: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating fanzine: ${e.toString()}')),
+          SnackBar(content: Text('Error: ${e.toString()}')),
         );
       }
     } finally {
@@ -90,12 +108,11 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               if (_isLoading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20.0),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: CircularProgressIndicator(),
                 ),
               if (!_isLoading) ...[
                 TextFormField(
@@ -104,12 +121,8 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
                     labelText: 'Fanzine Title',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a title for the fanzine';
-                    }
-                    return null;
-                  },
+                  validator: (value) =>
+                  (value == null || value.isEmpty) ? 'Please enter a title' : null,
                 ),
               ],
             ],
@@ -120,9 +133,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
         if (!_isLoading)
           TextButton(
             child: const Text('Cancel'),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
+            onPressed: () => Navigator.of(context).pop(),
           ),
         if (!_isLoading)
           ElevatedButton(
