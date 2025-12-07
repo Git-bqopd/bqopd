@@ -2,13 +2,12 @@ import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../widgets/profile_widget.dart';
 import '../widgets/new_fanzine_modal.dart';
 import '../widgets/image_view_modal.dart';
-import 'fanzine_editor_page.dart';
-import 'settings_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -18,7 +17,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  int _currentIndex = 0; // 0 = Fanzines, 1 = Pages
+  int _currentIndex = 0;
 
   bool _isEditor = false;
   bool _isLoadingCurrentUser = true;
@@ -34,13 +33,11 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoadingCurrentUser = true);
     _currentUser = FirebaseAuth.instance.currentUser;
 
-    // CHANGED: We now rely on UID, so strictly check for currentUser
     if (_currentUser != null) {
       try {
-        // CHANGED: Fetch from 'Users' using the UID, not email
         final userDoc = await FirebaseFirestore.instance
             .collection('Users')
-            .doc(_currentUser!.uid) // <--- CRITICAL FIX HERE
+            .doc(_currentUser!.uid)
             .get();
 
         if (userDoc.exists && mounted) {
@@ -72,42 +69,6 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => NewFanzineModal(userId: _currentUser!.uid),
-    );
-  }
-
-  // ... rest of your code remains the same ...
-  // (Helper functions, View Builders, etc.)
-
-  void _showFanzineDetailsModal(BuildContext context, Map<String, dynamic> fanzineData) {
-    final title = fanzineData['title'] ?? 'N/A';
-    final editorId = fanzineData['editorId'] ?? 'N/A';
-    String formattedDate = 'Date N/A';
-
-    if (fanzineData['creationDate'] is Timestamp) {
-      final creation = (fanzineData['creationDate'] as Timestamp).toDate().toLocal();
-      formattedDate = DateFormat("MMMM d, yyyy 'at' h:mm:ss a z", 'en_US').format(creation);
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: SingleChildScrollView(
-          child: ListBody(
-            children: <Widget>[
-              Text('Title: $title'),
-              Text('Editor ID: $editorId'),
-              Text('Creation Date: $formattedDate'),
-            ],
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            child: const Text('Close'),
-            onPressed: () => Navigator.of(ctx).pop(),
-          ),
-        ],
-      ),
     );
   }
 
@@ -173,10 +134,7 @@ class _ProfilePageState extends State<ProfilePage> {
             TextButton(
               style: _greyButtonStyle,
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SettingsPage()),
-                );
+                context.pushNamed('settings');
               },
               child: const Text(
                 "settings",
@@ -196,11 +154,9 @@ class _ProfilePageState extends State<ProfilePage> {
               TextButton(
                 style: _blueButtonStyle,
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => FanzineEditorPage(fanzineId: doc.id),
-                    ),
+                  context.pushNamed(
+                    'fanzineEditor',
+                    pathParameters: {'fanzineId': doc.id},
                   );
                 },
                 child: Text(

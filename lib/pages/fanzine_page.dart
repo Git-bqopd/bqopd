@@ -12,17 +12,18 @@ class FanzinePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      return const Scaffold(
-        body: Center(child: Text('User not logged in.')),
-      );
-    }
+    final db = FirebaseFirestore.instance;
 
-    // Define both references
-    final uidDocRef =
-    FirebaseFirestore.instance.collection('Users').doc(currentUser.uid);
-    final emailDocRef =
-    FirebaseFirestore.instance.collection('Users').doc(currentUser.email);
+    // --- 1. Determine Data Source ---
+    Stream<DocumentSnapshot> shortcodeSourceStream;
+
+    if (currentUser != null) {
+      // LOGGED IN: Get the user's personal Fanzine shortcode from their User doc
+      shortcodeSourceStream = db.collection('Users').doc(currentUser.uid).snapshots();
+    } else {
+      // NOT LOGGED IN (PUBLIC): Get the "Login Zine" shortcode from app_settings
+      shortcodeSourceStream = db.collection('app_settings').doc('main_settings').snapshots();
+    }
 
     return Scaffold(
       backgroundColor: Colors.grey[200],
@@ -30,80 +31,52 @@ class FanzinePage extends StatelessWidget {
         child: PageWrapper(
           maxWidth: 1000,
           scroll: false,
-          // 1) CHECK UID FIRST (The New Standard)
           child: StreamBuilder<DocumentSnapshot>(
-            stream: uidDocRef.snapshots(),
-            builder: (context, uidSnapshot) {
-              if (uidSnapshot.connectionState == ConnectionState.waiting) {
+            stream: shortcodeSourceStream,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              if (uidSnapshot.hasError) {
+
+              if (!snapshot.hasData || !snapshot.data!.exists) {
+                return const Center(child: Text('Fanzine configuration not found.'));
+              }
+
+              final data = snapshot.data!.data() as Map<String, dynamic>;
+              String? shortCode;
+
+              if (currentUser != null) {
+                // Logged In: Use 'newFanzine' from the User document
+                shortCode = data['newFanzine'] as String?;
+              } else {
+                // Not Logged In: Use 'login_zine_shortcode' from app_settings
+                shortCode = data['login_zine_shortcode'] as String?;
+              }
+
+              if (shortCode == null || shortCode.isEmpty) {
                 return Center(
-                  child: Text('Users read error (uid doc): ${uidSnapshot.error}'),
+                  child: Text(
+                    currentUser != null
+                        ? 'Welcome! You have no featured fanzine yet.'
+                        : 'Default public fanzine not configured.',
+                  ),
                 );
               }
 
-              // If the UID doc exists, use it!
-              if (uidSnapshot.hasData && uidSnapshot.data!.exists) {
-                return _buildFanzineFromUserDoc(uidSnapshot.data!);
-              }
+              // Determine which mode FanzineWidget should operate in
+              final isDashboardMode = currentUser != null;
 
-              // 2) FALLBACK TO EMAIL (Legacy)
-              // Only runs if the UID document was NOT found.
-              return StreamBuilder<DocumentSnapshot>(
-                stream: emailDocRef.snapshots(),
-                builder: (context, emailSnapshot) {
-                  if (emailSnapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (emailSnapshot.hasError) {
-                    return Center(
-                      child:
-                      Text('Users read error (email doc): ${emailSnapshot.error}'),
-                    );
-                  }
-                  if (!emailSnapshot.hasData || !emailSnapshot.data!.exists) {
-                    return const Center(child: Text('User profile not found.'));
-                  }
-                  // If we found the old email doc, use that
-                  return _buildFanzineFromUserDoc(emailSnapshot.data!);
-                },
+              return FanzineGridView(
+                shortCode: shortCode,
+                // uiWidget will display the Fanzine Widget configured for either:
+                // 1. DASHBOARD Mode (fanzineShortCode: null) -> fetches user's username/link
+                // 2. PUBLIC Mode (fanzineShortCode: shortCode) -> fetches creator's link or "Login/Register"
+                uiWidget: FanzineWidget(
+                  fanzineShortCode: isDashboardMode ? null : shortCode,
+                ),
               );
             },
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFanzineFromUserDoc(DocumentSnapshot userDoc) {
-    final data = (userDoc.data() ?? {}) as Map<String, dynamic>;
-    final shortCodeRaw = data['newFanzine'];
-    final shortCode = (shortCodeRaw is String && shortCodeRaw.trim().isNotEmpty)
-        ? shortCodeRaw.trim()
-        : null;
-
-    if (shortCode == null) {
-      return const Center(child: Text('No fanzine configured.'));
-    }
-
-    return FanzineGridView(
-      shortCode: shortCode,
-      uiWidget: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.0),
-          child: const FanzineWidget(),
         ),
       ),
     );

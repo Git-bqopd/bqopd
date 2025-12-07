@@ -2,10 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import '../pages/profile_page.dart';
+import 'package:go_router/go_router.dart';
+
+import 'login_widget.dart'; // Import for the dialog
 
 class FanzineWidget extends StatefulWidget {
-  const FanzineWidget({super.key});
+  // If provided, we are viewing a specific public fanzine.
+  // If null, we are viewing the logged-in user's dashboard (Home).
+  final String? fanzineShortCode;
+
+  const FanzineWidget({super.key, this.fanzineShortCode});
 
   @override
   State<FanzineWidget> createState() => _FanzineWidgetState();
@@ -16,70 +22,152 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  String _displayUrl = 'bqopd.com/...'; // Default placeholder
+  String _displayUrl = 'bqopd.com/...';
+  String? _targetRoute; // Where the link should go
   bool _isLoadingData = true;
+  bool _showLoginLink = false; // True if user is NOT logged in and viewing public fanzine
+
+  // Fanzine Data (if public)
+  List<Widget> _pages = [];
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadData();
   }
 
-  Future<void> _loadUserData() async {
-    if (!mounted) return;
-    setState(() { _isLoadingData = true; });
-
-    if (currentUser != null) {
-      try {
-        // 1. Try fetching from the new UID document first
-        final userDoc = await FirebaseFirestore.instance
-            .collection('Users')
-            .doc(currentUser!.uid)
-            .get();
-
-        if (userDoc.exists && mounted) {
-          final data = userDoc.data() as Map<String, dynamic>;
-          final username = data['username'] as String?;
-
-          setState(() {
-            if (username != null && username.isNotEmpty) {
-              _displayUrl = 'bqopd.com/$username';
-            } else {
-              _displayUrl = 'bqopd.com/user'; // Fallback if username missing
-            }
-          });
-        } else {
-          // Fallback: Try legacy email doc if UID doc is missing
-          final emailDoc = await FirebaseFirestore.instance
-              .collection('Users')
-              .doc(currentUser!.email)
-              .get();
-
-          if (emailDoc.exists && mounted) {
-            final data = emailDoc.data() as Map<String, dynamic>;
-            final username = data['username'] as String?;
-            setState(() {
-              if (username != null && username.isNotEmpty) {
-                _displayUrl = 'bqopd.com/$username';
-              }
-            });
-          }
-        }
-      } catch (e) {
-        print("Error loading username: $e");
-      } finally {
-        if (mounted) setState(() { _isLoadingData = false; });
-      }
-    } else {
-      if (mounted) setState(() { _isLoadingData = false; });
+  @override
+  void didUpdateWidget(covariant FanzineWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.fanzineShortCode != widget.fanzineShortCode) {
+      _loadData();
     }
   }
 
-  void goToProfilePage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const ProfilePage()),
-    );
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    setState(() { _isLoadingData = true; });
+
+    if (widget.fanzineShortCode != null) {
+      // --- PUBLIC MODE: Viewing a specific Fanzine ---
+      await _loadPublicFanzine(widget.fanzineShortCode!);
+    } else {
+      // --- DASHBOARD MODE: Viewing Logged-in User's Home ---
+      await _loadDashboard();
+    }
+
+    if (mounted) setState(() { _isLoadingData = false; });
+  }
+
+  Future<void> _loadPublicFanzine(String shortCode) async {
+    try {
+      // 1. Find the fanzine doc
+      final query = await FirebaseFirestore.instance
+          .collection('fanzines')
+          .where('shortCode', isEqualTo: shortCode)
+          .limit(1)
+          .get();
+
+      if (query.docs.isEmpty) {
+        _displayUrl = 'bqopd.com/404';
+        return;
+      }
+
+      final fanzineDoc = query.docs.first;
+      final data = fanzineDoc.data();
+      final creatorId = data['editorId'] as String?;
+
+      // 2. Determine Link Behavior
+      if (currentUser == null) {
+        // Not logged in -> Show Login CTA
+        _displayUrl = 'Login or Register';
+        _showLoginLink = true;
+        _targetRoute = null; // We'll handle tap differently
+      } else {
+        // Logged in -> Show Creator's Profile Link
+        _showLoginLink = false;
+        if (creatorId != null) {
+          final userDoc = await FirebaseFirestore.instance.collection('Users').doc(creatorId).get();
+          if (userDoc.exists) {
+            final username = userDoc.data()?['username'] ?? 'user';
+            _displayUrl = 'bqopd.com/$username';
+            _targetRoute = '/$username';
+          } else {
+            _displayUrl = 'bqopd.com/user';
+          }
+        }
+      }
+
+      // 3. Load Pages (Placeholder for now)
+      _pages = [
+        const Center(child: Text('Indicia (Public View)')),
+        const Center(child: Text('Creators (Public View)')),
+        const Center(child: Text('Stats (Public View)')),
+      ];
+
+    } catch (e) {
+      print("Error loading fanzine: $e");
+      _displayUrl = 'bqopd.com/error';
+    }
+  }
+
+  Future<void> _loadDashboard() async {
+    if (currentUser == null) {
+      // Should effectively not happen due to Router protection, but good safety
+      _displayUrl = 'bqopd.com';
+      return;
+    }
+
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('Users')
+          .doc(currentUser!.uid)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        final username = data['username'] as String?;
+        if (username != null && username.isNotEmpty) {
+          _displayUrl = 'bqopd.com/$username';
+          _targetRoute = '/profile'; // Link goes to MY Private Profile Dashboard
+        }
+      }
+
+      _pages = [
+        const Center(child: Text('Your Fanzine Dashboard')),
+        const Center(child: Text('Manage Creators')),
+        const Center(child: Text('View Stats')),
+      ];
+
+    } catch (e) {
+      print("Error loading dashboard: $e");
+    }
+  }
+
+  void _handleLinkTap() {
+    if (_showLoginLink) {
+      // Show Login Dialog
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+            child: LoginWidget(
+              onTap: () {
+                Navigator.pop(context); // Close dialog
+                context.go('/register'); // Go to full register page
+              },
+            ),
+          ),
+        ),
+      );
+    } else if (_targetRoute != null) {
+      if (_targetRoute == '/profile') {
+        context.pushNamed('profile');
+      } else {
+        context.go(_targetRoute!);
+      }
+    }
   }
 
   @override
@@ -111,31 +199,26 @@ class _FanzineWidgetState extends State<FanzineWidget> {
               : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // --- Top Row: Profile Link (Updated) ---
+              // --- Top Row: Dynamic Link ---
               Row(
-                mainAxisAlignment: MainAxisAlignment.center, // Centered
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   RichText(
                     text: TextSpan(
                       text: _displayUrl,
                       style: linkStyle,
                       recognizer: TapGestureRecognizer()
-                        ..onTap = goToProfilePage,
+                        ..onTap = _handleLinkTap,
                     ),
                   ),
                 ],
               ),
 
               const SizedBox(height: 10),
-              // Single pixel horizontal line
-              const Divider(
-                height: 1,
-                thickness: 1,
-                color: Colors.black54, // Matches the '|' separators below
-              ),
+              const Divider(height: 1, thickness: 1, color: Colors.black54),
               const SizedBox(height: 20),
 
-              // --- Second Row: Tab Navigation ---
+              // --- Tab Navigation ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -148,20 +231,16 @@ class _FanzineWidgetState extends State<FanzineWidget> {
               ),
               const SizedBox(height: 10),
 
-              // --- Third Row: PageView ---
+              // --- Content Pages ---
               Expanded(
                 child: PageView(
                   controller: _pageController,
                   onPageChanged: (index) {
-                    setState(() {
-                      _currentPage = index;
-                    });
+                    setState(() { _currentPage = index; });
                   },
-                  children: const [
-                    Center(child: Text('This is the indicia page.')),
-                    Center(child: Text('This is the creators page.')),
-                    Center(child: Text('This is the stats page.')),
-                  ],
+                  children: _pages.isEmpty
+                      ? [const Center(child: Text("Loading..."))]
+                      : _pages,
                 ),
               ),
             ],

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,6 +14,9 @@ import 'pages/register_page.dart';
 import 'pages/fanzine_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/short_link_page.dart';
+import 'pages/edit_info_page.dart';
+import 'pages/settings_page.dart';
+import 'pages/fanzine_editor_page.dart';
 
 // --- helper to refresh router when auth state changes ---
 class GoRouterRefreshStream extends ChangeNotifier {
@@ -47,30 +50,40 @@ class MyApp extends StatelessWidget {
       refreshListenable:
       GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
 
-      redirect: (context, state) async { // Async redirect
+      redirect: (context, state) async {
         final user = FirebaseAuth.instance.currentUser;
         final path = state.fullPath ?? '/';
 
         final isLoggingIn = path == '/login' || path == '/register';
         final isRoot = path == '/';
-        final isProtected = path == '/fanzine' || path == '/profile';
+
+        // Define pages that require login (Private Dashboards)
+        // /fanzine is now a PUBLIC page, so it's removed from isProtected!
+        final isProtected = path == '/profile' ||
+            path == '/settings' ||
+            path == '/edit-info' ||
+            path.startsWith('/editor');
 
         // 1. Unauthenticated User Logic
         if (user == null) {
-          if (isRoot || isProtected) {
+          // If trying to access protected pages, go to login
+          if (isProtected) {
             return '/login';
           }
-          // Allow public access to login, register, and shortlinks
+          // If trying to access root, redirect to fanzine page, which is now the public landing page.
+          if (isRoot) {
+            return '/fanzine';
+          }
+          // Allow access to /fanzine, /login, /register, and /:code
           return null;
         }
 
         // 2. Authenticated User Logic
         if (user != null) {
-          // If going to Root, Login, Register, OR the old /fanzine route
-          if (isRoot || isLoggingIn || path == '/fanzine') {
-
-            // Fetch the user's shortcode preference
+          // If logged in and at Root/Login/Register, send them to their Vanity URL (Home)
+          if (isRoot || isLoggingIn) {
             try {
+              // Lookup their username to construct the redirect URL
               final doc = await FirebaseFirestore.instance
                   .collection('Users')
                   .doc(user.uid)
@@ -78,25 +91,21 @@ class MyApp extends StatelessWidget {
 
               if (doc.exists) {
                 final data = doc.data();
-                final shortCode = data?['newFanzine'] as String?;
+                // Prefer username as the vanity URL if available
+                final username = data?['username'] as String?;
 
-                // If they have a shortcode, send them there!
-                if (shortCode != null && shortCode.isNotEmpty) {
-                  return '/$shortCode';
+                if (username != null && username.isNotEmpty) {
+                  // Redirect to their vanity URL which loads their profile/fanzine
+                  return '/$username';
                 }
               }
             } catch (e) {
               print("Error fetching user shortcode for redirect: $e");
             }
 
-            // Fallback if no shortcode found or error
-            // We can send them to a generic 'fanzine' route, or keep them on current path
-            // But to avoid infinite loops, if we are already at /fanzine, return null.
-            if (path != '/fanzine') {
-              return '/fanzine';
-            }
+            // Fallback: If no username found, send them to the generic authenticated fanzine dashboard
+            return '/fanzine';
           }
-          // Allow access to Profile and other pages
           return null;
         }
 
@@ -121,19 +130,38 @@ class MyApp extends StatelessWidget {
           name: 'register',
           builder: (context, state) => const RegisterPage(),
         ),
-        // Keep /fanzine as a fallback route
+        // Fanzine Page - Handles both Public (Fanzine of the Week) and Private (User Dashboard) viewing
         GoRoute(
           path: '/fanzine',
           name: 'fanzine',
           builder: (context, state) => const FanzinePage(),
         ),
+        // Private Profile Dashboard Route
         GoRoute(
           path: '/profile',
           name: 'profile',
           builder: (context, state) => const ProfilePage(),
         ),
+        GoRoute(
+          path: '/edit-info',
+          name: 'editInfo',
+          builder: (context, state) => const EditInfoPage(),
+        ),
+        GoRoute(
+          path: '/settings',
+          name: 'settings',
+          builder: (context, state) => const SettingsPage(),
+        ),
+        GoRoute(
+          path: '/editor/:fanzineId',
+          name: 'fanzineEditor',
+          builder: (context, state) {
+            final fanzineId = state.pathParameters['fanzineId']!;
+            return FanzineEditorPage(fanzineId: fanzineId);
+          },
+        ),
 
-        // PUBLIC: /:code
+        // PUBLIC: /:code (The "Traffic Cop" Route)
         GoRoute(
           path: '/:code',
           name: 'shortlink',

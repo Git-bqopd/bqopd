@@ -2,20 +2,21 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import '../pages/fanzine_page.dart';
-import '../pages/edit_info_page.dart';
+import 'package:go_router/go_router.dart';
 import 'image_upload_modal.dart';
 
 class ProfileWidget extends StatefulWidget {
   final int currentIndex;
   final VoidCallback onFanzinesTapped;
   final VoidCallback onPagesTapped;
+  final String? targetUserId; // NULL = Current Logged In User
 
   const ProfileWidget({
     super.key,
     required this.currentIndex,
     required this.onFanzinesTapped,
     required this.onPagesTapped,
+    this.targetUserId,
   });
 
   @override
@@ -24,9 +25,16 @@ class ProfileWidget extends StatefulWidget {
 
 class _ProfileWidgetState extends State<ProfileWidget> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
+
   String _username = '', _email = '', _firstName = '', _lastName = '', _street1 = '', _street2 = '', _city = '', _stateName = '', _zipCode = '', _country = '';
   bool _isLoading = true;
   String? _errorMessage;
+
+  // Is this the currently logged-in user's profile?
+  bool get _isMyProfile {
+    if (widget.targetUserId == null) return true;
+    return currentUser?.uid == widget.targetUserId;
+  }
 
   @override
   void initState() {
@@ -34,22 +42,32 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     _loadUserData();
   }
 
+  @override
+  void didUpdateWidget(covariant ProfileWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.targetUserId != widget.targetUserId) {
+      _loadUserData();
+    }
+  }
+
   Future<void> _loadUserData() async {
     if (!mounted) return;
     setState(() { _isLoading = true; _errorMessage = null; });
 
-    if (currentUser != null) {
+    // Determine which UID to fetch
+    final uidToFetch = widget.targetUserId ?? currentUser?.uid;
+
+    if (uidToFetch != null) {
       try {
-        // CHANGED: Query by UID, not Email
         final userDoc = await FirebaseFirestore.instance
             .collection('Users')
-            .doc(currentUser!.uid) // <--- CRITICAL FIX
+            .doc(uidToFetch)
             .get();
 
         if (userDoc.exists && mounted) {
           final data = userDoc.data() as Map<String, dynamic>;
           setState(() {
-            _email = currentUser!.email ?? '';
+            _email = data['email'] ?? '';
             _username = data['username'] ?? '';
             _firstName = data['firstName'] ?? '';
             _lastName = data['lastName'] ?? '';
@@ -60,24 +78,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             _zipCode = data['zipCode'] ?? '';
             _country = data['country'] ?? '';
           });
-        } else if (mounted) {
-          // Fallback logic: If UID doc doesn't exist, check Email (legacy)
-          // This helps during your migration phase
-          final emailDoc = await FirebaseFirestore.instance
-              .collection('Users')
-              .doc(currentUser!.email)
-              .get();
-
-          if (emailDoc.exists) {
-            final data = emailDoc.data() as Map<String, dynamic>;
-            setState(() {
-              _email = currentUser!.email ?? '';
-              _username = data['username'] ?? '';
-              // ... (copy other fields if needed, or just rely on UID going forward)
-            });
-          } else {
-            setState(() { _email = currentUser!.email ?? 'N/A'; _errorMessage = "Profile data not found."; });
-          }
+        } else {
+          if (mounted) setState(() { _errorMessage = "User not found."; });
         }
       } catch (e) {
         print("Error loading user data: $e");
@@ -86,7 +88,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         if (mounted) setState(() { _isLoading = false; });
       }
     } else {
-      print("Error: No current user found.");
       if (mounted) setState(() { _errorMessage = "Not logged in."; _isLoading = false; });
     }
   }
@@ -135,8 +136,11 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 children: [
                                   Text('Username: $_username'),
                                   const SizedBox(height: 4),
-                                  Text('Email: $_email'),
-                                  const SizedBox(height: 12),
+                                  // Email is private unless it's MY profile
+                                  if (_isMyProfile) ...[
+                                    Text('Email: $_email'),
+                                    const SizedBox(height: 12),
+                                  ],
                                   if (_buildFormattedAddress().isNotEmpty) ...[
                                     const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 4),
@@ -148,52 +152,49 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                               ),
                             ),
                             const SizedBox(width: 20),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                RichText(
-                                  text: TextSpan(
-                                    text: 'view profile',
-                                    style: linkStyle,
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage())),
+
+                            // Edit Controls: Only show if this is MY profile
+                            if (_isMyProfile)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  RichText(
+                                    text: TextSpan(
+                                      text: 'view profile',
+                                      style: linkStyle,
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () => context.goNamed('fanzine'),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                RichText(
-                                  text: TextSpan(
-                                    text: 'edit info',
-                                    style: linkStyle,
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const EditInfoPage())),
+                                  const SizedBox(height: 10),
+                                  RichText(
+                                    text: TextSpan(
+                                      text: 'edit info',
+                                      style: linkStyle,
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () => context.pushNamed('editInfo'),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                RichText(
-                                  text: TextSpan(
-                                    text: 'upload image',
-                                    style: linkStyle,
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = () {
-                                        if (currentUser?.uid == null && currentUser?.email == null) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('You must be logged in to upload images.')),
+                                  const SizedBox(height: 10),
+                                  RichText(
+                                    text: TextSpan(
+                                      text: 'upload image',
+                                      style: linkStyle,
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () {
+                                          if (currentUser?.uid == null) return;
+                                          final userId = currentUser!.uid;
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            builder: (BuildContext dialogContext) => ImageUploadModal(userId: userId),
                                           );
-                                          return;
-                                        }
-                                        // Always use UID now for uploads too!
-                                        final userId = currentUser!.uid;
-                                        showDialog(
-                                          context: context,
-                                          barrierDismissible: false,
-                                          builder: (BuildContext dialogContext) => ImageUploadModal(userId: userId),
-                                        );
-                                      },
+                                        },
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
                           ],
                         ),
                       ),
