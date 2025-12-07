@@ -50,76 +50,40 @@ class MyApp extends StatelessWidget {
       refreshListenable:
       GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
 
-      redirect: (context, state) async {
+      redirect: (context, state) {
         final user = FirebaseAuth.instance.currentUser;
         final path = state.fullPath ?? '/';
 
-        final isLoggingIn = path == '/login' || path == '/register';
-        final isRoot = path == '/';
-
-        // Define pages that require login (Private Dashboards)
-        // /fanzine is now a PUBLIC page, so it's removed from isProtected!
+        // Pages that REQUIRE login.
+        // If a user tries to go here while logged out, send them to login.
         final isProtected = path == '/profile' ||
             path == '/settings' ||
             path == '/edit-info' ||
             path.startsWith('/editor');
 
-        // 1. Unauthenticated User Logic
-        if (user == null) {
-          // If trying to access protected pages, go to login
-          if (isProtected) {
-            return '/login';
-          }
-          // If trying to access root, redirect to fanzine page, which is now the public landing page.
-          if (isRoot) {
-            return '/fanzine';
-          }
-          // Allow access to /fanzine, /login, /register, and /:code
-          return null;
+        if (user == null && isProtected) {
+          return '/login';
         }
 
-        // 2. Authenticated User Logic
-        if (user != null) {
-          // If logged in and at Root/Login/Register, send them to their Vanity URL (Home)
-          if (isRoot || isLoggingIn) {
-            try {
-              // Lookup their username to construct the redirect URL
-              final doc = await FirebaseFirestore.instance
-                  .collection('Users')
-                  .doc(user.uid)
-                  .get();
-
-              if (doc.exists) {
-                final data = doc.data();
-                // Prefer username as the vanity URL if available
-                final username = data?['username'] as String?;
-
-                if (username != null && username.isNotEmpty) {
-                  // Redirect to their vanity URL which loads their profile/fanzine
-                  return '/$username';
-                }
-              }
-            } catch (e) {
-              print("Error fetching user shortcode for redirect: $e");
-            }
-
-            // Fallback: If no username found, send them to the generic authenticated fanzine dashboard
-            return '/fanzine';
-          }
-          return null;
+        // If user is logged in and tries to access explicit login/register,
+        // send them to home (/).
+        if (user != null && (path == '/login' || path == '/register')) {
+          return '/';
         }
 
+        // Otherwise, no redirection needed.
+        // The "/" route (FanzinePage) handles both Auth and Unauth states internally.
         return null;
       },
 
       routes: [
+        // ROOT: The main "Landing Page" / "Dashboard"
         GoRoute(
           path: '/',
           name: 'root',
-          builder: (context, state) => const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          ),
+          builder: (context, state) => const FanzinePage(),
         ),
+
         GoRoute(
           path: '/login',
           name: 'login',
@@ -130,13 +94,15 @@ class MyApp extends StatelessWidget {
           name: 'register',
           builder: (context, state) => const RegisterPage(),
         ),
-        // Fanzine Page - Handles both Public (Fanzine of the Week) and Private (User Dashboard) viewing
+
+        // This acts as the Private Dashboard route explicitly if needed
         GoRoute(
           path: '/fanzine',
           name: 'fanzine',
           builder: (context, state) => const FanzinePage(),
         ),
-        // Private Profile Dashboard Route
+
+        // Private Profile Routes
         GoRoute(
           path: '/profile',
           name: 'profile',
@@ -161,7 +127,7 @@ class MyApp extends StatelessWidget {
           },
         ),
 
-        // PUBLIC: /:code (The "Traffic Cop" Route)
+        // PUBLIC: /:code (The "Traffic Cop" Route for Vanity URLs)
         GoRoute(
           path: '/:code',
           name: 'shortlink',

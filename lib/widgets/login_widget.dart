@@ -8,7 +8,14 @@ class LoginWidget extends StatefulWidget {
   // Callback function to trigger switching to the register page
   final void Function()? onTap;
 
-  const LoginWidget({super.key, required this.onTap});
+  // NEW: Callback when login is successful (to close modals, etc.)
+  final VoidCallback? onLoginSuccess;
+
+  const LoginWidget({
+    super.key,
+    required this.onTap,
+    this.onLoginSuccess,
+  });
 
   @override
   State<LoginWidget> createState() => _LoginWidgetState();
@@ -38,7 +45,13 @@ class _LoginWidgetState extends State<LoginWidget> {
         password: passwordController.text,
       );
       await ensureUserDocument();
-      // Login successful: Navigation or state updates should be handled elsewhere
+
+      // Login successful!
+      // If a success callback was provided (e.g. to close a modal), call it now.
+      if (widget.onLoginSuccess != null) {
+        widget.onLoginSuccess!();
+      }
+
     } on FirebaseAuthException catch (e) {
       // Handle Firebase authentication errors
       if (mounted) {
@@ -64,15 +77,10 @@ class _LoginWidgetState extends State<LoginWidget> {
   // --- Build Method ---
   @override
   Widget build(BuildContext context) {
-    // *** AspectRatio REMOVED from here ***
-    // Use a Container to set the background color
+    // Wrap the content with a Container to set the background color
     return Container(
       color: const Color(0xFFF1B255), // Default background color
-      // Use ClipRRect if you might add rounded corners later via a parent container
       child: ClipRRect(
-        // Example: If you wanted rounded corners on the yellow box itself:
-        // borderRadius: BorderRadius.circular(12.0),
-        // Make the content scrollable if it overflows
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(15.0), // Padding inside the yellow box

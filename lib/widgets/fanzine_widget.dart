@@ -18,7 +18,10 @@ class FanzineWidget extends StatefulWidget {
 }
 
 class _FanzineWidgetState extends State<FanzineWidget> {
-  final User? currentUser = FirebaseAuth.instance.currentUser;
+  // FIX: Use a getter so we always get the *current* auth state.
+  // If we use 'final User? user = ...' it captures 'null' at creation and never updates after login.
+  User? get currentUser => FirebaseAuth.instance.currentUser;
+
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
@@ -78,6 +81,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       final creatorId = data['editorId'] as String?;
 
       // 2. Determine Link Behavior
+      // Use the getter 'currentUser' to check live status
       if (currentUser == null) {
         // Not logged in -> Show Login CTA
         _displayUrl = 'Login or Register';
@@ -86,15 +90,23 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       } else {
         // Logged in -> Show Creator's Profile Link
         _showLoginLink = false;
-        if (creatorId != null) {
-          final userDoc = await FirebaseFirestore.instance.collection('Users').doc(creatorId).get();
+
+        // Per your request: Show the LOGGED IN USER'S vanity URL as a "Home Button"
+        // even if viewing someone else's fanzine.
+        try {
+          final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
           if (userDoc.exists) {
-            final username = userDoc.data()?['username'] ?? 'user';
-            _displayUrl = 'bqopd.com/$username';
-            _targetRoute = '/$username';
+            final myUsername = userDoc.data()?['username'] ?? 'user';
+            _displayUrl = 'bqopd.com/$myUsername';
+            _targetRoute = '/profile';
           } else {
             _displayUrl = 'bqopd.com/user';
+            _targetRoute = '/profile';
           }
+        } catch (e) {
+          print("Error fetching my username: $e");
+          _displayUrl = 'bqopd.com/home';
+          _targetRoute = '/profile';
         }
       }
 
@@ -113,7 +125,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   Future<void> _loadDashboard() async {
     if (currentUser == null) {
-      // Should effectively not happen due to Router protection, but good safety
       _displayUrl = 'bqopd.com';
       return;
     }
@@ -154,8 +165,13 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
             child: LoginWidget(
               onTap: () {
-                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Close dialog if switching to register
                 context.go('/register'); // Go to full register page
+              },
+              // FIX: Handle the successful login!
+              onLoginSuccess: () {
+                Navigator.pop(context); // 1. Close the modal
+                _loadData();            // 2. Refresh this widget (re-checks currentUser getter)
               },
             ),
           ),
