@@ -40,42 +40,51 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final router = GoRouter(
-      initialLocation: '/',
-      refreshListenable:
-      GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
+  State<MyApp> createState() => _MyAppState();
+}
 
+class _MyAppState extends State<MyApp> {
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _router = GoRouter(
+      initialLocation: '/',
+      refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
       redirect: (context, state) {
         final user = FirebaseAuth.instance.currentUser;
-        final path = state.fullPath ?? '/';
+
+        // Use uri.path to get the actual path (e.g. "/QrNsbYA")
+        final path = state.uri.path;
+        // Use fullPath to check against route patterns (e.g. "/editor/:fanzineId")
+        final routePattern = state.fullPath;
 
         // Pages that REQUIRE login.
-        // If a user tries to go here while logged out, send them to login.
         final isProtected = path == '/profile' ||
             path == '/settings' ||
             path == '/edit-info' ||
-            path.startsWith('/editor');
+            (routePattern != null && routePattern.startsWith('/editor'));
 
+        // 1. If user is NOT logged in and tries to access a protected page -> Login
         if (user == null && isProtected) {
           return '/login';
         }
 
-        // If user is logged in and tries to access explicit login/register,
-        // send them to home (/).
+        // 2. If user IS logged in and tries to access explicit Login/Register -> Home
         if (user != null && (path == '/login' || path == '/register')) {
           return '/';
         }
 
-        // Otherwise, no redirection needed.
-        // The "/" route (FanzinePage) handles both Auth and Unauth states internally.
+        // 3. Otherwise, no redirection.
+        // This ensures that vanity URLs (matched by /:code) remain in the browser bar.
         return null;
       },
-
       routes: [
         // ROOT: The main "Landing Page" / "Dashboard"
         GoRoute(
@@ -128,6 +137,7 @@ class MyApp extends StatelessWidget {
         ),
 
         // PUBLIC: /:code (The "Traffic Cop" Route for Vanity URLs)
+        // This catches everything else, so it must be last.
         GoRoute(
           path: '/:code',
           name: 'shortlink',
@@ -140,12 +150,15 @@ class MyApp extends StatelessWidget {
       errorBuilder: (context, state) =>
       const Scaffold(body: Center(child: Text('Page not found'))),
     );
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'bqopd',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      routerConfig: router,
+      routerConfig: _router,
     );
   }
 }

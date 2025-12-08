@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../widgets/profile_widget.dart';
 import '../widgets/new_fanzine_modal.dart';
@@ -17,6 +16,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  // 0 = Editor, 1 = Fanzines, 2 = Pages
   int _currentIndex = 0;
 
   bool _isEditor = false;
@@ -84,7 +84,8 @@ class _ProfilePageState extends State<ProfilePage> {
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
 
-  Widget _buildFanzinesSection() {
+  // --- TAB 0: EDITOR SECTION (My Created Fanzines + Tools) ---
+  Widget _buildEditorSection() {
     if (_isLoadingCurrentUser) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
@@ -112,14 +113,12 @@ class _ProfilePageState extends State<ProfilePage> {
           );
         }
         if (snapshot.hasError) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: Text('Error loading fanzines.')),
-          );
+          return Center(child: Text('Error loading editor fanzines: ${snapshot.error}'));
         }
 
         final displayItems = <Widget>[];
 
+        // Editor Controls (moved from Fanzines to here)
         if (_isEditor) {
           displayItems.addAll([
             TextButton(
@@ -200,6 +199,60 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // --- TAB 1: FANZINES SECTION (Consumed Content / Placeholders) ---
+  Widget _buildFanzinesSection() {
+    // Currently just a placeholder for "For You Zine Issue 3"
+    // In the future, this could be a query for fanzines the user subscribes to.
+
+    final displayItems = <Widget>[
+      // The requested placeholder item
+      TextButton(
+        style: _blueButtonStyle,
+        onPressed: () {
+          // Placeholder action
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Opening "For You Zine Issue 3"... (Placeholder)')),
+          );
+        },
+        child: const Text(
+          "For You Zine Issue 3",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = _calcCols(c.maxWidth);
+        // Ensure a minimum grid for layout consistency
+        final itemCount = 6;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            childAspectRatio: 5 / 8,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+          ),
+          itemCount: itemCount,
+          itemBuilder: (context, index) {
+            if (index < displayItems.length) return displayItems[index];
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(12),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- TAB 2: PAGES SECTION (My Images) ---
   Widget _buildPagesSection() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -327,12 +380,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 aspectRatio: 8 / 5,
                 child: ProfileWidget(
                   currentIndex: _currentIndex,
-                  onFanzinesTapped: () => setState(() => _currentIndex = 0),
-                  onPagesTapped: () => setState(() => _currentIndex = 1),
+                  onEditorTapped: () => setState(() => _currentIndex = 0),
+                  onFanzinesTapped: () => setState(() => _currentIndex = 1),
+                  onPagesTapped: () => setState(() => _currentIndex = 2),
                 ),
               ),
               const SizedBox(height: 8),
-              if (_currentIndex == 0) _buildFanzinesSection() else _buildPagesSection(),
+              if (_currentIndex == 0) _buildEditorSection()
+              else if (_currentIndex == 1) _buildFanzinesSection()
+              else _buildPagesSection(),
             ],
           ),
         ),

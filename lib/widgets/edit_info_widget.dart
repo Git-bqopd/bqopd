@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../components/button.dart';
 import '../components/textfield.dart';
 import '../pages/profile_page.dart';
@@ -45,10 +46,10 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
       try {
         emailController.text = currentUser!.email ?? 'No Email Found';
 
-        // CHANGED: Load from UID document, not Email
+        // Always load by UID now. Migration is handled by user_bootstrap.dart on login.
         final userDoc = await FirebaseFirestore.instance
             .collection('Users')
-            .doc(currentUser!.uid) // <--- FIX
+            .doc(currentUser!.uid)
             .get();
 
         if (userDoc.exists && mounted) {
@@ -66,34 +67,11 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
             firstNameController.text = data['firstName'] ?? '';
             lastNameController.text = data['lastName'] ?? '';
           });
-        } else if (mounted) {
-          // Fallback: Try loading from Email document if UID doc is missing
-          // This helps you see your old data before you save (which will migrate it!)
-          final emailDoc = await FirebaseFirestore.instance
-              .collection('Users')
-              .doc(currentUser!.email)
-              .get();
-
-          if (emailDoc.exists) {
-            final data = emailDoc.data() as Map<String, dynamic>;
-            setStateIfMounted(() {
-              _initialUsername = data['username'] ?? '';
-              userNameController.text = _initialUsername;
-              bioController.text = data['bio'] ?? '';
-              street1Controller.text = data['street1'] ?? '';
-              street2Controller.text = data['street2'] ?? '';
-              cityController.text = data['city'] ?? '';
-              stateController.text = data['state'] ?? '';
-              zipController.text = data['zipCode'] ?? '';
-              countryController.text = data['country'] ?? '';
-              firstNameController.text = data['firstName'] ?? '';
-              lastNameController.text = data['lastName'] ?? '';
-            });
-          } else {
-            setStateIfMounted(() {
-              userNameController.text = currentUser!.displayName ?? '';
-            });
-          }
+        } else {
+          // Fallback if doc missing (should rely on bootstrap, but safe default)
+          setStateIfMounted(() {
+            userNameController.text = currentUser!.displayName ?? '';
+          });
         }
       } catch (e) {
         print("Error loading user data: $e");
@@ -102,7 +80,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
         setStateIfMounted(() { _isLoadingData = false; });
       }
     } else {
-      print("Error: No current user found.");
       setStateIfMounted(() { _isLoadingData = false; });
     }
   }
@@ -126,24 +103,20 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           'state': stateController.text.trim(),
           'zipCode': zipController.text.trim(),
           'country': countryController.text.trim(),
-          'email': currentUser!.email, // Ensure email is saved in the doc
-          'uid': currentUser!.uid,     // Ensure UID is saved
+          'email': currentUser!.email,
+          'uid': currentUser!.uid,
         };
 
-        // CHANGED: Save to UID document!
-        // This effectively "migrates" the data if it was previously only in the email doc.
+        // Save strictly to UID document
         await FirebaseFirestore.instance
             .collection('Users')
-            .doc(currentUser!.uid) // <--- FIX
+            .doc(currentUser!.uid)
             .set(dataToUpdate, SetOptions(merge: true));
 
         _initialUsername = userNameController.text.trim();
         if(mounted) { displayMessageToUser("Profile Saved!", context); }
-      } else {
-        if(mounted) { displayMessageToUser("Error: No user logged in.", context); }
       }
     } catch (e) {
-      print("Error saving profile: $e");
       if(mounted) { displayMessageToUser("Error saving profile: ${e.toString()}", context); }
     } finally {
       setStateIfMounted(() { _isSaving = false; });
@@ -151,7 +124,13 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   }
 
   void goToMyInfoPage() {
-    Navigator.push( context, MaterialPageRoute(builder: (context) => const ProfilePage()), );
+    if (_initialUsername.isNotEmpty) {
+      // Use the vanity URL navigation
+      context.pushNamed('shortlink', pathParameters: {'code': _initialUsername});
+    } else {
+      // Fallback
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilePage()));
+    }
   }
 
   void logout() async {
@@ -159,7 +138,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
       await FirebaseAuth.instance.signOut();
       if (mounted) { Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil( '/login', (Route<dynamic> route) => false, ); }
     } catch (e) {
-      print("Error logging out: $e");
       if (mounted) { displayMessageToUser("Error logging out: ${e.toString()}", context); }
     }
   }

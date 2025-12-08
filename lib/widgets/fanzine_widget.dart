@@ -4,11 +4,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'login_widget.dart'; // Import for the dialog
+import 'login_widget.dart';
 
 class FanzineWidget extends StatefulWidget {
-  // If provided, we are viewing a specific public fanzine.
-  // If null, we are viewing the logged-in user's dashboard (Home).
   final String? fanzineShortCode;
 
   const FanzineWidget({super.key, this.fanzineShortCode});
@@ -18,19 +16,16 @@ class FanzineWidget extends StatefulWidget {
 }
 
 class _FanzineWidgetState extends State<FanzineWidget> {
-  // FIX: Use a getter so we always get the *current* auth state.
-  // If we use 'final User? user = ...' it captures 'null' at creation and never updates after login.
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
   String _displayUrl = 'bqopd.com/...';
-  String? _targetRoute; // Where the link should go
+  String? _targetShortCode;
   bool _isLoadingData = true;
-  bool _showLoginLink = false; // True if user is NOT logged in and viewing public fanzine
+  bool _showLoginLink = false;
 
-  // Fanzine Data (if public)
   List<Widget> _pages = [];
 
   @override
@@ -52,10 +47,8 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     setState(() { _isLoadingData = true; });
 
     if (widget.fanzineShortCode != null) {
-      // --- PUBLIC MODE: Viewing a specific Fanzine ---
       await _loadPublicFanzine(widget.fanzineShortCode!);
     } else {
-      // --- DASHBOARD MODE: Viewing Logged-in User's Home ---
       await _loadDashboard();
     }
 
@@ -64,7 +57,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   Future<void> _loadPublicFanzine(String shortCode) async {
     try {
-      // 1. Find the fanzine doc
       final query = await FirebaseFirestore.instance
           .collection('fanzines')
           .where('shortCode', isEqualTo: shortCode)
@@ -76,41 +68,28 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         return;
       }
 
-      final fanzineDoc = query.docs.first;
-      final data = fanzineDoc.data();
-      final creatorId = data['editorId'] as String?;
-
-      // 2. Determine Link Behavior
-      // Use the getter 'currentUser' to check live status
       if (currentUser == null) {
-        // Not logged in -> Show Login CTA
         _displayUrl = 'Login or Register';
         _showLoginLink = true;
-        _targetRoute = null; // We'll handle tap differently
+        _targetShortCode = null;
       } else {
-        // Logged in -> Show Creator's Profile Link
         _showLoginLink = false;
-
-        // Per your request: Show the LOGGED IN USER'S vanity URL as a "Home Button"
-        // even if viewing someone else's fanzine.
         try {
           final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
           if (userDoc.exists) {
             final myUsername = userDoc.data()?['username'] ?? 'user';
             _displayUrl = 'bqopd.com/$myUsername';
-            _targetRoute = '/profile';
+            _targetShortCode = myUsername; // Target my username
           } else {
             _displayUrl = 'bqopd.com/user';
-            _targetRoute = '/profile';
+            _targetShortCode = null;
           }
         } catch (e) {
-          print("Error fetching my username: $e");
           _displayUrl = 'bqopd.com/home';
-          _targetRoute = '/profile';
+          _targetShortCode = null;
         }
       }
 
-      // 3. Load Pages (Placeholder for now)
       _pages = [
         const Center(child: Text('Indicia (Public View)')),
         const Center(child: Text('Creators (Public View)')),
@@ -118,7 +97,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       ];
 
     } catch (e) {
-      print("Error loading fanzine: $e");
       _displayUrl = 'bqopd.com/error';
     }
   }
@@ -140,7 +118,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         final username = data['username'] as String?;
         if (username != null && username.isNotEmpty) {
           _displayUrl = 'bqopd.com/$username';
-          _targetRoute = '/profile'; // Link goes to MY Private Profile Dashboard
+          _targetShortCode = username; // Target my username
         }
       }
 
@@ -157,7 +135,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   void _handleLinkTap() {
     if (_showLoginLink) {
-      // Show Login Dialog
       showDialog(
         context: context,
         builder: (context) => Dialog(
@@ -165,24 +142,23 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
             child: LoginWidget(
               onTap: () {
-                Navigator.pop(context); // Close dialog if switching to register
-                context.go('/register'); // Go to full register page
+                Navigator.pop(context);
+                context.go('/register');
               },
-              // FIX: Handle the successful login!
               onLoginSuccess: () {
-                Navigator.pop(context); // 1. Close the modal
-                _loadData();            // 2. Refresh this widget (re-checks currentUser getter)
+                Navigator.pop(context);
+                _loadData();
               },
             ),
           ),
         ),
       );
-    } else if (_targetRoute != null) {
-      if (_targetRoute == '/profile') {
-        context.pushNamed('profile');
-      } else {
-        context.go(_targetRoute!);
-      }
+    } else if (_targetShortCode != null) {
+      // NAVIGATE TO VANITY URL
+      context.goNamed(
+        'shortlink',
+        pathParameters: {'code': _targetShortCode!},
+      );
     }
   }
 
@@ -215,7 +191,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
               : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // --- Top Row: Dynamic Link ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -229,12 +204,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 10),
               const Divider(height: 1, thickness: 1, color: Colors.black54),
               const SizedBox(height: 20),
-
-              // --- Tab Navigation ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -246,8 +218,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                 ],
               ),
               const SizedBox(height: 10),
-
-              // --- Content Pages ---
               Expanded(
                 child: PageView(
                   controller: _pageController,

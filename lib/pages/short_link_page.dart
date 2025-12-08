@@ -77,9 +77,11 @@ class ShortLinkPage extends StatelessWidget {
 
     // --- 1. MASTER LOOKUP (shortcodes collection) ---
     // Try both UPPERCASE (fanzines) and lowercase (users)
-    DocumentSnapshot masterDoc = await db.collection('shortcodes').doc(code.toUpperCase()).get();
+    DocumentSnapshot masterDoc =
+    await db.collection('shortcodes').doc(code.toUpperCase()).get();
     if (!masterDoc.exists) {
-      masterDoc = await db.collection('shortcodes').doc(code.toLowerCase()).get();
+      masterDoc =
+      await db.collection('shortcodes').doc(code.toLowerCase()).get();
     }
 
     if (masterDoc.exists) {
@@ -90,8 +92,7 @@ class ShortLinkPage extends StatelessWidget {
       if (type == 'fanzine') {
         // Return the code needed for FanzineGridView
         return 'fanzine:${data['displayCode'] ?? code}';
-      }
-      else if (type == 'user') {
+      } else if (type == 'user') {
         // Return user UID
         return 'user:$contentId';
       }
@@ -110,7 +111,8 @@ class ShortLinkPage extends StatelessWidget {
     }
 
     // B) Check Usernames collection directly (doc ID is lowercase username)
-    final unameDoc = await db.collection('usernames').doc(code.toLowerCase()).get();
+    final unameDoc =
+    await db.collection('usernames').doc(code.toLowerCase()).get();
     if (unameDoc.exists) {
       final data = unameDoc.data()!;
       final uid = data['uid'];
@@ -120,7 +122,11 @@ class ShortLinkPage extends StatelessWidget {
     }
 
     // C) Check Users collection directly (Last Resort)
-    final usersByUsername = await db.collection('Users').where('username', isEqualTo: code).limit(1).get();
+    final usersByUsername = await db
+        .collection('Users')
+        .where('username', isEqualTo: code)
+        .limit(1)
+        .get();
     if (usersByUsername.docs.isNotEmpty) {
       return 'user:${usersByUsername.docs.first.id}';
     }
@@ -139,6 +145,7 @@ class _PublicProfileView extends StatefulWidget {
 }
 
 class _PublicProfileViewState extends State<_PublicProfileView> {
+  // 0 = Editor, 1 = Fanzines, 2 = Pages
   int _currentIndex = 0;
 
   @override
@@ -156,8 +163,9 @@ class _PublicProfileViewState extends State<_PublicProfileView> {
               child: ProfileWidget(
                 targetUserId: widget.userId, // Show THIS user's info
                 currentIndex: _currentIndex,
-                onFanzinesTapped: () => setState(() => _currentIndex = 0),
-                onPagesTapped: () => setState(() => _currentIndex = 1),
+                onEditorTapped: () => setState(() => _currentIndex = 0),
+                onFanzinesTapped: () => setState(() => _currentIndex = 1),
+                onPagesTapped: () => setState(() => _currentIndex = 2),
               ),
             ),
 
@@ -177,15 +185,52 @@ class _PublicProfileViewState extends State<_PublicProfileView> {
   }
 
   Widget _buildPublicContentGrid(String userId) {
+    // --- TAB 1: FANZINES (Placeholder) ---
+    if (_currentIndex == 1) {
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2, // or responsive logic
+        childAspectRatio: 5 / 8,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.blueAccent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(8),
+            child: const Text(
+              "For You Zine Issue 3",
+              textAlign: TextAlign.center,
+              style:
+              TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+          // Fill rest with empty slots for grid look
+          for (int i = 0; i < 3; i++)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+        ],
+      );
+    }
+
+    // --- TAB 0 (Editor) & TAB 2 (Pages) use Queries ---
     Query query;
     if (_currentIndex == 0) {
-      // Fanzines
+      // Editor Tab: Created Fanzines
       query = FirebaseFirestore.instance
           .collection('fanzines')
           .where('editorId', isEqualTo: userId)
           .orderBy('creationDate', descending: true);
     } else {
-      // Pages/Images
+      // Pages Tab (2): Uploaded Images
       query = FirebaseFirestore.instance
           .collection('images')
           .where('uploaderId', isEqualTo: userId)
@@ -221,23 +266,24 @@ class _PublicProfileViewState extends State<_PublicProfileView> {
             final data = docs[index].data() as Map<String, dynamic>;
 
             if (_currentIndex == 0) {
-              // Fanzine Card
+              // Fanzine Card (Editor Tab)
               final title = data['title'] ?? 'Untitled';
               return Container(
                 decoration: BoxDecoration(
-                  color: Colors.blueGrey[100],
+                  color: Colors.blueAccent, // Match Editor Tab style
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(8),
                 child: Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.white),
                   textAlign: TextAlign.center,
                 ),
               );
             } else {
-              // Image Tile
+              // Image Tile (Pages Tab)
               final url = data['fileUrl'] ?? '';
               if (url.isEmpty) return const SizedBox();
               return ClipRRect(

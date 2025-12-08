@@ -7,6 +7,7 @@ import 'image_upload_modal.dart';
 
 class ProfileWidget extends StatefulWidget {
   final int currentIndex;
+  final VoidCallback onEditorTapped;   // New Callback
   final VoidCallback onFanzinesTapped;
   final VoidCallback onPagesTapped;
   final String? targetUserId; // NULL = Current Logged In User
@@ -14,6 +15,7 @@ class ProfileWidget extends StatefulWidget {
   const ProfileWidget({
     super.key,
     required this.currentIndex,
+    required this.onEditorTapped,
     required this.onFanzinesTapped,
     required this.onPagesTapped,
     this.targetUserId,
@@ -159,15 +161,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  RichText(
-                                    text: TextSpan(
-                                      text: 'view profile',
-                                      style: linkStyle,
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = () => context.goNamed('fanzine'),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
+                                  // "View Profile" link removed as requested
                                   RichText(
                                     text: TextSpan(
                                       text: 'edit info',
@@ -207,10 +201,11 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    // --- EDITOR TAB (0) ---
                     GestureDetector(
-                      onTap: widget.onFanzinesTapped,
+                      onTap: widget.onEditorTapped,
                       child: Text(
-                        'fanzines',
+                        'editor',
                         style: TextStyle(
                           color: Theme.of(context).primaryColorDark,
                           fontWeight: widget.currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
@@ -221,13 +216,29 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
                     ),
+                    // --- FANZINES TAB (1) ---
+                    GestureDetector(
+                      onTap: widget.onFanzinesTapped,
+                      child: Text(
+                        'fanzines',
+                        style: TextStyle(
+                          color: Theme.of(context).primaryColorDark,
+                          fontWeight: widget.currentIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
+                    ),
+                    // --- PAGES TAB (2) ---
                     GestureDetector(
                       onTap: widget.onPagesTapped,
                       child: Text(
                         'pages',
                         style: TextStyle(
                           color: Theme.of(context).primaryColorDark,
-                          fontWeight: widget.currentIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: widget.currentIndex == 2 ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ),
