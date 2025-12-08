@@ -11,7 +11,7 @@ class ImageViewModal extends StatefulWidget {
   const ImageViewModal({
     super.key,
     required this.imageUrl,
-    required this.imageId, // Add this to your constructor call
+    required this.imageId,
     this.imageText,
     this.shortCode,
   });
@@ -138,16 +138,40 @@ class _ImageViewModalState extends State<ImageViewModal> {
 
   Future<void> _addToFanzine(String fanzineId, String fanzineTitle) async {
     try {
-      // Add the image ID to the 'imageIds' array in the fanzine document
-      // FieldValue.arrayUnion ensures no duplicates are added
-      await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).update({
+      final db = FirebaseFirestore.instance;
+
+      // 1. Get the current highest page number
+      final pagesQuery = await db
+          .collection('fanzines')
+          .doc(fanzineId)
+          .collection('pages')
+          .orderBy('pageNumber', descending: true)
+          .limit(1)
+          .get();
+
+      int newPageNumber = 1;
+      if (pagesQuery.docs.isNotEmpty) {
+        final lastPage = pagesQuery.docs.first.data();
+        newPageNumber = (lastPage['pageNumber'] ?? 0) + 1;
+      }
+
+      // 2. Add the actual page document (This makes it show up in the Editor!)
+      await db.collection('fanzines').doc(fanzineId).collection('pages').add({
+        'imageId': widget.imageId,
+        'imageUrl': widget.imageUrl,
+        'pageNumber': newPageNumber,
+        'addedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 3. Update the 'imageIds' array on the Fanzine doc (Keeps your UI checkmark working)
+      await db.collection('fanzines').doc(fanzineId).update({
         'imageIds': FieldValue.arrayUnion([widget.imageId]),
       });
 
       if (mounted) {
         Navigator.pop(context); // Close the sheet
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added to "$fanzineTitle"!')),
+          SnackBar(content: Text('Added to "$fanzineTitle" as page $newPageNumber!')),
         );
       }
     } catch (e) {

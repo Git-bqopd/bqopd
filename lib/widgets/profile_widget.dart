@@ -2,14 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+// import 'package:go_router/go_router.dart';
+import '../pages/fanzine_page.dart';
+import '../pages/edit_info_page.dart';
 import 'image_upload_modal.dart';
 
 class ProfileWidget extends StatefulWidget {
   final int currentIndex;
-  final VoidCallback onEditorTapped;   // New Callback
-  final VoidCallback onFanzinesTapped;
-  final VoidCallback onPagesTapped;
+  final VoidCallback onEditorTapped;   // Callback for Editor Tab
+  final VoidCallback onFanzinesTapped; // Callback for Fanzines Tab
+  final VoidCallback onPagesTapped;    // Callback for Pages Tab
   final String? targetUserId; // NULL = Current Logged In User
 
   const ProfileWidget({
@@ -80,8 +82,26 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             _zipCode = data['zipCode'] ?? '';
             _country = data['country'] ?? '';
           });
-        } else {
-          if (mounted) setState(() { _errorMessage = "User not found."; });
+        } else if (mounted) {
+          // Fallback logic: If UID doc doesn't exist, check Email (legacy migration)
+          if (widget.targetUserId == null && currentUser?.email != null) {
+            final emailDoc = await FirebaseFirestore.instance
+                .collection('Users')
+                .doc(currentUser!.email)
+                .get();
+
+            if (emailDoc.exists) {
+              final data = emailDoc.data() as Map<String, dynamic>;
+              setState(() {
+                _email = currentUser!.email ?? '';
+                _username = data['username'] ?? '';
+              });
+            } else {
+              setState(() { _errorMessage = "User not found."; });
+            }
+          } else {
+            setState(() { _errorMessage = "User not found."; });
+          }
         }
       } catch (e) {
         print("Error loading user data: $e");
@@ -161,13 +181,22 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  // "View Profile" link removed as requested
+                                  // Restored "View Profile" link as requested
+                                  RichText(
+                                    text: TextSpan(
+                                      text: 'view profile',
+                                      style: linkStyle,
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage())),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
                                   RichText(
                                     text: TextSpan(
                                       text: 'edit info',
                                       style: linkStyle,
                                       recognizer: TapGestureRecognizer()
-                                        ..onTap = () => context.pushNamed('editInfo'),
+                                        ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const EditInfoPage())),
                                     ),
                                   ),
                                   const SizedBox(height: 10),

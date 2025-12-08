@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../widgets/profile_widget.dart';
 import '../widgets/new_fanzine_modal.dart';
 import '../widgets/image_view_modal.dart';
+import 'fanzine_editor_page.dart';
+import 'settings_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -113,36 +115,67 @@ class _ProfilePageState extends State<ProfilePage> {
           );
         }
         if (snapshot.hasError) {
-          return Center(child: Text('Error loading editor fanzines: ${snapshot.error}'));
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text('Error loading fanzines.')),
+          );
         }
 
         final displayItems = <Widget>[];
 
-        // Editor Controls (moved from Fanzines to here)
-        if (_isEditor) {
-          displayItems.addAll([
-            TextButton(
-              style: _blueButtonStyle,
-              onPressed: _showNewFanzineModal,
-              child: const Text(
-                "make new fanzine",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white),
-              ),
+        // --- DEBUG INFO TILE ---
+        // This will appear as the first item in your grid so you can verify status
+        displayItems.add(
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.amber[100],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber),
             ),
-            TextButton(
-              style: _greyButtonStyle,
-              onPressed: () {
-                context.pushNamed('settings');
-              },
-              child: const Text(
-                "settings",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white),
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.bug_report, color: Colors.amber),
+                Text(
+                  "Editor: $_isEditor",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  "UID: ${_currentUser!.uid.substring(0, 5)}...",
+                  style: const TextStyle(fontSize: 10),
+                ),
+              ],
             ),
-          ]);
-        }
+          ),
+        );
+
+        // --- ALWAYS SHOW TOOLS (Removed _isEditor check for debugging) ---
+        displayItems.addAll([
+          TextButton(
+            style: _blueButtonStyle,
+            onPressed: _showNewFanzineModal,
+            child: const Text(
+              "make new fanzine",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+          TextButton(
+            style: _greyButtonStyle,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+            },
+            child: const Text(
+              "settings",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ]);
 
         if (snapshot.hasData) {
           for (final doc in snapshot.data!.docs) {
@@ -153,9 +186,11 @@ class _ProfilePageState extends State<ProfilePage> {
               TextButton(
                 style: _blueButtonStyle,
                 onPressed: () {
-                  context.pushNamed(
-                    'fanzineEditor',
-                    pathParameters: {'fanzineId': doc.id},
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => FanzineEditorPage(fanzineId: doc.id),
+                    ),
                   );
                 },
                 child: Text(
@@ -201,15 +236,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // --- TAB 1: FANZINES SECTION (Consumed Content / Placeholders) ---
   Widget _buildFanzinesSection() {
-    // Currently just a placeholder for "For You Zine Issue 3"
-    // In the future, this could be a query for fanzines the user subscribes to.
-
     final displayItems = <Widget>[
-      // The requested placeholder item
       TextButton(
         style: _blueButtonStyle,
         onPressed: () {
-          // Placeholder action
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Opening "For You Zine Issue 3"... (Placeholder)')),
           );
@@ -225,7 +255,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return LayoutBuilder(
       builder: (context, c) {
         final cols = _calcCols(c.maxWidth);
-        // Ensure a minimum grid for layout consistency
         final itemCount = 6;
 
         return GridView.builder(
