@@ -175,39 +175,38 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       color: Theme.of(context).primaryColorDark,
       fontSize: 16,
     );
-    final borderRadius = BorderRadius.circular(12.0);
+    // Removed rounded corners (radius set to 0.0 effectively removes rounding)
+    // const borderRadius = BorderRadius.zero;
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1B255),
-        borderRadius: borderRadius,
+      decoration: const BoxDecoration(
+        color: Color(0xFFF1B255),
+        // borderRadius: borderRadius, // Removed
       ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: _isLoadingData
-              ? const Center(child: CircularProgressIndicator())
-              : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  RichText(
-                    text: TextSpan(
-                      text: _displayUrl,
-                      style: linkStyle,
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = _handleLinkTap,
-                    ),
-                  ),
-                ],
+      child: Padding( // Removed ClipRRect as it's not needed without rounded corners
+        padding: const EdgeInsets.all(16.0),
+        child: _isLoadingData
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: RichText(
+                text: TextSpan(
+                  text: _displayUrl,
+                  style: linkStyle,
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = _handleLinkTap,
+                ),
               ),
-              const SizedBox(height: 10),
-              const Divider(height: 1, thickness: 1, color: Colors.black54),
-              const SizedBox(height: 20),
-              Row(
+            ),
+            const SizedBox(height: 10),
+            const Divider(height: 1, thickness: 1, color: Colors.black54),
+            const SizedBox(height: 20),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildTab('indicia', 0),
@@ -217,20 +216,20 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                   _buildTab('stats', 2),
                 ],
               ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: (index) {
-                    setState(() { _currentPage = index; });
-                  },
-                  children: _pages.isEmpty
-                      ? [const Center(child: Text("Loading..."))]
-                      : _pages,
-                ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() { _currentPage = index; });
+                },
+                children: _pages.isEmpty
+                    ? [const Center(child: Text("Loading..."))]
+                    : _pages,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
