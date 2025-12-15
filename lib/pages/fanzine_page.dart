@@ -139,9 +139,13 @@ class _FanzinePageState extends State<FanzinePage> {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-          // Avoid loop if we are already there
-          if (!currentLoc.contains(_resolvedShortCode!) && currentLoc != '/') {
-            // context.replace('/$_resolvedShortCode'); // Optional enforcement
+
+          // If we are currently at a "user" URL (like /bqopd) but displaying a Fanzine (QrNsbYA),
+          // or if we are at root /, update the URL to match the content.
+          if (!currentLoc.contains(_resolvedShortCode!)) {
+            // Use 'go' here to ensure the router stack is fully reset to match the target route.
+            // This solves issues where imperative pushes might obscure the declarative route update.
+            context.go('/$_resolvedShortCode');
           }
         } catch (_) {}
       });

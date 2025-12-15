@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-// import 'package:go_router/go_router.dart';
+import 'package:go_router/go_router.dart';
 import '../pages/fanzine_page.dart';
 import '../pages/edit_info_page.dart';
 import 'image_upload_modal.dart';
@@ -64,7 +64,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     if (!mounted) return;
     setState(() { _isLoading = true; _errorMessage = null; });
 
-    // Determine which UID to fetch
     final uidToFetch = widget.targetUserId ?? currentUser?.uid;
 
     if (uidToFetch != null) {
@@ -89,13 +88,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             _country = data['country'] ?? '';
           });
         } else if (mounted) {
-          // Fallback logic
-          if (widget.targetUserId == null && currentUser?.email != null) {
-            // Legacy fallback logic omitted for brevity as UID is standard now
-            setState(() { _errorMessage = "User not found."; });
-          } else {
-            setState(() { _errorMessage = "User not found."; });
-          }
+          setState(() { _errorMessage = "User not found."; });
         }
       } catch (e) {
         print("Error loading user data: $e");
@@ -152,7 +145,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 children: [
                                   Text('Username: $_username'),
                                   const SizedBox(height: 4),
-                                  // Email is private unless it's MY profile
                                   if (_isMyProfile) ...[
                                     Text('Email: $_email'),
                                     const SizedBox(height: 12),
@@ -169,22 +161,27 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             ),
                             const SizedBox(width: 20),
 
-                            // Edit Controls: Only show if this is MY profile
-                            if (_isMyProfile)
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // DYNAMIC LINK: Use override if provided, else default
-                                  RichText(
-                                    text: TextSpan(
-                                      text: widget.actionLinkText ?? 'view profile',
-                                      style: linkStyle,
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = widget.onActionLinkTapped ??
-                                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage())),
-                                    ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // 1. Dynamic Link
+                                RichText(
+                                  text: TextSpan(
+                                    text: widget.actionLinkText ?? 'view fanzine',
+                                    style: linkStyle,
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = widget.onActionLinkTapped ??
+                                              () {
+                                            // FIXED: Use context.push instead of Navigator.push
+                                            // This keeps GoRouter in sync so back/forward navigation works
+                                            context.push('/fanzine');
+                                          },
                                   ),
+                                ),
+
+                                // 2. Edit Controls (Only if MY profile)
+                                if (_isMyProfile) ...[
                                   const SizedBox(height: 10),
                                   RichText(
                                     text: TextSpan(
@@ -212,7 +209,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                     ),
                                   ),
                                 ],
-                              ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -225,22 +223,22 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // --- EDITOR TAB (0) ---
-                    GestureDetector(
-                      onTap: widget.onEditorTapped,
-                      child: Text(
-                        'editor',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColorDark,
-                          fontWeight: widget.currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                    if (_isMyProfile) ...[
+                      GestureDetector(
+                        onTap: widget.onEditorTapped,
+                        child: Text(
+                          'editor',
+                          style: TextStyle(
+                            color: Theme.of(context).primaryColorDark,
+                            fontWeight: widget.currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                          ),
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
-                    ),
-                    // --- FANZINES TAB (1) ---
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
+                      ),
+                    ],
                     GestureDetector(
                       onTap: widget.onFanzinesTapped,
                       child: Text(
@@ -255,7 +253,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
                     ),
-                    // --- PAGES TAB (2) ---
                     GestureDetector(
                       onTap: widget.onPagesTapped,
                       child: Text(

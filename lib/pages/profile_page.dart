@@ -22,7 +22,8 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   // 0 = Editor, 1 = Fanzines, 2 = Pages
-  int _currentIndex = 0;
+  // Default to 1 (Fanzines) if not owner, will update in init
+  int _currentIndex = 1;
 
   // State
   bool _isOwner = false;
@@ -50,7 +51,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     // 1. Determine Target User
-    if (widget.userId != null) {
+    if (widget.userId != null && widget.userId!.isNotEmpty) {
       _targetUserId = widget.userId;
     } else {
       _targetUserId = currentUser?.uid;
@@ -59,6 +60,10 @@ class _ProfilePageState extends State<ProfilePage> {
     // 2. Determine Permissions
     if (currentUser != null && _targetUserId == currentUser.uid) {
       _isOwner = true;
+      // If I'm the owner, default to "Editor" tab (0) or stick to current preference?
+      // Let's default to Editor (0) for the owner for better UX
+      if (_currentIndex == 1) _currentIndex = 0;
+
       // Fetch editor status
       try {
         final doc = await FirebaseFirestore.instance.collection('Users').doc(currentUser.uid).get();
@@ -71,6 +76,9 @@ class _ProfilePageState extends State<ProfilePage> {
     } else {
       _isOwner = false;
       _isEditor = false;
+      // If I'm NOT the owner, I must be on Fanzines (1) or Pages (2).
+      // If current is Editor (0), force switch to Fanzines (1).
+      if (_currentIndex == 0) _currentIndex = 1;
     }
 
     if (mounted) setState(() => _isLoading = false);
@@ -97,7 +105,10 @@ class _ProfilePageState extends State<ProfilePage> {
       return Scaffold(
         backgroundColor: Colors.grey[200],
         body: Center(
-          child: LoginWidget(onTap: () => context.go('/login')),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: LoginWidget(onTap: () => context.go('/register')),
+          ),
         ),
       );
     }
@@ -107,7 +118,7 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SafeArea(
         child: PageWrapper(
           maxWidth: 1000,
-          scroll: false, // We handle scrolling manually
+          scroll: false, // We handle scrolling manually inside
           padding: const EdgeInsets.all(8),
           child: SingleChildScrollView(
             child: Column(
@@ -136,7 +147,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 // 3. Bottom Widget (Navigation or Login Call-to-Action)
                 if (!_isOwner)
                   FirebaseAuth.instance.currentUser == null
-                      ? LoginWidget(onTap: () => context.go('/register'))
+                      ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 400), child: LoginWidget(onTap: () => context.go('/register'))))
                       : const FanzineWidget() // Show nav bar if logged in but looking at someone else
               ],
             ),
@@ -147,33 +158,57 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildContentGrid() {
-    // --- TAB 1: FANZINES (Consumed Content - Placeholder) ---
+    // --- TAB 1: FANZINES (Consumed Content / Feed) ---
+    // If you want to show Fanzines CREATED by this user, we query 'fanzines' where 'editorId' == userId
+    // Note: The previous logic had a hardcoded placeholder for Tab 1.
+    // We should probably show their published fanzines here.
     if (_currentIndex == 1) {
-      return GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        childAspectRatio: 5 / 8,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        children: [
-          Container(
-            decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(12)),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(8),
-            child: const Text("For You Zine Issue 3", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          for (int i = 0; i < 3; i++)
-            Container(decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(12))),
-        ],
+      Query fanzineQuery = FirebaseFirestore.instance
+          .collection('fanzines')
+          .where('editorId', isEqualTo: _targetUserId)
+          .orderBy('creationDate', descending: true);
+
+      return StreamBuilder<QuerySnapshot>(
+          stream: fanzineQuery.snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+            final docs = snapshot.data?.docs ?? [];
+            if (docs.isEmpty) return const SizedBox(height: 100, child: Center(child: Text("No fanzines found.")));
+
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 5 / 8,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+              ),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final data = docs[index].data() as Map<String, dynamic>;
+                final title = data['title'] ?? 'Untitled';
+                // Just a placeholder visual for now, could be a cover image
+                return Container(
+                  decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(12)),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.all(8),
+                  child: Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                );
+              },
+            );
+          }
       );
     }
 
-    // --- TAB 0 (Editor) & TAB 2 (Pages) use Queries ---
+    // --- TAB 0 (Editor - Private) & TAB 2 (Pages - Public Images) ---
     Query query;
     if (_currentIndex == 0) {
+      // Editor Tab: Show Fanzines to Edit
       query = FirebaseFirestore.instance.collection('fanzines').where('editorId', isEqualTo: _targetUserId).orderBy('creationDate', descending: true);
     } else {
+      // Pages Tab: Show Uploaded Images
       query = FirebaseFirestore.instance.collection('images').where('uploaderId', isEqualTo: _targetUserId).orderBy('timestamp', descending: true);
     }
 
@@ -181,7 +216,7 @@ class _ProfilePageState extends State<ProfilePage> {
       stream: query.snapshots(),
       builder: (context, snapshot) {
 
-        // --- EDITOR DASHBOARD BUTTONS (Only if Owner & Editor) ---
+        // --- EDITOR DASHBOARD BUTTONS (Only if Owner & Editor & Tab 0) ---
         final buttons = <Widget>[];
         if (_currentIndex == 0 && _isOwner) {
           if (_isEditor) {
@@ -210,12 +245,14 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           itemCount: totalItems,
           itemBuilder: (context, index) {
+            // Render Buttons first
             if (index < buttons.length) return buttons[index];
 
             final docIndex = index - buttons.length;
             final data = docs[docIndex].data() as Map<String, dynamic>;
 
             if (_currentIndex == 0) {
+              // Editor: List of Fanzines
               final title = data['title'] ?? 'Untitled';
               return TextButton(
                 style: _blueButtonStyle,
@@ -223,6 +260,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
               );
             } else {
+              // Pages: List of Images
               final url = data['fileUrl'] ?? '';
               if (url.isEmpty) return const SizedBox();
               return GestureDetector(
