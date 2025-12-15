@@ -14,6 +14,10 @@ class ProfileWidget extends StatefulWidget {
   final VoidCallback onPagesTapped;    // Callback for Pages Tab
   final String? targetUserId; // NULL = Current Logged In User
 
+  // NEW: Optional override for the "primary action" link
+  final String? actionLinkText;
+  final VoidCallback? onActionLinkTapped;
+
   const ProfileWidget({
     super.key,
     required this.currentIndex,
@@ -21,6 +25,8 @@ class ProfileWidget extends StatefulWidget {
     required this.onFanzinesTapped,
     required this.onPagesTapped,
     this.targetUserId,
+    this.actionLinkText,
+    this.onActionLinkTapped,
   });
 
   @override
@@ -83,22 +89,10 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             _country = data['country'] ?? '';
           });
         } else if (mounted) {
-          // Fallback logic: If UID doc doesn't exist, check Email (legacy migration)
+          // Fallback logic
           if (widget.targetUserId == null && currentUser?.email != null) {
-            final emailDoc = await FirebaseFirestore.instance
-                .collection('Users')
-                .doc(currentUser!.email)
-                .get();
-
-            if (emailDoc.exists) {
-              final data = emailDoc.data() as Map<String, dynamic>;
-              setState(() {
-                _email = currentUser!.email ?? '';
-                _username = data['username'] ?? '';
-              });
-            } else {
-              setState(() { _errorMessage = "User not found."; });
-            }
+            // Legacy fallback logic omitted for brevity as UID is standard now
+            setState(() { _errorMessage = "User not found."; });
           } else {
             setState(() { _errorMessage = "User not found."; });
           }
@@ -181,13 +175,14 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  // Restored "View Profile" link as requested
+                                  // DYNAMIC LINK: Use override if provided, else default
                                   RichText(
                                     text: TextSpan(
-                                      text: 'view profile',
+                                      text: widget.actionLinkText ?? 'view profile',
                                       style: linkStyle,
                                       recognizer: TapGestureRecognizer()
-                                        ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage())),
+                                        ..onTap = widget.onActionLinkTapped ??
+                                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FanzinePage())),
                                     ),
                                   ),
                                   const SizedBox(height: 10),

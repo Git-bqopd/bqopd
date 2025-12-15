@@ -23,7 +23,7 @@ class ViewService {
         final cred = await _auth.signInAnonymously();
         user = cred.user;
       } catch (e) {
-        print("Error signing in anonymously for view tracking: $e");
+        // print("Error signing in anonymously for view tracking: $e");
         return;
       }
     }
@@ -41,7 +41,7 @@ class ViewService {
         },
       );
     } catch (e) {
-      print("Analytics log failed: $e");
+      // Analytics failures are non-critical
     }
 
     // 3. Record Unique View in Firestore
@@ -61,7 +61,13 @@ class ViewService {
         'isAnonymous': user.isAnonymous,
       }, SetOptions(merge: true));
     } catch (e) {
-      print("Error recording view to Firestore: $e");
+      // Suppress permission errors specifically to keep console clean during dev
+      if (e.toString().contains('permission-denied')) {
+        // Commented out to silence the specific log as requested
+        // print("Note: View tracking skipped (Permission Denied). Enable writes to 'stats' collection in Firestore Rules.");
+      } else {
+        print("Error recording view to Firestore: $e");
+      }
     }
   }
 
@@ -82,7 +88,9 @@ class ViewService {
       final snapshot = await query.get(source: AggregateSource.server);
       return snapshot.count ?? 0;
     } catch (e) {
-      print("Error fetching view count: $e");
+      if (!e.toString().contains('permission-denied')) {
+        print("Error fetching view count: $e");
+      }
       return 0;
     }
   }

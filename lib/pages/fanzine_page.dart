@@ -2,28 +2,165 @@ import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-import '../utils/fanzine_grid_view.dart';
+import '../services/view_service.dart';
+import '../utils/fanzine_single_view.dart';
 import '../widgets/fanzine_widget.dart';
 
-class FanzinePage extends StatelessWidget {
-  const FanzinePage({super.key});
+class FanzinePage extends StatefulWidget {
+  final String? fanzineId; // Optional: If passed directly
+  final String? shortCode; // Optional: If passed directly
+
+  const FanzinePage({
+    super.key,
+    this.fanzineId,
+    this.shortCode,
+  });
+
+  @override
+  State<FanzinePage> createState() => _FanzinePageState();
+}
+
+class _FanzinePageState extends State<FanzinePage> {
+  final ViewService _viewService = ViewService();
+
+  // State
+  bool _isSingleColumn = false; // True = 1 col (Feed), False = 2 cols (Grid)
+  int _targetIndex = 0;
+  List<Map<String, dynamic>> _pages = [];
+  bool _isLoading = true;
+  String? _resolvedFanzineId;
+  String? _resolvedShortCode;
+
+  // Scroll Controller
+  ScrollController? _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _initData();
+  }
+
+  @override
+  void dispose() {
+    _scrollController?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initData() async {
+    setState(() => _isLoading = true);
+
+    String? targetShortCode = widget.shortCode;
+    String? targetId = widget.fanzineId;
+
+    // 1. Resolve Shortcode/ID if not passed explicitly
+    if (targetShortCode == null && targetId == null) {
+      final user = FirebaseAuth.instance.currentUser;
+      // IMPORTANT: Ignore anonymous users for "My Dashboard" logic
+      if (user != null && !user.isAnonymous) {
+        // Logged In (Real User) -> Check User Doc
+        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
+        targetShortCode = userDoc.data()?['newFanzine'];
+      } else {
+        // Public / Anon -> Check App Settings for Landing Zine
+        final settings = await FirebaseFirestore.instance.collection('app_settings').doc('main_settings').get();
+        targetShortCode = settings.data()?['login_zine_shortcode'];
+      }
+    }
+
+    // 2. Resolve ID from Shortcode if needed
+    if (targetId == null && targetShortCode != null) {
+      // Try 'fanzines' collection first
+      final fanzineQuery = await FirebaseFirestore.instance
+          .collection('fanzines')
+          .where('shortCode', isEqualTo: targetShortCode)
+          .limit(1)
+          .get();
+
+      if (fanzineQuery.docs.isNotEmpty) {
+        targetId = fanzineQuery.docs.first.id;
+      } else {
+        // Fallback: Check 'shortcodes' collection
+        final scDoc = await FirebaseFirestore.instance.collection('shortcodes').doc(targetShortCode).get();
+        if (scDoc.exists && scDoc.data()?['type'] == 'fanzine') {
+          targetId = scDoc.data()?['contentId'];
+        }
+      }
+    }
+
+    _resolvedFanzineId = targetId;
+    _resolvedShortCode = targetShortCode;
+
+    // 3. Load Pages if we found an ID
+    if (_resolvedFanzineId != null) {
+      await _loadPages(_resolvedFanzineId!);
+      _updateUrlIfNeeded();
+    } else {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadPages(String fanzineId) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('fanzines')
+          .doc(fanzineId)
+          .collection('pages')
+          .get();
+
+      final docs = snapshot.docs.map((d) {
+        final data = d.data();
+        data['__id'] = d.id;
+        return data;
+      }).toList();
+
+      docs.sort((a, b) {
+        int aNum = (a['pageNumber'] ?? a['index'] ?? 0) as int;
+        int bNum = (b['pageNumber'] ?? b['index'] ?? 0) as int;
+        return aNum.compareTo(bNum);
+      });
+
+      if (mounted) {
+        setState(() {
+          _pages = docs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error loading pages: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _updateUrlIfNeeded() {
+    if (_resolvedShortCode != null && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          final router = GoRouter.of(context);
+          final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
+          // Avoid loop if we are already there
+          if (!currentLoc.contains(_resolvedShortCode!) && currentLoc != '/') {
+            // context.replace('/$_resolvedShortCode'); // Optional enforcement
+          }
+        } catch (_) {}
+      });
+    }
+  }
+
+  void _recordViewForIndex(int index) {
+    if (index > 0 && index <= _pages.length) {
+      final pageData = _pages[index - 1];
+      final imageId = pageData['imageId'];
+      if (imageId != null) {
+        _viewService.recordView(contentId: imageId, contentType: 'images');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final db = FirebaseFirestore.instance;
-
-    // --- 1. Determine Data Source ---
-    Stream<DocumentSnapshot> shortcodeSourceStream;
-
-    if (currentUser != null) {
-      // LOGGED IN: Get the user's personal Fanzine shortcode from their User doc
-      shortcodeSourceStream = db.collection('Users').doc(currentUser.uid).snapshots();
-    } else {
-      // NOT LOGGED IN (PUBLIC): Get the "Login Zine" shortcode from app_settings
-      shortcodeSourceStream = db.collection('app_settings').doc('main_settings').snapshots();
-    }
+    final headerWidget = FanzineWidget(fanzineShortCode: _resolvedShortCode);
 
     return Scaffold(
       backgroundColor: Colors.grey[200],
@@ -31,48 +168,90 @@ class FanzinePage extends StatelessWidget {
         child: PageWrapper(
           maxWidth: 1000,
           scroll: false,
-          child: StreamBuilder<DocumentSnapshot>(
-            stream: shortcodeSourceStream,
-            builder: (context, snapshot) {
-              // Note: We don't block on 'waiting' here to prevent white flash if possible,
-              // but standard practice is a loader.
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildLayout(headerWidget),
+        ),
+      ),
+    );
+  }
 
-              String? shortCode;
+  Widget _buildLayout(Widget headerWidget) {
+    final int crossAxisCount = _isSingleColumn ? 1 : 2;
+    final double childAspectRatio = _isSingleColumn ? 0.6 : 0.625;
+    const double mainAxisSpacing = 30.0;
+    const double crossAxisSpacing = 24.0;
+    const double padding = 8.0;
 
-              if (snapshot.hasData && snapshot.data!.exists) {
-                final data = snapshot.data!.data() as Map<String, dynamic>?;
-                if (data != null) {
-                  if (currentUser != null) {
-                    // Logged In: Use 'newFanzine' (fallback to nothing if not set)
-                    shortCode = data['newFanzine'] as String?;
-                  } else {
-                    // Not Logged In: Use 'login_zine_shortcode'
-                    shortCode = data['login_zine_shortcode'] as String?;
-                  }
-                }
-              }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final availableWidth = width - (padding * 2);
+        final totalCrossAxisSpacing = (crossAxisCount - 1) * crossAxisSpacing;
+        final itemWidth = (availableWidth - totalCrossAxisSpacing) / crossAxisCount;
+        final itemHeight = itemWidth / childAspectRatio;
+        final rowHeight = itemHeight + mainAxisSpacing;
 
-              // Determine which mode FanzineWidget should operate in
-              final isDashboardMode = currentUser != null;
+        final rowIndex = (_targetIndex / crossAxisCount).floor();
+        final initialOffset = rowIndex * rowHeight;
 
-              // IF NO SHORTCODE IS FOUND (e.g. database not set up, or new user):
-              // We pass an empty string or null. The FanzineGridView handles this
-              // by just showing the uiWidget (the FanzineWidget) and no image tiles.
-              return FanzineGridView(
-                shortCode: shortCode ?? '',
-                uiWidget: FanzineWidget(
-                  // If dashboard mode, we pass null so FanzineWidget loads "My Dashboard" logic
-                  // If public mode, we pass the shortCode so it loads that specific zine (or nothing)
-                  fanzineShortCode: isDashboardMode ? null : shortCode,
+        // Dispose previous controller to prevent attaching to multiple scrolls
+        _scrollController?.dispose();
+        _scrollController = ScrollController(initialScrollOffset: initialOffset);
+
+        if (_isSingleColumn) {
+          return FanzineSingleView(
+            pages: _pages,
+            headerWidget: headerWidget,
+            scrollController: _scrollController!,
+            viewService: _viewService,
+            onOpenGrid: (currentIndex) {
+              setState(() {
+                _targetIndex = currentIndex;
+                _isSingleColumn = false;
+              });
+            },
+          );
+        } else {
+          // Inline Grid Logic (or move to fanzine_grid_view.dart in future)
+          return GridView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(padding),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.625,
+              mainAxisSpacing: mainAxisSpacing,
+              crossAxisSpacing: crossAxisSpacing,
+            ),
+            itemCount: _pages.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) return headerWidget;
+
+              final pageIndex = index - 1;
+              final pageData = _pages[pageIndex];
+              final imageUrl = pageData['imageUrl'] ?? '';
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _targetIndex = index;
+                    _isSingleColumn = true;
+                  });
+                  _recordViewForIndex(index);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: imageUrl.isEmpty ? Colors.grey[300] : Colors.white,
+                  ),
+                  child: imageUrl.isNotEmpty
+                      ? Image.network(imageUrl, fit: BoxFit.contain)
+                      : null,
                 ),
               );
             },
-          ),
-        ),
-      ),
+          );
+        }
+      },
     );
   }
 }

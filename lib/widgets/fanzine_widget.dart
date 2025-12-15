@@ -68,7 +68,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         return;
       }
 
-      if (currentUser == null) {
+      // Check Real Auth (Not Anonymous)
+      final isRealUser = currentUser != null && !currentUser!.isAnonymous;
+
+      if (!isRealUser) {
         _displayUrl = 'Login or Register';
         _showLoginLink = true;
         _targetShortCode = null;
@@ -102,8 +105,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   }
 
   Future<void> _loadDashboard() async {
-    if (currentUser == null) {
-      _displayUrl = 'bqopd.com';
+    // Only load Dashboard for real users
+    if (currentUser == null || currentUser!.isAnonymous) {
+      _displayUrl = 'Login or Register';
+      _showLoginLink = true;
       return;
     }
 
@@ -147,6 +152,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
               },
               onLoginSuccess: () {
                 Navigator.pop(context);
+                // Reload data to reflect new auth state
                 _loadData();
               },
             ),
@@ -175,15 +181,12 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       color: Theme.of(context).primaryColorDark,
       fontSize: 16,
     );
-    // Removed rounded corners (radius set to 0.0 effectively removes rounding)
-    // const borderRadius = BorderRadius.zero;
 
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFF1B255),
-        // borderRadius: borderRadius, // Removed
       ),
-      child: Padding( // Removed ClipRRect as it's not needed without rounded corners
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: _isLoadingData
             ? const Center(child: CircularProgressIndicator())
