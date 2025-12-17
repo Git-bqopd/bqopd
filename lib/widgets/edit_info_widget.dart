@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'; // kIsWeb, defaultTargetPlatform
 import 'package:flutter/material.dart';
 import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart';
 import 'package:go_router/go_router.dart';
@@ -9,13 +9,7 @@ import '../components/button.dart';
 import '../components/textfield.dart';
 import '../pages/profile_page.dart';
 import '../services/username_service.dart';
-
-// -----------------------------------------------------------------------------
-// TODO: PASTE YOUR NEW ANDROID API KEY HERE
-// This key should be restricted to "Android apps" in Cloud Console.
-// On Web, the SDK automatically uses the key from index.html (which should be restricted to Websites).
-// -----------------------------------------------------------------------------
-const String kGoogleApiKeyMobile = 'AIzaSyDVZREk4WuVoGJhVj9I0PmFCb8IQcSA6GQ';
+import '../env.dart'; // Import Env
 
 class EditInfoWidget extends StatefulWidget {
   const EditInfoWidget({super.key});
@@ -27,14 +21,12 @@ class EditInfoWidget extends StatefulWidget {
 class _EditInfoWidgetState extends State<EditInfoWidget> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
-  // Google Places SDK
   late final FlutterGooglePlacesSdk _places;
 
   final TextEditingController userNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
 
-  // Address Controllers
   final TextEditingController street1Controller = TextEditingController();
   final TextEditingController street2Controller = TextEditingController();
   final TextEditingController cityController = TextEditingController();
@@ -47,22 +39,30 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   bool _isLoadingData = true;
   bool _isSaving = false;
   String _initialUsername = "";
-
-  // Track if the user has manually edited their username
   bool _isUsernameManuallyEdited = false;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize Places SDK
-    // Pass the Android key here. On Web, the package ignores this string
-    // and uses the key from the <script> tag in index.html.
-    _places = FlutterGooglePlacesSdk(kGoogleApiKeyMobile);
+    // LOGIC TO SELECT THE CORRECT API KEY
+    String apiKey = '';
+
+    if (kIsWeb) {
+      // On Web, the SDK technically uses the key from the <script> tag (injected via loader),
+      // but passing the web key here maintains consistency.
+      apiKey = Env.googleApiKeyWeb;
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      apiKey = Env.googleApiKeyAndroid;
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // If you add an iOS key later:
+      // apiKey = Env.googleApiKeyIos;
+    }
+
+    _places = FlutterGooglePlacesSdk(apiKey);
 
     _loadUserData();
 
-    // Add listeners for auto-generating username
     firstNameController.addListener(_updateDefaultUsername);
     stateController.addListener(_updateDefaultUsername);
   }
@@ -86,7 +86,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     super.dispose();
   }
 
-  /// Logic to create "Kevin-from-WI" automatically
   void _updateDefaultUsername() {
     if (_isUsernameManuallyEdited) return;
 
@@ -95,7 +94,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
     if (name.isNotEmpty && state.isNotEmpty) {
       String generated = "$name-from-$state";
-      // Normalize: lowercase, no special chars except hyphens
       generated = generated.toLowerCase().replaceAll(' ', '-').replaceAll(RegExp(r'[^a-z0-9-]'), '');
 
       setState(() {
@@ -104,10 +102,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     }
   }
 
-  /// Opens the Address Search Modal
   void _openAddressSearch() async {
-    // We use 'dynamic' because the result can be AutocompletePrediction (from Google)
-    // OR it can be a String (if user typed manual text)
     final dynamic result = await showDialog(
       context: context,
       builder: (context) => _AddressSearchDialog(places: _places),
@@ -118,16 +113,12 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
         _fetchAndFillAddress(result.placeId);
       }
     } else if (result is String && result.isNotEmpty) {
-      // Manual Entry Case
       setState(() {
         street1Controller.text = result;
-        // We do NOT clear City/State/Zip here, because for a PO Box,
-        // the user likely still needs to enter those manually.
       });
     }
   }
 
-  /// Fetches place details and fills the form
   Future<void> _fetchAndFillAddress(String placeId) async {
     setState(() => _isLoadingData = true);
     try {
@@ -151,12 +142,10 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
       for (var c in place.addressComponents!) {
         final types = c.types;
-        // Note: The property is 'name' in this package, not 'longName'
-        // 'shortName' is available for abbreviated forms (like state codes)
         if (types.contains('street_number')) streetNum = c.name;
         if (types.contains('route')) route = c.name;
         if (types.contains('locality') || types.contains('postal_town')) city = c.name;
-        if (types.contains('administrative_area_level_1')) state = c.shortName ?? c.name; // "WI"
+        if (types.contains('administrative_area_level_1')) state = c.shortName ?? c.name;
         if (types.contains('postal_code')) zip = c.name;
         if (types.contains('country')) country = c.name;
       }
@@ -164,7 +153,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
       setState(() {
         street1Controller.text = "$streetNum $route".trim();
         cityController.text = city;
-        stateController.text = state; // Triggers _updateDefaultUsername!
+        stateController.text = state;
         zipController.text = zip;
         countryController.text = country;
       });
@@ -293,7 +282,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               Text('Edit Your Profile', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark)),
               const SizedBox(height: 20),
 
-              // --- Identity ---
               _buildSectionLabel('Identity'),
               TextField( controller: emailController, enabled: false, decoration: defaultDecoration.copyWith(hintText: "email", fillColor: Colors.grey[200]), style: TextStyle(color: Colors.grey[700]) ),
               const SizedBox(height: 10),
@@ -313,9 +301,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               TextField( controller: bioController, maxLines: 3, decoration: defaultDecoration.copyWith(hintText: "Bio (tell us about yourself!)"), keyboardType: TextInputType.multiline ),
               const SizedBox(height: 25),
 
-              // --- Mailing Address ---
               _buildSectionLabel('Mailing Address'),
-              // Removed old search button row from here
 
               const SizedBox(height: 10),
 
@@ -328,7 +314,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               ),
               const SizedBox(height: 10),
 
-              // Street Address Button (Triggers Search) - MOVED HERE
               GestureDetector(
                 onTap: _openAddressSearch,
                 child: AbsorbPointer(
@@ -407,7 +392,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   }
 }
 
-// --- Internal Search Dialog ---
 class _AddressSearchDialog extends StatefulWidget {
   final FlutterGooglePlacesSdk places;
   const _AddressSearchDialog({required this.places});
@@ -427,7 +411,6 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-    // Clear state if empty
     if (query.isEmpty) {
       setState(() {
         _predictions = [];
@@ -485,7 +468,6 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
                 border: OutlineInputBorder(),
               ),
               onChanged: _onSearchChanged,
-              // ALLOW ENTER KEY to use the text immediately
               onSubmitted: (val) {
                 if (val.trim().isNotEmpty) {
                   Navigator.pop(context, val.trim());
@@ -493,8 +475,6 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
               },
             ),
             const SizedBox(height: 10),
-
-            // --- Result List or Status ---
             Expanded(
               child: _buildBody(),
             ),
@@ -505,7 +485,6 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
   }
 
   Widget _buildBody() {
-    // 1. Error Case (Billing/API issues) -> Show Error but allow manual override
     if (_errorMessage != null) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -530,10 +509,8 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // 2. No Results (or just empty list)
     if (_predictions.isEmpty) {
       if (_controller.text.isNotEmpty) {
-        // Show manual option nicely
         return ListView(
           children: [
             ListTile(
@@ -554,12 +531,10 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
       return const Center(child: Text("Start typing to search...", style: TextStyle(color: Colors.grey)));
     }
 
-    // 3. Results List
     return ListView.separated(
-      itemCount: _predictions.length + 1, // +1 for the manual footer option
+      itemCount: _predictions.length + 1,
       separatorBuilder: (c, i) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        // Footer Option: Always allow manual entry at the bottom of the list
         if (index == _predictions.length) {
           return ListTile(
             leading: const Icon(Icons.edit_note, color: Colors.grey),
@@ -581,7 +556,6 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
   }
 }
 
-// --- Helper Method ---
 void displayMessageToUser(String message, BuildContext context) {
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).removeCurrentSnackBar();

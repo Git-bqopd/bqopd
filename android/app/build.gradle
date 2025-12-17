@@ -8,6 +8,21 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Logic to read dart-defines and extract the Android Key
+def dartEnvironmentVariables = [:]
+if (project.hasProperty('dart-defines')) {
+    dartEnvironmentVariables = project.property('dart-defines')
+            .split(',')
+            .collectEntries { entry ->
+                def pair = new String(entry.decodeBase64(), 'UTF-8').split('=')
+                if (pair.length == 2) {
+                    [(pair[0]): pair[1]]
+                } else {
+                    [(pair[0]): ""]
+                }
+            }
+}
+
 android {
     namespace = "com.bqopd.bqopd"
     compileSdk = flutter.compileSdkVersion
@@ -31,6 +46,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Pass the ANDROID specific key to the Manifest
+        manifestPlaceholders = [
+                googleApiKey: dartEnvironmentVariables.get('GOOGLE_API_KEY_ANDROID', '')
+        ]
     }
 
     buildTypes {

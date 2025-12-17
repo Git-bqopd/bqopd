@@ -33,11 +33,11 @@
 
         <!--
              REQUIRED FOR GOOGLE MAPS/PLACES SDK ON ANDROID
-             Paste your NEW Android-restricted API Key here.
+             Uses the value passed via --dart-define which is piped through build.gradle
         -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAYeJVVPpCTiuPfIuX8fMBUFwLUutW4ahE"/>
+            android:value="${googleApiKey}"/>
 
     </application>
     <!-- Required to query activities that can process text, see:
