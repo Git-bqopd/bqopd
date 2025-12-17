@@ -3,8 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../services/user_provider.dart';
 import '../pages/fanzine_page.dart';
-import '../pages/edit_info_page.dart';
 import 'image_upload_modal.dart';
 
 class ProfileWidget extends StatefulWidget {
@@ -34,71 +36,113 @@ class ProfileWidget extends StatefulWidget {
 }
 
 class _ProfileWidgetState extends State<ProfileWidget> {
-  final User? currentUser = FirebaseAuth.instance.currentUser;
-
   String _username = '', _email = '', _firstName = '', _lastName = '', _street1 = '', _street2 = '', _city = '', _stateName = '', _zipCode = '', _country = '';
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Is this the currently logged-in user's profile?
-  bool get _isMyProfile {
-    if (widget.targetUserId == null) return true;
-    return currentUser?.uid == widget.targetUserId;
-  }
-
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadData();
   }
 
   @override
   void didUpdateWidget(covariant ProfileWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.targetUserId != widget.targetUserId) {
-      _loadUserData();
+      _loadData();
     }
   }
 
-  Future<void> _loadUserData() async {
-    if (!mounted) return;
-    setState(() { _isLoading = true; _errorMessage = null; });
+  void _loadData() {
+    final provider = Provider.of<UserProvider>(context, listen: false);
+    final currentUid = provider.currentUserId;
+    final targetUid = widget.targetUserId ?? currentUid;
 
-    final uidToFetch = widget.targetUserId ?? currentUser?.uid;
-
-    if (uidToFetch != null) {
-      try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('Users')
-            .doc(uidToFetch)
-            .get();
-
-        if (userDoc.exists && mounted) {
-          final data = userDoc.data() as Map<String, dynamic>;
-          setState(() {
-            _email = data['email'] ?? '';
-            _username = data['username'] ?? '';
-            _firstName = data['firstName'] ?? '';
-            _lastName = data['lastName'] ?? '';
-            _street1 = data['street1'] ?? '';
-            _street2 = data['street2'] ?? '';
-            _city = data['city'] ?? '';
-            _stateName = data['state'] ?? '';
-            _zipCode = data['zipCode'] ?? '';
-            _country = data['country'] ?? '';
-          });
-        } else if (mounted) {
-          setState(() { _errorMessage = "User not found."; });
-        }
-      } catch (e) {
-        print("Error loading user data: $e");
-        if (mounted) setState(() { _errorMessage = "Error loading data."; });
-      } finally {
-        if (mounted) setState(() { _isLoading = false; });
+    // CASE 1: Viewing MY profile
+    if (currentUid != null && targetUid == currentUid) {
+      // Use Provider Data (Synchronous/Cached)
+      final data = provider.userProfile;
+      if (data != null) {
+        _populateFields(data);
+        setState(() => _isLoading = false);
+      } else if (provider.isLoading) {
+        // Wait for provider to finish
+        setState(() => _isLoading = true);
+        provider.addListener(_onProviderUpdate);
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = "User data not found.";
+        });
       }
-    } else {
-      if (mounted) setState(() { _errorMessage = "Not logged in."; _isLoading = false; });
     }
+    // CASE 2: Viewing SOMEONE ELSE'S profile (or not logged in)
+    else {
+      if (targetUid == null) {
+        setState(() { _errorMessage = "User not found"; _isLoading = false; });
+        return;
+      }
+      _fetchOtherUser(targetUid);
+    }
+  }
+
+  void _onProviderUpdate() {
+    if (!mounted) return;
+    final provider = Provider.of<UserProvider>(context, listen: false);
+    if (!provider.isLoading) {
+      provider.removeListener(_onProviderUpdate);
+      if (provider.userProfile != null) {
+        _populateFields(provider.userProfile!);
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _fetchOtherUser(String uid) async {
+    setState(() => _isLoading = true);
+    try {
+      final doc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
+      if (doc.exists && mounted) {
+        _populateFields(doc.data()!);
+        setState(() => _isLoading = false);
+      } else if (mounted) {
+        setState(() { _errorMessage = "User not found."; _isLoading = false; });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _errorMessage = "Error loading data."; _isLoading = false; });
+    }
+  }
+
+  void _populateFields(Map<String, dynamic> data) {
+    setState(() {
+      _email = data['email'] ?? '';
+      _username = data['username'] ?? '';
+      _firstName = data['firstName'] ?? '';
+      _lastName = data['lastName'] ?? '';
+      _street1 = data['street1'] ?? '';
+      _street2 = data['street2'] ?? '';
+      _city = data['city'] ?? '';
+      _stateName = data['state'] ?? '';
+      _zipCode = data['zipCode'] ?? '';
+      _country = data['country'] ?? '';
+      _errorMessage = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    // Safety check in case we added listener
+    try {
+      final provider = Provider.of<UserProvider>(context, listen: false);
+      provider.removeListener(_onProviderUpdate);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  bool get _isMyProfile {
+    final provider = Provider.of<UserProvider>(context, listen: false);
+    return widget.targetUserId == null || widget.targetUserId == provider.currentUserId;
   }
 
   String _buildFormattedAddress() {
@@ -114,13 +158,28 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // If it's my profile, we can watch the provider for live updates
+    if (_isMyProfile) {
+      final provider = context.watch<UserProvider>();
+      if (!provider.isLoading && provider.userProfile != null) {
+        // This ensures the UI updates if the provider gets new data while we are looking at it
+        _populateFields(provider.userProfile!);
+        _isLoading = false;
+      }
+    }
+
     final linkStyle = TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark);
-    final borderRadius = BorderRadius.circular(12.0);
+
+    // REMOVED: borderRadius variable
+    // final borderRadius = BorderRadius.circular(12.0);
 
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFFF1B255), borderRadius: borderRadius),
-      child: ClipRRect(
-        borderRadius: borderRadius,
+      decoration: const BoxDecoration(
+        color: Color(0xFFF1B255),
+        // borderRadius: borderRadius // REMOVED
+      ),
+      child: ClipRect( // CHANGED from ClipRRect to ClipRect
+        // borderRadius: borderRadius, // REMOVED
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: _isLoading
@@ -173,8 +232,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                     recognizer: TapGestureRecognizer()
                                       ..onTap = widget.onActionLinkTapped ??
                                               () {
-                                            // FIXED: Use context.push instead of Navigator.push
-                                            // This keeps GoRouter in sync so back/forward navigation works
                                             context.push('/fanzine');
                                           },
                                   ),
@@ -188,7 +245,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                       text: 'edit info',
                                       style: linkStyle,
                                       recognizer: TapGestureRecognizer()
-                                        ..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (context) => const EditInfoPage())),
+                                        ..onTap = () => context.pushNamed('editInfo'),
                                     ),
                                   ),
                                   const SizedBox(height: 10),
@@ -198,13 +255,25 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                       style: linkStyle,
                                       recognizer: TapGestureRecognizer()
                                         ..onTap = () {
-                                          if (currentUser?.uid == null) return;
-                                          final userId = currentUser!.uid;
+                                          final uid = Provider.of<UserProvider>(context, listen: false).currentUserId;
+                                          if (uid == null) return;
                                           showDialog(
                                             context: context,
                                             barrierDismissible: false,
-                                            builder: (BuildContext dialogContext) => ImageUploadModal(userId: userId),
+                                            builder: (BuildContext dialogContext) => ImageUploadModal(userId: uid),
                                           );
+                                        },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  RichText(
+                                    text: TextSpan(
+                                      text: 'logout',
+                                      style: linkStyle,
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () async {
+                                          await FirebaseAuth.instance.signOut();
+                                          if (mounted) context.go('/login');
                                         },
                                     ),
                                   ),

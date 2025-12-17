@@ -257,20 +257,30 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   @override
   Widget build(BuildContext context) {
     final InputDecoration defaultDecoration = InputDecoration(
-      enabledBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.circular(8), ),
-      focusedBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).primaryColor), borderRadius: BorderRadius.circular(8), ),
+      enabledBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.zero, ), // UPDATED: BorderRadius.zero
+      focusedBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).primaryColor), borderRadius: BorderRadius.zero, ), // UPDATED: BorderRadius.zero
       fillColor: Colors.white, filled: true, contentPadding: const EdgeInsets.all(15), hintStyle: TextStyle(color: Colors.grey[500]),
       isDense: true,
     );
-    final borderRadius = BorderRadius.circular(12.0);
+    // REMOVED: borderRadius variable
+    // final borderRadius = BorderRadius.circular(12.0);
+
+    // Reuse the style from the old "Logout" button for consistency
+    final ButtonStyle actionButtonStyle = OutlinedButton.styleFrom(
+      foregroundColor: Colors.black87,
+      backgroundColor: Colors.white.withOpacity(0.3),
+      side: BorderSide.none,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero), // UPDATED: BorderRadius.zero
+    );
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1B255),
-        borderRadius: borderRadius,
+      decoration: const BoxDecoration(
+        color: Color(0xFFF1B255),
+        // borderRadius: borderRadius, // REMOVED
       ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
+      child: ClipRect( // CHANGED: from ClipRRect to ClipRect
+        // borderRadius: borderRadius, // REMOVED
         child: Padding(
           padding: const EdgeInsets.all(25.0),
           child: _isLoadingData
@@ -346,11 +356,19 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               TextField( controller: countryController, decoration: defaultDecoration.copyWith(hintText: "Country") ),
 
               const SizedBox(height: 30),
-              MyButton(text: _isSaving ? "Saving..." : "Save Profile", onTap: _isSaving ? null : saveProfile),
-              const SizedBox(height: 15),
 
+              // NEW LAYOUT: Save Left, View Public Profile Right
+              // Both using the style requested (Logout style)
               Row(
                 children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : saveProfile,
+                      style: actionButtonStyle,
+                      child: Text(_isSaving ? "Saving..." : "Save Profile"),
+                    ),
+                  ),
+                  const SizedBox(width: 15),
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
@@ -360,19 +378,8 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
                           context.push('/profile');
                         }
                       },
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white), padding: const EdgeInsets.symmetric(vertical: 16)),
+                      style: actionButtonStyle,
                       child: const Text("View Public Profile"),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () async {
-                        await FirebaseAuth.instance.signOut();
-                        if(mounted) context.go('/login');
-                      },
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.black87, backgroundColor: Colors.white.withOpacity(0.3), side: BorderSide.none, padding: const EdgeInsets.symmetric(vertical: 16)),
-                      child: const Text("Logout"),
                     ),
                   ),
                 ],

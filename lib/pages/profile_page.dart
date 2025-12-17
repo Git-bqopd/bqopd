@@ -3,14 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../services/user_provider.dart';
 import '../widgets/profile_widget.dart';
 import '../widgets/new_fanzine_modal.dart';
 import '../widgets/image_view_modal.dart';
 import '../widgets/login_widget.dart';
 import '../widgets/fanzine_widget.dart';
-import 'fanzine_editor_page.dart';
-import 'settings_page.dart';
+// Note: We don't need imports for Pages that we navigate to via named routes,
+// but we keep them if we use classes for other reasons.
+// However, to fix navigation we replace Navigator.push calls.
 
 class ProfilePage extends StatefulWidget {
   final String? userId; // Optional: If null, uses current user
@@ -22,86 +25,57 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   // 0 = Editor, 1 = Fanzines, 2 = Pages
-  // Default to 1 (Fanzines) if not owner, will update in init
   int _currentIndex = 1;
+  bool _hasDefaultedTab = false; // Track if we've auto-switched tab for owner
 
-  // State
-  bool _isOwner = false;
-  bool _isEditor = false;
-  String? _targetUserId;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _initUser();
-  }
-
-  @override
-  void didUpdateWidget(covariant ProfilePage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.userId != widget.userId) {
-      _initUser();
-    }
-  }
-
-  Future<void> _initUser() async {
-    setState(() => _isLoading = true);
-
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    // 1. Determine Target User
-    if (widget.userId != null && widget.userId!.isNotEmpty) {
-      _targetUserId = widget.userId;
-    } else {
-      _targetUserId = currentUser?.uid;
-    }
-
-    // 2. Determine Permissions
-    if (currentUser != null && _targetUserId == currentUser.uid) {
-      _isOwner = true;
-      // If I'm the owner, default to "Editor" tab (0) or stick to current preference?
-      // Let's default to Editor (0) for the owner for better UX
-      if (_currentIndex == 1) _currentIndex = 0;
-
-      // Fetch editor status
-      try {
-        final doc = await FirebaseFirestore.instance.collection('Users').doc(currentUser.uid).get();
-        if (doc.exists && mounted) {
-          setState(() => _isEditor = (doc.data()?['Editor'] == true));
-        }
-      } catch (e) {
-        print("Error fetching editor status: $e");
-      }
-    } else {
-      _isOwner = false;
-      _isEditor = false;
-      // If I'm NOT the owner, I must be on Fanzines (1) or Pages (2).
-      // If current is Editor (0), force switch to Fanzines (1).
-      if (_currentIndex == 0) _currentIndex = 1;
-    }
-
-    if (mounted) setState(() => _isLoading = false);
-  }
-
-  void _showNewFanzineModal() {
-    if (!_isOwner || _targetUserId == null) return;
+  void _showNewFanzineModal(String userId) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => NewFanzineModal(userId: _targetUserId!),
+      builder: (_) => NewFanzineModal(userId: userId),
     );
   }
 
+  // UPDATED: Removed circular border radius
   ButtonStyle get _blueButtonStyle => TextButton.styleFrom(
     backgroundColor: Colors.blueAccent,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
   );
 
   @override
   Widget build(BuildContext context) {
-    // Handling cases where no user is found (e.g. not logged in and no ID passed)
-    if (!_isLoading && _targetUserId == null) {
+    final userProvider = context.watch<UserProvider>();
+    final currentUid = userProvider.currentUserId;
+
+    // Determine Target User (Dynamic based on provider)
+    // If widget.userId is explicit, use it. Otherwise use current logged in user.
+    final String? targetUserId = (widget.userId != null && widget.userId!.isNotEmpty)
+        ? widget.userId
+        : currentUid;
+
+    // Determine Ownership
+    final bool isOwner = (currentUid != null && targetUserId == currentUid);
+
+    // Auto-switch to Editor tab (0) if it's the owner and we haven't done it yet
+    if (isOwner && !_hasDefaultedTab) {
+      // Only switch if we are currently on Fanzines (1), which is the default
+      if (_currentIndex == 1) {
+        // We can't setState during build, so we schedule it
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _currentIndex = 0;
+              _hasDefaultedTab = true;
+            });
+          }
+        });
+      } else {
+        _hasDefaultedTab = true;
+      }
+    }
+
+    // Handling cases where no user is found
+    if (!userProvider.isLoading && targetUserId == null) {
       return Scaffold(
         backgroundColor: Colors.grey[200],
         body: Center(
@@ -118,18 +92,18 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SafeArea(
         child: PageWrapper(
           maxWidth: 1000,
-          scroll: false, // We handle scrolling manually inside
+          scroll: false,
           padding: const EdgeInsets.all(8),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 1. Profile Widget (Fixed Height)
-                if (_targetUserId != null)
+                if (targetUserId != null)
                   SizedBox(
                     height: 340,
                     child: ProfileWidget(
-                      targetUserId: _targetUserId!,
+                      targetUserId: targetUserId,
                       currentIndex: _currentIndex,
                       onEditorTapped: () => setState(() => _currentIndex = 0),
                       onFanzinesTapped: () => setState(() => _currentIndex = 1),
@@ -140,15 +114,21 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 16),
 
                 // 2. The Content Grid
-                if (_targetUserId != null) _buildContentGrid(),
+                if (targetUserId != null)
+                  _buildContentGrid(targetUserId, isOwner, userProvider.isEditor),
 
                 const SizedBox(height: 32),
 
                 // 3. Bottom Widget (Navigation or Login Call-to-Action)
-                if (!_isOwner)
-                  FirebaseAuth.instance.currentUser == null
-                      ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 400), child: LoginWidget(onTap: () => context.go('/register'))))
-                      : const FanzineWidget() // Show nav bar if logged in but looking at someone else
+                if (!isOwner)
+                  userProvider.isLoggedIn
+                      ? const FanzineWidget()
+                      : Center(
+                      child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: LoginWidget(onTap: () => context.go('/register'))
+                      )
+                  )
               ],
             ),
           ),
@@ -157,15 +137,16 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildContentGrid() {
+  Widget _buildContentGrid(String targetUserId, bool isOwner, bool isEditor) {
+    // If non-owner tries to access Editor tab, force show Fanzines or empty
+    int effectiveIndex = _currentIndex;
+    if (!isOwner && effectiveIndex == 0) effectiveIndex = 1;
+
     // --- TAB 1: FANZINES (Consumed Content / Feed) ---
-    // If you want to show Fanzines CREATED by this user, we query 'fanzines' where 'editorId' == userId
-    // Note: The previous logic had a hardcoded placeholder for Tab 1.
-    // We should probably show their published fanzines here.
-    if (_currentIndex == 1) {
+    if (effectiveIndex == 1) {
       Query fanzineQuery = FirebaseFirestore.instance
           .collection('fanzines')
-          .where('editorId', isEqualTo: _targetUserId)
+          .where('editorId', isEqualTo: targetUserId)
           .orderBy('creationDate', descending: true);
 
       return StreamBuilder<QuerySnapshot>(
@@ -180,7 +161,7 @@ class _ProfilePageState extends State<ProfilePage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
+                crossAxisCount: 3, // CHANGED to 3 columns
                 childAspectRatio: 5 / 8,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
@@ -189,9 +170,9 @@ class _ProfilePageState extends State<ProfilePage> {
               itemBuilder: (context, index) {
                 final data = docs[index].data() as Map<String, dynamic>;
                 final title = data['title'] ?? 'Untitled';
-                // Just a placeholder visual for now, could be a cover image
                 return Container(
-                  decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(12)),
+                  // UPDATED: Removed circular border radius
+                  decoration: const BoxDecoration(color: Colors.blueAccent),
                   alignment: Alignment.center,
                   padding: const EdgeInsets.all(8),
                   child: Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -202,14 +183,14 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
 
-    // --- TAB 0 (Editor - Private) & TAB 2 (Pages - Public Images) ---
+    // --- TAB 0 (Editor) & TAB 2 (Pages) ---
     Query query;
-    if (_currentIndex == 0) {
+    if (effectiveIndex == 0) {
       // Editor Tab: Show Fanzines to Edit
-      query = FirebaseFirestore.instance.collection('fanzines').where('editorId', isEqualTo: _targetUserId).orderBy('creationDate', descending: true);
+      query = FirebaseFirestore.instance.collection('fanzines').where('editorId', isEqualTo: targetUserId).orderBy('creationDate', descending: true);
     } else {
       // Pages Tab: Show Uploaded Images
-      query = FirebaseFirestore.instance.collection('images').where('uploaderId', isEqualTo: _targetUserId).orderBy('timestamp', descending: true);
+      query = FirebaseFirestore.instance.collection('images').where('uploaderId', isEqualTo: targetUserId).orderBy('timestamp', descending: true);
     }
 
     return StreamBuilder<QuerySnapshot>(
@@ -218,13 +199,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
         // --- EDITOR DASHBOARD BUTTONS (Only if Owner & Editor & Tab 0) ---
         final buttons = <Widget>[];
-        if (_currentIndex == 0 && _isOwner) {
-          if (_isEditor) {
-            buttons.add(TextButton(style: _blueButtonStyle, onPressed: _showNewFanzineModal, child: const Text("make new fanzine", textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
+        if (effectiveIndex == 0 && isOwner) {
+          if (isEditor) {
+            buttons.add(TextButton(style: _blueButtonStyle, onPressed: () => _showNewFanzineModal(targetUserId), child: const Text("make new fanzine", textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
           } else {
             buttons.add(Container(padding: const EdgeInsets.all(8), color: Colors.red[100], alignment: Alignment.center, child: const Text("You are not an editor.", textAlign: TextAlign.center)));
           }
-          buttons.add(TextButton(style: TextButton.styleFrom(backgroundColor: Colors.grey, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())), child: const Text("settings", textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
+          // CHANGED: Use context.pushNamed('settings') for GoRouter navigation
+          // UPDATED: Changed style to be square (removed default rounded button style if any, but TextButton is usually rectangular, ensuring square shape with explicit shape)
+          buttons.add(TextButton(style: TextButton.styleFrom(backgroundColor: Colors.grey, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)), onPressed: () => context.pushNamed('settings'), child: const Text("settings", textAlign: TextAlign.center, style: TextStyle(color: Colors.white))));
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -238,7 +221,7 @@ class _ProfilePageState extends State<ProfilePage> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
+            crossAxisCount: 3, // CHANGED to 3 columns
             childAspectRatio: 5 / 8,
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
@@ -251,12 +234,17 @@ class _ProfilePageState extends State<ProfilePage> {
             final docIndex = index - buttons.length;
             final data = docs[docIndex].data() as Map<String, dynamic>;
 
-            if (_currentIndex == 0) {
+            if (effectiveIndex == 0) {
               // Editor: List of Fanzines
               final title = data['title'] ?? 'Untitled';
               return TextButton(
                 style: _blueButtonStyle,
-                onPressed: () { if (_isOwner) Navigator.push(context, MaterialPageRoute(builder: (_) => FanzineEditorPage(fanzineId: docs[docIndex].id))); },
+                // CHANGED: Use context.pushNamed('fanzineEditor', ...) for GoRouter navigation
+                onPressed: () {
+                  if (isOwner) {
+                    context.pushNamed('fanzineEditor', pathParameters: {'fanzineId': docs[docIndex].id});
+                  }
+                },
                 child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
               );
             } else {
@@ -267,7 +255,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 onTap: () {
                   showDialog(context: context, builder: (_) => ImageViewModal(imageUrl: url, imageText: data['text'], shortCode: data['shortCode'], imageId: docs[docIndex].id));
                 },
-                child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, fit: BoxFit.cover)),
+                // UPDATED: Replaced ClipRRect with ClipRect (removed rounded corners)
+                child: ClipRect(
+                    child: Image.network(url, fit: BoxFit.cover)
+                ),
               );
             }
           },

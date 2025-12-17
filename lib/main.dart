@@ -5,10 +5,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart'; // Import Provider
 
 import 'firebase_options.dart';
 import 'utils/script_loader.dart';
-import 'env.dart'; // Import Env
+import 'env.dart';
+
+// Services
+import 'services/user_provider.dart'; // Import UserProvider
 
 // Pages
 import 'pages/login_page.dart';
@@ -45,7 +49,14 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   usePathUrlStrategy();
-  runApp(const MyApp());
+
+  runApp(
+    // 3. Inject UserProvider at the root
+    ChangeNotifierProvider(
+      create: (_) => UserProvider(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatefulWidget {
