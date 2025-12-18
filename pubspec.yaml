@@ -30,6 +30,9 @@ dependencies:
   # NEW: For Address Autocomplete
   flutter_google_places_sdk: ^0.3.3
 
+  # NEW: For Social Links
+  url_launcher: ^6.3.0
+
   flutter_web_plugins:
     sdk: flutter
 

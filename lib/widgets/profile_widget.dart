@@ -4,31 +4,21 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart'; // Add this for linking!
 
 import '../services/user_provider.dart';
-import '../pages/fanzine_page.dart';
 import 'image_upload_modal.dart';
 
 class ProfileWidget extends StatefulWidget {
   final int currentIndex;
-  final VoidCallback onEditorTapped;   // Callback for Editor Tab
-  final VoidCallback onFanzinesTapped; // Callback for Fanzines Tab
-  final VoidCallback onPagesTapped;    // Callback for Pages Tab
-  final String? targetUserId; // NULL = Current Logged In User
-
-  // NEW: Optional override for the "primary action" link
-  final String? actionLinkText;
-  final VoidCallback? onActionLinkTapped;
+  final Function(int) onTabChanged; // Callback for bottom tabs
+  final String? targetUserId;
 
   const ProfileWidget({
     super.key,
     required this.currentIndex,
-    required this.onEditorTapped,
-    required this.onFanzinesTapped,
-    required this.onPagesTapped,
+    required this.onTabChanged,
     this.targetUserId,
-    this.actionLinkText,
-    this.onActionLinkTapped,
   });
 
   @override
@@ -36,9 +26,26 @@ class ProfileWidget extends StatefulWidget {
 }
 
 class _ProfileWidgetState extends State<ProfileWidget> {
-  String _username = '', _email = '', _firstName = '', _lastName = '', _street1 = '', _street2 = '', _city = '', _stateName = '', _zipCode = '', _country = '';
+  // Top Right Tabs: 0=Socials, 1=Affiliations, 2=Upcoming
+  int _topTabIndex = 0;
+
+  String _username = '',
+      _email = '',
+      _firstName = '',
+      _lastName = '',
+      _street1 = '',
+      _street2 = '',
+      _city = '',
+      _stateName = '',
+      _zipCode = '',
+      _country = '',
+      _bio = '',
+      _xHandle = '',
+      _instagramHandle = '';
   bool _isLoading = true;
   String? _errorMessage;
+
+  final ScrollController _leftStickerScrollController = ScrollController();
 
   @override
   void initState() {
@@ -59,15 +66,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     final currentUid = provider.currentUserId;
     final targetUid = widget.targetUserId ?? currentUid;
 
-    // CASE 1: Viewing MY profile
     if (currentUid != null && targetUid == currentUid) {
-      // Use Provider Data (Synchronous/Cached)
       final data = provider.userProfile;
       if (data != null) {
         _populateFields(data);
         setState(() => _isLoading = false);
       } else if (provider.isLoading) {
-        // Wait for provider to finish
         setState(() => _isLoading = true);
         provider.addListener(_onProviderUpdate);
       } else {
@@ -76,11 +80,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
           _errorMessage = "User data not found.";
         });
       }
-    }
-    // CASE 2: Viewing SOMEONE ELSE'S profile (or not logged in)
-    else {
+    } else {
       if (targetUid == null) {
-        setState(() { _errorMessage = "User not found"; _isLoading = false; });
+        setState(() {
+          _errorMessage = "User not found";
+          _isLoading = false;
+        });
         return;
       }
       _fetchOtherUser(targetUid);
@@ -107,10 +112,17 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         _populateFields(doc.data()!);
         setState(() => _isLoading = false);
       } else if (mounted) {
-        setState(() { _errorMessage = "User not found."; _isLoading = false; });
+        setState(() {
+          _errorMessage = "User not found.";
+          _isLoading = false;
+        });
       }
     } catch (e) {
-      if (mounted) setState(() { _errorMessage = "Error loading data."; _isLoading = false; });
+      if (mounted)
+        setState(() {
+          _errorMessage = "Error loading data.";
+          _isLoading = false;
+        });
     }
   }
 
@@ -126,17 +138,20 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       _stateName = data['state'] ?? '';
       _zipCode = data['zipCode'] ?? '';
       _country = data['country'] ?? '';
+      _bio = data['bio'] ?? '';
+      _xHandle = data['xHandle'] ?? '';
+      _instagramHandle = data['instagramHandle'] ?? '';
       _errorMessage = null;
     });
   }
 
   @override
   void dispose() {
-    // Safety check in case we added listener
     try {
       final provider = Provider.of<UserProvider>(context, listen: false);
       provider.removeListener(_onProviderUpdate);
     } catch (_) {}
+    _leftStickerScrollController.dispose();
     super.dispose();
   }
 
@@ -156,188 +171,401 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     return parts.join('\n');
   }
 
+  void _showImageUpload() {
+    final uid = Provider.of<UserProvider>(context, listen: false).currentUserId;
+    if (uid == null) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) => ImageUploadModal(userId: uid),
+    );
+  }
+
+  // Link Launcher Helper
+  Future<void> _launchSocial(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url)) {
+      throw Exception('Could not launch $url');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // If it's my profile, we can watch the provider for live updates
     if (_isMyProfile) {
       final provider = context.watch<UserProvider>();
       if (!provider.isLoading && provider.userProfile != null) {
-        // This ensures the UI updates if the provider gets new data while we are looking at it
         _populateFields(provider.userProfile!);
         _isLoading = false;
       }
     }
 
-    final linkStyle = TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark);
-
-    // REMOVED: borderRadius variable
-    // final borderRadius = BorderRadius.circular(12.0);
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF1B255),
-        // borderRadius: borderRadius // REMOVED
-      ),
-      child: ClipRect( // CHANGED from ClipRRect to ClipRect
-        // borderRadius: borderRadius, // REMOVED
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _errorMessage != null
-              ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
-              : Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text('Username: $_username'),
-                                  const SizedBox(height: 4),
-                                  if (_isMyProfile) ...[
-                                    Text('Email: $_email'),
-                                    const SizedBox(height: 12),
-                                  ],
-                                  if (_buildFormattedAddress().isNotEmpty) ...[
-                                    const Text('mailing address:', style: TextStyle(fontWeight: FontWeight.bold)),
-                                    const SizedBox(height: 4),
-                                    Text(_buildFormattedAddress()),
-                                  ] else ...[
-                                    const Text('Address: Not Provided'),
-                                  ],
-                                ],
-                              ),
+    // 8:5 Aspect Ratio Container
+    return AspectRatio(
+      aspectRatio: 8 / 5,
+      child: Container(
+        color: const Color(0xFFF1B255), // Manilla Envelope Background
+        padding: const EdgeInsets.all(16.0), // Outer Margin
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _errorMessage != null
+            ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
+            : Column(
+          children: [
+            // TOP ROW (Contact + Linktree)
+            Expanded(
+              flex: 4,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch, // Allow full height for pinning
+                children: [
+                  // LEFT STICKER: Contact Info (Takes remaining space, aligned left)
+                  Expanded(
+                    flex: 1,
+                    child: Align(
+                      alignment: Alignment.centerLeft, // Pinned to the Left (vertically centered)
+                      child: Container(
+                        // Constrain max width for the sticker itself
+                        constraints: const BoxConstraints(maxWidth: 400), // Increased max width for 2-column layout
+                        width: double.infinity,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.zero,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 2,
+                              offset: Offset(1, 1),
                             ),
-                            const SizedBox(width: 20),
-
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                // 1. Dynamic Link
-                                RichText(
-                                  text: TextSpan(
-                                    text: widget.actionLinkText ?? 'view fanzine',
-                                    style: linkStyle,
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = widget.onActionLinkTapped ??
-                                              () {
-                                            context.push('/fanzine');
-                                          },
+                          ],
+                        ),
+                        // New Layout Structure
+                        padding: const EdgeInsets.all(8.0),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // ROW 1: Edit Info (Aligned Right)
+                              if (_isMyProfile)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: () => context.pushNamed('editInfo'),
+                                    child: const Text('edit info', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)),
                                   ),
                                 ),
 
-                                // 2. Edit Controls (Only if MY profile)
-                                if (_isMyProfile) ...[
-                                  const SizedBox(height: 10),
-                                  RichText(
-                                    text: TextSpan(
-                                      text: 'edit info',
-                                      style: linkStyle,
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = () => context.pushNamed('editInfo'),
+                              const SizedBox(height: 8),
+
+                              // ROW 2: The Split (Profile Pic | Info)
+                              Expanded(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Left Column: Profile Picture
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 12.0),
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 100), // Constraint for profile pic
+                                        child: AspectRatio(
+                                          aspectRatio: 5/8,
+                                          child: Container(
+                                            color: Colors.grey[300],
+                                            child: const Icon(Icons.person, color: Colors.grey),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  RichText(
-                                    text: TextSpan(
-                                      text: 'upload image',
-                                      style: linkStyle,
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = () {
-                                          final uid = Provider.of<UserProvider>(context, listen: false).currentUserId;
-                                          if (uid == null) return;
-                                          showDialog(
-                                            context: context,
-                                            barrierDismissible: false,
-                                            builder: (BuildContext dialogContext) => ImageUploadModal(userId: uid),
-                                          );
-                                        },
+
+                                    // Right Column: Info
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _firstName.isNotEmpty || _lastName.isNotEmpty
+                                                ? '$_firstName $_lastName'.trim()
+                                                : 'User',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                          ),
+                                          Text(
+                                            '@$_username',
+                                            style: const TextStyle(fontSize: 12),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              GestureDetector(
+                                                onTap: () { },
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: Colors.black),
+                                                    borderRadius: BorderRadius.zero,
+                                                  ),
+                                                  child: const Text("follow", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              const Text("0 followers", style: TextStyle(fontSize: 10, color: Colors.black)),
+                                            ],
+                                          ),
+                                          if (_bio.isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              _bio,
+                                              style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                                              maxLines: 4,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 8),
+
+                              // ROW 3: Logout (Aligned Right)
+                              if (_isMyProfile)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      await FirebaseAuth.instance.signOut();
+                                      if (mounted) context.go('/login');
+                                    },
+                                    child: const Text('logout', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)),
                                   ),
-                                  const SizedBox(height: 10),
-                                  RichText(
-                                    text: TextSpan(
-                                      text: 'logout',
-                                      style: linkStyle,
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = () async {
-                                          await FirebaseAuth.instance.signOut();
-                                          if (mounted) context.go('/login');
-                                        },
-                                    ),
-                                  ),
-                                ],
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  // RIGHT STICKER: Socials / Tabs (Pinned Top Right, grows Left/Down)
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.zero,
+                          boxShadow: [
+                            BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(1, 1)),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min, // Shrink wrap vertically
+                          crossAxisAlignment: CrossAxisAlignment.end, // Right align content inside the box
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min, // Shrink wrap horizontally
+                              children: [
+                                _buildTopTab("socials", 0),
+                                _buildSeparator(),
+                                _buildTopTab("affiliations", 1),
+                                _buildSeparator(),
+                                _buildTopTab("upcoming", 2),
                               ],
                             ),
+                            const Divider(height: 16, thickness: 1),
+
+                            // Content
+                            if (_topTabIndex == 0) _buildSocialsTab(),
+                            if (_topTabIndex == 1) const Padding(padding: EdgeInsets.all(8), child: Text("Affiliations List\n(Coming Soon)", textAlign: TextAlign.center)),
+                            if (_topTabIndex == 2) const Padding(padding: EdgeInsets.all(8), child: Text("Upcoming Cons/Events\n(Coming Soon)", textAlign: TextAlign.center)),
                           ],
                         ),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (_isMyProfile) ...[
-                      GestureDetector(
-                        onTap: widget.onEditorTapped,
-                        child: Text(
-                          'editor',
-                          style: TextStyle(
-                            color: Theme.of(context).primaryColorDark,
-                            fontWeight: widget.currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
-                      ),
-                    ],
-                    GestureDetector(
-                      onTap: widget.onFanzinesTapped,
-                      child: Text(
-                        'fanzines',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColorDark,
-                          fontWeight: widget.currentIndex == 1 ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Text('|', style: TextStyle(color: Theme.of(context).primaryColorDark)),
-                    ),
-                    GestureDetector(
-                      onTap: widget.onPagesTapped,
-                      child: Text(
-                        'pages',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColorDark,
-                          fontWeight: widget.currentIndex == 2 ? FontWeight.bold : FontWeight.normal,
-                        ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // BOTTOM STICKER: Main Navigation
+            SizedBox(
+              height: 50,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IntrinsicWidth(
+                    child: _buildSticker(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_isMyProfile) ...[
+                            _buildNavTab('editor', 0),
+                            _buildSeparator(isNav: true),
+                          ],
+                          _buildNavTab('pages', 1),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('works', 2),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('comments', 3),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('mentions', 4),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('collection', 5),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSticker({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.zero,
+        boxShadow: [
+          BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(1, 1)),
+        ],
+      ),
+      padding: const EdgeInsets.all(12),
+      child: child,
+    );
+  }
+
+  Widget _buildSocialsTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end, // Right align links
+      children: [
+        if (_xHandle.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Colors.black),
+                children: [
+                  const TextSpan(text: 'X: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(
+                    text: '@$_xHandle',
+                    style: TextStyle(color: Theme.of(context).primaryColorDark, decoration: TextDecoration.underline),
+                    recognizer: TapGestureRecognizer()..onTap = () => _launchSocial('https://x.com/$_xHandle'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        if (_instagramHandle.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Colors.black),
+                children: [
+                  const TextSpan(text: 'Instagram: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(
+                    text: '@$_instagramHandle',
+                    style: TextStyle(color: Theme.of(context).primaryColorDark, decoration: TextDecoration.underline),
+                    recognizer: TapGestureRecognizer()..onTap = () => _launchSocial('https://instagram.com/$_instagramHandle'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        if (_xHandle.isEmpty && _instagramHandle.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text("No socials linked.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTopTab(String title, int index) {
+    final isActive = _topTabIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _topTabIndex = index),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).primaryColorDark,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            decoration: isActive ? TextDecoration.underline : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavTab(String title, int index) {
+    final isActive = widget.currentIndex == index;
+    final isPagesTab = index == 1;
+    final showUploadLink = isPagesTab && isActive && _isMyProfile;
+
+    if (showUploadLink) {
+      return FittedBox( // Shrink if narrow
+        fit: BoxFit.scaleDown,
+        child: RichText(
+          text: TextSpan(
+            style: const TextStyle(color: Colors.black, fontSize: 14, fontFamily: 'Roboto'),
+            children: [
+              TextSpan(
+                text: title,
+                style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                recognizer: TapGestureRecognizer()..onTap = () => widget.onTabChanged(index),
+              ),
+              const TextSpan(text: ' '),
+              TextSpan(
+                text: '(upload image)',
+                style: const TextStyle(fontWeight: FontWeight.normal, color: Colors.black),
+                recognizer: TapGestureRecognizer()..onTap = _showImageUpload,
               ),
             ],
           ),
         ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => widget.onTabChanged(index),
+      child: Center(
+        child: FittedBox( // Shrink if narrow
+          fit: BoxFit.scaleDown,
+          child: Text(
+            title,
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              decoration: isActive ? TextDecoration.underline : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSeparator({bool isNav = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Text('|',
+          style: TextStyle(color: isNav ? Colors.black : Colors.grey.shade400)
       ),
     );
   }

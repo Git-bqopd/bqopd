@@ -36,6 +36,10 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   final TextEditingController firstNameController = TextEditingController();
   final TextEditingController lastNameController = TextEditingController();
 
+  // Socials Controllers
+  final TextEditingController xHandleController = TextEditingController();
+  final TextEditingController instagramHandleController = TextEditingController();
+
   bool _isLoadingData = true;
   bool _isSaving = false;
   String _initialUsername = "";
@@ -49,14 +53,9 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     String apiKey = '';
 
     if (kIsWeb) {
-      // On Web, the SDK technically uses the key from the <script> tag (injected via loader),
-      // but passing the web key here maintains consistency.
       apiKey = Env.googleApiKeyWeb;
     } else if (defaultTargetPlatform == TargetPlatform.android) {
       apiKey = Env.googleApiKeyAndroid;
-    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-      // If you add an iOS key later:
-      // apiKey = Env.googleApiKeyIos;
     }
 
     _places = FlutterGooglePlacesSdk(apiKey);
@@ -83,6 +82,8 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     countryController.dispose();
     firstNameController.dispose();
     lastNameController.dispose();
+    xHandleController.dispose();
+    instagramHandleController.dispose();
     super.dispose();
   }
 
@@ -196,6 +197,9 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
             countryController.text = data['country'] ?? '';
             firstNameController.text = data['firstName'] ?? '';
             lastNameController.text = data['lastName'] ?? '';
+
+            xHandleController.text = data['xHandle'] ?? '';
+            instagramHandleController.text = data['instagramHandle'] ?? '';
           });
         }
       } catch (e) {
@@ -229,6 +233,11 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           'state': stateController.text.trim(),
           'zipCode': zipController.text.trim(),
           'country': countryController.text.trim(),
+
+          // Socials
+          'xHandle': xHandleController.text.trim().replaceAll('@', ''),
+          'instagramHandle': instagramHandleController.text.trim().replaceAll('@', ''),
+
           'email': currentUser!.email,
           'uid': currentUser!.uid,
         };
@@ -257,30 +266,25 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   @override
   Widget build(BuildContext context) {
     final InputDecoration defaultDecoration = InputDecoration(
-      enabledBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.zero, ), // UPDATED: BorderRadius.zero
-      focusedBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).primaryColor), borderRadius: BorderRadius.zero, ), // UPDATED: BorderRadius.zero
+      enabledBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).dividerColor), borderRadius: BorderRadius.zero, ),
+      focusedBorder: OutlineInputBorder( borderSide: BorderSide(color: Theme.of(context).primaryColor), borderRadius: BorderRadius.zero, ),
       fillColor: Colors.white, filled: true, contentPadding: const EdgeInsets.all(15), hintStyle: TextStyle(color: Colors.grey[500]),
       isDense: true,
     );
-    // REMOVED: borderRadius variable
-    // final borderRadius = BorderRadius.circular(12.0);
 
-    // Reuse the style from the old "Logout" button for consistency
     final ButtonStyle actionButtonStyle = OutlinedButton.styleFrom(
       foregroundColor: Colors.black87,
       backgroundColor: Colors.white.withOpacity(0.3),
       side: BorderSide.none,
       padding: const EdgeInsets.symmetric(vertical: 16),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero), // UPDATED: BorderRadius.zero
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
     );
 
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFF1B255),
-        // borderRadius: borderRadius, // REMOVED
       ),
-      child: ClipRect( // CHANGED: from ClipRRect to ClipRect
-        // borderRadius: borderRadius, // REMOVED
+      child: ClipRect(
         child: Padding(
           padding: const EdgeInsets.all(25.0),
           child: _isLoadingData
@@ -355,10 +359,15 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               const SizedBox(height: 10),
               TextField( controller: countryController, decoration: defaultDecoration.copyWith(hintText: "Country") ),
 
+              const SizedBox(height: 25),
+              _buildSectionLabel('Socials'),
+              const SizedBox(height: 10),
+              TextField(controller: xHandleController, decoration: defaultDecoration.copyWith(hintText: "X (Twitter) Username")),
+              const SizedBox(height: 10),
+              TextField(controller: instagramHandleController, decoration: defaultDecoration.copyWith(hintText: "Instagram Username")),
+
               const SizedBox(height: 30),
 
-              // NEW LAYOUT: Save Left, View Public Profile Right
-              // Both using the style requested (Logout style)
               Row(
                 children: [
                   Expanded(
