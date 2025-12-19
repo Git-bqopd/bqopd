@@ -12,6 +12,16 @@ class UserProvider extends ChangeNotifier {
   StreamSubscription? _profileSubscription;
   bool _isLoading = true;
 
+  // --- Session Preferences (Social Toolbar) ---
+  // Default: All buttons visible
+  final Map<String, bool> _socialButtonVisibility = {
+    'Comment': true,
+    'Share': true,
+    'Views': true,
+    'Text': true,
+    'Circulation': true,
+  };
+
   UserProvider() {
     _init();
   }
@@ -21,6 +31,7 @@ class UserProvider extends ChangeNotifier {
   bool get isLoggedIn => _currentUser != null;
   User? get currentUser => _currentUser;
   Map<String, dynamic>? get userProfile => _userProfile;
+  Map<String, bool> get socialButtonVisibility => _socialButtonVisibility;
 
   // Helpers
   String get username => _userProfile?['username'] ?? '';
@@ -57,6 +68,18 @@ class UserProvider extends ChangeNotifier {
         .listen((snapshot) {
       if (snapshot.exists) {
         _userProfile = snapshot.data();
+
+        // --- NEW: Sync Toolbar Preferences from Firestore ---
+        if (_userProfile != null && _userProfile!.containsKey('socialToolbar')) {
+          final savedPrefs = _userProfile!['socialToolbar'];
+          if (savedPrefs is Map<String, dynamic>) {
+            savedPrefs.forEach((key, value) {
+              if (value is bool && _socialButtonVisibility.containsKey(key)) {
+                _socialButtonVisibility[key] = value;
+              }
+            });
+          }
+        }
       } else {
         // Doc doesn't exist yet (or deleted)
         _userProfile = {};
@@ -68,6 +91,24 @@ class UserProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     });
+  }
+
+  // --- Preference Methods ---
+  void toggleSocialButton(String key) {
+    if (_socialButtonVisibility.containsKey(key)) {
+      // 1. Optimistic Update (Instant UI feedback)
+      _socialButtonVisibility[key] = !(_socialButtonVisibility[key] ?? true);
+      notifyListeners(); // Notify all listeners (SocialToolbars) to rebuild
+
+      // 2. Persist to Firestore if logged in
+      if (_currentUser != null) {
+        _db.collection('Users').doc(_currentUser!.uid).set({
+          'socialToolbar': _socialButtonVisibility
+        }, SetOptions(merge: true)).catchError((e) {
+          print("Error saving toolbar prefs: $e");
+        });
+      }
+    }
   }
 
   @override
