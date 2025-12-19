@@ -96,7 +96,18 @@ class _MyAppState extends State<MyApp> {
         GoRoute(path: '/register', name: 'register', builder: (context, state) => const RegisterPage()),
         GoRoute(path: '/fanzine', name: 'fanzine', builder: (context, state) => const FanzinePage()),
         GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfilePage()),
-        GoRoute(path: '/edit-info', name: 'editInfo', builder: (context, state) => const EditInfoPage()),
+
+        // UPDATED ROUTE
+        GoRoute(
+          path: '/edit-info',
+          name: 'editInfo',
+          builder: (context, state) {
+            // Read query param: /edit-info?userId=abc1234
+            final userId = state.uri.queryParameters['userId'];
+            return EditInfoPage(targetUserId: userId);
+          },
+        ),
+
         GoRoute(path: '/settings', name: 'settings', builder: (context, state) => const SettingsPage()),
         GoRoute(path: '/editor/:fanzineId', name: 'fanzineEditor', builder: (context, state) {
           final fanzineId = state.pathParameters['fanzineId']!;

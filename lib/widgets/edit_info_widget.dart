@@ -12,7 +12,9 @@ import '../services/username_service.dart';
 import '../env.dart'; // Import Env
 
 class EditInfoWidget extends StatefulWidget {
-  const EditInfoWidget({super.key});
+  final String? targetUserId; // Optional: If null, edits current user
+
+  const EditInfoWidget({super.key, this.targetUserId});
 
   @override
   State<EditInfoWidget> createState() => _EditInfoWidgetState();
@@ -44,6 +46,9 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   bool _isSaving = false;
   String _initialUsername = "";
   bool _isUsernameManuallyEdited = false;
+
+  // Computed property to get the ID we are actually editing
+  String get _editingUid => widget.targetUserId ?? currentUser?.uid ?? '';
 
   @override
   void initState() {
@@ -170,13 +175,18 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     if (!mounted) return;
     setState(() { _isLoadingData = true; });
 
-    if (currentUser != null) {
+    if (_editingUid.isNotEmpty) {
       try {
-        emailController.text = currentUser!.email ?? 'No Email Found';
+        // If editing self, prefer Auth email. If other, placeholder.
+        if (widget.targetUserId == null && currentUser != null) {
+          emailController.text = currentUser!.email ?? 'No Email Found';
+        } else {
+          emailController.text = 'Managed Account (No Email)';
+        }
 
         final userDoc = await FirebaseFirestore.instance
             .collection('Users')
-            .doc(currentUser!.uid)
+            .doc(_editingUid)
             .get();
 
         if (userDoc.exists && mounted) {
@@ -200,6 +210,11 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
             xHandleController.text = data['xHandle'] ?? '';
             instagramHandleController.text = data['instagramHandle'] ?? '';
+
+            // If Managed user has a stored email field (rare), show it
+            if (widget.targetUserId != null && data.containsKey('email') && data['email'] != '') {
+              emailController.text = data['email'];
+            }
           });
         }
       } catch (e) {
@@ -218,7 +233,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     setState(() { _isSaving = true; });
 
     try {
-      if (currentUser != null) {
+      if (_editingUid.isNotEmpty) {
         final finalUsername = normalizeHandle(userNameController.text);
 
         final Map<String, dynamic> dataToUpdate = {
@@ -238,17 +253,50 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           'xHandle': xHandleController.text.trim().replaceAll('@', ''),
           'instagramHandle': instagramHandleController.text.trim().replaceAll('@', ''),
 
-          'email': currentUser!.email,
-          'uid': currentUser!.uid,
+          // Only update email if we are editing ourselves (Managed profiles don't update email here)
+          if (widget.targetUserId == null && currentUser != null)
+            'email': currentUser!.email,
+
+          // UID should definitely match document ID
+          'uid': _editingUid,
         };
 
         await FirebaseFirestore.instance
             .collection('Users')
-            .doc(currentUser!.uid)
+            .doc(_editingUid)
             .set(dataToUpdate, SetOptions(merge: true));
 
+        // Claim handle if it changed
         if (finalUsername.isNotEmpty && finalUsername != _initialUsername) {
-          await claimHandle(finalUsername);
+          // Note: claimHandle currently uses FirebaseAuth.currentUser.uid to reserve the name.
+          // For managed profiles, we need to register the handle under the MANAGED ID, not the logged-in admin's ID.
+          if (widget.targetUserId != null) {
+            // Manual handle registration for managed user
+            final db = FirebaseFirestore.instance;
+            final shortCodeKey = finalUsername.toUpperCase();
+
+            // Check collisions
+            final short = await db.collection('shortcodes').doc(shortCodeKey).get();
+            if (!short.exists) {
+              final batch = db.batch();
+              // 1. usernames/{handle}
+              batch.set(db.collection('usernames').doc(finalUsername), {
+                'uid': _editingUid,
+                'isManaged': true,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+              // 2. shortcodes/{HANDLE}
+              batch.set(db.collection('shortcodes').doc(shortCodeKey), {
+                'type': 'user',
+                'contentId': _editingUid,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+              await batch.commit();
+            }
+          } else {
+            // Normal user flow
+            await claimHandle(finalUsername);
+          }
         }
 
         _initialUsername = finalUsername;
@@ -280,6 +328,8 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
     );
 
+    final String pageTitle = widget.targetUserId != null ? 'Edit Managed Profile' : 'Edit Your Profile';
+
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFF1B255),
@@ -293,7 +343,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Edit Your Profile', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark)),
+              Text(pageTitle, textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColorDark)),
               const SizedBox(height: 20),
 
               _buildSectionLabel('Identity'),

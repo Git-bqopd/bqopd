@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import '../widgets/edit_info_widget.dart';
 
 class EditInfoPage extends StatelessWidget {
-  const EditInfoPage({super.key});
+  final String? targetUserId; // New parameter
+
+  const EditInfoPage({super.key, this.targetUserId});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +18,7 @@ class EditInfoPage extends StatelessWidget {
           scroll: true, // The page handles the scrolling now
           child: Padding(
             padding: const EdgeInsets.all(8.0),
-            child: const EditInfoWidget(),
+            child: EditInfoWidget(targetUserId: targetUserId),
           ),
         ),
       ),

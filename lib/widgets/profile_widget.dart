@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart'; // Add this for linking!
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/user_provider.dart';
 import 'image_upload_modal.dart';
@@ -44,6 +44,11 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       _instagramHandle = '';
   bool _isLoading = true;
   String? _errorMessage;
+  bool _isManaged = false;
+  List<dynamic> _managers = [];
+
+  // Used for permission check
+  String _profileUid = '';
 
   final ScrollController _leftStickerScrollController = ScrollController();
 
@@ -66,6 +71,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     final currentUid = provider.currentUserId;
     final targetUid = widget.targetUserId ?? currentUid;
 
+    // If viewing MY profile and it's loaded in provider
     if (currentUid != null && targetUid == currentUid) {
       final data = provider.userProfile;
       if (data != null) {
@@ -81,6 +87,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         });
       }
     } else {
+      // Viewing SOMEONE ELSE'S (or a Managed) profile
       if (targetUid == null) {
         setState(() {
           _errorMessage = "User not found";
@@ -128,6 +135,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
   void _populateFields(Map<String, dynamic> data) {
     setState(() {
+      _profileUid = data['uid'] ?? '';
       _email = data['email'] ?? '';
       _username = data['username'] ?? '';
       _firstName = data['firstName'] ?? '';
@@ -141,6 +149,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       _bio = data['bio'] ?? '';
       _xHandle = data['xHandle'] ?? '';
       _instagramHandle = data['instagramHandle'] ?? '';
+      _isManaged = data['isManaged'] == true;
+      _managers = data['managers'] ?? [];
       _errorMessage = null;
     });
   }
@@ -155,9 +165,19 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     super.dispose();
   }
 
-  bool get _isMyProfile {
+  /// Determines if the current logged-in user has permission to edit this profile.
+  bool get _canEdit {
     final provider = Provider.of<UserProvider>(context, listen: false);
-    return widget.targetUserId == null || widget.targetUserId == provider.currentUserId;
+    final currentUid = provider.currentUserId;
+    if (currentUid == null) return false;
+
+    // 1. Is it me?
+    if (_profileUid == currentUid) return true;
+
+    // 2. Am I a manager of this managed profile?
+    if (_isManaged && _managers.contains(currentUid)) return true;
+
+    return false;
   }
 
   String _buildFormattedAddress() {
@@ -172,12 +192,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   }
 
   void _showImageUpload() {
-    final uid = Provider.of<UserProvider>(context, listen: false).currentUserId;
-    if (uid == null) return;
+    if (!_canEdit) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext dialogContext) => ImageUploadModal(userId: uid),
+      builder: (BuildContext dialogContext) => ImageUploadModal(userId: _profileUid),
     );
   }
 
@@ -191,9 +211,10 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isMyProfile) {
+    if (widget.targetUserId == null) {
+      // Fallback for "My Profile" tab logic if data hasn't loaded via _fetchOtherUser
       final provider = context.watch<UserProvider>();
-      if (!provider.isLoading && provider.userProfile != null) {
+      if (!provider.isLoading && provider.userProfile != null && _profileUid.isEmpty) {
         _populateFields(provider.userProfile!);
         _isLoading = false;
       }
@@ -245,11 +266,22 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               // ROW 1: Edit Info (Aligned Right)
-                              if (_isMyProfile)
+                              if (_canEdit)
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: GestureDetector(
-                                    onTap: () => context.pushNamed('editInfo'),
+                                    // Navigate to edit page with parameters
+                                    onTap: () {
+                                      // If we have a valid profile UID, pass it along
+                                      if (_profileUid.isNotEmpty) {
+                                        context.pushNamed(
+                                            'editInfo',
+                                            queryParameters: {'userId': _profileUid}
+                                        );
+                                      } else {
+                                        context.pushNamed('editInfo');
+                                      }
+                                    },
                                     child: const Text('edit info', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)),
                                   ),
                                 ),
@@ -287,6 +319,14 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                                 : 'User',
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                           ),
+                                          if (_isManaged) ...[
+                                            const SizedBox(height: 2),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                              color: Colors.grey[200],
+                                              child: const Text("Managed Profile", style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic)),
+                                            )
+                                          ],
                                           Text(
                                             '@$_username',
                                             style: const TextStyle(fontSize: 12),
@@ -327,8 +367,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
                               const SizedBox(height: 8),
 
-                              // ROW 3: Logout (Aligned Right)
-                              if (_isMyProfile)
+                              // ROW 3: Logout (Aligned Right) - Only show if it's MY account, not a managed one
+                              if (!_isManaged && _profileUid == Provider.of<UserProvider>(context, listen: false).currentUserId)
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: GestureDetector(
@@ -405,7 +445,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          if (_isMyProfile) ...[
+                          if (_canEdit) ...[
                             _buildNavTab('editor', 0),
                             _buildSeparator(isNav: true),
                           ],
@@ -517,7 +557,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   Widget _buildNavTab(String title, int index) {
     final isActive = widget.currentIndex == index;
     final isPagesTab = index == 1;
-    final showUploadLink = isPagesTab && isActive && _isMyProfile;
+    // Check _canEdit instead of _isMyProfile to support managers uploading to managed profiles
+    final showUploadLink = isPagesTab && isActive && _canEdit;
 
     if (showUploadLink) {
       return FittedBox( // Shrink if narrow
