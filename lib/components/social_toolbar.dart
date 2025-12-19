@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/view_service.dart';
 import '../services/user_provider.dart';
 import 'social_action_button.dart';
+import '../game/game_lobby.dart'; // Import Game Lobby
 
 class SocialToolbar extends StatefulWidget {
   final String? imageId; // For view counting and future features
@@ -28,14 +29,19 @@ class _SocialToolbarState extends State<SocialToolbar> {
   final ViewService _viewService = ViewService();
 
   // State for the "Drawer" (Apps Box)
-  // This remains local because opening the drawer is a momentary UI action,
-  // not a global preference.
   bool _isDrawerOpen = false;
 
   void _toggleDrawer() {
     setState(() {
       _isDrawerOpen = !_isDrawerOpen;
     });
+  }
+
+  void _openGameLobby() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const GameLobby()),
+    );
   }
 
   @override
@@ -114,6 +120,16 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
+                // Terminal, CA (Game Launch Button)
+                if (buttonVisibility['Terminal'] == true) ...[
+                  SocialActionButton(
+                    icon: Icons.terminal,
+                    label: 'Terminal',
+                    onTap: _openGameLobby,
+                  ),
+                  const SizedBox(width: 16),
+                ],
+
                 // "Buttons" (The Drawer Toggle)
                 SocialActionButton(
                   icon: Icons.apps,
@@ -129,7 +145,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
         // 2. The Drawer (Apps Box)
         if (_isDrawerOpen)
           Container(
-            height: 80,
+            height: 90,
             margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: Center(
               child: SingleChildScrollView(
@@ -171,6 +187,14 @@ class _SocialToolbarState extends State<SocialToolbar> {
                       isSelected: buttonVisibility['Circulation']!,
                       onTap: () => userProvider.toggleSocialButton('Circulation'),
                     ),
+                    const SizedBox(width: 10),
+                    // Terminal, CA (Toggle)
+                    _DrawerItem(
+                      label: 'Terminal, CA',
+                      icon: Icons.terminal,
+                      isSelected: buttonVisibility['Terminal'] ?? false,
+                      onTap: () => userProvider.toggleSocialButton('Terminal'),
+                    ),
                   ],
                 ),
               ),
@@ -196,6 +220,7 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Styling: Black = Selected (Visible in toolbar), Grey = Unselected (Hidden)
     final color = isSelected ? Colors.black : Colors.grey.shade300;
     final textColor = isSelected ? Colors.black : Colors.grey;
 

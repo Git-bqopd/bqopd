@@ -13,13 +13,14 @@ class UserProvider extends ChangeNotifier {
   bool _isLoading = true;
 
   // --- Session Preferences (Social Toolbar) ---
-  // Default: All buttons visible
+  // Default: All buttons visible except Terminal
   final Map<String, bool> _socialButtonVisibility = {
     'Comment': true,
     'Share': true,
     'Views': true,
     'Text': true,
     'Circulation': true,
+    'Terminal': false, // Starts hidden, user must enable in drawer
   };
 
   UserProvider() {
@@ -69,7 +70,7 @@ class UserProvider extends ChangeNotifier {
       if (snapshot.exists) {
         _userProfile = snapshot.data();
 
-        // --- NEW: Sync Toolbar Preferences from Firestore ---
+        // --- Sync Toolbar Preferences from Firestore ---
         if (_userProfile != null && _userProfile!.containsKey('socialToolbar')) {
           final savedPrefs = _userProfile!['socialToolbar'];
           if (savedPrefs is Map<String, dynamic>) {
