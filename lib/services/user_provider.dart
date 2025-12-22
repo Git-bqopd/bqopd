@@ -13,14 +13,16 @@ class UserProvider extends ChangeNotifier {
   bool _isLoading = true;
 
   // --- Session Preferences (Social Toolbar) ---
-  // Default: All buttons visible except Terminal
+  // Default: All buttons visible except Terminal and Editor tools
   final Map<String, bool> _socialButtonVisibility = {
     'Comment': true,
     'Share': true,
     'Views': true,
     'Text': true,
     'Circulation': true,
-    'Terminal': false, // Starts hidden, user must enable in drawer
+    'Terminal': false, // Starts hidden
+    'Approve': false,  // Editor tool - starts hidden
+    'Fanzine': false,  // Editor tool - starts hidden
   };
 
   UserProvider() {

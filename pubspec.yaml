@@ -27,6 +27,9 @@ dependencies:
   go_router: ^14.2.0
   firebase_analytics: ^11.6.0
 
+  # ADDED: Required for Rescan/Delete buttons
+  cloud_functions: ^5.1.0
+
   # NEW: For Address Autocomplete
   flutter_google_places_sdk: ^0.3.3
 

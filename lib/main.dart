@@ -23,6 +23,9 @@ import 'pages/short_link_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/fanzine_editor_page.dart';
+import 'pages/new_reader_page.dart'; // Import New Reader Page
+import 'pages/curator_dashboard_page.dart'; // Import Dashboard
+import 'pages/curator_workbench_page.dart'; // Import Workbench
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -84,7 +87,9 @@ class _MyAppState extends State<MyApp> {
         final isProtected = path == '/profile' ||
             path == '/settings' ||
             path == '/edit-info' ||
-            (routePattern != null && routePattern.startsWith('/editor'));
+            path == '/dashboard' ||
+            (routePattern != null && routePattern.startsWith('/editor')) ||
+            (routePattern != null && routePattern.startsWith('/workbench'));
 
         if (user == null && isProtected) return '/login';
         if (user != null && (path == '/login' || path == '/register')) return '/';
@@ -96,6 +101,33 @@ class _MyAppState extends State<MyApp> {
         GoRoute(path: '/register', name: 'register', builder: (context, state) => const RegisterPage()),
         GoRoute(path: '/fanzine', name: 'fanzine', builder: (context, state) => const FanzinePage()),
         GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfilePage()),
+
+        // NEW: Curator Dashboard (Inbox)
+        GoRoute(
+          path: '/dashboard',
+          name: 'curatorDashboard',
+          builder: (context, state) => const CuratorDashboardPage(),
+        ),
+
+        // NEW: Curator Workbench
+        GoRoute(
+          path: '/workbench/:fanzineId',
+          name: 'curatorWorkbench',
+          builder: (context, state) {
+            final fanzineId = state.pathParameters['fanzineId']!;
+            return CuratorWorkbenchPage(fanzineId: fanzineId);
+          },
+        ),
+
+        // NEW: Route for the New Reader
+        GoRoute(
+          path: '/reader/:fanzineId',
+          name: 'newReader',
+          builder: (context, state) {
+            final fanzineId = state.pathParameters['fanzineId']!;
+            return NewReaderPage(fanzineId: fanzineId);
+          },
+        ),
 
         // UPDATED ROUTE
         GoRoute(
