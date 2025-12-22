@@ -26,6 +26,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   bool _isLoadingPages = true;
 
   final TextEditingController _textController = TextEditingController();
+  final TextEditingController _titleController = TextEditingController(); // Added title controller
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
 
@@ -42,7 +43,20 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _listenToPages();
+    _fetchFanzineTitle(); // Fetch title
     _textController.addListener(_onTextChanged);
+  }
+
+  Future<void> _fetchFanzineTitle() async {
+    try {
+      final doc = await _db.collection('fanzines').doc(widget.fanzineId).get();
+      if (doc.exists && mounted) {
+        final data = doc.data() as Map<String, dynamic>;
+        _titleController.text = data['title'] ?? '';
+      }
+    } catch (e) {
+      print("Error fetching title: $e");
+    }
   }
 
   void _onTextChanged() {
@@ -52,6 +66,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   @override
   void dispose() {
     _textController.dispose();
+    _titleController.dispose();
     _searchController.dispose();
     _tabController.dispose();
     super.dispose();
@@ -85,17 +100,30 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   }
 
   Future<void> _saveCurrentPage() async {
-    if (_pages.isEmpty) return;
     setState(() => _isSaving = true);
     try {
-      await _pages[_currentPageIndex].reference.update({
-        'text_processed': _textController.text,
-        'lastEdited': FieldValue.serverTimestamp(),
+      final batch = _db.batch();
+
+      // 1. Update Fanzine Title
+      batch.update(_db.collection('fanzines').doc(widget.fanzineId), {
+        'title': _titleController.text.trim(),
       });
+
+      // 2. Update Page Content (if pages exist)
+      if (_pages.isNotEmpty) {
+        batch.update(_pages[_currentPageIndex].reference, {
+          'text_processed': _textController.text,
+          'lastEdited': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+
       setState(() { _isSaving = false; _hasUnsavedChanges = false; });
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Page saved.')));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved.')));
     } catch (e) {
       setState(() => _isSaving = false);
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
     }
   }
 
@@ -336,7 +364,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                 color: Colors.grey[200],
                 child: Column(
                   children: [
-                    Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Row(children: [Text(hasPages ? "Page ${_currentPageIndex + 1}" : "-", style: const TextStyle(fontWeight: FontWeight.bold)), const Spacer(), if (_hasUnsavedChanges) const Text("Unsaved ", style: TextStyle(color: Colors.orange, fontSize: 12)), IconButton(icon: const Icon(Icons.save), onPressed: hasPages ? _saveCurrentPage : null), if (hasPages) IconButton(icon: const Icon(Icons.flag, color: Colors.orange), onPressed: _reportIssue)])),
+                    Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Row(children: [Text(hasPages ? "Page ${_currentPageIndex + 1}" : "-", style: const TextStyle(fontWeight: FontWeight.bold)), const Spacer(), if (_hasUnsavedChanges) const Text("Unsaved ", style: TextStyle(color: Colors.orange, fontSize: 12)), IconButton(icon: const Icon(Icons.save), onPressed: _saveCurrentPage), if (hasPages) IconButton(icon: const Icon(Icons.flag, color: Colors.orange), onPressed: _reportIssue)])),
                     TabBar(controller: _tabController, labelColor: Colors.indigo, unselectedLabelColor: Colors.grey, indicatorColor: Colors.indigo, tabs: const [Tab(text: "Editor", icon: Icon(Icons.edit_note, size: 16)), Tab(text: "Entities", icon: Icon(Icons.people_alt, size: 16))]),
                   ],
                 ),
@@ -345,7 +373,24 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    Column(children: [if (currentPageData.containsKey('error')) Container(width: double.infinity, padding: const EdgeInsets.all(8), color: Colors.red.shade100, child: SelectableText("OCR Error: ${currentPageData['error']}", style: TextStyle(color: Colors.red.shade900, fontSize: 12))), Expanded(child: Padding(padding: const EdgeInsets.all(12.0), child: TextField(controller: _textController, maxLines: null, expands: true, textAlignVertical: TextAlignVertical.top, enabled: hasPages, decoration: const InputDecoration(hintText: "Transcribe...", border: OutlineInputBorder(), filled: true, fillColor: Colors.white), style: const TextStyle(fontFamily: 'Courier', fontSize: 14)))), const Divider(height: 1), SizedBox(height: 120, child: Column(children: [Padding(padding: const EdgeInsets.all(8.0), child: TextField(controller: _searchController, decoration: InputDecoration(hintText: 'Manual Search...', suffixIcon: IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _searchResults=[])), isDense: true, border: const OutlineInputBorder()), onSubmitted: _searchEntities)), if (_searchResults.isNotEmpty) Expanded(child: ListView.builder(itemCount: _searchResults.length, itemBuilder: (c, i) => ListTile(title: Text(_searchResults[i]['display']!), onTap: () => _insertEntity(_searchResults[i]))))]))]),
+                    Column(children: [
+                      // NEW TITLE FIELD
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                        child: TextField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(
+                            labelText: 'Fanzine Title',
+                            border: UnderlineInputBorder(),
+                            isDense: true,
+                          ),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+                          onChanged: (val) {
+                            if (!_hasUnsavedChanges) setState(() => _hasUnsavedChanges = true);
+                          },
+                        ),
+                      ),
+                      if (currentPageData.containsKey('error')) Container(width: double.infinity, padding: const EdgeInsets.all(8), color: Colors.red.shade100, child: SelectableText("OCR Error: ${currentPageData['error']}", style: TextStyle(color: Colors.red.shade900, fontSize: 12))), Expanded(child: Padding(padding: const EdgeInsets.all(12.0), child: TextField(controller: _textController, maxLines: null, expands: true, textAlignVertical: TextAlignVertical.top, enabled: hasPages, decoration: const InputDecoration(hintText: "Transcribe...", border: OutlineInputBorder(), filled: true, fillColor: Colors.white), style: const TextStyle(fontFamily: 'Courier', fontSize: 14)))), const Divider(height: 1), SizedBox(height: 120, child: Column(children: [Padding(padding: const EdgeInsets.all(8.0), child: TextField(controller: _searchController, decoration: InputDecoration(hintText: 'Manual Search...', suffixIcon: IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _searchResults=[])), isDense: true, border: const OutlineInputBorder()), onSubmitted: _searchEntities)), if (_searchResults.isNotEmpty) Expanded(child: ListView.builder(itemCount: _searchResults.length, itemBuilder: (c, i) => ListTile(title: Text(_searchResults[i]['display']!), onTap: () => _insertEntity(_searchResults[i]))))]))]),
                     _isValidatingEntities ? const Center(child: CircularProgressIndicator()) : ListView.separated(padding: const EdgeInsets.all(16), itemCount: _detectedEntities.length, separatorBuilder: (c,i) => const Divider(), itemBuilder: (context, index) { final e = _detectedEntities[index]; final status = e['status']; IconData icon; Color color; String sub = ""; if (status == 'exists') { icon = Icons.check_circle; color = Colors.green; sub = "Profile Found"; } else if (status == 'alias') { icon = Icons.directions_bike; color = Colors.blue; sub = "Alias -> ${e['redirect']}"; } else { icon = Icons.warning; color = Colors.orange; sub = "No Profile Found"; } return ListTile(leading: Icon(icon, color: color), title: Text(e['name'], style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text(sub), trailing: status == 'missing' ? Row(mainAxisSize: MainAxisSize.min, children: [TextButton(onPressed: () => _createProfileFor(e['name']), child: const Text("Create")), const SizedBox(width: 8), TextButton(onPressed: () => _createAliasFor(e['name']), child: const Text("Alias"))]) : null); }),
                   ],
                 ),

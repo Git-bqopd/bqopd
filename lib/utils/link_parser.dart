@@ -27,7 +27,17 @@ class LinkParser {
       if (code.isEmpty) continue;
 
       // Try to resolve username/alias
-      final userDoc = await db.collection('usernames').doc(code.toLowerCase()).get();
+      String handleCandidate = code.toLowerCase();
+      var userDoc = await db.collection('usernames').doc(handleCandidate).get();
+
+      // FALLBACK: If "the comet" fails, try "the-comet"
+      if (!userDoc.exists) {
+        final hyphenated = handleCandidate.replaceAll(' ', '-');
+        if (hyphenated != handleCandidate) {
+          userDoc = await db.collection('usernames').doc(hyphenated).get();
+        }
+      }
+
       if (userDoc.exists) {
         final data = userDoc.data()!;
         if (data.containsKey('redirect')) {
@@ -133,35 +143,21 @@ class LinkParser {
       final id = parts[1];
 
       if (type == 'user') {
+        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(id).get();
+        if (userDoc.exists) {
+          final username = userDoc.data()?['username'];
+          if (username != null) {
+            context.go('/$username');
+            return;
+          }
+        }
         context.pushNamed('editInfo', queryParameters: {'userId': id});
       } else if (type == 'fanzine') {
         context.push('/reader/$id');
       }
     } else {
-      final db = FirebaseFirestore.instance;
       final handle = ref.toLowerCase().replaceAll(' ', '-');
-
-      try {
-        final doc = await db.collection('usernames').doc(handle).get();
-        if (doc.exists) {
-          final data = doc.data()!;
-          if (data.containsKey('redirect')) {
-            final target = data['redirect'];
-            final targetDoc = await db.collection('usernames').doc(target).get();
-            if (targetDoc.exists) {
-              final uid = targetDoc.data()!['uid'];
-              context.pushNamed('editInfo', queryParameters: {'userId': uid});
-              return;
-            }
-          } else if (data.containsKey('uid')) {
-            context.pushNamed('editInfo', queryParameters: {'userId': data['uid']});
-            return;
-          }
-        }
-      } catch (e) {
-        print("Error resolving link: $e");
-      }
-      context.push('/$ref');
+      context.push('/$handle');
     }
   }
 }
