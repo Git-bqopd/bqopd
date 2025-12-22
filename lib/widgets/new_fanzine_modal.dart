@@ -65,6 +65,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
         await newFanzineRef.set({
           'title': title,
           'editorId': editorId,
+          'status': 'draft', // <--- ADDED: Sets status to draft immediately
           'creationDate': FieldValue.serverTimestamp(),
           'shortCode': shortCode, // Saves "N7bqopd4" (Display version)
           'shortCodeKey': shortCode.toUpperCase(), // Normalized key for searching

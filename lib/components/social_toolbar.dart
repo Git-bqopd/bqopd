@@ -28,12 +28,12 @@ class SocialToolbar extends StatefulWidget {
 class _SocialToolbarState extends State<SocialToolbar> {
   final ViewService _viewService = ViewService();
 
-  // State for the "Drawer" (Apps Box)
-  bool _isDrawerOpen = false;
+  // State for the "Buttons" Drawer
+  bool _isButtonsDrawerOpen = false;
 
-  void _toggleDrawer() {
+  void _toggleButtonsDrawer() {
     setState(() {
-      _isDrawerOpen = !_isDrawerOpen;
+      _isButtonsDrawerOpen = !_isButtonsDrawerOpen;
     });
   }
 
@@ -130,74 +130,132 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
-                // "Buttons" (The Drawer Toggle)
+                // --- EDITOR TOOLS (Conditionally visible in main row) ---
+                if (buttonVisibility['Approve'] == true) ...[
+                  const SocialActionButton(
+                    icon: Icons.check_circle_outline,
+                    label: 'Approve',
+                  ),
+                  const SizedBox(width: 16),
+                ],
+
+                if (buttonVisibility['Fanzine'] == true) ...[
+                  const SocialActionButton(
+                    icon: Icons.auto_stories,
+                    label: 'Fanzine',
+                  ),
+                  const SizedBox(width: 16),
+                ],
+
+                // "Buttons" (The Standard Drawer Toggle)
                 SocialActionButton(
                   icon: Icons.apps,
                   label: 'Buttons',
-                  isActive: _isDrawerOpen,
-                  onTap: _toggleDrawer,
+                  isActive: _isButtonsDrawerOpen,
+                  onTap: _toggleButtonsDrawer,
                 ),
               ],
             ),
           ),
         ),
 
-        // 2. The Drawer (Apps Box)
-        if (_isDrawerOpen)
+        // 2. The Drawer (Unified Buttons Box)
+        if (_isButtonsDrawerOpen)
           Container(
-            height: 90,
-            margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: Center(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _DrawerItem(
-                      label: 'Comment',
-                      icon: Icons.comment,
-                      isSelected: buttonVisibility['Comment']!,
-                      onTap: () => userProvider.toggleSocialButton('Comment'),
-                    ),
-                    const SizedBox(width: 10),
-                    _DrawerItem(
-                      label: 'Share',
-                      icon: Icons.share,
-                      isSelected: buttonVisibility['Share']!,
-                      onTap: () => userProvider.toggleSocialButton('Share'),
-                    ),
-                    const SizedBox(width: 10),
-                    _DrawerItem(
-                      label: 'Views',
-                      icon: Icons.show_chart,
-                      isSelected: buttonVisibility['Views']!,
-                      onTap: () => userProvider.toggleSocialButton('Views'),
-                    ),
-                    const SizedBox(width: 10),
-                    _DrawerItem(
-                      label: 'Text',
-                      icon: Icons.newspaper,
-                      isSelected: buttonVisibility['Text']!,
-                      onTap: () => userProvider.toggleSocialButton('Text'),
-                    ),
-                    const SizedBox(width: 10),
-                    _DrawerItem(
-                      label: 'Circulation',
-                      icon: Icons.print,
-                      isSelected: buttonVisibility['Circulation']!,
-                      onTap: () => userProvider.toggleSocialButton('Circulation'),
-                    ),
-                    const SizedBox(width: 10),
-                    // Terminal, CA (Toggle)
-                    _DrawerItem(
-                      label: 'Terminal, CA',
-                      icon: Icons.terminal,
-                      isSelected: buttonVisibility['Terminal'] ?? false,
-                      onTap: () => userProvider.toggleSocialButton('Terminal'),
-                    ),
-                  ],
+            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border(top: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ROW 1: Standard Social Buttons
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _DrawerItem(
+                        label: 'Comment',
+                        icon: Icons.comment,
+                        isSelected: buttonVisibility['Comment']!,
+                        onTap: () => userProvider.toggleSocialButton('Comment'),
+                      ),
+                      const SizedBox(width: 10),
+                      _DrawerItem(
+                        label: 'Share',
+                        icon: Icons.share,
+                        isSelected: buttonVisibility['Share']!,
+                        onTap: () => userProvider.toggleSocialButton('Share'),
+                      ),
+                      const SizedBox(width: 10),
+                      _DrawerItem(
+                        label: 'Views',
+                        icon: Icons.show_chart,
+                        isSelected: buttonVisibility['Views']!,
+                        onTap: () => userProvider.toggleSocialButton('Views'),
+                      ),
+                      const SizedBox(width: 10),
+                      _DrawerItem(
+                        label: 'Text',
+                        icon: Icons.newspaper,
+                        isSelected: buttonVisibility['Text']!,
+                        onTap: () => userProvider.toggleSocialButton('Text'),
+                      ),
+                      const SizedBox(width: 10),
+                      _DrawerItem(
+                        label: 'Circulation',
+                        icon: Icons.print,
+                        isSelected: buttonVisibility['Circulation']!,
+                        onTap: () => userProvider.toggleSocialButton('Circulation'),
+                      ),
+                      const SizedBox(width: 10),
+                      _DrawerItem(
+                        label: 'Terminal, CA',
+                        icon: Icons.terminal,
+                        isSelected: buttonVisibility['Terminal'] ?? false,
+                        onTap: () => userProvider.toggleSocialButton('Terminal'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+
+                // SECTION 2: Editor's Desk (Only for Editors)
+                if (userProvider.isEditor) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Divider(height: 1, thickness: 0.5),
+                  ),
+                  const Text(
+                    "Editor's Desk",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _DrawerItem(
+                        label: 'Approve',
+                        icon: Icons.check_circle_outline,
+                        isSelected: buttonVisibility['Approve'] ?? false,
+                        onTap: () => userProvider.toggleSocialButton('Approve'),
+                      ),
+                      const SizedBox(width: 20),
+                      _DrawerItem(
+                        label: 'Fanzine',
+                        icon: Icons.auto_stories,
+                        isSelected: buttonVisibility['Fanzine'] ?? false,
+                        onTap: () => userProvider.toggleSocialButton('Fanzine'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
       ],
