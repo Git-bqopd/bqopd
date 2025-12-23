@@ -9,7 +9,7 @@ class CuratorWorkbenchPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Canvas-like feel
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Curator Workbench'),
         elevation: 1,
