@@ -86,16 +86,21 @@ Future<String?> createManagedProfile({
   // 1. Generate a new Random Document ID
   final newProfileRef = db.collection('Users').doc();
 
-  // 2. Generate a URL-friendly username
-  String baseHandle = '${firstName.trim()}-${lastName.trim()}'.toLowerCase();
+  // 2. Generate a URL-friendly username (FIXED LOGIC)
+  // Join parts with hyphen, but filter empty parts to avoid trailing/leading hyphens
+  final parts = [firstName.trim(), lastName.trim()].where((s) => s.isNotEmpty).join('-');
+
+  String baseHandle = parts.toLowerCase();
   baseHandle = baseHandle.replaceAll(RegExp(r'[^a-z0-9-]'), '');
 
-  if (baseHandle.length < 3) {
+  // Safety fallback
+  if (baseHandle.isEmpty) {
+    baseHandle = 'user-${DateTime.now().millisecondsSinceEpoch}';
+  } else if (baseHandle.length < 3) {
     baseHandle += '-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
   }
 
   // 3. Create the Document
-  // Added 'Editor' and 'newFanzine' to match real user schema
   await newProfileRef.set({
     'uid': newProfileRef.id,
     'firstName': firstName.trim(),
@@ -106,8 +111,8 @@ Future<String?> createManagedProfile({
     'managers': [currentUser.uid],
     'createdAt': FieldValue.serverTimestamp(),
     'email': '',
-    'Editor': false, // Ensure consistency with real profiles
-    'newFanzine': null, // Ensure consistency with real profiles
+    'Editor': false,
+    'newFanzine': null,
   });
 
   // 4. Register the Handle

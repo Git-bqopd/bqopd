@@ -1,9 +1,8 @@
-import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
 import '../utils/link_parser.dart';
 import '../services/user_bootstrap.dart';
 import '../services/username_service.dart';
@@ -24,6 +23,10 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   List<DocumentSnapshot> _pages = [];
   int _currentPageIndex = 0;
   bool _isLoadingPages = true;
+
+  // Image State
+  String _currentImageUrl = '';
+  bool _isLoadingImage = false;
 
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
@@ -53,7 +56,9 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
       if (doc.exists && mounted) {
         final data = doc.data() as Map<String, dynamic>;
         setState(() {
-          _titleController.text = data['title'] ?? '';
+          if (!_hasUnsavedChanges && _titleController.text.isEmpty) {
+            _titleController.text = data['title'] ?? '';
+          }
           _pipelineStatus = data['processingStatus'] ?? 'idle';
         });
       }
@@ -77,10 +82,23 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     setState(() => _isLoadingPages = true);
     _db.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber').snapshots().listen((snapshot) {
       if (!mounted) return;
+
+      String? currentId;
+      if (_pages.isNotEmpty && _currentPageIndex < _pages.length) {
+        currentId = _pages[_currentPageIndex].id;
+      }
+
       setState(() {
         _pages = snapshot.docs;
         _isLoadingPages = false;
+
+        if (currentId != null) {
+          final idx = _pages.indexWhere((doc) => doc.id == currentId);
+          if (idx != -1) _currentPageIndex = idx;
+        }
+
         if (_currentPageIndex >= _pages.length) _currentPageIndex = _pages.isNotEmpty ? _pages.length - 1 : 0;
+
         if (!_hasUnsavedChanges && _pages.isNotEmpty) _loadPageContent(_currentPageIndex);
       });
     }, onError: (e) { if(mounted) setState(() => _isLoadingPages = false); });
@@ -92,16 +110,39 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     String text = data['text_processed'] ?? data['text_raw'] ?? data['text'] ?? '';
 
     _textController.removeListener(_onTextChanged);
-
-    // FIX FOR FOCUS ERROR: Only update if different and not currently editing
     if (_textController.text != text) {
       _textController.text = text;
     }
-
     _textController.addListener(_onTextChanged);
 
-    setState(() { _currentPageIndex = index; _hasUnsavedChanges = false; });
+    setState(() {
+      _currentPageIndex = index;
+      _hasUnsavedChanges = false;
+      _isLoadingImage = true;
+    });
+
     _analyzeEntitiesInText();
+    _refreshImageUrl(data);
+  }
+
+  Future<void> _refreshImageUrl(Map<String, dynamic> data) async {
+    String url = data['imageUrl'] ?? '';
+    final storagePath = data['storagePath'];
+
+    if (storagePath != null && storagePath.toString().isNotEmpty) {
+      try {
+        url = await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
+      } catch (e) {
+        print("Error fetching fresh URL for $storagePath: $e");
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _currentImageUrl = url;
+        _isLoadingImage = false;
+      });
+    }
   }
 
   // --- WORKFLOW ACTIONS ---
@@ -112,7 +153,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
       await FirebaseFunctions.instance.httpsCallable('trigger_batch_ocr').call({
         'fanzineId': widget.fanzineId,
       });
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processing started.')));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Batch OCR Triggered. Worker bees dispatched.')));
     } catch (e) {
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
@@ -176,6 +217,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   }
 
   Future<void> _analyzeEntitiesInText() async {
+    if (!mounted) return;
     setState(() => _isValidatingEntities = true);
     final text = _textController.text;
     final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
@@ -204,7 +246,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
 
   Future<void> _createProfileFor(String name) async {
     try {
-      await createManagedProfile(firstName: name, lastName: "", bio: "Auto-created");
+      await createManagedProfile(firstName: name, lastName: "", bio: "Auto-created from text analysis");
       await _analyzeEntitiesInText();
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile created!")));
     } catch (e) {
@@ -261,7 +303,11 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     _textController.selection = TextSelection.fromPosition(TextPosition(offset: newCursorPos));
   }
 
-  Future<void> _publishFanzine() async {
+  // --- PUBLISHING ACTIONS ---
+
+  /// Soft Publish: Update mentions and published date, but SET status to 'working'.
+  /// This makes it viewable but keeps it in the Curator Dashboard.
+  Future<void> _softPublish() async {
     if (_hasUnsavedChanges) await _saveCurrentPage();
     setState(() => _isSaving = true);
     try {
@@ -272,20 +318,44 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
         final mentions = await LinkParser.parseMentions(text);
         allMentions.addAll(mentions);
       }
+
+      // Update logic: Set status to 'working' and update metadata
       await _db.collection('fanzines').doc(widget.fanzineId).update({
-        'status': 'live',
+        'status': 'working', // Change to 'working' (in editor, published)
         'mentionedUsers': allMentions.toList(),
         'publishedAt': FieldValue.serverTimestamp(),
+        'isSoftPublished': true, // Optional flag for UI
       });
+
       setState(() => _isSaving = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fanzine Published Successfully!')));
-        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Soft Publish Complete! (Working Draft)')));
       }
     } catch (e) {
       if(mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error publishing: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  /// Mark Live: Change status to 'live'. Removes it from Curator Dashboard drafts list.
+  Future<void> _markAsLive() async {
+    setState(() => _isSaving = true);
+    try {
+      await _db.collection('fanzines').doc(widget.fanzineId).update({
+        'status': 'live',
+      });
+
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fanzine is now LIVE!')));
+        Navigator.pop(context); // Close workbench as it's no longer a draft
+      }
+    } catch (e) {
+      if(mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -296,7 +366,6 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
 
     final bool hasPages = _pages.isNotEmpty;
     Map<String, dynamic> currentPageData = {};
-    String imageUrl = '';
     String pageStatus = 'unknown';
 
     int readyCount = 0; int queuedCount = 0; int completeCount = 0; int errorCount = 0; int totalCount = _pages.length;
@@ -312,7 +381,6 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     if (hasPages) {
       final currentPageDoc = _pages[_currentPageIndex];
       currentPageData = currentPageDoc.data() as Map<String, dynamic>;
-      imageUrl = currentPageData['imageUrl'] ?? '';
       pageStatus = currentPageData['status'] ?? 'unknown';
     }
 
@@ -321,41 +389,34 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
         builder: (context, constraints) {
           final isWide = constraints.maxWidth > 800;
 
+          // LEFT: IMAGE PANEL
           Widget imagePanel = Container(
             color: Colors.grey[900],
-            child: hasPages && imageUrl.isNotEmpty
+            child: _isLoadingImage
+                ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                : hasPages && _currentImageUrl.isNotEmpty
                 ? InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4.0,
                 child: Image.network(
-                  imageUrl,
+                  _currentImageUrl,
                   fit: BoxFit.contain,
+                  loadingBuilder: (c, child, progress) {
+                    if (progress == null) return child;
+                    return Center(child: CircularProgressIndicator(value: progress.expectedTotalBytes != null ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes! : null));
+                  },
                   errorBuilder: (context, error, stackTrace) {
-                    return Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.lock_person, color: Colors.amber, size: 60),
-                            const SizedBox(height: 16),
-                            const Text("IMAGE ACCESS FORBIDDEN (403)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                            const SizedBox(height: 8),
-                            const Text("Your browser cannot see these images. Check Storage permissions.", textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 14)),
-                            const SizedBox(height: 16),
-                            SelectableText(imageUrl, style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    );
+                    return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.broken_image, color: Colors.white), Text("Image Error", style: TextStyle(color: Colors.white))]));
                   },
                 )
             )
                 : const Center(child: Text("No Image", style: TextStyle(color: Colors.white))),
           );
 
+          // RIGHT: CONTROL PANEL
           Widget rightPanel = Column(
             children: [
+              // Top Bar: Navigation
               Container(
                 color: Colors.grey[200],
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -388,6 +449,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                 child: TabBarView(
                   controller: _tabController,
                   children: [
+                    // TAB 1: PIPELINE CONTROL
                     SingleChildScrollView(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -412,7 +474,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                             onPressed: _isSaving || (readyCount == 0 && errorCount == 0) ? null : _runStep2_BatchOCR,
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
                             icon: const Icon(Icons.bolt),
-                            label: Text(readyCount > 0 ? "Step 2: Run OCR on $readyCount Pages" : "Retry $errorCount Failed Pages"),
+                            label: Text(readyCount > 0 ? "Step 2: Start OCR on $readyCount Pages" : "Retry $errorCount Failed Pages"),
                           ),
                           const SizedBox(height: 20),
 
@@ -420,14 +482,14 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                             onPressed: _isSaving || completeCount == 0 ? null : _runStep3_Finalize,
                             style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                             icon: const Icon(Icons.check_circle),
-                            label: const Text("Step 3: Finalize & Aggregrate Entities"),
+                            label: const Text("Step 3: Finalize & Aggregate Entities"),
                           ),
 
                           if (queuedCount > 0) ...[
                             const SizedBox(height: 20),
                             const LinearProgressIndicator(),
                             const SizedBox(height: 8),
-                            const Center(child: Text("Processing in background...", style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12))),
+                            const Center(child: Text("Processing in background (refresh to see updates)...", style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12))),
                           ],
 
                           if (errorCount > 0) ...[
@@ -460,13 +522,14 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                       ),
                     ),
 
+                    // TAB 2: TEXT EDITOR
                     Column(children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                         child: TextField(
                           controller: _titleController,
                           decoration: const InputDecoration(labelText: 'Fanzine Title', border: UnderlineInputBorder(), isDense: true),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                           onChanged: (val) { if (!_hasUnsavedChanges) setState(() => _hasUnsavedChanges = true); },
                         ),
                       ),
@@ -478,6 +541,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                       SizedBox(height: 120, child: Column(children: [Padding(padding: const EdgeInsets.all(8.0), child: TextField(controller: _searchController, decoration: InputDecoration(hintText: 'Manual Search...', suffixIcon: IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _searchResults=[])), isDense: true, border: const OutlineInputBorder()), onSubmitted: _searchEntities)), if (_searchResults.isNotEmpty) Expanded(child: ListView.builder(itemCount: _searchResults.length, itemBuilder: (c, i) => ListTile(title: Text(_searchResults[i]['display']!), onTap: () => _insertEntity(_searchResults[i]))))]))
                     ]),
 
+                    // TAB 3: ENTITY VALIDATOR
                     _isValidatingEntities ? const Center(child: CircularProgressIndicator()) : ListView.separated(padding: const EdgeInsets.all(16), itemCount: _detectedEntities.length, separatorBuilder: (c,i) => const Divider(), itemBuilder: (context, index) { final e = _detectedEntities[index]; final status = e['status']; IconData icon; Color color; String sub = ""; if (status == 'exists') { icon = Icons.check_circle; color = Colors.green; sub = "Profile Found"; } else if (status == 'alias') { icon = Icons.directions_bike; color = Colors.blue; sub = "Alias -> ${e['redirect']}"; } else { icon = Icons.warning; color = Colors.orange; sub = "No Profile Found"; } return ListTile(leading: Icon(icon, color: color), title: Text(e['name'], style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text(sub), trailing: status == 'missing' ? Row(mainAxisSize: MainAxisSize.min, children: [TextButton(onPressed: () => _createProfileFor(e['name']), child: const Text("Create")), const SizedBox(width: 8), TextButton(onPressed: () => _createAliasFor(e['name']), child: const Text("Alias"))]) : null); }),
                   ],
                 ),
@@ -485,7 +549,58 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
             ],
           );
 
-          return Column(children: [Expanded(child: isWide ? Row(children: [Expanded(child: imagePanel), Expanded(child: rightPanel)]) : Column(children: [Expanded(child: imagePanel), Expanded(child: rightPanel)])), Container(height: 50, decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)]), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [IconButton(icon: const Icon(Icons.arrow_back), onPressed: hasPages && _currentPageIndex > 0 ? () => _loadPageContent(_currentPageIndex - 1) : null), Text(hasPages ? "Page ${_currentPageIndex + 1}" : "-"), IconButton(icon: const Icon(Icons.arrow_forward), onPressed: hasPages && _currentPageIndex < _pages.length - 1 ? () => _loadPageContent(_currentPageIndex + 1) : null)]), Padding(padding: const EdgeInsets.only(right: 16), child: ElevatedButton.icon(onPressed: (_isSaving || !hasPages) ? null : _publishFanzine, icon: const Icon(Icons.publish), label: const Text("PUBLISH"), style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white)))]))]);
+          return Column(
+              children: [
+                Expanded(child: isWide ? Row(children: [Expanded(child: imagePanel), Expanded(child: rightPanel)]) : Column(children: [Expanded(child: imagePanel), Expanded(child: rightPanel)])),
+                Container(
+                    height: 50,
+                    decoration: const BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)]
+                    ),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                              children: [
+                                IconButton(icon: const Icon(Icons.arrow_back), onPressed: hasPages && _currentPageIndex > 0 ? () => _loadPageContent(_currentPageIndex - 1) : null),
+                                Text(hasPages ? "Page ${_currentPageIndex + 1}" : "-"),
+                                IconButton(icon: const Icon(Icons.arrow_forward), onPressed: hasPages && _currentPageIndex < _pages.length - 1 ? () => _loadPageContent(_currentPageIndex + 1) : null)
+                              ]
+                          ),
+
+                          // --- NEW ACTION BUTTONS ---
+                          Padding(
+                            padding: const EdgeInsets.only(right: 16),
+                            child: Row(
+                              children: [
+                                ElevatedButton.icon(
+                                    onPressed: (_isSaving || !hasPages) ? null : _softPublish,
+                                    icon: const Icon(Icons.visibility),
+                                    label: const Text("Soft Publish (Working)"),
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blueGrey,
+                                        foregroundColor: Colors.white
+                                    )
+                                ),
+                                const SizedBox(width: 12),
+                                ElevatedButton.icon(
+                                    onPressed: (_isSaving || !hasPages) ? null : _markAsLive,
+                                    icon: const Icon(Icons.check_circle),
+                                    label: const Text("Mark Live"),
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green[700],
+                                        foregroundColor: Colors.white
+                                    )
+                                ),
+                              ],
+                            ),
+                          )
+                        ]
+                    )
+                )
+              ]
+          );
         },
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_storage/firebase_storage.dart'; // ADDED
 import '../services/view_service.dart';
 import '../components/social_toolbar.dart';
 import 'link_parser.dart';
@@ -62,7 +63,9 @@ class _NewFanzineSingleViewState extends State<NewFanzineSingleView> {
   }
 
   Widget _buildPageItem(int pageIndex, Map<String, dynamic> pageData) {
-    final imageUrl = pageData['imageUrl'] ?? '';
+    // Extract both imageUrl (fallback) and storagePath (primary)
+    final imageUrl = pageData['imageUrl'] as String?;
+    final storagePath = pageData['storagePath'] as String?;
     final imageId = pageData['imageId'];
     final String pageText = pageData['text_processed'] ?? pageData['text'] ?? '';
     final bool isTextOpen = _openTextDrawers[pageIndex] ?? false;
@@ -75,17 +78,11 @@ class _NewFanzineSingleViewState extends State<NewFanzineSingleView> {
         AspectRatio(
           aspectRatio: 0.65,
           child: Container(
-            color: imageUrl.isEmpty ? Colors.grey[300] : Colors.white,
-            child: imageUrl.isNotEmpty
-                ? Image.network(
-              imageUrl,
-              fit: BoxFit.contain,
-              loadingBuilder: (c, child, progress) {
-                if (progress == null) return child;
-                return const Center(child: CircularProgressIndicator());
-              },
-            )
-                : const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+            color: Colors.grey[100], // Lighter placeholder
+            child: _PageImage(
+              imageUrl: imageUrl,
+              storagePath: storagePath,
+            ),
           ),
         ),
         Container(
@@ -194,6 +191,68 @@ class _NewFanzineSingleViewState extends State<NewFanzineSingleView> {
           )
         ],
       ),
+    );
+  }
+}
+
+// Helper Widget to handle async URL fetching safely
+class _PageImage extends StatefulWidget {
+  final String? imageUrl;
+  final String? storagePath;
+
+  const _PageImage({this.imageUrl, this.storagePath});
+
+  @override
+  State<_PageImage> createState() => _PageImageState();
+}
+
+class _PageImageState extends State<_PageImage> {
+  Future<String?>? _urlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlFuture = _resolveUrl();
+  }
+
+  Future<String?> _resolveUrl() async {
+    // 1. Try to get a fresh URL if storagePath is available
+    if (widget.storagePath != null && widget.storagePath!.isNotEmpty) {
+      try {
+        return await FirebaseStorage.instance.ref(widget.storagePath).getDownloadURL();
+      } catch (e) {
+        print("Error refreshing URL for ${widget.storagePath}: $e");
+        // If fetch fails, fall back to the stored URL
+      }
+    }
+    // 2. Return stored URL (fallback)
+    return widget.imageUrl;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: _urlFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final url = snapshot.data;
+        if (url == null || url.isEmpty) {
+          return const Center(child: Icon(Icons.broken_image, color: Colors.grey, size: 48));
+        }
+
+        return Image.network(
+          url,
+          fit: BoxFit.contain,
+          loadingBuilder: (c, child, progress) {
+            if (progress == null) return child;
+            return const Center(child: CircularProgressIndicator());
+          },
+          errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image, color: Colors.grey, size: 48)),
+        );
+      },
     );
   }
 }

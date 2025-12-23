@@ -4,8 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart'; // Added for error link
-import 'dart:async'; // Required for Stream manipulation
+import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_storage/firebase_storage.dart'; // ADDED
+import 'dart:async';
 
 import '../services/user_provider.dart';
 import '../widgets/profile_widget.dart';
@@ -303,7 +304,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   ));
                 },
                 child: ClipRect(
-                    child: Image.network(imageUrl, fit: BoxFit.cover)
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                    )
                 ),
               );
             }
@@ -331,21 +336,47 @@ class _FanzineCoverTile extends StatelessWidget {
 
   const _FanzineCoverTile({required this.fanzineId, required this.title});
 
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<QuerySnapshot>(
-      future: FirebaseFirestore.instance
+  /// Fetches the cover image URL.
+  /// First it gets the first page of the fanzine.
+  /// Then it checks for a 'storagePath'. If found, it gets a fresh signed URL from Firebase Storage.
+  /// If not, it falls back to 'imageUrl' (which might be expired).
+  Future<String?> _fetchCoverUrl() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
           .collection('fanzines')
           .doc(fanzineId)
           .collection('pages')
           .orderBy('pageNumber')
           .limit(1)
-          .get(),
-      builder: (context, snapshot) {
-        String? imageUrl;
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          imageUrl = snapshot.data!.docs.first['imageUrl'];
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final data = snapshot.docs.first.data();
+        final storagePath = data['storagePath'];
+
+        if (storagePath != null && storagePath.toString().isNotEmpty) {
+          try {
+            return await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
+          } catch (e) {
+            // Fallback if storage access fails
+            print("Storage access failed for $storagePath: $e");
+          }
         }
+
+        return data['imageUrl'];
+      }
+    } catch (e) {
+      print("Error fetching cover for $fanzineId: $e");
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: _fetchCoverUrl(),
+      builder: (context, snapshot) {
+        final imageUrl = snapshot.data;
 
         return GestureDetector(
           onTap: () => context.push('/reader/$fanzineId'),
@@ -361,7 +392,19 @@ class _FanzineCoverTile extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 if (imageUrl != null)
-                  Image.network(imageUrl, fit: BoxFit.cover)
+                  Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                          Text("Err", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ));
+                    },
+                  )
                 else
                   const Center(child: Icon(Icons.book, size: 40, color: Colors.grey)),
 
