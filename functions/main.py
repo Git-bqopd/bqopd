@@ -7,7 +7,7 @@ import traceback
 import base64
 import firebase_admin
 from firebase_admin import firestore, storage
-from firebase_functions import storage_fn, https_fn, firestore_fn
+from firebase_functions import storage_fn, https_fn, firestore_fn, options
 from firebase_functions.params import SecretParam
 
 # The new Gemini 3 SDK
@@ -53,6 +53,40 @@ def apply_wikilinks_locally(text, entities):
         processed_text = pattern.sub(replace_func, processed_text)
     return processed_text
 
+def extract_json_from_text(text):
+    """
+    Extracts the first valid JSON object from a string.
+    Handles cases where Gemini adds conversational text around the block.
+    """
+    if not text: return None
+    
+    # Try direct load first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Find first { and last }
+    start = text.find('{')
+    end = text.rfind('}')
+    
+    if start != -1 and end != -1:
+        try:
+            return json.loads(text[start:end+1])
+        except json.JSONDecodeError:
+            pass
+            
+    # Last ditch: strip markdown code blocks
+    clean = text.strip()
+    if clean.startswith("```json"): clean = clean[7:]
+    if clean.startswith("```"): clean = clean[3:]
+    if clean.endswith("```"): clean = clean[:-3]
+    
+    try:
+        return json.loads(clean.strip())
+    except:
+        raise ValueError(f"Failed to extract valid JSON from response. Length: {len(text)}")
+
 # --------------------------------------------------------------------------------
 # TRAFFIC CONTROL MANAGER
 # --------------------------------------------------------------------------------
@@ -84,10 +118,24 @@ def fanzine_traffic_manager(event: firestore_fn.Event[firestore_fn.Change[firest
         pending_docs = list(pages_ref.where(filter=firestore.FieldFilter('status', 'in', ['ready', 'queued'])).limit(1).stream())
 
         if not pending_docs:
+            fref.update({'processingStatus': 'review_needed'})
+        return
+
+    # STEP 3: Review Completion
+    if status == 'review_needed':
+        # Check if all pages are marked 'complete'
+        pages_ref = fref.collection('pages')
+        # We check for any page that is NOT complete. 
+        # Since != might require specific indexes, we check for known non-complete statuses.
+        # Note: 'ocr_complete' is deprecated but included for backward compatibility if any exist.
+        non_complete_statuses = ['review_needed', 'error', 'ready', 'queued', 'ocr_complete']
+        pending_review = list(pages_ref.where(filter=firestore.FieldFilter('status', 'in', non_complete_statuses)).limit(1).stream())
+        
+        if not pending_review:
             fref.update({'processingStatus': 'ready_for_agg'})
         return
 
-    # STEP 3: Aggregation
+    # STEP 4: Aggregation
     if status == 'ready_for_agg':
         fref.update({'processingStatus': 'aggregating'})
         _do_aggregation(fanzine_id)
@@ -123,12 +171,22 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
         client = genai.Client(api_key=GEMINI_API_KEY.value)
 
         prompt = """
-        Perform a deep spatial OCR on this fanzine page.
+        ACT AS AN ARCHIVIST. Perform a deep spatial OCR on this fanzine page for archival and indexing purposes.
+        This is historical content for inclusion in a community-driven database.
         1. Extract all text, maintaining the reading order of multi-column layouts and floating boxes.
         2. Identify and extract names of people, groups, and entities mentioned.
         3. Output strictly as JSON with this structure:
            {"text": "full extracted markdown text", "entities": ["Name 1", "Name 2"]}
+        Do not truncate, summarize, or omit any text from the page. If the page is long, provide the full transcription.
         """
+
+        # Define safety settings to be less restrictive for OCR of archival docs
+        safety_settings = [
+            types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+            types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+            types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+            types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+        ]
 
         # Using Gemini 3 Flash Preview as requested
         response = client.models.generate_content(
@@ -139,25 +197,19 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
             ],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
+                safety_settings=safety_settings
             )
         )
 
         # Handle potential empty or null response text
         if not response.text:
-            raise ValueError(f"Gemini returned empty response. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'Unknown'}")
+            # Enhanced error logging for citation/safety blocks
+            finish_reason = "Unknown"
+            if response.candidates:
+                finish_reason = response.candidates[0].finish_reason
+            raise ValueError(f"Gemini returned empty response. Finish reason: {finish_reason}")
 
-        try:
-            res_json = json.loads(response.text)
-        except json.JSONDecodeError as e:
-            # Fallback if the model returns something that isn't strict JSON (e.g. wrapped in markdown)
-            clean_text = response.text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.startswith("```"):
-                clean_text = clean_text[3:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-            res_json = json.loads(clean_text.strip())
+        res_json = extract_json_from_text(response.text)
 
         raw_text = res_json.get('text', '')
 
@@ -174,7 +226,7 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
             'text_raw': raw_text,
             'text_processed': processed,
             'detected_entities': [e['clean'] for e in ents],
-            'status': 'ocr_complete',
+            'status': 'review_needed',
             'error_entity_id': entity_id_errors,
             'processedAt': firestore.SERVER_TIMESTAMP,
             'ocrModelUsed': 'gemini-3-flash-preview'
@@ -200,7 +252,10 @@ def trigger_batch_ocr(req: https_fn.CallableRequest):
     Updates Fanzine status to 'processing_ocr'.
     """
     fid = req.data.get('fanzineId')
-    if not fid: return {"error": "Missing fanzineId"}
+    print(f"--- trigger_batch_ocr CALLED for fid: {fid} ---")
+    if not fid: 
+        print("Error: Missing fanzineId")
+        return {"error": "Missing fanzineId"}
 
     db = firestore.client()
     fref = db.collection('fanzines').document(fid)
@@ -216,8 +271,10 @@ def trigger_batch_ocr(req: https_fn.CallableRequest):
 
     for p in pages:
         p_data = p.to_dict()
+        status = p_data.get('status')
         # Retry 'error' pages or start 'ready' pages
-        if p_data.get('status') in ['ready', 'error']:
+        if status in ['ready', 'error']:
+            print(f"Queuing page {p_data.get('pageNumber')} (current status: {status})")
             # Resetting status to 'queued' triggers the ocr_worker function above
             batch.update(p.reference, {'status': 'queued', 'errorLog': firestore.DELETE_FIELD})
             updated += 1
@@ -225,13 +282,16 @@ def trigger_batch_ocr(req: https_fn.CallableRequest):
 
         # Firestore batch limit is 500
         if count >= 400:
+            print(f"Committing batch of {count}...")
             batch.commit()
             batch = db.batch()
             count = 0
 
     if count > 0:
+        print(f"Committing final batch of {count}...")
         batch.commit()
 
+    print(f"Successfully queued {updated} pages for {fid}")
     return {"success": True, "queued_count": updated}
 
 @https_fn.on_call()
@@ -393,3 +453,85 @@ def handle_pdf_upload(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]
     })
 
     print(f"Created fanzine {ref.id} for {file_path}")
+
+# --------------------------------------------------------------------------------
+# GRAPH SYNC TRIGGERS
+# --------------------------------------------------------------------------------
+
+def prepare_graph_payload(source_id, target_id, relationship_type, timestamp, metadata=None):
+    """
+    Sanitizes and prepares a JSON payload for external graph sync.
+    """
+    if metadata is None: metadata = {}
+    
+    # Convert timestamp to milliseconds if it's a Firestore Timestamp
+    created_at_ms = int(time.time() * 1000)
+    if hasattr(timestamp, 'timestamp'):
+        created_at_ms = int(timestamp.timestamp() * 1000)
+    elif isinstance(timestamp, int):
+        created_at_ms = timestamp
+
+    payload = {
+        "source": source_id,
+        "target": target_id,
+        "type": relationship_type,
+        "createdAt": created_at_ms
+    }
+    payload.update(metadata)
+    return payload
+
+@firestore_fn.on_document_created(document="Users/{userId}/following/{targetUserId}")
+def on_follow_user(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    """
+    Triggered when a user follows another user.
+    """
+    user_id = event.params['userId']
+    target_user_id = event.params['targetUserId']
+    
+    data = event.data.to_dict() if event.data else {}
+    timestamp = data.get('createdAt', firestore.SERVER_TIMESTAMP)
+
+    payload = prepare_graph_payload(user_id, target_user_id, "FOLLOWS", timestamp)
+    
+    print(f"Graph Sync [FOLLOW]: {json.dumps(payload)}")
+    # TODO: Push to Neo4j
+
+@firestore_fn.on_document_created(document="Likes/{likeId}")
+def on_like_content(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    """
+    Triggered when content is liked.
+    """
+    data = event.data.to_dict() if event.data else {}
+    user_id = data.get('userId')
+    content_id = data.get('contentId')
+    
+    if not user_id or not content_id:
+        print(f"Invalid Like document: {event.params['likeId']}")
+        return
+
+    timestamp = data.get('createdAt', firestore.SERVER_TIMESTAMP)
+    payload = prepare_graph_payload(user_id, content_id, "LIKES", timestamp)
+
+    print(f"Graph Sync [LIKE]: {json.dumps(payload)}")
+    # TODO: Push to Neo4j
+
+@firestore_fn.on_document_created(document="Remixes/{remixId}")
+def on_remix_content(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    """
+    Triggered when content is remixed.
+    """
+    data = event.data.to_dict() if event.data else {}
+    user_id = data.get('userId') # The remixer
+    original_content_id = data.get('originalContentId')
+    
+    if not user_id or not original_content_id:
+        print(f"Invalid Remix document: {event.params['remixId']}")
+        return
+
+    timestamp = data.get('createdAt', firestore.SERVER_TIMESTAMP)
+    payload = prepare_graph_payload(user_id, original_content_id, "REMIXED", timestamp, {
+        "remixContentId": event.params['remixId']
+    })
+
+    print(f"Graph Sync [REMIX]: {json.dumps(payload)}")
+    # TODO: Push to Neo4j
