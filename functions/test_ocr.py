@@ -101,5 +101,59 @@ class TestOCRWorker(unittest.TestCase):
         update_dict = args[0]
         self.assertEqual(update_dict['status'], 'review_needed')
 
+    @patch('main.firestore')
+    @patch('main.storage')
+    @patch('main.genai')
+    def test_ocr_worker_fallback_on_recitation(self, mock_genai, mock_storage, mock_firestore):
+        # Setup Mocks for Recitation Failure
+        mock_event = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_snapshot.exists = True
+        mock_snapshot.to_dict.return_value = {
+            'status': 'queued',
+            'storagePath': 'path/to/image.jpg'
+        }
+        mock_page_ref = MagicMock()
+        mock_snapshot.reference = mock_page_ref
+        mock_event.data.after = mock_snapshot
+        mock_event.params = {'fanzineId': 'f1', 'pageId': 'p1'}
+        
+        # Mock Client
+        mock_client = MagicMock()
+        mock_genai.Client.return_value = mock_client
+        
+        # Setup side_effect for generate_content to simulate first fail, second success
+        # First call: returns object with finish_reason='RECITATION'
+        # Second call: returns success
+        
+        mock_fail_response = MagicMock()
+        mock_fail_response.text = None
+        mock_fail_response.candidates = [MagicMock(finish_reason="RECITATION")]
+        
+        mock_success_response = MagicMock()
+        mock_success_response.text = '{"text": "Fallback Text", "entities": []}'
+        
+        mock_client.models.generate_content.side_effect = [
+            ValueError("FinishReason.RECITATION"), # Simulating the raise we added or the API behavior
+            mock_success_response
+        ]
+
+        # Execute
+        ocr_worker(mock_event)
+
+        # Assert
+        # Check that generate_content was called twice
+        self.assertEqual(mock_client.models.generate_content.call_count, 2)
+        # Check first call was gemini-3
+        args1, _ = mock_client.models.generate_content.call_args_list[0]
+        self.assertEqual(kwargs1 := mock_client.models.generate_content.call_args_list[0].kwargs['model'], "gemini-3-flash-preview")
+        # Check second call was gemini-1.5
+        args2, _ = mock_client.models.generate_content.call_args_list[1]
+        self.assertEqual(kwargs2 := mock_client.models.generate_content.call_args_list[1].kwargs['model'], "gemini-1.5-flash")
+        
+        # Verify update uses fallback model name
+        args, _ = mock_page_ref.update.call_args
+        self.assertEqual(args[0]['ocrModelUsed'], 'gemini-1.5-flash')
+
 if __name__ == '__main__':
     unittest.main()

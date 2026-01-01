@@ -189,17 +189,42 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
         ]
 
         # Using Gemini 3 Flash Preview as requested
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=[
-                prompt,
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                safety_settings=safety_settings
+        # WRAPPING IN RETRY LOGIC FOR RECITATION ERRORS
+        model_name = "gemini-3-flash-preview"
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[
+                    prompt,
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    safety_settings=safety_settings
+                )
             )
-        )
+            
+            # Check for RECITATION stop reason specifically
+            if response.candidates and response.candidates[0].finish_reason == "RECITATION":
+                raise ValueError("FinishReason.RECITATION")
+                
+        except Exception as e:
+            if "RECITATION" in str(e):
+                print(f"Gemini 3 Flash hit RECITATION. Falling back to Gemini 1.5 Flash...")
+                model_name = "gemini-1.5-flash"
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        prompt,
+                        types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        safety_settings=safety_settings
+                    )
+                )
+            else:
+                raise e
 
         # Handle potential empty or null response text
         if not response.text:
@@ -229,7 +254,7 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
             'status': 'review_needed',
             'error_entity_id': entity_id_errors,
             'processedAt': firestore.SERVER_TIMESTAMP,
-            'ocrModelUsed': 'gemini-3-flash-preview'
+            'ocrModelUsed': model_name
         })
 
         # Pulse the parent to check if all pages are done
