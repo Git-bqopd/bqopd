@@ -205,13 +205,15 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
             )
             
             # Check for RECITATION stop reason specifically
-            if response.candidates and response.candidates[0].finish_reason == "RECITATION":
-                raise ValueError("FinishReason.RECITATION")
+            # Convert to string to handle Enum values like FinishReason.RECITATION
+            finish_reason_str = str(response.candidates[0].finish_reason) if response.candidates else ""
+            if "RECITATION" in finish_reason_str:
+                raise ValueError(f"FinishReason.RECITATION found in {model_name}")
                 
         except Exception as e:
             if "RECITATION" in str(e):
-                print(f"Gemini 3 Flash hit RECITATION. Falling back to Gemini 1.5 Flash...")
-                model_name = "gemini-1.5-flash"
+                print(f"Gemini 3 Flash hit RECITATION. Falling back to Gemini 1.5 Pro...")
+                model_name = "gemini-1.5-pro"
                 response = client.models.generate_content(
                     model=model_name,
                     contents=[

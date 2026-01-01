@@ -149,11 +149,11 @@ class TestOCRWorker(unittest.TestCase):
         self.assertEqual(kwargs1 := mock_client.models.generate_content.call_args_list[0].kwargs['model'], "gemini-3-flash-preview")
         # Check second call was gemini-1.5
         args2, _ = mock_client.models.generate_content.call_args_list[1]
-        self.assertEqual(kwargs2 := mock_client.models.generate_content.call_args_list[1].kwargs['model'], "gemini-1.5-flash")
+        self.assertEqual(kwargs2 := mock_client.models.generate_content.call_args_list[1].kwargs['model'], "gemini-1.5-pro")
         
         # Verify update uses fallback model name
         args, _ = mock_page_ref.update.call_args
-        self.assertEqual(args[0]['ocrModelUsed'], 'gemini-1.5-flash')
+        self.assertEqual(args[0]['ocrModelUsed'], 'gemini-1.5-pro')
 
 if __name__ == '__main__':
     unittest.main()
