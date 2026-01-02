@@ -6,7 +6,7 @@ import '../components/social_toolbar.dart';
 import 'link_parser.dart';
 
 class FanzineSingleView extends StatefulWidget {
-  final String fanzineId; // Added fanzineId
+  final String fanzineId;
   final List<Map<String, dynamic>> pages;
   final Widget headerWidget;
   final ScrollController scrollController;
@@ -102,7 +102,7 @@ class _FanzineSingleViewState extends State<FanzineSingleView> {
   Widget _buildSingleColumnItem(
       int index, int pageIndex, Map<String, dynamic> pageData) {
     final imageUrl = pageData['imageUrl'] ?? '';
-    final imageId = pageData['imageId'];
+    final imageId = pageData['imageId'] as String?;
     final pageId = pageData['__id'] ?? '';
     final String pageText =
         pageData['text_processed'] ?? pageData['text'] ?? '';
@@ -110,6 +110,7 @@ class _FanzineSingleViewState extends State<FanzineSingleView> {
     final bool isTextOpen = _openTextDrawers[pageIndex] ?? false;
     final bool isCommentsOpen = _openCommentDrawers[pageIndex] ?? false;
 
+    // Use a FutureBuilder to check the master Image document for "isGame"
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -121,15 +122,38 @@ class _FanzineSingleViewState extends State<FanzineSingleView> {
                 : null,
           ),
         ),
-        SocialToolbar(
-          imageId: imageId,
-          pageId: pageId,
-          fanzineId: widget.fanzineId,
-          pageNumber: pageIndex + 1,
-          onOpenGrid: () => widget.onOpenGrid(index),
-          onToggleComments: () => _toggleCommentDrawer(pageIndex),
-          onToggleText: () => _toggleTextDrawer(pageIndex),
-        ),
+        if (imageId != null)
+          FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance.collection('images').doc(imageId).get(),
+            builder: (context, snapshot) {
+              bool isGame = false;
+              if (snapshot.hasData && snapshot.data!.exists) {
+                isGame = (snapshot.data!.data() as Map<String, dynamic>)['isGame'] == true;
+              }
+
+              return SocialToolbar(
+                imageId: imageId,
+                pageId: pageId,
+                fanzineId: widget.fanzineId,
+                pageNumber: pageIndex + 1,
+                isGame: isGame, // Passed logic
+                onOpenGrid: () => widget.onOpenGrid(index),
+                onToggleComments: () => _toggleCommentDrawer(pageIndex),
+                onToggleText: () => _toggleTextDrawer(pageIndex),
+              );
+            },
+          )
+        else
+          SocialToolbar(
+            imageId: null,
+            pageId: pageId,
+            fanzineId: widget.fanzineId,
+            pageNumber: pageIndex + 1,
+            isGame: false,
+            onOpenGrid: () => widget.onOpenGrid(index),
+            onToggleComments: () => _toggleCommentDrawer(pageIndex),
+            onToggleText: () => _toggleTextDrawer(pageIndex),
+          ),
         AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -151,7 +175,6 @@ class _FanzineSingleViewState extends State<FanzineSingleView> {
     if (text.isEmpty) {
       return Container(
           padding: const EdgeInsets.all(20),
-          // Fixed: Colors.grey[500] is nullable, shade500 is not.
           color: Colors.grey.shade500.withOpacity(0.1),
           alignment: Alignment.center,
           child: const Text("No transcription available."));

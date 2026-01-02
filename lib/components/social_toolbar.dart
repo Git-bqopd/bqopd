@@ -13,6 +13,7 @@ class SocialToolbar extends StatefulWidget {
   final String? pageId;
   final String? fanzineId;
   final int? pageNumber;
+  final bool isGame; // Added to control Terminal visibility
   final VoidCallback? onOpenGrid;
   final VoidCallback? onToggleComments;
   final VoidCallback? onToggleText;
@@ -23,6 +24,7 @@ class SocialToolbar extends StatefulWidget {
     this.pageId,
     this.fanzineId,
     this.pageNumber,
+    this.isGame = false, // Default to false
     this.onOpenGrid,
     this.onToggleComments,
     this.onToggleText,
@@ -70,6 +72,9 @@ class _SocialToolbarState extends State<SocialToolbar> {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final buttonVisibility = userProvider.socialButtonVisibility;
+
+    // Terminal is only visible if the image is marked as a game AND user hasn't hidden it
+    final bool canShowTerminal = widget.isGame && (buttonVisibility['Terminal'] == true);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -172,7 +177,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
-                if (buttonVisibility['Terminal'] == true) ...[
+                if (canShowTerminal) ...[
                   SocialActionButton(icon: Icons.terminal, label: 'Terminal', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const GameLobby()))),
                   const SizedBox(width: 16),
                 ],
@@ -203,8 +208,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
                       _DrawerItem(label: 'Text', icon: Icons.newspaper, isSelected: buttonVisibility['Text']!, onTap: () => userProvider.toggleSocialButton('Text')),
                       const SizedBox(width: 10),
                       _DrawerItem(label: 'Circulation', icon: Icons.print, isSelected: buttonVisibility['Circulation']!, onTap: () => userProvider.toggleSocialButton('Circulation')),
-                      const SizedBox(width: 10),
-                      _DrawerItem(label: 'Terminal, CA', icon: Icons.terminal, isSelected: buttonVisibility['Terminal'] ?? false, onTap: () => userProvider.toggleSocialButton('Terminal')),
+
+                      // Terminal only appears in the settings drawer if the page is actually a game
+                      if (widget.isGame) ...[
+                        const SizedBox(width: 10),
+                        _DrawerItem(label: 'Terminal, CA', icon: Icons.terminal, isSelected: buttonVisibility['Terminal'] ?? false, onTap: () => userProvider.toggleSocialButton('Terminal')),
+                      ],
                     ],
                   ),
                 ),

@@ -92,7 +92,7 @@ class _NewFanzineSingleViewState extends State<NewFanzineSingleView> {
   Widget _buildPageItem(int pageIndex, Map<String, dynamic> pageData) {
     final imageUrl = pageData['imageUrl'] as String?;
     final storagePath = pageData['storagePath'] as String?;
-    final imageId = pageData['imageId'];
+    final imageId = pageData['imageId'] as String?;
     final pageId = pageData['__id'];
     final String pageText = pageData['text_processed'] ?? pageData['text'] ?? '';
     final bool isTextOpen = _openTextDrawers[pageIndex] ?? false;
@@ -108,11 +108,32 @@ class _NewFanzineSingleViewState extends State<NewFanzineSingleView> {
         ),
         Container(
           color: Colors.white,
-          child: SocialToolbar(
-            imageId: imageId,
+          child: imageId != null
+              ? FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance.collection('images').doc(imageId).get(),
+            builder: (context, snapshot) {
+              bool isGame = false;
+              if (snapshot.hasData && snapshot.data!.exists) {
+                isGame = (snapshot.data!.data() as Map<String, dynamic>)['isGame'] == true;
+              }
+              return SocialToolbar(
+                imageId: imageId,
+                pageId: pageId,
+                fanzineId: widget.fanzineId,
+                pageNumber: pageIndex + 1,
+                isGame: isGame,
+                onOpenGrid: null,
+                onToggleComments: () => _toggleCommentDrawer(pageIndex),
+                onToggleText: () => _toggleTextDrawer(pageIndex),
+              );
+            },
+          )
+              : SocialToolbar(
+            imageId: null,
             pageId: pageId,
             fanzineId: widget.fanzineId,
             pageNumber: pageIndex + 1,
+            isGame: false,
             onOpenGrid: null,
             onToggleComments: () => _toggleCommentDrawer(pageIndex),
             onToggleText: () => _toggleTextDrawer(pageIndex),
