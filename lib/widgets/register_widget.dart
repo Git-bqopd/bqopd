@@ -19,42 +19,54 @@ class _RegisterWidgetState extends State<RegisterWidget> {
   final TextEditingController pwController = TextEditingController();
   final TextEditingController confirmPwController = TextEditingController();
 
+  bool _isLoading = false;
+
+  final FocusNode userNameFocusNode = FocusNode();
+  final FocusNode emailFocusNode = FocusNode();
+  final FocusNode pwFocusNode = FocusNode();
+  final FocusNode confirmPwFocusNode = FocusNode();
+
   @override
   void dispose() {
     userNameController.dispose();
     emailController.dispose();
     pwController.dispose();
     confirmPwController.dispose();
+    userNameFocusNode.dispose();
+    emailFocusNode.dispose();
+    pwFocusNode.dispose();
+    confirmPwFocusNode.dispose();
     super.dispose();
   }
 
   void registerUser() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
+    if (_isLoading) return;
 
     if (pwController.text != confirmPwController.text) {
-      if (mounted) Navigator.pop(context);
       displayMessageToUser("Passwords don't match!", context);
       return;
     }
 
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       UserCredential? userCredential =
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: emailController.text.trim(),
         password: pwController.text,
       );
 
       await createUserDocument(userCredential);
-
-      if (mounted) Navigator.pop(context);
-
     } on FirebaseAuthException catch (e) {
-      if (mounted) Navigator.pop(context);
       if (mounted) displayMessageToUser(e.message ?? e.code, context);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -75,7 +87,8 @@ class _RegisterWidgetState extends State<RegisterWidget> {
         'lastName': '',
       });
     } else {
-      print("Error: User credential or user was null. Document not created.");
+      debugPrint(
+          "Error: User credential or user was null. Document not created.");
     }
   }
 
@@ -96,15 +109,51 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                   const SizedBox(height: 25),
                   const Text('bqopd', style: TextStyle(fontSize: 20)),
                   const SizedBox(height: 50),
-                  MyTextField(controller: userNameController, hintText: "Username", obscureText: false),
-                  const SizedBox(height: 10),
-                  MyTextField(controller: emailController, hintText: "Email", obscureText: false),
-                  const SizedBox(height: 10),
-                  MyTextField(controller: pwController, hintText: "Password", obscureText: true),
-                  const SizedBox(height: 10),
-                  MyTextField(controller: confirmPwController, hintText: "Confirm Password", obscureText: true),
+                  Form(
+                    child: AutofillGroup(
+                      child: Column(
+                        children: [
+                          MyTextField(
+                            controller: userNameController,
+                            focusNode: userNameFocusNode,
+                            hintText: "Username",
+                            obscureText: false,
+                            autofillHints: const [AutofillHints.username],
+                          ),
+                          const SizedBox(height: 10),
+                          MyTextField(
+                            controller: emailController,
+                            focusNode: emailFocusNode,
+                            hintText: "Email",
+                            obscureText: false,
+                            autofillHints: const [AutofillHints.email],
+                          ),
+                          const SizedBox(height: 10),
+                          MyTextField(
+                            controller: pwController,
+                            focusNode: pwFocusNode,
+                            hintText: "Password",
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.newPassword],
+                          ),
+                          const SizedBox(height: 10),
+                          MyTextField(
+                            controller: confirmPwController,
+                            focusNode: confirmPwFocusNode,
+                            hintText: "Confirm Password",
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.password],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 25),
-                  MyButton(text: "Register", onTap: registerUser),
+                  MyButton(
+                    text: "Register",
+                    onTap: registerUser,
+                    isLoading: _isLoading,
+                  ),
                   const SizedBox(height: 25),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,

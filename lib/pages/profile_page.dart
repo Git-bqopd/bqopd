@@ -1,6 +1,5 @@
 import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +12,6 @@ import '../widgets/profile_widget.dart';
 import '../widgets/new_fanzine_modal.dart';
 import '../widgets/image_view_modal.dart';
 import '../widgets/login_widget.dart';
-import '../widgets/fanzine_widget.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? userId;
@@ -53,7 +51,12 @@ class _ProfilePageState extends State<ProfilePage> {
           .get();
 
       if (mentionsSnap.docs.isNotEmpty) {
-        if (mounted) setState(() { _currentIndex = 4; _isLoadingDefaults = false; }); // Default to Mentions for entities
+        if (mounted) {
+          setState(() {
+            _currentIndex = 4;
+            _isLoadingDefaults = false;
+          }); // Default to Mentions for entities
+        }
         return;
       }
 
@@ -64,7 +67,12 @@ class _ProfilePageState extends State<ProfilePage> {
           .get();
 
       if (editorSnap.docs.isNotEmpty) {
-        if (mounted) setState(() { _currentIndex = 0; _isLoadingDefaults = false; });
+        if (mounted) {
+          setState(() {
+            _currentIndex = 0;
+            _isLoadingDefaults = false;
+          });
+        }
         return;
       }
     } catch (e) {
@@ -72,7 +80,10 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     if (mounted) {
-      setState(() { _currentIndex = 5; _isLoadingDefaults = false; }); // Default to Collection
+      setState(() {
+        _currentIndex = 5;
+        _isLoadingDefaults = false;
+      }); // Default to Collection
     }
   }
 
@@ -125,14 +136,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   ProfileWidget(
                     targetUserId: targetUserId,
                     currentIndex: _currentIndex!,
-                    onTabChanged: (index) => setState(() => _currentIndex = index),
+                    onTabChanged: (index) =>
+                        setState(() => _currentIndex = index),
                   ),
-
                 const SizedBox(height: 16),
-
                 if (targetUserId != null)
-                  _buildContentGrid(targetUserId, isOwner, userProvider.isEditor),
-
+                  _buildContentGrid(
+                      targetUserId, isOwner, userProvider.isEditor),
                 const SizedBox(height: 32),
               ],
             ),
@@ -148,8 +158,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
     switch (_currentIndex) {
       case 0: // EDITOR (Created by this user)
-      // Only show if owner or checking editor status?
-      // Actually, public users should see what an Editor has created.
+        // Only show if owner or checking editor status?
+        // Actually, public users should see what an Editor has created.
         if (!isOwner && !isEditor) return const SizedBox();
         stream = FirebaseFirestore.instance
             .collection('fanzines')
@@ -178,12 +188,13 @@ class _ProfilePageState extends State<ProfilePage> {
         break;
 
       case 3: // COMMENTS
-        placeholder = const Center(child: Text("Letters of Comment functionality coming soon."));
+        placeholder = const Center(
+            child: Text("Letters of Comment functionality coming soon."));
         break;
 
       case 4: // MENTIONS (Fanzines mentioning this entity/user)
-      // CHANGED: Now querying FANZINES, not images.
-      // This acts as the "What links here" / "Appears in" tab.
+        // CHANGED: Now querying FANZINES, not images.
+        // This acts as the "What links here" / "Appears in" tab.
         stream = FirebaseFirestore.instance
             .collection('fanzines')
             .where('mentionedUsers', arrayContains: 'user:$targetUserId')
@@ -210,25 +221,35 @@ class _ProfilePageState extends State<ProfilePage> {
         if (_currentIndex == 0 && isOwner) {
           if (isEditor) {
             buttons.add(TextButton(
-                style: TextButton.styleFrom(backgroundColor: Colors.blueAccent, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
+                style: TextButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero)),
                 onPressed: () => _showNewFanzineModal(targetUserId),
-                child: const Text("make new fanzine", textAlign: TextAlign.center, style: TextStyle(color: Colors.white))
-            ));
+                child: const Text("make new fanzine",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white))));
           }
           buttons.add(TextButton(
-              style: TextButton.styleFrom(backgroundColor: Colors.grey, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
+              style: TextButton.styleFrom(
+                  backgroundColor: Colors.grey,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero)),
               onPressed: () => context.pushNamed('settings'),
-              child: const Text("settings", textAlign: TextAlign.center, style: TextStyle(color: Colors.white))
-          ));
+              child: const Text("settings",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white))));
         }
 
         // --- ERROR HANDLING START ---
         if (snapshot.hasError) {
           final errorMsg = snapshot.error.toString();
           // Check for Firestore Index requirement
-          if (errorMsg.contains('failed-precondition') || errorMsg.contains('requires an index')) {
+          if (errorMsg.contains('failed-precondition') ||
+              errorMsg.contains('requires an index')) {
             // Try to extract URL
-            final urlRegex = RegExp(r'https://console\.firebase\.google\.com[^\s]+');
+            final urlRegex =
+                RegExp(r'https://console\.firebase\.google\.com[^\s]+');
             final match = urlRegex.firstMatch(errorMsg);
             final indexUrl = match?.group(0);
 
@@ -238,9 +259,13 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text("Database Index Required", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                    const Text("Database Index Required",
+                        style: TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    const Text("To view this list sorted by date, a Firestore index is needed.", textAlign: TextAlign.center),
+                    const Text(
+                        "To view this list sorted by date, a Firestore index is needed.",
+                        textAlign: TextAlign.center),
                     if (indexUrl != null) ...[
                       const SizedBox(height: 12),
                       ElevatedButton(
@@ -248,7 +273,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: const Text("Create Index"),
                       )
                     ] else
-                      SelectableText(errorMsg, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                      SelectableText(errorMsg,
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.grey)),
                   ],
                 ),
               ),
@@ -258,12 +285,17 @@ class _ProfilePageState extends State<ProfilePage> {
         }
         // --- ERROR HANDLING END ---
 
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
         final docs = snapshot.data ?? [];
         final totalItems = buttons.length + docs.length;
 
-        if (totalItems == 0) return const SizedBox(height: 100, child: Center(child: Text("No items found.")));
+        if (totalItems == 0) {
+          return const SizedBox(
+              height: 100, child: Center(child: Text("No items found.")));
+        }
 
         return GridView.builder(
           shrinkWrap: true,
@@ -285,7 +317,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // Logic for displaying Fanzine Covers
             // Apply for Tab 0 (Editor), Tab 2 (Works), and Tab 4 (Mentions)
-            if (_currentIndex == 0 || _currentIndex == 2 || _currentIndex == 4) {
+            if (_currentIndex == 0 ||
+                _currentIndex == 2 ||
+                _currentIndex == 4) {
               return _FanzineCoverTile(
                 fanzineId: docId,
                 title: data['title'] ?? 'Untitled',
@@ -296,20 +330,21 @@ class _ProfilePageState extends State<ProfilePage> {
               if (imageUrl == null || imageUrl.isEmpty) return const SizedBox();
               return GestureDetector(
                 onTap: () {
-                  showDialog(context: context, builder: (_) => ImageViewModal(
-                      imageUrl: imageUrl!,
-                      imageText: data['text'],
-                      shortCode: data['shortCode'],
-                      imageId: docId
-                  ));
+                  showDialog(
+                      context: context,
+                      builder: (_) => ImageViewModal(
+                          imageUrl: imageUrl,
+                          imageText: data['text'],
+                          shortCode: data['shortCode'],
+                          imageId: docId));
                 },
                 child: ClipRect(
                     child: Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                    )
-                ),
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Center(
+                      child: Icon(Icons.broken_image, color: Colors.grey)),
+                )),
               );
             }
           },
@@ -356,17 +391,19 @@ class _FanzineCoverTile extends StatelessWidget {
 
         if (storagePath != null && storagePath.toString().isNotEmpty) {
           try {
-            return await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
+            return await FirebaseStorage.instance
+                .ref(storagePath)
+                .getDownloadURL();
           } catch (e) {
             // Fallback if storage access fails
-            print("Storage access failed for $storagePath: $e");
+            debugPrint("Storage access failed for $storagePath: $e");
           }
         }
 
         return data['imageUrl'];
       }
     } catch (e) {
-      print("Error fetching cover for $fanzineId: $e");
+      debugPrint("Error fetching cover for $fanzineId: $e");
     }
     return null;
   }
@@ -385,7 +422,10 @@ class _FanzineCoverTile extends StatelessWidget {
               color: Colors.white,
               border: Border.all(color: Colors.black12),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2))
               ],
             ),
             child: Stack(
@@ -396,17 +436,22 @@ class _FanzineCoverTile extends StatelessWidget {
                     imageUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
-                      return const Center(child: Column(
+                      return const Center(
+                          child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.broken_image, size: 40, color: Colors.grey),
-                          Text("Err", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                          Icon(Icons.broken_image,
+                              size: 40, color: Colors.grey),
+                          Text("Err",
+                              style:
+                                  TextStyle(fontSize: 10, color: Colors.grey)),
                         ],
                       ));
                     },
                   )
                 else
-                  const Center(child: Icon(Icons.book, size: 40, color: Colors.grey)),
+                  const Center(
+                      child: Icon(Icons.book, size: 40, color: Colors.grey)),
 
                 // Gradient for text readability
                 Positioned(
@@ -418,13 +463,19 @@ class _FanzineCoverTile extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
-                        colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                        colors: [
+                          Colors.black.withValues(alpha: 0.8),
+                          Colors.transparent
+                        ],
                       ),
                     ),
                     padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
                     child: Text(
                       title,
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,

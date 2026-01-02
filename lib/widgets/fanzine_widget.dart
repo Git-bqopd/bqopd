@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-
+import '../services/view_service.dart';
 import 'login_widget.dart';
 
 class FanzineWidget extends StatefulWidget {
@@ -17,6 +17,7 @@ class FanzineWidget extends StatefulWidget {
 
 class _FanzineWidgetState extends State<FanzineWidget> {
   User? get currentUser => FirebaseAuth.instance.currentUser;
+  final ViewService _viewService = ViewService();
 
   final PageController _pageController = PageController();
   int _currentPage = 0;
@@ -26,7 +27,8 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   bool _isLoadingData = true;
   bool _showLoginLink = false;
 
-  List<Widget> _pages = [];
+  Map<String, dynamic>? _fanzineData;
+  String? _fanzineId;
 
   @override
   void initState() {
@@ -68,7 +70,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         return;
       }
 
-      // Check Real Auth (Not Anonymous)
+      _fanzineId = query.docs.first.id;
+      _fanzineData = query.docs.first.data();
+
+      // Check Real Auth
       final isRealUser = currentUser != null && !currentUser!.isAnonymous;
 
       if (!isRealUser) {
@@ -77,35 +82,17 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         _targetShortCode = null;
       } else {
         _showLoginLink = false;
-        try {
-          final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
-          if (userDoc.exists) {
-            final myUsername = userDoc.data()?['username'] ?? 'user';
-            _displayUrl = 'bqopd.com/$myUsername';
-            _targetShortCode = myUsername; // Target my username
-          } else {
-            _displayUrl = 'bqopd.com/user';
-            _targetShortCode = null;
-          }
-        } catch (e) {
-          _displayUrl = 'bqopd.com/home';
-          _targetShortCode = null;
-        }
+        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
+        final myUsername = userDoc.data()?['username'] ?? 'user';
+        _displayUrl = 'bqopd.com/$myUsername';
+        _targetShortCode = myUsername;
       }
-
-      _pages = [
-        const Center(child: Text('Indicia (Public View)')),
-        const Center(child: Text('Creators (Public View)')),
-        const Center(child: Text('Stats (Public View)')),
-      ];
-
     } catch (e) {
       _displayUrl = 'bqopd.com/error';
     }
   }
 
   Future<void> _loadDashboard() async {
-    // Only load Dashboard for real users
     if (currentUser == null || currentUser!.isAnonymous) {
       _displayUrl = 'Login or Register';
       _showLoginLink = true;
@@ -113,26 +100,12 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     }
 
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('Users')
-          .doc(currentUser!.uid)
-          .get();
-
+      final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
       if (userDoc.exists) {
-        final data = userDoc.data()!;
-        final username = data['username'] as String?;
-        if (username != null && username.isNotEmpty) {
-          _displayUrl = 'bqopd.com/$username';
-          _targetShortCode = username; // Target my username
-        }
+        final username = userDoc.data()?['username'] as String?;
+        _displayUrl = 'bqopd.com/$username';
+        _targetShortCode = username;
       }
-
-      _pages = [
-        const Center(child: Text('Your Fanzine Dashboard')),
-        const Center(child: Text('Manage Creators')),
-        const Center(child: Text('View Stats')),
-      ];
-
     } catch (e) {
       print("Error loading dashboard: $e");
     }
@@ -146,25 +119,14 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
             child: LoginWidget(
-              onTap: () {
-                Navigator.pop(context);
-                context.go('/register');
-              },
-              onLoginSuccess: () {
-                Navigator.pop(context);
-                // Reload data to reflect new auth state
-                _loadData();
-              },
+              onTap: () { Navigator.pop(context); context.go('/register'); },
+              onLoginSuccess: () { Navigator.pop(context); _loadData(); },
             ),
           ),
         ),
       );
     } else if (_targetShortCode != null) {
-      // NAVIGATE TO VANITY URL
-      context.goNamed(
-        'shortlink',
-        pathParameters: {'code': _targetShortCode!},
-      );
+      context.goNamed('shortlink', pathParameters: {'code': _targetShortCode!});
     }
   }
 
@@ -183,9 +145,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     );
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF1B255),
-      ),
+      decoration: const BoxDecoration(color: Color(0xFFF1B255)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: _isLoadingData
@@ -199,8 +159,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                 text: TextSpan(
                   text: _displayUrl,
                   style: linkStyle,
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = _handleLinkTap,
+                  recognizer: TapGestureRecognizer()..onTap = _handleLinkTap,
                 ),
               ),
             ),
@@ -224,12 +183,12 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             Expanded(
               child: PageView(
                 controller: _pageController,
-                onPageChanged: (index) {
-                  setState(() { _currentPage = index; });
-                },
-                children: _pages.isEmpty
-                    ? [const Center(child: Text("Loading..."))]
-                    : _pages,
+                onPageChanged: (index) => setState(() => _currentPage = index),
+                children: [
+                  _buildIndiciaTab(),
+                  _buildCreatorsTab(),
+                  _buildStatsTab(),
+                ],
               ),
             ),
           ],
@@ -238,30 +197,79 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     );
   }
 
-  Widget _buildTab(String text, int index) {
-    return GestureDetector(
-      onTap: () {
-        _pageController.animateToPage(
-          index,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-      },
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: _currentPage == index ? FontWeight.bold : FontWeight.normal,
-          color: _currentPage == index ? Colors.black : Colors.black54,
-        ),
+  Widget _buildIndiciaTab() {
+    if (_fanzineData == null) return const Center(child: Text("Indicia pending curation."));
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_fanzineData!['title'] ?? 'Untitled', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          const SizedBox(height: 4),
+          Text("Status: ${_fanzineData!['status']}", style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.black54)),
+          if (_fanzineData!['creationDate'] != null)
+            Text("Archived: ${(_fanzineData!['creationDate'] as Timestamp).toDate().year}"),
+          const SizedBox(height: 8),
+          const Text("Detailed volume/issue information coming soon.", style: TextStyle(fontSize: 12, color: Colors.black45)),
+        ],
       ),
     );
   }
 
-  Widget _buildTabSeparator() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: Text('|', style: TextStyle(fontSize: 16, color: Colors.black54)),
+  Widget _buildCreatorsTab() {
+    final mentions = List<String>.from(_fanzineData?['mentionedUsers'] ?? []);
+    if (mentions.isEmpty) return const Center(child: Text("No verified entities found yet."));
+
+    return ListView.builder(
+      itemCount: mentions.length,
+      itemBuilder: (context, index) {
+        final parts = mentions[index].split(':');
+        final uid = parts.last;
+        return FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
+          builder: (context, snap) {
+            if (!snap.hasData) return const SizedBox();
+            final data = snap.data!.data() as Map<String, dynamic>?;
+            final name = data != null ? "${data['firstName']} ${data['lastName']}".trim() : 'Unknown Entity';
+            final username = data?['username'] ?? uid;
+            return ListTile(
+              dense: true,
+              leading: const Icon(Icons.verified_user, size: 16, color: Colors.indigo),
+              title: Text(name.isNotEmpty ? name : '@$username'),
+              onTap: () => context.go('/$username'),
+            );
+          },
+        );
+      },
     );
   }
+
+  Widget _buildStatsTab() {
+    if (_fanzineId == null) return const Center(child: Text("Engagement stats loading..."));
+    return FutureBuilder<int>(
+      future: _viewService.getViewCount(contentId: _fanzineId!, contentType: 'fanzines'),
+      builder: (context, snap) {
+        final views = snap.data ?? 0;
+        final pages = _fanzineData?['pageCount'] ?? 0;
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("$views", style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+            const Text("TOTAL VIEWS", style: TextStyle(fontSize: 10, letterSpacing: 1)),
+            const SizedBox(height: 16),
+            Text("$pages", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text("PAGES", style: TextStyle(fontSize: 10, letterSpacing: 1)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTab(String text, int index) {
+    return GestureDetector(
+      onTap: () => _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut),
+      child: Text(text, style: TextStyle(fontSize: 16, fontWeight: _currentPage == index ? FontWeight.bold : FontWeight.normal, color: _currentPage == index ? Colors.black : Colors.black54)),
+    );
+  }
+
+  Widget _buildTabSeparator() => const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text('|', style: TextStyle(fontSize: 16, color: Colors.black54)));
 }

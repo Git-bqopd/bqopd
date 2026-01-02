@@ -7,7 +7,7 @@ class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -40,7 +40,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadSettings() async {
     try {
-      final doc = await _firestore.collection('app_settings').doc('main_settings').get();
+      final doc = await _firestore
+          .collection('app_settings')
+          .doc('main_settings')
+          .get();
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
         _loginZineController.text = data['login_zine_shortcode'] ?? '';
@@ -83,7 +86,9 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
 
-    setState(() { _isCreatingProfile = true; });
+    setState(() {
+      _isCreatingProfile = true;
+    });
     Navigator.of(context).pop();
 
     try {
@@ -103,14 +108,18 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       }
     } catch (e) {
-      print("Managed Profile Creation Error: $e"); // Debug print
+      debugPrint("Managed Profile Creation Error: $e"); // Debug print
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error creating profile: $e')),
         );
       }
     } finally {
-      if (mounted) setState(() { _isCreatingProfile = false; });
+      if (mounted) {
+        setState(() {
+          _isCreatingProfile = false;
+        });
+      }
     }
   }
 
@@ -123,21 +132,25 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("Create a profile for a historical figure or estate that you will manage."),
+              const Text(
+                  "Create a profile for a historical figure or estate that you will manage."),
               const SizedBox(height: 16),
               TextField(
                 controller: _firstNameController,
-                decoration: const InputDecoration(labelText: "First Name", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: "First Name", border: OutlineInputBorder()),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _lastNameController,
-                decoration: const InputDecoration(labelText: "Last Name", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: "Last Name", border: OutlineInputBorder()),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _bioController,
-                decoration: const InputDecoration(labelText: "Bio (Optional)", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: "Bio (Optional)", border: OutlineInputBorder()),
                 maxLines: 2,
               ),
             ],
@@ -221,13 +234,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
               if (currentUser != null)
                 StreamBuilder<QuerySnapshot>(
-                  stream: _firestore.collection('Users')
+                  stream: _firestore
+                      .collection('Users')
                       .where('isManaged', isEqualTo: true)
                       .where('managers', arrayContains: currentUser.uid)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    if (snapshot.hasError) return Text('Error: ${snapshot.error}');
-                    if (snapshot.connectionState == ConnectionState.waiting) return const CircularProgressIndicator();
+                    if (snapshot.hasError) {
+                      return Text('Error: ${snapshot.error}');
+                    }
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const CircularProgressIndicator();
+                    }
 
                     final docs = snapshot.data?.docs ?? [];
 
@@ -244,7 +262,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     return GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         childAspectRatio: 2.5, // Wide cards
                         crossAxisSpacing: 10,
@@ -254,7 +273,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       itemBuilder: (context, index) {
                         final data = docs[index].data() as Map<String, dynamic>;
                         final name = "${data['firstName']} ${data['lastName']}";
-                        final managers = List<String>.from(data['managers'] ?? []);
+                        final managers =
+                            List<String>.from(data['managers'] ?? []);
                         final username = data['username'] ?? 'No handle';
 
                         return Card(
@@ -267,13 +287,16 @@ class _SettingsPageState extends State<SettingsPage> {
                               children: [
                                 Text(
                                   name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
                                   "@$username",
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey[600], fontSize: 12),
                                 ),
                                 const Spacer(),
                                 Text(

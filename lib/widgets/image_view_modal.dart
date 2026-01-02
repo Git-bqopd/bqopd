@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../components/social_toolbar.dart'; // Updated import
 
 class ImageViewModal extends StatefulWidget {
@@ -39,16 +37,6 @@ class _ImageViewModalState extends State<ImageViewModal> {
       _showText = !_showText;
       _showComments = false;
       _showShortCode = false;
-    });
-  }
-
-  // NOTE: ShortCode toggle isn't in the standard social row yet,
-  // but we can keep it here or eventually integrate it.
-  void _toggleShortCode() {
-    setState(() {
-      _showShortCode = !_showShortCode;
-      _showComments = false;
-      _showText = false;
     });
   }
 
@@ -98,7 +86,8 @@ class _ImageViewModalState extends State<ImageViewModal> {
                 elevation: 1,
                 color: Colors.white,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: SocialToolbar(
                     imageId: widget.imageId,
                     onToggleComments: _toggleComments,
@@ -133,7 +122,8 @@ class _ImageViewModalState extends State<ImageViewModal> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_showComments) ...[
-              const Text('Comments', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text('Comments',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               const TextField(
                 maxLines: null,
@@ -154,7 +144,8 @@ class _ImageViewModalState extends State<ImageViewModal> {
             // Keep ShortCode display for now if triggered manually,
             // though SocialToolbar doesn't trigger it yet.
             if (_showShortCode) ...[
-              const Text('Short Code', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text('Short Code',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               SelectableText(
                 widget.shortCode != null

@@ -25,7 +25,7 @@ class _CombatTerminalState extends State<CombatTerminal> {
   final ScrollController _scrollController = ScrollController();
   final GameService _service = GameService();
 
-  List<String> _log = [];
+  final List<String> _log = [];
   bool _isPlayback = false;
   bool _isGameOver = false;
   bool _isAutoCombat = false; // Flag to prevent multiple loops
@@ -49,14 +49,16 @@ class _CombatTerminalState extends State<CombatTerminal> {
       _print("Connected to sector 7G...");
       _print("Target acquired: ${widget.enemyChar!.name} (Level 1)");
       _print("Type 'kill' to initiate auto-combat.");
-      _print("Your status: HP $_playerHp/${widget.playerChar!.maxHp} | STR ${widget.playerChar!.str}");
+      _print(
+          "Your status: HP $_playerHp/${widget.playerChar!.maxHp} | STR ${widget.playerChar!.str}");
     }
   }
 
   void _startPlayback() async {
     _print("--- REPLAYING COMBAT LOG ---");
     for (String line in widget.playbackLogs!) {
-      await Future.delayed(const Duration(milliseconds: 800)); // Cinematic delay
+      await Future.delayed(
+          const Duration(milliseconds: 800)); // Cinematic delay
       if (!mounted) return;
       _print(line);
     }
@@ -230,7 +232,11 @@ class _CombatTerminalState extends State<CombatTerminal> {
       backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text("TERMINAL, CA", style: TextStyle(fontFamily: 'Courier', color: terminalGreen, fontWeight: FontWeight.bold)),
+        title: const Text("TERMINAL, CA",
+            style: TextStyle(
+                fontFamily: 'Courier',
+                color: terminalGreen,
+                fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: terminalGreen),
         elevation: 0,
       ),
@@ -242,7 +248,8 @@ class _CombatTerminalState extends State<CombatTerminal> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border.all(color: terminalGreen.withOpacity(0.3), width: 2),
+                border: Border.all(
+                    color: terminalGreen.withValues(alpha: 0.3), width: 2),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -282,12 +289,20 @@ class _CombatTerminalState extends State<CombatTerminal> {
               color: Colors.black,
               child: Row(
                 children: [
-                  const Text(">", style: TextStyle(color: terminalGreen, fontFamily: 'Courier', fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text(">",
+                      style: TextStyle(
+                          color: terminalGreen,
+                          fontFamily: 'Courier',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
                       controller: _inputController,
-                      style: const TextStyle(color: terminalGreen, fontFamily: 'Courier', fontSize: 16),
+                      style: const TextStyle(
+                          color: terminalGreen,
+                          fontFamily: 'Courier',
+                          fontSize: 16),
                       cursorColor: cursorColor,
                       decoration: const InputDecoration(
                         border: InputBorder.none,
@@ -303,7 +318,9 @@ class _CombatTerminalState extends State<CombatTerminal> {
                   if (_isGameOver)
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text("EXIT", style: TextStyle(color: Colors.red, fontFamily: 'Courier')),
+                      child: const Text("EXIT",
+                          style: TextStyle(
+                              color: Colors.red, fontFamily: 'Courier')),
                     )
                 ],
               ),

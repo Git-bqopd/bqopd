@@ -24,7 +24,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
   bool _isVanityEligible(User? user) {
     if (user == null || user.email == null) return false;
 
-    // Check for your specific email or any "bqopd" email
+    // Check for specific email or any "bqopd" email
     return user.email == 'kevin@712liberty.com' ||
         user.email!.contains('bqopd');
   }
@@ -53,7 +53,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
 
       final newFanzineRef = FirebaseFirestore.instance.collection('fanzines').doc();
 
-      // Pass the isVanity flag to our new generator
+      // Pass the isVanity flag to our generator
       final String? shortCode = await assignShortcode(
         FirebaseFirestore.instance,
         'fanzine',
@@ -62,13 +62,19 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
       );
 
       if (shortCode != null) {
+        // Updated payload to match bqopd Design Document
         await newFanzineRef.set({
           'title': title,
           'editorId': editorId,
-          'status': 'draft', // <--- ADDED: Sets status to draft immediately
+          'status': 'draft',
+          'processingStatus': 'idle', // Explicitly set pipeline state
           'creationDate': FieldValue.serverTimestamp(),
-          'shortCode': shortCode, // Saves "N7bqopd4" (Display version)
-          'shortCodeKey': shortCode.toUpperCase(), // Normalized key for searching
+          'shortCode': shortCode,
+          'shortCodeKey': shortCode.toUpperCase(),
+          'twoPage': false, // Placeholder for future layout engine
+          'mentionedUsers': [], // Initialize empty verified list
+          'draftEntities': [], // Initialize empty raw detection list
+          'isSoftPublished': false,
         });
 
         if (mounted) {

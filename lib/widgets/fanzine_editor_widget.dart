@@ -22,7 +22,10 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('fanzines')
+          .doc(widget.fanzineId)
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -39,7 +42,7 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
             borderRadius: BorderRadius.circular(12.0),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 spreadRadius: 1,
                 blurRadius: 5,
                 offset: const Offset(0, 3),
@@ -50,7 +53,9 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // First Row: Title
-              Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8.0),
 
               // Second Row: Add Page
@@ -109,9 +114,11 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
         .get();
 
     if (imageQuery.docs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Image not found.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image not found.')),
+        );
+      }
       return;
     }
 
@@ -146,10 +153,7 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
         .collection('pages')
         .add(pageData);
 
-    await FirebaseFirestore.instance
-        .collection('images')
-        .doc(imageId)
-        .update({
+    await FirebaseFirestore.instance.collection('images').doc(imageId).update({
       'usedInFanzines': FieldValue.arrayUnion([widget.fanzineId])
     });
 

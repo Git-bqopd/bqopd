@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/user_provider.dart';
 import '../components/button.dart';
 import '../components/textfield.dart';
 import '../services/user_bootstrap.dart';
@@ -24,12 +26,16 @@ class LoginWidget extends StatefulWidget {
 class _LoginWidgetState extends State<LoginWidget> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final FocusNode emailFocusNode = FocusNode();
+  final FocusNode passwordFocusNode = FocusNode();
   bool _isLoading = false;
 
   void login() async {
     if (_isLoading) return;
-    setState(() { _isLoading = true; });
-    FocusScope.of(context).unfocus();
+    setState(() {
+      _isLoading = true;
+    });
+    // Removed FocusScope.of(context).unfocus(); as it can trigger assertions on Web
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -41,14 +47,15 @@ class _LoginWidgetState extends State<LoginWidget> {
       if (widget.onLoginSuccess != null) {
         widget.onLoginSuccess!();
       }
-
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         displayMessageToUser(e.message ?? e.code, context);
       }
     } finally {
       if (mounted) {
-        setState(() { _isLoading = false; });
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -57,6 +64,8 @@ class _LoginWidgetState extends State<LoginWidget> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
+    emailFocusNode.dispose();
+    passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -65,7 +74,8 @@ class _LoginWidgetState extends State<LoginWidget> {
     // 1. The "Envelope" (Manilla Background)
     return Container(
       color: const Color(0xFFF1B255), // Manilla Envelope Color
-      padding: const EdgeInsets.all(24.0), // Padding = The visible envelope edge
+      padding:
+          const EdgeInsets.all(24.0), // Padding = The visible envelope edge
       child: Center(
         child: AspectRatio(
           // 2. The "Sticker" Shape (5:8)
@@ -73,10 +83,11 @@ class _LoginWidgetState extends State<LoginWidget> {
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white, // Sticker Color
-              borderRadius: BorderRadius.circular(12.0), // Rounded corners for sticker
+              borderRadius:
+                  BorderRadius.circular(12.0), // Rounded corners for sticker
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -99,16 +110,28 @@ class _LoginWidgetState extends State<LoginWidget> {
                       const SizedBox(height: 10),
                       const Text('bqopd', style: TextStyle(fontSize: 16)),
                       const SizedBox(height: 20),
-                      MyTextField(
-                        controller: emailController,
-                        hintText: "Email",
-                        obscureText: false,
-                      ),
-                      const SizedBox(height: 10),
-                      MyTextField(
-                        controller: passwordController,
-                        hintText: "Password",
-                        obscureText: true,
+                      Form(
+                        child: AutofillGroup(
+                          child: Column(
+                            children: [
+                              MyTextField(
+                                controller: emailController,
+                                focusNode: emailFocusNode,
+                                hintText: "Email",
+                                obscureText: false,
+                                autofillHints: const [AutofillHints.email],
+                              ),
+                              const SizedBox(height: 10),
+                              MyTextField(
+                                controller: passwordController,
+                                focusNode: passwordFocusNode,
+                                hintText: "Password",
+                                obscureText: true,
+                                autofillHints: const [AutofillHints.password],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -116,24 +139,47 @@ class _LoginWidgetState extends State<LoginWidget> {
                         children: [
                           GestureDetector(
                             onTap: () {
-                              displayMessageToUser("Forgot Password Tapped (Not Implemented)", context);
+                              displayMessageToUser(
+                                  "Forgot Password Tapped (Not Implemented)",
+                                  context);
                             },
                             child: const Text(
                               "Forgot password?",
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 25),
-                      _isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : MyButton(text: "Login", onTap: login),
+                      MyButton(
+                        text: "Login",
+                        onTap: login,
+                        isLoading: _isLoading,
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: () {
+                          Provider.of<UserProvider>(context, listen: false)
+                              .enableDevBypass();
+                          if (widget.onLoginSuccess != null) {
+                            widget.onLoginSuccess!();
+                          } else {
+                            // If no callback, router will handle redirect
+                            // via refreshListenable
+                          }
+                        },
+                        child: const Text("Dev Auth Bypass (Testing Only)",
+                            style: TextStyle(
+                                color: Colors.indigo,
+                                fontWeight: FontWeight.bold)),
+                      ),
                       const SizedBox(height: 25),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("Not cool yet?", style: TextStyle(fontSize: 12)),
+                          const Text("Not cool yet?",
+                              style: TextStyle(fontSize: 12)),
                           const SizedBox(width: 4),
                           GestureDetector(
                             onTap: widget.onTap,

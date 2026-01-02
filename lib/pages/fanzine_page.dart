@@ -9,8 +9,8 @@ import '../utils/fanzine_single_view.dart';
 import '../widgets/fanzine_widget.dart';
 
 class FanzinePage extends StatefulWidget {
-  final String? fanzineId; // Optional: If passed directly
-  final String? shortCode; // Optional: If passed directly
+  final String? fanzineId;
+  final String? shortCode;
 
   const FanzinePage({
     super.key,
@@ -25,15 +25,13 @@ class FanzinePage extends StatefulWidget {
 class _FanzinePageState extends State<FanzinePage> {
   final ViewService _viewService = ViewService();
 
-  // State
-  bool _isSingleColumn = false; // True = 1 col (Feed), False = 2 cols (Grid)
+  bool _isSingleColumn = false;
   int _targetIndex = 0;
   List<Map<String, dynamic>> _pages = [];
   bool _isLoading = true;
   String? _resolvedFanzineId;
   String? _resolvedShortCode;
 
-  // Scroll Controller
   ScrollController? _scrollController;
 
   @override
@@ -49,29 +47,24 @@ class _FanzinePageState extends State<FanzinePage> {
   }
 
   Future<void> _initData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     String? targetShortCode = widget.shortCode;
     String? targetId = widget.fanzineId;
 
-    // 1. Resolve Shortcode/ID if not passed explicitly
     if (targetShortCode == null && targetId == null) {
       final user = FirebaseAuth.instance.currentUser;
-      // IMPORTANT: Ignore anonymous users for "My Dashboard" logic
       if (user != null && !user.isAnonymous) {
-        // Logged In (Real User) -> Check User Doc
         final userDoc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
         targetShortCode = userDoc.data()?['newFanzine'];
       } else {
-        // Public / Anon -> Check App Settings for Landing Zine
         final settings = await FirebaseFirestore.instance.collection('app_settings').doc('main_settings').get();
         targetShortCode = settings.data()?['login_zine_shortcode'];
       }
     }
 
-    // 2. Resolve ID from Shortcode if needed
     if (targetId == null && targetShortCode != null) {
-      // Try 'fanzines' collection first
       final fanzineQuery = await FirebaseFirestore.instance
           .collection('fanzines')
           .where('shortCode', isEqualTo: targetShortCode)
@@ -81,8 +74,7 @@ class _FanzinePageState extends State<FanzinePage> {
       if (fanzineQuery.docs.isNotEmpty) {
         targetId = fanzineQuery.docs.first.id;
       } else {
-        // Fallback: Check 'shortcodes' collection
-        final scDoc = await FirebaseFirestore.instance.collection('shortcodes').doc(targetShortCode).get();
+        final scDoc = await FirebaseFirestore.instance.collection('shortcodes').doc(targetShortCode.toUpperCase()).get();
         if (scDoc.exists && scDoc.data()?['type'] == 'fanzine') {
           targetId = scDoc.data()?['contentId'];
         }
@@ -92,13 +84,30 @@ class _FanzinePageState extends State<FanzinePage> {
     _resolvedFanzineId = targetId;
     _resolvedShortCode = targetShortCode;
 
-    // 3. Load Pages if we found an ID
     if (_resolvedFanzineId != null) {
       await _loadPages(_resolvedFanzineId!);
+      _processDeepLink(); // ADDED: Jump to specific page if fragment exists
       _updateUrlIfNeeded();
     } else {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Parses the URL fragment (e.g. #p12) and sets the target scroll index.
+  void _processDeepLink() {
+    try {
+      final router = GoRouter.of(context);
+      final fragment = router.routerDelegate.currentConfiguration.uri.fragment;
+      if (fragment.startsWith('p')) {
+        final pageNum = int.tryParse(fragment.substring(1));
+        if (pageNum != null && pageNum > 0) {
+          setState(() {
+            _targetIndex = pageNum; // 0 is header, so p1 is index 1
+            _isSingleColumn = true; // Auto-expand if deep-linked to specific page
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadPages(String fanzineId) async {
@@ -128,7 +137,6 @@ class _FanzinePageState extends State<FanzinePage> {
         });
       }
     } catch (e) {
-      print("Error loading pages: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -139,12 +147,7 @@ class _FanzinePageState extends State<FanzinePage> {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-
-          // If we are currently at a "user" URL (like /bqopd) but displaying a Fanzine (QrNsbYA),
-          // or if we are at root /, update the URL to match the content.
           if (!currentLoc.contains(_resolvedShortCode!)) {
-            // Use 'go' here to ensure the router stack is fully reset to match the target route.
-            // This solves issues where imperative pushes might obscure the declarative route update.
             context.go('/$_resolvedShortCode');
           }
         } catch (_) {}
@@ -199,12 +202,12 @@ class _FanzinePageState extends State<FanzinePage> {
         final rowIndex = (_targetIndex / crossAxisCount).floor();
         final initialOffset = rowIndex * rowHeight;
 
-        // Dispose previous controller to prevent attaching to multiple scrolls
         _scrollController?.dispose();
         _scrollController = ScrollController(initialScrollOffset: initialOffset);
 
         if (_isSingleColumn) {
           return FanzineSingleView(
+            fanzineId: _resolvedFanzineId ?? '',
             pages: _pages,
             headerWidget: headerWidget,
             scrollController: _scrollController!,
@@ -217,7 +220,6 @@ class _FanzinePageState extends State<FanzinePage> {
             },
           );
         } else {
-          // Inline Grid Logic (or move to fanzine_grid_view.dart in future)
           return GridView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.all(padding),
@@ -230,7 +232,6 @@ class _FanzinePageState extends State<FanzinePage> {
             itemCount: _pages.length + 1,
             itemBuilder: (context, index) {
               if (index == 0) return headerWidget;
-
               final pageIndex = index - 1;
               final pageData = _pages[pageIndex];
               final imageUrl = pageData['imageUrl'] ?? '';
@@ -244,12 +245,8 @@ class _FanzinePageState extends State<FanzinePage> {
                   _recordViewForIndex(index);
                 },
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: imageUrl.isEmpty ? Colors.grey[300] : Colors.white,
-                  ),
-                  child: imageUrl.isNotEmpty
-                      ? Image.network(imageUrl, fit: BoxFit.contain)
-                      : null,
+                  decoration: BoxDecoration(color: imageUrl.isEmpty ? Colors.grey[300] : Colors.white),
+                  child: imageUrl.isNotEmpty ? Image.network(imageUrl, fit: BoxFit.contain) : null,
                 ),
               );
             },

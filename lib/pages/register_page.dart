@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../widgets/register_widget.dart';
 
 class RegisterPage extends StatelessWidget {
-
   const RegisterPage({super.key});
 
   @override
@@ -23,7 +22,7 @@ class RegisterPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     spreadRadius: 1,
                     blurRadius: 5,
                     offset: const Offset(0, 3),

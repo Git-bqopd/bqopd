@@ -18,7 +18,8 @@ class CuratorDashboardPage extends StatefulWidget {
   State<CuratorDashboardPage> createState() => _CuratorDashboardPageState();
 }
 
-class _CuratorDashboardPageState extends State<CuratorDashboardPage> with SingleTickerProviderStateMixin {
+class _CuratorDashboardPageState extends State<CuratorDashboardPage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isUploading = false;
 
@@ -53,13 +54,19 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
 
         if (fileBytes != null) {
           // Upload to Firebase Storage
-          final storageRef = FirebaseStorage.instance.ref().child('uploads/raw_pdfs/$fileName');
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('uploads/raw_pdfs/$fileName');
 
           // Metadata for the trigger
           final metadata = SettableMetadata(
             contentType: 'application/pdf',
             customMetadata: {
-              'uploaderId': Provider.of<UserProvider>(context, listen: false).currentUserId ?? 'unknown',
+              'uploaderId': mounted
+                  ? Provider.of<UserProvider>(context, listen: false)
+                          .currentUserId ??
+                      'unknown'
+                  : 'unknown',
               'originalName': fileName,
             },
           );
@@ -68,7 +75,8 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Uploaded "$fileName". Processing started...')),
+              SnackBar(
+                  content: Text('Uploaded "$fileName". Processing started...')),
             );
           }
         }
@@ -86,10 +94,18 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
 
   Future<void> _rescanFanzine(String fanzineId) async {
     try {
-      await FirebaseFunctions.instance.httpsCallable('rescan_fanzine').call({'fanzineId': fanzineId});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Rescan Triggered. Scheduler bot notified.")));
+      await FirebaseFunctions.instance
+          .httpsCallable('rescan_fanzine')
+          .call({'fanzineId': fanzineId});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Rescan Triggered. Scheduler bot notified.")));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
@@ -100,8 +116,12 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
         title: const Text("Delete Fanzine?"),
         content: const Text("This will remove all images and data."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text("Delete", style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -109,17 +129,27 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
     if (confirm != true) return;
 
     try {
-      await FirebaseFunctions.instance.httpsCallable('delete_fanzine').call({'fanzineId': fanzineId});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Deleted.")));
+      await FirebaseFunctions.instance
+          .httpsCallable('delete_fanzine')
+          .call({'fanzineId': fanzineId});
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Deleted.")));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    if (!userProvider.isEditor) return const Scaffold(body: Center(child: Text("Access Denied.")));
+    if (!userProvider.isEditor) {
+      return const Scaffold(body: Center(child: Text("Access Denied.")));
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -152,12 +182,17 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
               ElevatedButton.icon(
                 onPressed: _isUploading ? null : _uploadPdf,
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
                 ),
                 icon: _isUploading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.upload_file),
                 label: Text(_isUploading ? "Uploading..." : "Upload PDF"),
               ),
@@ -187,11 +222,18 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
           .orderBy('creationDate', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}"));
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("No drafts to review. Upload a PDF to start."));
+        if (docs.isEmpty) {
+          return const Center(
+              child: Text("No drafts to review. Upload a PDF to start."));
+        }
 
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -208,52 +250,54 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
               final id = doc.id;
 
               return DataRow(cells: [
-                DataCell(
-                    SizedBox(
-                      width: 250,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(data['title'] ?? 'Untitled', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                          Text("ID: $id", style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey)),
-                        ],
-                      ),
-                    )
-                ),
-                DataCell(
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(data['processingStatus'] ?? 'idle', style: const TextStyle(fontSize: 12)),
-                    )
-                ),
+                DataCell(SizedBox(
+                  width: 250,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(data['title'] ?? 'Untitled',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis),
+                      Text("ID: $id",
+                          style: const TextStyle(
+                              fontSize: 10,
+                              fontStyle: FontStyle.italic,
+                              color: Colors.grey)),
+                    ],
+                  ),
+                )),
+                DataCell(Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(data['processingStatus'] ?? 'idle',
+                      style: const TextStyle(fontSize: 12)),
+                )),
                 DataCell(_ErrorCounter(fanzineId: id)),
-                DataCell(
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.refresh, color: Colors.blue),
-                          tooltip: "Rescan",
-                          onPressed: () => _rescanFanzine(id),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () => context.push('/workbench/$id'),
-                          child: const Text("Workbench"),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          tooltip: "Delete",
-                          onPressed: () => _deleteFanzine(id),
-                        ),
-                      ],
-                    )
-                ),
+                DataCell(Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: Colors.blue),
+                      tooltip: "Rescan",
+                      onPressed: () => _rescanFanzine(id),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => context.push('/workbench/$id'),
+                      child: const Text("Workbench"),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      tooltip: "Delete",
+                      onPressed: () => _deleteFanzine(id),
+                    ),
+                  ],
+                )),
               ]);
             }).toList(),
           ),
@@ -267,11 +311,14 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('fanzines')
-          .where('status', whereIn: ['draft', 'working'])
-          .snapshots(),
+          .where('status', whereIn: ['draft', 'working']).snapshots(),
       builder: (context, fanzineSnapshot) {
-        if (fanzineSnapshot.hasError) return Center(child: Text("Error: ${fanzineSnapshot.error}"));
-        if (!fanzineSnapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (fanzineSnapshot.hasError) {
+          return Center(child: Text("Error: ${fanzineSnapshot.error}"));
+        }
+        if (!fanzineSnapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
         // Aggregate counts: { "Julius Schwartz": 5, "Gardner Fox": 2 }
         final Map<String, int> entityCounts = {};
@@ -284,7 +331,8 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage> with Single
         }
 
         if (entityCounts.isEmpty) {
-          return const Center(child: Text("No entities found in current drafts."));
+          return const Center(
+              child: Text("No entities found in current drafts."));
         }
 
         // Sort by Count (Descending), then Alphabetical
@@ -324,13 +372,19 @@ class _EntityRow extends StatelessWidget {
     final handle = normalizeHandle(name);
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('usernames').doc(handle).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('usernames')
+          .doc(handle)
+          .snapshots(),
       builder: (context, snapshot) {
         // --- Widget States ---
         Widget statusWidget;
 
         if (!snapshot.hasData) {
-          statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
+          statusWidget = const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2));
         } else if (snapshot.data!.exists) {
           // EXISTS: Show Link
           final data = snapshot.data!.data() as Map<String, dynamic>;
@@ -351,8 +405,7 @@ class _EntityRow extends StatelessWidget {
                 style: const TextStyle(
                     color: Colors.blue,
                     fontWeight: FontWeight.bold,
-                    decoration: TextDecoration.underline
-                ),
+                    decoration: TextDecoration.underline),
               ),
             ),
           );
@@ -363,12 +416,14 @@ class _EntityRow extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: () => _createProfile(context, name),
-                child: const Text("Create", style: TextStyle(color: Colors.green)),
+                child:
+                    const Text("Create", style: TextStyle(color: Colors.green)),
               ),
               const SizedBox(width: 8),
               TextButton(
                 onPressed: () => _createAlias(context, name),
-                child: const Text("Alias", style: TextStyle(color: Colors.orange)),
+                child:
+                    const Text("Alias", style: TextStyle(color: Colors.orange)),
               ),
             ],
           );
@@ -380,7 +435,9 @@ class _EntityRow extends StatelessWidget {
             children: [
               SizedBox(
                 width: 40,
-                child: Text(count.toString(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                child: Text(count.toString(),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.grey)),
               ),
               Expanded(
                 child: Text(name, style: const TextStyle(fontSize: 16)),
@@ -405,12 +462,21 @@ class _EntityRow extends StatelessWidget {
     }
 
     try {
-      await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from dashboard");
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
+      await createManagedProfile(
+          firstName: first, lastName: last, bio: "Auto-created from dashboard");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Profile Created!")));
+      }
       // Force rebuild? The FutureBuilder will re-run if parent rebuilds, but local state might stick.
-      (context as Element).markNeedsBuild();
+      if (context.mounted) {
+        (context as Element).markNeedsBuild();
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
@@ -423,24 +489,36 @@ class _EntityRow extends StatelessWidget {
             title: Text("Create Alias for '$name'"),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               const Text("Enter EXISTING username (target):"),
-              TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))
+              TextField(
+                  controller: controller,
+                  decoration:
+                      const InputDecoration(hintText: "e.g. julius-schwartz"))
             ]),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
-              TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias")),
+              TextButton(
+                  onPressed: () => Navigator.pop(c),
+                  child: const Text("Cancel")),
+              TextButton(
+                  onPressed: () => Navigator.pop(c, controller.text.trim()),
+                  child: const Text("Create Alias")),
             ],
           );
-        }
-    );
+        });
 
     if (target == null || target.isEmpty) return;
 
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
-      (context as Element).markNeedsBuild();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Alias Created!")));
+        (context as Element).markNeedsBuild();
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 }
@@ -453,7 +531,11 @@ class _ErrorCounter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('fanzines')
+          .doc(fanzineId)
+          .collection('pages')
+          .snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) return const Center(child: Text("-"));
 
@@ -466,12 +548,15 @@ class _ErrorCounter extends StatelessWidget {
           if ((d['error_entity_id'] ?? 0) > 0) entErrors++;
         }
 
-        if (ocrErrors == 0 && entErrors == 0) return const Text("OK", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold));
+        if (ocrErrors == 0 && entErrors == 0) {
+          return const Text("OK",
+              style:
+                  TextStyle(color: Colors.green, fontWeight: FontWeight.bold));
+        }
 
-        return Text(
-            "OCR: $ocrErrors | Ent: $entErrors",
-            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
-        );
+        return Text("OCR: $ocrErrors | Ent: $entErrors",
+            style: const TextStyle(
+                color: Colors.red, fontWeight: FontWeight.bold));
       },
     );
   }

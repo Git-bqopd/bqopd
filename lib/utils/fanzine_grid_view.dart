@@ -66,7 +66,7 @@ class FanzineGridView extends StatelessWidget {
 
         // If found in step 1
         return FanzineReader(
-          fanzineId: fanzineId!,
+          fanzineId: fanzineId,
           headerWidget: uiWidget,
         );
       },

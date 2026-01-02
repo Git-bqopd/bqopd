@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -60,7 +59,9 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
       return;
     }
 
-    setState(() { _isUploading = true; });
+    setState(() {
+      _isUploading = true;
+    });
 
     try {
       final String title = _titleController.text;
@@ -69,12 +70,14 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
       final String filePath = 'uploads/${widget.userId}/$fileName';
 
       // 1. Upload to Storage
-      final Reference storageRef = FirebaseStorage.instance.ref().child(filePath);
+      final Reference storageRef =
+          FirebaseStorage.instance.ref().child(filePath);
       final fileData = await _pickedFile!.readAsBytes();
 
       final uploadTask = storageRef.putData(
         fileData,
-        SettableMetadata(contentType: 'image/${p.extension(fileName).replaceAll('.', '')}'),
+        SettableMetadata(
+            contentType: 'image/${p.extension(fileName).replaceAll('.', '')}'),
       );
 
       final TaskSnapshot snapshot = await uploadTask;
@@ -103,9 +106,8 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
         );
         Navigator.of(context).pop(true);
       }
-
     } catch (e) {
-      print("Error uploading image: $e");
+      debugPrint("Error uploading image: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error uploading image: ${e.toString()}')),
@@ -113,7 +115,9 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
       }
     } finally {
       if (mounted) {
-        setState(() { _isUploading = false; });
+        setState(() {
+          _isUploading = false;
+        });
       }
     }
   }
@@ -141,7 +145,6 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
                   padding: EdgeInsets.symmetric(vertical: 20.0),
                   child: Center(child: CircularProgressIndicator()),
                 ),
-
               if (!_isUploading) ...[
                 ElevatedButton.icon(
                   onPressed: _pickImage,
@@ -156,12 +159,10 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                            _pickedFileBytes!,
+                        child: Image.memory(_pickedFileBytes!,
                             height: 150,
                             width: double.infinity,
-                            fit: BoxFit.cover
-                        ),
+                            fit: BoxFit.cover),
                       ),
                     ),
                 ],
@@ -172,7 +173,9 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
                     labelText: 'Title',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) => value == null || value.isEmpty ? 'Please enter a title' : null,
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter a title'
+                      : null,
                 ),
                 const SizedBox(height: 20),
                 TextFormField(
@@ -182,7 +185,9 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
                     border: OutlineInputBorder(),
                   ),
                   maxLines: 3,
-                  validator: (value) => value == null || value.isEmpty ? 'Please enter a description' : null,
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter a description'
+                      : null,
                 ),
               ],
             ],

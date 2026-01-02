@@ -2,9 +2,10 @@
 
 ## Phase 1: Backend Optimization & Async Handling
 - [x] Task: Analyze existing OCR functions in `functions/main.py` to identify bottlenecks. cd1e096
-- [ ] Task: Refactor OCR functions to run asynchronously if they aren't already, using Cloud Tasks or background triggers.
-- [ ] Task: Update Firestore schema to support granular status tracking (e.g., `uploading`, `processing`, `review_needed`, `complete`) for each page.
-- [ ] Task: Implement status updates in the backend functions to reflect real-time progress in Firestore.
+- [x] Task: Refactor OCR functions to run asynchronously if they aren't already, using Cloud Tasks or background triggers. 5d939ba
+- [x] Task: Update Firestore schema to support granular status tracking (e.g., `uploading`, `processing`, `review_needed`, `complete`) for each page. 5d939ba
+- [x] Task: Implement status updates in the backend functions to reflect real-time progress in Firestore. 5d939ba
+- [x] Task: Fix 'FinishReason.RECITATION' error in OCR worker by implementing model fallback or prompt engineering. fe85ee9
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Backend Optimization & Async Handling' (Protocol in workflow.md)
 
 ## Phase 2: Curator Workbench UI Updates

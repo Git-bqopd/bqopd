@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Standard: A-Z, 0-9 (Base36) - No lowercase allowed in the "Math"
@@ -25,19 +26,16 @@ String _generateVanityCode() {
   // 2. Insert "bqopd" (lowercase) at a random position (0 to 3)
   // This creates the "Display" version (e.g. "N7bqopd4")
   final insertPos = random.nextInt(4);
-  return randomPart.substring(0, insertPos) +
-      'bqopd' +
-      randomPart.substring(insertPos);
+  return '${randomPart.substring(0, insertPos)}bqopd${randomPart.substring(insertPos)}';
 }
 
 Future<String?> assignShortcode(
     dynamic firestoreInstance, String contentType, String contentId,
     {bool isVanity = false}) async {
-
   final FirebaseFirestore db = firestoreInstance as FirebaseFirestore;
 
-  String displayCode;  // e.g. "N7bqopd4" OR "7X91B2Z"
-  String dbKey;        // e.g. "N7BQOPD4" OR "7X91B2Z" (The Search Key)
+  String displayCode; // e.g. "N7bqopd4" OR "7X91B2Z"
+  String dbKey; // e.g. "N7BQOPD4" OR "7X91B2Z" (The Search Key)
 
   bool isUnique = false;
   int retries = 0;
@@ -77,7 +75,7 @@ Future<String?> assignShortcode(
         // Return the DISPLAY version to the UI
         return displayCode;
       } catch (e) {
-        print('Error assigning shortcode: $e');
+        debugPrint('Error assigning shortcode: $e');
         rethrow;
       }
     }
@@ -85,7 +83,8 @@ Future<String?> assignShortcode(
   }
 
   if (retries >= maxRetries) {
-    throw Exception('Failed to generate a unique shortcode after $maxRetries retries.');
+    throw Exception(
+        'Failed to generate a unique shortcode after $maxRetries retries.');
   }
   return null;
 }

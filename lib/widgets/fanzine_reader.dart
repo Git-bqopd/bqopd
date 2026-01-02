@@ -25,6 +25,7 @@ class _FanzineReaderState extends State<FanzineReader> {
   int _targetIndex = 0;
   List<Map<String, dynamic>> _pages = [];
   bool _isLoading = true;
+  String? _resolvedDocId; // Added for shortcode resolution parity
 
   ScrollController? _scrollController;
 
@@ -46,44 +47,32 @@ class _FanzineReaderState extends State<FanzineReader> {
       return;
     }
 
+    String realDocId = widget.fanzineId;
+
     try {
-      // 1. Fetch Fanzine Doc to get Shortcode and potentially update URL
-      final fanzineDoc = await FirebaseFirestore.instance
-          .collection('fanzines')
-          .doc(widget.fanzineId)
+      // 1. RESOLVE ID: Handle shortcodes if passed as fanzineId
+      final shortcodeSnap = await FirebaseFirestore.instance
+          .collection('shortcodes')
+          .doc(widget.fanzineId.toUpperCase())
           .get();
 
-      if (fanzineDoc.exists) {
-        final shortCode = fanzineDoc.data()?['shortCode'] as String?;
-        if (shortCode != null && shortCode.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              // Attempt to update the browser URL if it doesn't match
-              try {
-                final router = GoRouter.of(context);
-                final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-                // Simple check to avoid loops: if we aren't already at this shortcode
-                if (!currentLoc.contains(shortCode)) {
-                  // router.replaceNamed('shortlink', pathParameters: {'code': shortCode});
-                }
-              } catch (e) {
-                // Not in a router context or router not ready
-              }
-            }
-          });
+      if (shortcodeSnap.exists) {
+        final data = shortcodeSnap.data();
+        if (data != null && data['type'] == 'fanzine') {
+          realDocId = data['contentId'];
         }
       }
 
       // 2. Fetch Pages
       final snapshot = await FirebaseFirestore.instance
           .collection('fanzines')
-          .doc(widget.fanzineId)
+          .doc(realDocId)
           .collection('pages')
           .get();
 
       final docs = snapshot.docs.map((d) {
         final data = d.data();
-        data['__id'] = d.id;
+        data['__id'] = d.id; // Map page ID for SocialToolbar
         return data;
       }).toList();
 
@@ -95,6 +84,7 @@ class _FanzineReaderState extends State<FanzineReader> {
 
       if (mounted) {
         setState(() {
+          _resolvedDocId = realDocId;
           _pages = docs;
           _isLoading = false;
         });
@@ -119,17 +109,14 @@ class _FanzineReaderState extends State<FanzineReader> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
-    // 1. Determine Layout Params for calculation
     final int crossAxisCount = _isSingleColumn ? 1 : 2;
-    // IMPORTANT: These must match what is used in FanzineSingleView and below for consistency
     final double childAspectRatio = _isSingleColumn ? 0.6 : 0.625;
     const double mainAxisSpacing = 30.0;
-    const double crossAxisSpacing = 24.0; // only matters for grid
+    const double crossAxisSpacing = 24.0;
     const double padding = 8.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 2. Calculate Initial Offset
         final width = constraints.maxWidth;
         final availableWidth = width - (padding * 2);
         final totalCrossAxisSpacing = (crossAxisCount - 1) * crossAxisSpacing;
@@ -145,6 +132,7 @@ class _FanzineReaderState extends State<FanzineReader> {
 
         if (_isSingleColumn) {
           return FanzineSingleView(
+            fanzineId: _resolvedDocId!, // Pass the resolved ID
             pages: _pages,
             headerWidget: widget.headerWidget,
             scrollController: _scrollController!,
@@ -157,13 +145,12 @@ class _FanzineReaderState extends State<FanzineReader> {
             },
           );
         } else {
-          // Inline Grid Builder (2 Columns)
           return GridView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.all(padding),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              childAspectRatio: 0.625, // 5/8
+              childAspectRatio: 0.625,
               mainAxisSpacing: mainAxisSpacing,
               crossAxisSpacing: crossAxisSpacing,
             ),

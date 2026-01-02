@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:flutter/foundation.dart';
 
 class ViewService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -23,7 +24,7 @@ class ViewService {
         final cred = await _auth.signInAnonymously();
         user = cred.user;
       } catch (e) {
-        // print("Error signing in anonymously for view tracking: $e");
+        // debugPrint("Error signing in anonymously for view tracking: $e");
         return;
       }
     }
@@ -64,9 +65,10 @@ class ViewService {
       // Suppress permission errors specifically to keep console clean during dev
       if (e.toString().contains('permission-denied')) {
         // Commented out to silence the specific log as requested
-        // print("Note: View tracking skipped (Permission Denied). Enable writes to 'stats' collection in Firestore Rules.");
+        debugPrint(
+            "Note: View tracking skipped (Permission Denied). Enable writes to 'stats' collection in Firestore Rules.");
       } else {
-        print("Error recording view to Firestore: $e");
+        debugPrint("Error recording view to Firestore: $e");
       }
     }
   }
@@ -89,7 +91,7 @@ class ViewService {
       return snapshot.count ?? 0;
     } catch (e) {
       if (!e.toString().contains('permission-denied')) {
-        print("Error fetching view count: $e");
+        debugPrint("Error fetching view count: $e");
       }
       return 0;
     }

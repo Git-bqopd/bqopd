@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart'; // Import Provider
@@ -77,10 +75,10 @@ class _MyAppState extends State<MyApp> {
     super.initState();
 
     _router = GoRouter(
-      initialLocation: '/',
-      refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
+      refreshListenable: Provider.of<UserProvider>(context, listen: false),
       redirect: (context, state) {
-        final user = FirebaseAuth.instance.currentUser;
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        final isLoggedIn = userProvider.isLoggedIn;
         final path = state.uri.path;
         final routePattern = state.fullPath;
 
@@ -91,16 +89,35 @@ class _MyAppState extends State<MyApp> {
             (routePattern != null && routePattern.startsWith('/editor')) ||
             (routePattern != null && routePattern.startsWith('/workbench'));
 
-        if (user == null && isProtected) return '/login';
-        if (user != null && (path == '/login' || path == '/register')) return '/';
+        if (!isLoggedIn && isProtected) {
+          return '/login';
+        }
+        if (isLoggedIn && (path == '/login' || path == '/register')) {
+          return '/';
+        }
         return null;
       },
       routes: [
-        GoRoute(path: '/', name: 'root', builder: (context, state) => const FanzinePage()),
-        GoRoute(path: '/login', name: 'login', builder: (context, state) => const LoginPage()),
-        GoRoute(path: '/register', name: 'register', builder: (context, state) => const RegisterPage()),
-        GoRoute(path: '/fanzine', name: 'fanzine', builder: (context, state) => const FanzinePage()),
-        GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfilePage()),
+        GoRoute(
+            path: '/',
+            name: 'root',
+            builder: (context, state) => const FanzinePage()),
+        GoRoute(
+            path: '/login',
+            name: 'login',
+            builder: (context, state) => const LoginPage()),
+        GoRoute(
+            path: '/register',
+            name: 'register',
+            builder: (context, state) => const RegisterPage()),
+        GoRoute(
+            path: '/fanzine',
+            name: 'fanzine',
+            builder: (context, state) => const FanzinePage()),
+        GoRoute(
+            path: '/profile',
+            name: 'profile',
+            builder: (context, state) => const ProfilePage()),
 
         // NEW: Curator Dashboard (Inbox)
         GoRoute(
@@ -140,19 +157,29 @@ class _MyAppState extends State<MyApp> {
           },
         ),
 
-        GoRoute(path: '/settings', name: 'settings', builder: (context, state) => const SettingsPage()),
-        GoRoute(path: '/editor/:fanzineId', name: 'fanzineEditor', builder: (context, state) {
-          final fanzineId = state.pathParameters['fanzineId']!;
-          return FanzineEditorPage(fanzineId: fanzineId);
-        },
+        GoRoute(
+            path: '/settings',
+            name: 'settings',
+            builder: (context, state) => const SettingsPage()),
+        GoRoute(
+          path: '/editor/:fanzineId',
+          name: 'fanzineEditor',
+          builder: (context, state) {
+            final fanzineId = state.pathParameters['fanzineId']!;
+            return FanzineEditorPage(fanzineId: fanzineId);
+          },
         ),
-        GoRoute(path: '/:code', name: 'shortlink', builder: (context, state) {
-          final code = state.pathParameters['code']!;
-          return ShortLinkPage(code: code);
-        },
+        GoRoute(
+          path: '/:code',
+          name: 'shortlink',
+          builder: (context, state) {
+            final code = state.pathParameters['code']!;
+            return ShortLinkPage(code: code);
+          },
         ),
       ],
-      errorBuilder: (context, state) => const Scaffold(body: Center(child: Text('Page not found'))),
+      errorBuilder: (context, state) =>
+          const Scaffold(body: Center(child: Text('Page not found'))),
     );
   }
 

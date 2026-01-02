@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/view_service.dart';
-import '../components/social_toolbar.dart'; // Updated import
+import '../services/engagement_service.dart';
+import '../components/social_toolbar.dart';
+import 'link_parser.dart';
 
 class FanzineSingleView extends StatefulWidget {
+  final String fanzineId; // Added fanzineId
   final List<Map<String, dynamic>> pages;
   final Widget headerWidget;
   final ScrollController scrollController;
@@ -11,6 +15,7 @@ class FanzineSingleView extends StatefulWidget {
 
   const FanzineSingleView({
     super.key,
+    required this.fanzineId,
     required this.pages,
     required this.headerWidget,
     required this.scrollController,
@@ -23,68 +28,91 @@ class FanzineSingleView extends StatefulWidget {
 }
 
 class _FanzineSingleViewState extends State<FanzineSingleView> {
-  // Local state for expandable boxes (Comment / Text inputs)
-  // The SocialToolbar handles the "Drawer" state internally now.
-  bool _areCommentBoxesOpen = false;
-  bool _areTextBoxesOpen = false;
+  final Map<int, bool> _openTextDrawers = {};
+  final Map<int, bool> _openCommentDrawers = {};
+  final EngagementService _engagementService = EngagementService();
+  final Map<int, TextEditingController> _commentControllers = {};
 
-  void _toggleAllCommentBoxes() {
+  void _toggleTextDrawer(int index) {
     setState(() {
-      _areCommentBoxesOpen = !_areCommentBoxesOpen;
-      if (_areCommentBoxesOpen) {
-        _areTextBoxesOpen = false;
-      }
+      final isOpen = _openTextDrawers[index] ?? false;
+      _openTextDrawers[index] = !isOpen;
+      if (_openTextDrawers[index] == true) _openCommentDrawers[index] = false;
     });
   }
 
-  void _toggleAllTextBoxes() {
+  void _toggleCommentDrawer(int index) {
     setState(() {
-      _areTextBoxesOpen = !_areTextBoxesOpen;
-      if (_areTextBoxesOpen) {
-        _areCommentBoxesOpen = false;
-      }
+      final isOpen = _openCommentDrawers[index] ?? false;
+      _openCommentDrawers[index] = !isOpen;
+      if (_openCommentDrawers[index] == true) _openTextDrawers[index] = false;
     });
+  }
+
+  Future<void> _submitComment(int pageIndex, String pageId) async {
+    final controller = _commentControllers[pageIndex];
+    if (controller == null || controller.text.trim().isEmpty) return;
+
+    final text = controller.text.trim();
+    controller.clear();
+    FocusScope.of(context).unfocus();
+
+    try {
+      await _engagementService.addComment(
+        fanzineId: widget.fanzineId,
+        pageId: pageId,
+        text: text,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var c in _commentControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 1 Column Grid Layout
-    const int crossAxisCount = 1;
-    const double childAspectRatio = 0.6;
-    const double mainAxisSpacing = 30.0;
-    const double crossAxisSpacing = 0.0;
-    const double padding = 8.0;
-
     return GridView.builder(
       controller: widget.scrollController,
-      padding: const EdgeInsets.all(padding),
+      padding: const EdgeInsets.all(8.0),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        childAspectRatio: childAspectRatio,
-        mainAxisSpacing: mainAxisSpacing,
-        crossAxisSpacing: crossAxisSpacing,
+        crossAxisCount: 1,
+        childAspectRatio: 0.6,
+        mainAxisSpacing: 30.0,
       ),
-      itemCount: widget.pages.length + 1, // +1 for Header
+      itemCount: widget.pages.length + 1,
       itemBuilder: (context, index) {
-        if (index == 0) {
-          return widget.headerWidget;
-        }
+        if (index == 0) return widget.headerWidget;
 
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
-        return _buildSingleColumnItem(index, pageData);
+        return _buildSingleColumnItem(index, pageIndex, pageData);
       },
     );
   }
 
-  Widget _buildSingleColumnItem(int index, Map<String, dynamic> pageData) {
+  Widget _buildSingleColumnItem(
+      int index, int pageIndex, Map<String, dynamic> pageData) {
     final imageUrl = pageData['imageUrl'] ?? '';
     final imageId = pageData['imageId'];
+    final pageId = pageData['__id'] ?? '';
+    final String pageText =
+        pageData['text_processed'] ?? pageData['text'] ?? '';
+
+    final bool isTextOpen = _openTextDrawers[pageIndex] ?? false;
+    final bool isCommentsOpen = _openCommentDrawers[pageIndex] ?? false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1. Image
         Expanded(
           child: Container(
             color: imageUrl.isEmpty ? Colors.grey[300] : null,
@@ -93,42 +121,101 @@ class _FanzineSingleViewState extends State<FanzineSingleView> {
                 : null,
           ),
         ),
-
-        // 2. New Unified Social Toolbar
         SocialToolbar(
           imageId: imageId,
+          pageId: pageId,
+          fanzineId: widget.fanzineId,
+          pageNumber: pageIndex + 1,
           onOpenGrid: () => widget.onOpenGrid(index),
-          onToggleComments: _toggleAllCommentBoxes,
-          onToggleText: _toggleAllTextBoxes,
+          onToggleComments: () => _toggleCommentDrawer(pageIndex),
+          onToggleText: () => _toggleTextDrawer(pageIndex),
         ),
-
-        // 3. Expandable Boxes (External content areas triggered by the row)
-        if (_areCommentBoxesOpen)
-          _buildExpandableBox(title: 'Write a comment:', child: const Text("Comment input...")),
-        if (_areTextBoxesOpen)
-          _buildExpandableBox(title: 'Text:', child: const Text("Page text...")),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child:
+          isTextOpen ? _buildTextDrawer(pageText) : const SizedBox.shrink(),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: isCommentsOpen
+              ? _buildCommentDrawer(pageIndex, pageId)
+              : const SizedBox.shrink(),
+        ),
       ],
     );
   }
 
-  Widget _buildExpandableBox({String? title, required Widget child}) {
+  Widget _buildTextDrawer(String text) {
+    if (text.isEmpty) {
+      return Container(
+          padding: const EdgeInsets.all(20),
+          // Fixed: Colors.grey[500] is nullable, shade500 is not.
+          color: Colors.grey.shade500.withOpacity(0.1),
+          alignment: Alignment.center,
+          child: const Text("No transcription available."));
+    }
     return Container(
-      height: 60,
-      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
+          color: const Color(0xFFFDFBF7),
+          border: Border(top: BorderSide(color: Colors.grey.shade300))),
+      child: SelectableText.rich(
+        LinkParser.renderLinks(context, text,
+            baseStyle: const TextStyle(
+                fontSize: 15, height: 1.5, fontFamily: 'Georgia')),
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (title != null)
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
-            child,
-          ],
-        ),
+    );
+  }
+
+  Widget _buildCommentDrawer(int pageIndex, String pageId) {
+    _commentControllers.putIfAbsent(pageIndex, () => TextEditingController());
+    return Container(
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Colors.grey.shade200))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 100,
+            child: StreamBuilder<QuerySnapshot>(
+              stream:
+              _engagementService.getCommentsStream(widget.fanzineId, pageId),
+              builder: (context, snap) {
+                if (!snap.hasData) return const SizedBox();
+                final docs = snap.data!.docs;
+                return ListView.builder(
+                  itemCount: docs.length,
+                  itemBuilder: (context, i) {
+                    final data = docs[i].data() as Map<String, dynamic>;
+                    return Text("${data['username']}: ${data['text']}",
+                        style: const TextStyle(fontSize: 12));
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _commentControllers[pageIndex],
+                  decoration: const InputDecoration(
+                      hintText: "Comment...",
+                      isDense: true,
+                      border: OutlineInputBorder()),
+                ),
+              ),
+              IconButton(
+                  icon: const Icon(Icons.send),
+                  onPressed: () => _submitComment(pageIndex, pageId)),
+            ],
+          ),
+        ],
       ),
     );
   }

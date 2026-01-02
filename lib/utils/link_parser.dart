@@ -6,7 +6,8 @@ import 'package:go_router/go_router.dart';
 class LinkParser {
   // Regex for [[Display Text|ID]] OR [[Display Text]]
   static final RegExp _wikiLinkRegex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
-  static final RegExp _headerRegex = RegExp(r'^(#{1,6})\s+(.*)$', multiLine: true);
+  static final RegExp _headerRegex =
+      RegExp(r'^(#{1,6})\s+(.*)$', multiLine: true);
 
   /// Parses text for [[Shortcode]] and resolves them to database references.
   static Future<List<String>> parseMentions(String text) async {
@@ -42,7 +43,8 @@ class LinkParser {
         final data = userDoc.data()!;
         if (data.containsKey('redirect')) {
           final targetHandle = data['redirect'];
-          final targetDoc = await db.collection('usernames').doc(targetHandle).get();
+          final targetDoc =
+              await db.collection('usernames').doc(targetHandle).get();
           if (targetDoc.exists) {
             mentions.add('user:${targetDoc.data()!['uid']}');
           }
@@ -55,12 +57,12 @@ class LinkParser {
   }
 
   static TextSpan renderLinks(
-      BuildContext context,
-      String text, {
-        TextStyle? baseStyle,
-        TextStyle? linkStyle,
-        TextStyle? headerStyle,
-      }) {
+    BuildContext context,
+    String text, {
+    TextStyle? baseStyle,
+    TextStyle? linkStyle,
+    TextStyle? headerStyle,
+  }) {
     final List<InlineSpan> spans = [];
     final lines = text.split('\n');
 
@@ -71,14 +73,17 @@ class LinkParser {
       if (headerMatch != null) {
         final content = headerMatch.group(2) ?? '';
         final level = headerMatch.group(1)?.length ?? 1;
-        final double fontSize = (baseStyle?.fontSize ?? 16.0) + (4.0 * (6 - level));
+        final double fontSize =
+            (baseStyle?.fontSize ?? 16.0) + (4.0 * (6 - level));
 
         spans.add(TextSpan(
-          children: _parseLineForLinks(context, content,
-              baseStyle?.copyWith(fontSize: fontSize, fontWeight: FontWeight.bold) ??
+          children: _parseLineForLinks(
+              context,
+              content,
+              baseStyle?.copyWith(
+                      fontSize: fontSize, fontWeight: FontWeight.bold) ??
                   TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
-              linkStyle
-          ),
+              linkStyle),
         ));
         spans.add(const TextSpan(text: '\n'));
       } else {
@@ -92,12 +97,8 @@ class LinkParser {
     return TextSpan(children: spans);
   }
 
-  static List<InlineSpan> _parseLineForLinks(
-      BuildContext context,
-      String lineText,
-      TextStyle? style,
-      TextStyle? linkStyle
-      ) {
+  static List<InlineSpan> _parseLineForLinks(BuildContext context,
+      String lineText, TextStyle? style, TextStyle? linkStyle) {
     final List<InlineSpan> spans = [];
     int currentIndex = 0;
     final matches = _wikiLinkRegex.allMatches(lineText);
@@ -115,11 +116,12 @@ class LinkParser {
 
       spans.add(TextSpan(
         text: display,
-        style: linkStyle ?? const TextStyle(
-          color: Colors.blue,
-          fontWeight: FontWeight.bold,
-          decoration: TextDecoration.underline,
-        ),
+        style: linkStyle ??
+            const TextStyle(
+              color: Colors.blue,
+              fontWeight: FontWeight.bold,
+              decoration: TextDecoration.underline,
+            ),
         recognizer: TapGestureRecognizer()
           ..onTap = () => _handleLinkTap(context, ref ?? display),
       ));
@@ -143,14 +145,17 @@ class LinkParser {
       final id = parts[1];
 
       if (type == 'user') {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(id).get();
+        final userDoc =
+            await FirebaseFirestore.instance.collection('Users').doc(id).get();
         if (userDoc.exists) {
           final username = userDoc.data()?['username'];
           if (username != null) {
+            if (!context.mounted) return;
             context.go('/$username');
             return;
           }
         }
+        if (!context.mounted) return;
         context.pushNamed('editInfo', queryParameters: {'userId': id});
       } else if (type == 'fanzine') {
         context.push('/reader/$id');

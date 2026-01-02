@@ -22,6 +22,7 @@ class _NewFanzineReaderState extends State<NewFanzineReader> {
   List<Map<String, dynamic>> _pages = [];
   bool _isLoading = true;
   String? _error;
+  String? _resolvedDocId; // Added to store the actual Firestore ID
 
   @override
   void initState() {
@@ -41,7 +42,6 @@ class _NewFanzineReaderState extends State<NewFanzineReader> {
 
     try {
       // 1. RESOLVE ID: Check if the input is a ShortCode (e.g., Z1766365778)
-      // We check the 'shortcodes' collection first.
       final shortcodeSnap = await FirebaseFirestore.instance
           .collection('shortcodes')
           .doc(widget.fanzineId.toUpperCase())
@@ -50,7 +50,7 @@ class _NewFanzineReaderState extends State<NewFanzineReader> {
       if (shortcodeSnap.exists) {
         final data = shortcodeSnap.data();
         if (data != null && data['type'] == 'fanzine') {
-          realDocId = data['contentId']; // Use the Real Document ID
+          realDocId = data['contentId'];
         }
       }
 
@@ -63,7 +63,7 @@ class _NewFanzineReaderState extends State<NewFanzineReader> {
 
       final docs = snapshot.docs.map((d) {
         final data = d.data();
-        data['__id'] = d.id;
+        data['__id'] = d.id; // Ensure page ID is available for engagement
         return data;
       }).toList();
 
@@ -76,6 +76,7 @@ class _NewFanzineReaderState extends State<NewFanzineReader> {
 
       if (mounted) {
         setState(() {
+          _resolvedDocId = realDocId;
           _pages = docs;
           _isLoading = false;
         });
@@ -101,11 +102,12 @@ class _NewFanzineReaderState extends State<NewFanzineReader> {
       return Center(child: Text("Error: $_error"));
     }
 
-    if (_pages.isEmpty) {
+    if (_pages.isEmpty || _resolvedDocId == null) {
       return const Center(child: Text("This fanzine has no pages yet."));
     }
 
     return NewFanzineSingleView(
+      fanzineId: _resolvedDocId!, // Passed the resolved ID to fix the missing argument error
       pages: _pages,
       headerWidget: widget.headerWidget ?? const SizedBox.shrink(),
       viewService: _viewService,

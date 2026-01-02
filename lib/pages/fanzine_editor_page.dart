@@ -57,7 +57,6 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
               return LayoutBuilder(
                 builder: (context, constraints) {
                   // Simple responsive breakpoints
-                  final width = constraints.maxWidth;
                   int crossAxisCount = 2;
 
                   return GridView.builder(
@@ -79,8 +78,10 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
                       final pageNum = data['pageNumber'];
 
                       return DragTarget<QueryDocumentSnapshot>(
-                        onWillAccept: (incoming) => incoming != null && incoming.id != page.id,
-                        onAccept: (draggedPage) => _onReorder(draggedPage, page),
+                        onWillAcceptWithDetails: (details) =>
+                            details.data.id != page.id,
+                        onAcceptWithDetails: (details) =>
+                            _onReorder(details.data, page),
                         builder: (context, candidate, rejected) {
                           final highlight = candidate.isNotEmpty;
 
@@ -89,22 +90,23 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
                             child: Container(
                               decoration: BoxDecoration(
                                 color: highlight
-                                    ? Colors.amber.withOpacity(0.2)
+                                    ? Colors.amber.withValues(alpha: 0.2)
                                     : Colors.grey[300],
                               ),
                               child: imageUrl != null && imageUrl.isNotEmpty
                                   ? Image.network(
-                                imageUrl,
-                                fit: BoxFit.cover, // or BoxFit.contain if you prefer no crop
-                                loadingBuilder: (c, child, progress) {
-                                  if (progress == null) return child;
-                                  return const Center(
-                                      child: CircularProgressIndicator());
-                                },
-                                errorBuilder: (c, e, s) => Center(
-                                  child: Text('Image $pageNum'),
-                                ),
-                              )
+                                      imageUrl,
+                                      fit: BoxFit
+                                          .cover, // or BoxFit.contain if you prefer no crop
+                                      loadingBuilder: (c, child, progress) {
+                                        if (progress == null) return child;
+                                        return const Center(
+                                            child: CircularProgressIndicator());
+                                      },
+                                      errorBuilder: (c, e, s) => Center(
+                                        child: Text('Image $pageNum'),
+                                      ),
+                                    )
                                   : Center(child: Text('Image $pageNum')),
                             ),
                           );
@@ -122,19 +124,20 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
                                   borderRadius: BorderRadius.circular(12),
                                   clipBehavior: Clip.antiAlias,
                                   child: imageUrl != null && imageUrl.isNotEmpty
-                                      ? Image.network(imageUrl, fit: BoxFit.cover)
+                                      ? Image.network(imageUrl,
+                                          fit: BoxFit.cover)
                                       : Container(
-                                    color: Colors.grey[300],
-                                    padding: const EdgeInsets.all(12),
-                                    child: Text('Image $pageNum'),
-                                  ),
+                                          color: Colors.grey[300],
+                                          padding: const EdgeInsets.all(12),
+                                          child: Text('Image $pageNum'),
+                                        ),
                                 ),
                               ),
                             ),
                             childWhenDragging: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: Container(
-                                color: Colors.grey[300]!.withOpacity(0.5),
+                                color: Colors.grey[300]!.withValues(alpha: 0.5),
                               ),
                             ),
                             child: tile,
@@ -153,9 +156,9 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
   }
 
   Future<void> _onReorder(
-      QueryDocumentSnapshot draggedPage,
-      QueryDocumentSnapshot targetPage,
-      ) async {
+    QueryDocumentSnapshot draggedPage,
+    QueryDocumentSnapshot targetPage,
+  ) async {
     final draggedData = draggedPage.data() as Map<String, dynamic>;
     final targetData = targetPage.data() as Map<String, dynamic>;
 

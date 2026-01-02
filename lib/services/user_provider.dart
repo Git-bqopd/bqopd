@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 class UserProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -10,6 +11,7 @@ class UserProvider extends ChangeNotifier {
   User? _currentUser;
   Map<String, dynamic>? _userProfile;
   StreamSubscription? _profileSubscription;
+  bool _isDevBypass = false;
   bool _isLoading = true;
 
   // --- Session Preferences (Social Toolbar) ---
@@ -21,8 +23,8 @@ class UserProvider extends ChangeNotifier {
     'Text': true,
     'Circulation': true,
     'Terminal': false, // Starts hidden
-    'Approve': false,  // Editor tool - starts hidden
-    'Fanzine': false,  // Editor tool - starts hidden
+    'Approve': false, // Editor tool - starts hidden
+    'Fanzine': false, // Editor tool - starts hidden
   };
 
   UserProvider() {
@@ -31,15 +33,16 @@ class UserProvider extends ChangeNotifier {
 
   // Getters
   bool get isLoading => _isLoading;
-  bool get isLoggedIn => _currentUser != null;
+  bool get isLoggedIn => _isDevBypass || _currentUser != null;
   User? get currentUser => _currentUser;
+  bool get isDevBypass => _isDevBypass;
   Map<String, dynamic>? get userProfile => _userProfile;
   Map<String, bool> get socialButtonVisibility => _socialButtonVisibility;
 
   // Helpers
   String get username => _userProfile?['username'] ?? '';
-  bool get isEditor => _userProfile?['Editor'] == true;
-  String? get currentUserId => _currentUser?.uid;
+  bool get isEditor => _isDevBypass || _userProfile?['Editor'] == true;
+  String? get currentUserId => _isDevBypass ? 'dev-user' : _currentUser?.uid;
 
   void _init() {
     // Listen to Auth State (Login/Logout)
@@ -59,21 +62,31 @@ class UserProvider extends ChangeNotifier {
     });
   }
 
+  void enableDevBypass() {
+    _isDevBypass = true;
+    _isLoading = false;
+    _userProfile = {
+      'username': 'dev-curator',
+      'Editor': true,
+      'firstName': 'Dev',
+      'lastName': 'Curator'
+    };
+    notifyListeners();
+  }
+
   void _subscribeToUserProfile(String uid) {
     _isLoading = true;
     notifyListeners();
 
     _profileSubscription?.cancel();
-    _profileSubscription = _db
-        .collection('Users')
-        .doc(uid)
-        .snapshots()
-        .listen((snapshot) {
+    _profileSubscription =
+        _db.collection('Users').doc(uid).snapshots().listen((snapshot) {
       if (snapshot.exists) {
         _userProfile = snapshot.data();
 
         // --- Sync Toolbar Preferences from Firestore ---
-        if (_userProfile != null && _userProfile!.containsKey('socialToolbar')) {
+        if (_userProfile != null &&
+            _userProfile!.containsKey('socialToolbar')) {
           final savedPrefs = _userProfile!['socialToolbar'];
           if (savedPrefs is Map<String, dynamic>) {
             savedPrefs.forEach((key, value) {
@@ -90,7 +103,7 @@ class UserProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }, onError: (error) {
-      print("UserProvider Error: $error");
+      debugPrint("UserProvider Error: $error");
       _isLoading = false;
       notifyListeners();
     });
@@ -105,10 +118,10 @@ class UserProvider extends ChangeNotifier {
 
       // 2. Persist to Firestore if logged in
       if (_currentUser != null) {
-        _db.collection('Users').doc(_currentUser!.uid).set({
-          'socialToolbar': _socialButtonVisibility
-        }, SetOptions(merge: true)).catchError((e) {
-          print("Error saving toolbar prefs: $e");
+        _db.collection('Users').doc(_currentUser!.uid).set(
+            {'socialToolbar': _socialButtonVisibility},
+            SetOptions(merge: true)).catchError((e) {
+          debugPrint("Error saving toolbar prefs: $e");
         });
       }
     }

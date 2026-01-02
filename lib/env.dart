@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 class Env {
   static String _googleApiKeyWeb = '';
@@ -15,10 +16,10 @@ class Env {
       _googleApiKeyWeb = data['google_api_key_web'] ?? '';
       _googleApiKeyAndroid = data['google_api_key_android'] ?? '';
 
-      print('Config loaded successfully.');
+      debugPrint('Config loaded successfully.');
     } catch (e) {
-      print('Error loading config.json: $e');
-      print('Make sure assets/config.json exists and is valid JSON.');
+      debugPrint('Error loading config.json: $e');
+      debugPrint('Make sure assets/config.json exists and is valid JSON.');
     }
   }
 }
