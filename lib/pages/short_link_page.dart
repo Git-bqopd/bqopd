@@ -1,9 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../utils/fanzine_grid_view.dart';
-import '../widgets/fanzine_widget.dart';
-import 'profile_page.dart'; // Import the Unified Profile Page
+import 'profile_page.dart';
+import 'fanzine_reader_page.dart'; // UPDATED Import
 
 class ShortLinkPage extends StatelessWidget {
   final String code;
@@ -32,18 +31,14 @@ class ShortLinkPage extends StatelessWidget {
             // CASE 1: It's a User Profile (e.g. /kevin)
             if (result.startsWith('user:')) {
               final userId = result.substring(5);
-              // ROUTING TO THE UNIFIED PROFILE PAGE
               return ProfilePage(userId: userId);
             }
 
             // CASE 2: It's a Fanzine (e.g. /QrnSbYA)
             if (result.startsWith('fanzine:')) {
               final fanzineCode = result.substring(8);
-              final specificFanzineWidget = FanzineWidget(fanzineShortCode: fanzineCode);
-              return FanzineGridView(
-                shortCode: fanzineCode,
-                uiWidget: specificFanzineWidget,
-              );
+              // UPDATED: Navigate to Unified Reader Page
+              return FanzineReaderPage(shortCode: fanzineCode);
             }
 
             return const Center(child: Text('Unknown content type.'));

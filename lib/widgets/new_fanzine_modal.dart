@@ -20,11 +20,11 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
   final _titleController = TextEditingController();
   bool _isLoading = false;
 
-  /// Check if this user gets special "bqopd" codes
+  // NEW: Checkbox state for layout preference
+  bool _twoPageView = false;
+
   bool _isVanityEligible(User? user) {
     if (user == null || user.email == null) return false;
-
-    // Check for specific email or any "bqopd" email
     return user.email == 'kevin@712liberty.com' ||
         user.email!.contains('bqopd');
   }
@@ -38,7 +38,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
     if (currentUser == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Not logged in. Cannot create fanzine.')),
+          const SnackBar(content: Text('Error: Not logged in.')),
         );
       }
       return;
@@ -53,7 +53,6 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
 
       final newFanzineRef = FirebaseFirestore.instance.collection('fanzines').doc();
 
-      // Pass the isVanity flag to our generator
       final String? shortCode = await assignShortcode(
         FirebaseFirestore.instance,
         'fanzine',
@@ -62,18 +61,17 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
       );
 
       if (shortCode != null) {
-        // Updated payload to match bqopd Design Document
         await newFanzineRef.set({
           'title': title,
           'editorId': editorId,
           'status': 'draft',
-          'processingStatus': 'idle', // Explicitly set pipeline state
+          'processingStatus': 'idle',
           'creationDate': FieldValue.serverTimestamp(),
           'shortCode': shortCode,
           'shortCodeKey': shortCode.toUpperCase(),
-          'twoPage': false, // Placeholder for future layout engine
-          'mentionedUsers': [], // Initialize empty verified list
-          'draftEntities': [], // Initialize empty raw detection list
+          'twoPage': _twoPageView, // UPDATED: Use checkbox value
+          'mentionedUsers': [],
+          'draftEntities': [],
           'isSoftPublished': false,
         });
 
@@ -130,6 +128,19 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
                   ),
                   validator: (value) =>
                   (value == null || value.isEmpty) ? 'Please enter a title' : null,
+                ),
+                const SizedBox(height: 16),
+                // NEW Checkbox Row
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _twoPageView,
+                      onChanged: (val) => setState(() => _twoPageView = val ?? false),
+                    ),
+                    const Flexible(
+                      child: Text("Enable Two-Page Grid View?\n(Default is Single Column Scroll)"),
+                    ),
+                  ],
                 ),
               ],
             ],

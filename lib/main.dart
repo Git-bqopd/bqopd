@@ -3,27 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart'; // Import Provider
+import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
 import 'utils/script_loader.dart';
 import 'env.dart';
 
 // Services
-import 'services/user_provider.dart'; // Import UserProvider
+import 'services/user_provider.dart';
 
 // Pages
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
-import 'pages/fanzine_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/short_link_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/fanzine_editor_page.dart';
-import 'pages/new_reader_page.dart'; // Import New Reader Page
-import 'pages/curator_dashboard_page.dart'; // Import Dashboard
-import 'pages/curator_workbench_page.dart'; // Import Workbench
+import 'pages/curator_dashboard_page.dart';
+import 'pages/curator_workbench_page.dart';
+import 'pages/fanzine_reader_page.dart'; // NEW Unified Page
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -39,20 +38,12 @@ class GoRouterRefreshStream extends ChangeNotifier {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 1. Load Configuration from JSON
   await Env.load();
-
-  // 2. Load the Web Script dynamically using the loaded Key
   await loadGoogleMapsScript();
-
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   usePathUrlStrategy();
 
   runApp(
-    // 3. Inject UserProvider at the root
     ChangeNotifierProvider(
       create: (_) => UserProvider(),
       child: const MyApp(),
@@ -101,7 +92,7 @@ class _MyAppState extends State<MyApp> {
         GoRoute(
             path: '/',
             name: 'root',
-            builder: (context, state) => const FanzinePage()),
+            builder: (context, state) => const FanzineReaderPage()), // Updated
         GoRoute(
             path: '/login',
             name: 'login',
@@ -113,20 +104,18 @@ class _MyAppState extends State<MyApp> {
         GoRoute(
             path: '/fanzine',
             name: 'fanzine',
-            builder: (context, state) => const FanzinePage()),
+            builder: (context, state) => const FanzineReaderPage()), // Updated
         GoRoute(
             path: '/profile',
             name: 'profile',
             builder: (context, state) => const ProfilePage()),
 
-        // NEW: Curator Dashboard (Inbox)
         GoRoute(
           path: '/dashboard',
           name: 'curatorDashboard',
           builder: (context, state) => const CuratorDashboardPage(),
         ),
 
-        // NEW: Curator Workbench
         GoRoute(
           path: '/workbench/:fanzineId',
           name: 'curatorWorkbench',
@@ -136,22 +125,20 @@ class _MyAppState extends State<MyApp> {
           },
         ),
 
-        // NEW: Route for the New Reader
+        // Updated Reader Route
         GoRoute(
           path: '/reader/:fanzineId',
-          name: 'newReader',
+          name: 'reader',
           builder: (context, state) {
             final fanzineId = state.pathParameters['fanzineId']!;
-            return NewReaderPage(fanzineId: fanzineId);
+            return FanzineReaderPage(fanzineId: fanzineId);
           },
         ),
 
-        // UPDATED ROUTE
         GoRoute(
           path: '/edit-info',
           name: 'editInfo',
           builder: (context, state) {
-            // Read query param: /edit-info?userId=abc1234
             final userId = state.uri.queryParameters['userId'];
             return EditInfoPage(targetUserId: userId);
           },
@@ -179,7 +166,7 @@ class _MyAppState extends State<MyApp> {
         ),
       ],
       errorBuilder: (context, state) =>
-          const Scaffold(body: Center(child: Text('Page not found'))),
+      const Scaffold(body: Center(child: Text('Page not found'))),
     );
   }
 
