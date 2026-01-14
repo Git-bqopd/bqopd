@@ -125,7 +125,7 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: Colors.grey[200],
       body: SafeArea(
         child: PageWrapper(
-          maxWidth: 1000,
+          maxWidth: 900,
           scroll: false,
           padding: const EdgeInsets.all(8),
           child: SingleChildScrollView(

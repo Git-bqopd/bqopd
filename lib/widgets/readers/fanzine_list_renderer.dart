@@ -15,6 +15,9 @@ class FanzineListRenderer extends StatefulWidget {
   final Function(int)? onOpenGrid;
   final int initialIndex;
 
+  // NEW: Callback for desktop mode to show drawer externally
+  final Function(Widget drawerContent)? onExternalDrawerRequest;
+
   const FanzineListRenderer({
     super.key,
     required this.fanzineId,
@@ -24,6 +27,7 @@ class FanzineListRenderer extends StatefulWidget {
     required this.viewService,
     this.onOpenGrid,
     this.initialIndex = 0,
+    this.onExternalDrawerRequest,
   });
 
   @override
@@ -37,51 +41,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   final Map<int, TextEditingController> _commentControllers = {};
 
   @override
-  void initState() {
-    super.initState();
-    // Logic for scrolling to initial index is handled by the controller passed from parent
-    // or by the GridView's deterministic rendering.
-  }
-
-  void _toggleTextDrawer(int index) {
-    setState(() {
-      final isOpen = _openTextDrawers[index] ?? false;
-      _openTextDrawers[index] = !isOpen;
-      if (_openTextDrawers[index] == true) _openCommentDrawers[index] = false;
-    });
-  }
-
-  void _toggleCommentDrawer(int index) {
-    setState(() {
-      final isOpen = _openCommentDrawers[index] ?? false;
-      _openCommentDrawers[index] = !isOpen;
-      if (_openCommentDrawers[index] == true) _openTextDrawers[index] = false;
-    });
-  }
-
-  Future<void> _submitComment(int pageIndex, String pageId) async {
-    final controller = _commentControllers[pageIndex];
-    if (controller == null || controller.text.trim().isEmpty) return;
-
-    final text = controller.text.trim();
-    controller.clear();
-    FocusScope.of(context).unfocus();
-
-    try {
-      await _engagementService.addComment(
-        fanzineId: widget.fanzineId,
-        pageId: pageId,
-        text: text,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
-  @override
   void dispose() {
     for (var c in _commentControllers.values) {
       c.dispose();
@@ -89,161 +48,132 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // REVERTING TO GRIDVIEW.BUILDER (Single Column)
-    // This matches the legacy `fanzine_single_view.dart` implementation exactly.
-    // It enforces a strict aspect ratio, making scroll offsets deterministic.
-    return GridView.builder(
-      controller: widget.scrollController,
-      padding: const EdgeInsets.all(8.0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 1, // Single Column
-        childAspectRatio: 0.625, // 5:8 Ratio (Matches Grid Renderer)
-        mainAxisSpacing: 30.0,
+  void _handleTextToggle(int index, String text) {
+    if (widget.onExternalDrawerRequest != null) {
+      // Desktop Mode: Send content to parent
+      // Note: We don't toggle local state
+      widget.onExternalDrawerRequest!(_buildTextDrawerContent(text));
+    } else {
+      // Mobile Mode: Toggle local state
+      setState(() {
+        final isOpen = _openTextDrawers[index] ?? false;
+        _openTextDrawers[index] = !isOpen;
+        if (_openTextDrawers[index] == true) _openCommentDrawers[index] = false;
+      });
+    }
+  }
+
+  void _handleCommentToggle(int index, String pageId) {
+    if (widget.onExternalDrawerRequest != null) {
+      // Desktop Mode
+      widget.onExternalDrawerRequest!(_buildCommentDrawerContent(index, pageId));
+    } else {
+      // Mobile Mode
+      setState(() {
+        final isOpen = _openCommentDrawers[index] ?? false;
+        _openCommentDrawers[index] = !isOpen;
+        if (_openCommentDrawers[index] == true) _openTextDrawers[index] = false;
+      });
+    }
+  }
+
+  // --- DRAWER CONTENT BUILDERS (Shared) ---
+
+  Widget _buildTextDrawerContent(String text) {
+    // Wrapped in a container for the external view consistency
+    return Container(
+      color: const Color(0xFFFDFBF7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.grey[200],
+            child: const Text("TRANSCRIPTION", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: text.isEmpty
+                  ? const Center(child: Text("No transcription available.", style: TextStyle(color: Colors.grey)))
+                  : SelectableText.rich(LinkParser.renderLinks(context, text,
+                  baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia'))),
+            ),
+          ),
+        ],
       ),
-      // Pre-load a large number of items to prevent lazy-loading delay
-      // during rapid scrolling or switching.
-      cacheExtent: 5000.0,
-      itemCount: widget.pages.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          // Header fits naturally in the grid cell
-          return widget.headerWidget;
-        }
-
-        final pageIndex = index - 1;
-        final pageData = widget.pages[pageIndex];
-        // Using AutomaticKeepAlive to ensure state persists
-        return _KeepAlivePageItem(
-          index: index,
-          pageIndex: pageIndex,
-          pageData: pageData,
-          fanzineId: widget.fanzineId,
-          isTextOpen: _openTextDrawers[pageIndex] ?? false,
-          isCommentsOpen: _openCommentDrawers[pageIndex] ?? false,
-          onToggleText: () => _toggleTextDrawer(pageIndex),
-          onToggleComment: () => _toggleCommentDrawer(pageIndex),
-          onOpenGrid: widget.onOpenGrid,
-          commentController: _commentControllers.putIfAbsent(
-              pageIndex, () => TextEditingController()),
-          onSubmitComment: _submitComment,
-          engagementService: _engagementService,
-        );
-      },
-    );
-  }
-}
-
-class _KeepAlivePageItem extends StatefulWidget {
-  final int index;
-  final int pageIndex;
-  final Map<String, dynamic> pageData;
-  final String fanzineId;
-  final bool isTextOpen;
-  final bool isCommentsOpen;
-  final VoidCallback onToggleText;
-  final VoidCallback onToggleComment;
-  final Function(int)? onOpenGrid;
-  final TextEditingController commentController;
-  final Function(int, String) onSubmitComment;
-  final EngagementService engagementService;
-
-  const _KeepAlivePageItem({
-    required this.index,
-    required this.pageIndex,
-    required this.pageData,
-    required this.fanzineId,
-    required this.isTextOpen,
-    required this.isCommentsOpen,
-    required this.onToggleText,
-    required this.onToggleComment,
-    required this.onOpenGrid,
-    required this.commentController,
-    required this.onSubmitComment,
-    required this.engagementService,
-  });
-
-  @override
-  State<_KeepAlivePageItem> createState() => _KeepAlivePageItemState();
-}
-
-class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true; // Forces the item to stay in memory
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context); // Required for KeepAlive
-
-    final imageUrl = widget.pageData['imageUrl'] as String?;
-    final storagePath = widget.pageData['storagePath'] as String?;
-    final imageId = widget.pageData['imageId'] as String?;
-    final pageId = widget.pageData['__id'];
-    final String pageText = widget.pageData['text_processed'] ?? widget.pageData['text'] ?? '';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Image Area (Expanded to fill available space in the Grid Cell)
-        Expanded(
-          child: Container(
-            color: Colors.grey[100],
-            child: _PageImage(imageUrl: imageUrl, storagePath: storagePath),
-          ),
-        ),
-
-        // Toolbar
-        Container(
-          color: Colors.white,
-          child: imageId != null
-              ? FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('images').doc(imageId).get(),
-            builder: (context, snapshot) {
-              bool isGame = false;
-              if (snapshot.hasData && snapshot.data!.exists) {
-                isGame = (snapshot.data!.data() as Map<String, dynamic>)['isGame'] == true;
-              }
-              return SocialToolbar(
-                imageId: imageId,
-                pageId: pageId,
-                fanzineId: widget.fanzineId,
-                pageNumber: widget.pageIndex + 1,
-                isGame: isGame,
-                onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
-                onToggleComments: widget.onToggleComment,
-                onToggleText: widget.onToggleText,
-              );
-            },
-          )
-              : SocialToolbar(
-            imageId: null,
-            pageId: pageId,
-            fanzineId: widget.fanzineId,
-            pageNumber: widget.pageIndex + 1,
-            isGame: false,
-            onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
-            onToggleComments: widget.onToggleComment,
-            onToggleText: widget.onToggleText,
-          ),
-        ),
-
-        // Drawers (Overlays or expansions)
-        // Note: In a fixed-height GridView, expanding drawers might cause overflow issues
-        // if they exceed the cell bounds. The legacy single view used GridView,
-        // effectively clipping or requiring scrolling *within* the item if it was complex.
-        // However, standard drawers usually push content.
-        // If the legacy view worked, it likely overlayed or the content was small.
-        // We render them here conditionally.
-        if (widget.isTextOpen)
-          _buildTextDrawer(pageText, context),
-        if (widget.isCommentsOpen)
-          _buildCommentDrawer(widget.pageIndex, pageId ?? 'unknown'),
-      ],
     );
   }
 
-  Widget _buildTextDrawer(String text, BuildContext context) {
+  Widget _buildCommentDrawerContent(int pageIndex, String pageId) {
+    // Ensure controller exists
+    final controller = _commentControllers.putIfAbsent(pageIndex, () => TextEditingController());
+
+    return Container(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.grey[200],
+            child: const Text("COMMENTS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _engagementService.getCommentsStream(widget.fanzineId, pageId),
+              builder: (context, snap) {
+                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                final docs = snap.data!.docs;
+                if (docs.isEmpty) return const Center(child: Text("No comments yet."));
+
+                return ListView.separated(
+                  itemCount: docs.length,
+                  separatorBuilder: (c,i) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final data = docs[i].data() as Map<String, dynamic>;
+                    return ListTile(
+                      dense: true,
+                      title: Text(data['username'] ?? 'Anon', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(data['text'] ?? ''),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade300))
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(
+                        hintText: "Add a comment...",
+                        isDense: true,
+                        border: OutlineInputBorder()),
+                    onSubmitted: (_) => _submitComment(pageIndex, pageId),
+                  ),
+                ),
+                IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: () => _submitComment(pageIndex, pageId)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- LOCAL DRAWER BUILDERS (For Mobile Inline) ---
+  // These wrap the content in a constrained box or style appropriate for inline display
+
+  Widget _buildInlineTextDrawer(String text) {
     if (text.isEmpty) {
       return Container(
           padding: const EdgeInsets.all(20),
@@ -261,7 +191,8 @@ class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKe
     );
   }
 
-  Widget _buildCommentDrawer(int pageIndex, String pageId) {
+  Widget _buildInlineCommentDrawer(int pageIndex, String pageId) {
+    final controller = _commentControllers.putIfAbsent(pageIndex, () => TextEditingController());
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -271,17 +202,24 @@ class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKe
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            height: 100,
+            height: 200, // Fixed height for inline
             child: StreamBuilder<QuerySnapshot>(
-              stream: widget.engagementService.getCommentsStream(widget.fanzineId, pageId),
+              stream: _engagementService.getCommentsStream(widget.fanzineId, pageId),
               builder: (context, snap) {
                 if (!snap.hasData) return const SizedBox();
                 final docs = snap.data!.docs;
+                if (docs.isEmpty) return const Center(child: Text("No comments yet."));
                 return ListView.builder(
                   itemCount: docs.length,
                   itemBuilder: (context, i) {
                     final data = docs[i].data() as Map<String, dynamic>;
-                    return Text("${data['username']}: ${data['text']}", style: const TextStyle(fontSize: 12));
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: RichText(text: TextSpan(style: const TextStyle(color: Colors.black), children: [
+                        TextSpan(text: "${data['username']}: ", style: const TextStyle(fontWeight: FontWeight.bold)),
+                        TextSpan(text: "${data['text']}"),
+                      ])),
+                    );
                   },
                 );
               },
@@ -292,7 +230,7 @@ class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKe
             children: [
               Expanded(
                 child: TextField(
-                  controller: widget.commentController,
+                  controller: controller,
                   decoration: const InputDecoration(
                       hintText: "Comment...",
                       isDense: true,
@@ -301,11 +239,161 @@ class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKe
               ),
               IconButton(
                   icon: const Icon(Icons.send),
-                  onPressed: () => widget.onSubmitComment(pageIndex, pageId)),
+                  onPressed: () => _submitComment(pageIndex, pageId)),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _submitComment(int pageIndex, String pageId) async {
+    final controller = _commentControllers[pageIndex];
+    if (controller == null || controller.text.trim().isEmpty) return;
+
+    final text = controller.text.trim();
+    controller.clear();
+    // Only unfocus if on mobile/inline to avoid jarring keyboard dismissal on desktop
+    if (widget.onExternalDrawerRequest == null) {
+      FocusScope.of(context).unfocus();
+    }
+
+    try {
+      await _engagementService.addComment(
+        fanzineId: widget.fanzineId,
+        pageId: pageId,
+        text: text,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      controller: widget.scrollController,
+      padding: const EdgeInsets.all(8.0),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 1, // Single Column
+        childAspectRatio: 0.625, // 5:8 Ratio
+        mainAxisSpacing: 30.0,
+      ),
+      cacheExtent: 5000.0,
+      itemCount: widget.pages.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return widget.headerWidget;
+        }
+
+        final pageIndex = index - 1;
+        final pageData = widget.pages[pageIndex];
+        return _KeepAlivePageItem(
+          index: index,
+          pageIndex: pageIndex,
+          pageData: pageData,
+          fanzineId: widget.fanzineId,
+          isTextOpen: _openTextDrawers[pageIndex] ?? false,
+          isCommentsOpen: _openCommentDrawers[pageIndex] ?? false,
+          onToggleText: () => _handleTextToggle(pageIndex, pageData['text_processed'] ?? pageData['text'] ?? ''),
+          onToggleComment: () => _handleCommentToggle(pageIndex, pageData['__id']),
+          onOpenGrid: widget.onOpenGrid,
+          // We pass inline builders for the mobile logic
+          inlineTextDrawerBuilder: _buildInlineTextDrawer,
+          inlineCommentDrawerBuilder: _buildInlineCommentDrawer,
+        );
+      },
+    );
+  }
+}
+
+class _KeepAlivePageItem extends StatefulWidget {
+  final int index;
+  final int pageIndex;
+  final Map<String, dynamic> pageData;
+  final String fanzineId;
+  final bool isTextOpen;
+  final bool isCommentsOpen;
+  final VoidCallback onToggleText;
+  final VoidCallback onToggleComment;
+  final Function(int)? onOpenGrid;
+  final Widget Function(String) inlineTextDrawerBuilder;
+  final Widget Function(int, String) inlineCommentDrawerBuilder;
+
+  const _KeepAlivePageItem({
+    required this.index,
+    required this.pageIndex,
+    required this.pageData,
+    required this.fanzineId,
+    required this.isTextOpen,
+    required this.isCommentsOpen,
+    required this.onToggleText,
+    required this.onToggleComment,
+    required this.onOpenGrid,
+    required this.inlineTextDrawerBuilder,
+    required this.inlineCommentDrawerBuilder,
+  });
+
+  @override
+  State<_KeepAlivePageItem> createState() => _KeepAlivePageItemState();
+}
+
+class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    final imageUrl = widget.pageData['imageUrl'] as String?;
+    final storagePath = widget.pageData['storagePath'] as String?;
+    final imageId = widget.pageData['imageId'] as String?;
+    final pageId = widget.pageData['__id'];
+    final String pageText = widget.pageData['text_processed'] ?? widget.pageData['text'] ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Container(
+            color: Colors.grey[100],
+            child: _PageImage(imageUrl: imageUrl, storagePath: storagePath),
+          ),
+        ),
+        Container(
+          color: Colors.white,
+          child: FutureBuilder<DocumentSnapshot>(
+            future: imageId != null
+                ? FirebaseFirestore.instance.collection('images').doc(imageId).get()
+                : null,
+            builder: (context, snapshot) {
+              bool isGame = false;
+              if (snapshot.hasData && snapshot.data!.exists) {
+                isGame = (snapshot.data!.data() as Map<String, dynamic>)['isGame'] == true;
+              }
+              return SocialToolbar(
+                imageId: imageId,
+                pageId: pageId,
+                fanzineId: widget.fanzineId,
+                pageNumber: widget.pageIndex + 1,
+                isGame: isGame,
+                onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
+                onToggleComments: widget.onToggleComment,
+                onToggleText: widget.onToggleText,
+              );
+            },
+          ),
+        ),
+        // Drawers (Only visible if local state allows)
+        if (widget.isTextOpen)
+          widget.inlineTextDrawerBuilder(pageText),
+        if (widget.isCommentsOpen)
+          widget.inlineCommentDrawerBuilder(widget.pageIndex, pageId ?? 'unknown'),
+      ],
     );
   }
 }
@@ -319,17 +407,12 @@ class _PageImage extends StatefulWidget {
 }
 
 class _PageImageState extends State<_PageImage> {
-  // Directly expose the URL state
   String? _currentUrl;
 
   @override
   void initState() {
     super.initState();
-    // IMPORTANT: If imageUrl is provided, USE IT IMMEDIATELY.
-    // This prevents the "loading after click" delay.
     _currentUrl = widget.imageUrl;
-
-    // Only resolve storage path if we have absolutely nothing
     if ((_currentUrl == null || _currentUrl!.isEmpty) && widget.storagePath != null) {
       _resolveUrl();
     }
@@ -349,9 +432,6 @@ class _PageImageState extends State<_PageImage> {
     if (_currentUrl == null || _currentUrl!.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    // Standard Image.network uses internal cache.
-    // Since we are now using GridView with cacheExtent + KeepAlive,
-    // this widget stays mounted and the image stays painted.
     return Image.network(
       _currentUrl!,
       fit: BoxFit.contain,

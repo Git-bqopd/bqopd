@@ -38,6 +38,9 @@ class FanzineGridRenderer extends StatelessWidget {
     return GridView.builder(
       controller: scrollController,
       padding: const EdgeInsets.all(padding),
+      // We use SliverGridDelegateWithFixedCrossAxisCount which responds
+      // automatically to the width of the parent container.
+      // This makes it safe for responsive column resizing.
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: childAspectRatio,
@@ -48,10 +51,7 @@ class FanzineGridRenderer extends StatelessWidget {
       itemCount: pages.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
-          // HEADER CELL: Must behave exactly like a grid cell (5:8 ratio)
-          // We wrap it in a Container to match the decoration of other cells if needed,
-          // or just return the widget which should handle its own internal 5:8 sizing.
-          // The GridDelegate forces the 5:8 constraint on this cell.
+          // HEADER CELL
           return GestureDetector(
             onTap: () {
               // Optional: trigger something on cover tap
