@@ -7,6 +7,7 @@ import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart';
 import 'package:go_router/go_router.dart';
 import '../services/username_service.dart';
 import '../env.dart'; // Import Env
+import 'image_selector_modal.dart'; // Import the new selector
 
 class EditInfoWidget extends StatefulWidget {
   final String? targetUserId; // Optional: If null, edits current user
@@ -22,6 +23,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
   late final FlutterGooglePlacesSdk _places;
 
+  final TextEditingController displayNameController = TextEditingController(); // NEW
   final TextEditingController userNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
@@ -38,7 +40,9 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   // Socials Controllers
   final TextEditingController xHandleController = TextEditingController();
   final TextEditingController instagramHandleController =
-      TextEditingController();
+  TextEditingController();
+
+  String? _profilePhotoUrl; // State for the photo URL
 
   bool _isLoadingData = true;
   bool _isSaving = false;
@@ -74,6 +78,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     firstNameController.removeListener(_updateDefaultUsername);
     stateController.removeListener(_updateDefaultUsername);
 
+    displayNameController.dispose();
     userNameController.dispose();
     emailController.dispose();
     bioController.dispose();
@@ -203,6 +208,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               _isUsernameManuallyEdited = true;
             }
 
+            displayNameController.text = data['displayName'] ?? ''; // Load Display Name
             bioController.text = data['bio'] ?? '';
             street1Controller.text = data['street1'] ?? '';
             street2Controller.text = data['street2'] ?? '';
@@ -215,6 +221,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
             xHandleController.text = data['xHandle'] ?? '';
             instagramHandleController.text = data['instagramHandle'] ?? '';
+            _profilePhotoUrl = data['photoUrl'];
 
             // If Managed user has a stored email field (rare), show it
             if (widget.targetUserId != null &&
@@ -244,7 +251,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
   Future<void> saveProfile() async {
     if (_isSaving) return;
-    // Removed FocusScope.of(context).unfocus() to prevent Web engine assertions
     setState(() {
       _isSaving = true;
     });
@@ -255,6 +261,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
         final Map<String, dynamic> dataToUpdate = {
           'username': finalUsername,
+          'displayName': displayNameController.text.trim(), // Save Display Name
           'bio': bioController.text.trim(),
           'updatedAt': FieldValue.serverTimestamp(),
           'firstName': firstNameController.text.trim(),
@@ -265,17 +272,17 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           'state': stateController.text.trim(),
           'zipCode': zipController.text.trim(),
           'country': countryController.text.trim(),
+          'photoUrl': _profilePhotoUrl,
 
           // Socials
           'xHandle': xHandleController.text.trim().replaceAll('@', ''),
           'instagramHandle':
-              instagramHandleController.text.trim().replaceAll('@', ''),
+          instagramHandleController.text.trim().replaceAll('@', ''),
 
-          // Only update email if we are editing ourselves (Managed profiles don't update email here)
+          // Only update email if we are editing ourselves
           if (widget.targetUserId == null && currentUser != null)
             'email': currentUser!.email,
 
-          // UID should definitely match document ID
           'uid': _editingUid,
         };
 
@@ -286,25 +293,18 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
         // Claim handle if it changed
         if (finalUsername.isNotEmpty && finalUsername != _initialUsername) {
-          // Note: claimHandle currently uses FirebaseAuth.currentUser.uid to reserve the name.
-          // For managed profiles, we need to register the handle under the MANAGED ID, not the logged-in admin's ID.
           if (widget.targetUserId != null) {
-            // Manual handle registration for managed user
             final db = FirebaseFirestore.instance;
             final shortCodeKey = finalUsername.toUpperCase();
-
-            // Check collisions
             final short =
-                await db.collection('shortcodes').doc(shortCodeKey).get();
+            await db.collection('shortcodes').doc(shortCodeKey).get();
             if (!short.exists) {
               final batch = db.batch();
-              // 1. usernames/{handle}
               batch.set(db.collection('usernames').doc(finalUsername), {
                 'uid': _editingUid,
                 'isManaged': true,
                 'createdAt': FieldValue.serverTimestamp(),
               });
-              // 2. shortcodes/{HANDLE}
               batch.set(db.collection('shortcodes').doc(shortCodeKey), {
                 'type': 'user',
                 'contentId': _editingUid,
@@ -313,7 +313,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
               await batch.commit();
             }
           } else {
-            // Normal user flow
             await claimHandle(finalUsername);
           }
         }
@@ -331,6 +330,19 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           _isSaving = false;
         });
       }
+    }
+  }
+
+  void _onChangePhoto() async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => ImageSelectorModal(userId: _editingUid),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() {
+        _profilePhotoUrl = result;
+      });
     }
   }
 
@@ -373,164 +385,251 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           padding: const EdgeInsets.all(25.0),
           child: _isLoadingData
               ? const SizedBox(
-                  height: 200,
-                  child: Center(child: CircularProgressIndicator()))
+              height: 200,
+              child: Center(child: CircularProgressIndicator()))
               : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(pageTitle,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 24,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(pageTitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColorDark)),
+              const SizedBox(height: 20),
+
+              // --- SPLIT LAYOUT START ---
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // Use a column on very narrow screens, otherwise row
+                  bool isNarrow = constraints.maxWidth < 500;
+
+                  Widget photoSection = GestureDetector(
+                    onTap: _onChangePhoto,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        AspectRatio(
+                          aspectRatio: 5 / 8,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              border:
+                              Border.all(color: Colors.grey[400]!),
+                            ),
+                            child: _profilePhotoUrl != null &&
+                                _profilePhotoUrl!.isNotEmpty
+                                ? Image.network(
+                              _profilePhotoUrl!,
+                              fit: BoxFit
+                                  .cover, // Or contain based on preference
+                              errorBuilder: (c, e, s) => const Icon(
+                                  Icons.broken_image,
+                                  size: 40),
+                            )
+                                : const Icon(Icons.person,
+                                size: 60, color: Colors.grey),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          "click to change photo",
+                          style: TextStyle(
+                            fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).primaryColorDark)),
-                    const SizedBox(height: 20),
-                    _buildSectionLabel('Identity'),
-                    TextField(
-                        controller: emailController,
-                        enabled: false,
-                        decoration: defaultDecoration.copyWith(
-                            hintText: "email", fillColor: Colors.grey[200]),
-                        style: TextStyle(color: Colors.grey[700])),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: userNameController,
-                      decoration: defaultDecoration.copyWith(
-                          hintText: "Username (e.g. kevin-from-wi)"),
-                      onChanged: (val) => _isUsernameManuallyEdited = true,
-                    ),
-                    if (!_isUsernameManuallyEdited &&
-                        firstNameController.text.isNotEmpty &&
-                        stateController.text.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0, left: 4.0),
-                        child: Text("Auto-generating handle...",
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.indigo.shade800,
-                                fontStyle: FontStyle.italic)),
-                      ),
-                    const SizedBox(height: 10),
-                    TextField(
-                        controller: bioController,
-                        maxLines: 3,
-                        decoration: defaultDecoration.copyWith(
-                            hintText: "Bio (tell us about yourself!)"),
-                        keyboardType: TextInputType.multiline),
-                    const SizedBox(height: 25),
-                    _buildSectionLabel('Mailing Address'),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                            child: TextField(
-                                controller: firstNameController,
-                                decoration: defaultDecoration.copyWith(
-                                    hintText: "First Name"),
-                                textCapitalization: TextCapitalization.words)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            child: TextField(
-                                controller: lastNameController,
-                                decoration: defaultDecoration.copyWith(
-                                    hintText: "Last Name"),
-                                textCapitalization: TextCapitalization.words)),
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    GestureDetector(
-                      onTap: _openAddressSearch,
-                      child: AbsorbPointer(
-                        child: TextField(
-                          controller: street1Controller,
+                  );
+
+                  Widget fieldsSection = Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildSectionLabel('Public Information'),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: displayNameController,
+                        decoration: defaultDecoration.copyWith(
+                            hintText: "Display Name (Public)"),
+                        textCapitalization: TextCapitalization.words,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: userNameController,
+                        decoration: defaultDecoration.copyWith(
+                            hintText: "Username (e.g. kevin-from-wi)"),
+                        onChanged: (val) =>
+                        _isUsernameManuallyEdited = true,
+                      ),
+                      if (!_isUsernameManuallyEdited &&
+                          firstNameController.text.isNotEmpty &&
+                          stateController.text.isNotEmpty)
+                        Padding(
+                          padding:
+                          const EdgeInsets.only(top: 4.0, left: 4.0),
+                          child: Text("Auto-generating handle...",
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.indigo.shade800,
+                                  fontStyle: FontStyle.italic)),
+                        ),
+                      const SizedBox(height: 10),
+                      TextField(
+                          controller: bioController,
+                          maxLines: 3,
                           decoration: defaultDecoration.copyWith(
-                            hintText: "Tap to search address...",
-                            prefixIcon: const Icon(Icons.location_on_outlined,
-                                color: Colors.indigo),
-                            filled: true,
-                            fillColor: Colors.indigo.withValues(alpha: 0.05),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                        controller: street2Controller,
-                        decoration: defaultDecoration.copyWith(
-                            hintText: "Apt / Suite / Other")),
-                    const SizedBox(height: 10),
-                    Row(
+                              hintText: "Bio (tell us about yourself!)"),
+                          keyboardType: TextInputType.multiline),
+                      const SizedBox(height: 10),
+                      TextField(
+                          controller: xHandleController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "X (Twitter) Username")),
+                      const SizedBox(height: 10),
+                      TextField(
+                          controller: instagramHandleController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "Instagram Username")),
+                    ],
+                  );
+
+                  if (isNarrow) {
+                    return Column(
                       children: [
-                        Expanded(
-                            flex: 2,
-                            child: TextField(
-                                controller: cityController,
-                                decoration: defaultDecoration.copyWith(
-                                    hintText: "City"))),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            flex: 1,
-                            child: TextField(
-                                controller: stateController,
-                                decoration: defaultDecoration.copyWith(
-                                    hintText: "State"))),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            flex: 1,
-                            child: TextField(
-                                controller: zipController,
-                                decoration: defaultDecoration.copyWith(
-                                    hintText: "Zip"))),
+                        SizedBox(height: 200, child: photoSection),
+                        const SizedBox(height: 20),
+                        fieldsSection,
                       ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                        controller: countryController,
-                        decoration:
-                            defaultDecoration.copyWith(hintText: "Country")),
-                    const SizedBox(height: 25),
-                    _buildSectionLabel('Socials'),
-                    const SizedBox(height: 10),
-                    TextField(
-                        controller: xHandleController,
-                        decoration: defaultDecoration.copyWith(
-                            hintText: "X (Twitter) Username")),
-                    const SizedBox(height: 10),
-                    TextField(
-                        controller: instagramHandleController,
-                        decoration: defaultDecoration.copyWith(
-                            hintText: "Instagram Username")),
-                    const SizedBox(height: 30),
-                    Row(
+                    );
+                  } else {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _isSaving ? null : saveProfile,
-                            style: actionButtonStyle,
-                            child:
-                                Text(_isSaving ? "Saving..." : "Save Profile"),
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              if (_initialUsername.isNotEmpty) {
-                                context.pushNamed('shortlink',
-                                    pathParameters: {'code': _initialUsername});
-                              } else {
-                                context.push('/profile');
-                              }
-                            },
-                            style: actionButtonStyle,
-                            child: const Text("View Public Profile"),
-                          ),
-                        ),
+                        // Left: Photo (Flex 1)
+                        Expanded(flex: 1, child: photoSection),
+                        const SizedBox(width: 20),
+                        // Right: Fields (Flex 2)
+                        Expanded(flex: 2, child: fieldsSection),
                       ],
-                    )
-                  ],
+                    );
+                  }
+                },
+              ),
+              // --- SPLIT LAYOUT END ---
+
+              const SizedBox(height: 25),
+
+              // Rest of the form (Full Width)
+              _buildSectionLabel('Private Information'),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: emailController,
+                  enabled: false,
+                  decoration: defaultDecoration.copyWith(
+                      hintText: "email", fillColor: Colors.grey[200]),
+                  style: TextStyle(color: Colors.grey[700])),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                      child: TextField(
+                          controller: firstNameController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "First Name"),
+                          textCapitalization: TextCapitalization.words)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: TextField(
+                          controller: lastNameController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "Last Name"),
+                          textCapitalization: TextCapitalization.words)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: _openAddressSearch,
+                child: AbsorbPointer(
+                  child: TextField(
+                    controller: street1Controller,
+                    decoration: defaultDecoration.copyWith(
+                      hintText: "Tap to search address...",
+                      prefixIcon: const Icon(Icons.location_on_outlined,
+                          color: Colors.indigo),
+                      filled: true,
+                      fillColor: Colors.indigo.withValues(alpha: 0.05),
+                    ),
+                  ),
                 ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: street2Controller,
+                  decoration: defaultDecoration.copyWith(
+                      hintText: "Apt / Suite / Other")),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                      flex: 2,
+                      child: TextField(
+                          controller: cityController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "City"))),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      flex: 1,
+                      child: TextField(
+                          controller: stateController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "State"))),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      flex: 1,
+                      child: TextField(
+                          controller: zipController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "Zip"))),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: countryController,
+                  decoration:
+                  defaultDecoration.copyWith(hintText: "Country")),
+              const SizedBox(height: 30),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : saveProfile,
+                      style: actionButtonStyle,
+                      child:
+                      Text(_isSaving ? "Saving..." : "Save Profile"),
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        if (_initialUsername.isNotEmpty) {
+                          context.pushNamed('shortlink',
+                              pathParameters: {'code': _initialUsername});
+                        } else {
+                          context.push('/profile');
+                        }
+                      },
+                      style: actionButtonStyle,
+                      child: const Text("View Public Profile"),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
         ),
       ),
     );

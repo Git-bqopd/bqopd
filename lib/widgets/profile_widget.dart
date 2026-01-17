@@ -30,12 +30,14 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   int _topTabIndex = 0;
 
   String _username = '',
+      _displayName = '',
       _firstName = '',
       _lastName = '',
       _bio = '',
       _xHandle = '',
       _instagramHandle = '',
       _profileUid = '';
+  String? _photoUrl; // Add photoUrl state
   bool _isLoading = true;
   String? _errorMessage;
   bool _isManaged = false;
@@ -106,7 +108,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     setState(() => _isLoading = true);
     try {
       final doc =
-          await FirebaseFirestore.instance.collection('Users').doc(uid).get();
+      await FirebaseFirestore.instance.collection('Users').doc(uid).get();
       if (doc.exists && mounted) {
         _populateFields(doc.data()!);
         setState(() => _isLoading = false);
@@ -129,6 +131,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   void _populateFields(Map<String, dynamic> data) {
     setState(() {
       _username = data['username'] ?? '';
+      _displayName = data['displayName'] ?? '';
       _firstName = data['firstName'] ?? '';
       _lastName = data['lastName'] ?? '';
       _bio = data['bio'] ?? '';
@@ -137,6 +140,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       _profileUid = data['uid'] ?? '';
       _isManaged = data['isManaged'] == true;
       _managers = data['managers'] ?? [];
+      _photoUrl = data['photoUrl']; // Populate photoUrl
       _errorMessage = null;
     });
   }
@@ -207,337 +211,340 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _errorMessage != null
-                ? Center(
-                    child: Text(_errorMessage!,
-                        style: const TextStyle(color: Colors.red)))
-                : Column(
-                    children: [
-                      // TOP ROW (Contact + Linktree)
-                      Expanded(
-                        flex: 4,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment
-                              .stretch, // Allow full height for pinning
-                          children: [
-                            // LEFT STICKER: Contact Info (Takes remaining space, aligned left)
-                            Expanded(
-                              flex: 1,
-                              child: Align(
-                                alignment: Alignment
-                                    .centerLeft, // Pinned to the Left (vertically centered)
-                                child: Container(
-                                  // Constrain max width for the sticker itself
-                                  constraints: const BoxConstraints(
-                                      maxWidth:
-                                          400), // Increased max width for 2-column layout
-                                  width: double.infinity,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.zero,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black12,
-                                        blurRadius: 2,
-                                        offset: Offset(1, 1),
-                                      ),
-                                    ],
-                                  ),
-                                  // New Layout Structure
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: IntrinsicHeight(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        // ROW 1: Edit Info (Aligned Right)
-                                        if (_canEdit)
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: GestureDetector(
-                                              // Navigate to edit page with parameters
-                                              onTap: () {
-                                                // If we have a valid profile UID, pass it along
-                                                if (_profileUid.isNotEmpty) {
-                                                  context.pushNamed('editInfo',
-                                                      queryParameters: {
-                                                        'userId': _profileUid
-                                                      });
-                                                } else {
-                                                  context.pushNamed('editInfo');
-                                                }
-                                              },
-                                              child: const Text('edit info',
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.black)),
-                                            ),
-                                          ),
-
-                                        const SizedBox(height: 8),
-
-                                        // ROW 2: The Split (Profile Pic | Info)
-                                        Expanded(
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              // Left Column: Profile Picture
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                    right: 12.0),
-                                                child: ConstrainedBox(
-                                                  constraints: const BoxConstraints(
-                                                      maxWidth:
-                                                          100), // Constraint for profile pic
-                                                  child: AspectRatio(
-                                                    aspectRatio: 5 / 8,
-                                                    child: Container(
-                                                      color: Colors.grey[300],
-                                                      child: const Icon(
-                                                          Icons.person,
-                                                          color: Colors.grey),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-
-                                              // Right Column: Info
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      _firstName.isNotEmpty ||
-                                                              _lastName
-                                                                  .isNotEmpty
-                                                          ? '$_firstName $_lastName'
-                                                              .trim()
-                                                          : 'User',
-                                                      style: const TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 14),
-                                                    ),
-                                                    if (_isManaged) ...[
-                                                      const SizedBox(height: 2),
-                                                      Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 4,
-                                                                vertical: 1),
-                                                        color: Colors.grey[200],
-                                                        child: const Text(
-                                                            "Managed Profile",
-                                                            style: TextStyle(
-                                                                fontSize: 9,
-                                                                fontStyle:
-                                                                    FontStyle
-                                                                        .italic)),
-                                                      )
-                                                    ],
-                                                    Text(
-                                                      '@$_username',
-                                                      style: const TextStyle(
-                                                          fontSize: 12),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    Row(
-                                                      children: [
-                                                        GestureDetector(
-                                                          onTap: () {},
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        6,
-                                                                    vertical:
-                                                                        2),
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              border: Border.all(
-                                                                  color: Colors
-                                                                      .black),
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .zero,
-                                                            ),
-                                                            child: const Text(
-                                                                "follow",
-                                                                style: TextStyle(
-                                                                    fontSize:
-                                                                        10,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold)),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                            width: 6),
-                                                        const Text(
-                                                            "0 followers",
-                                                            style: TextStyle(
-                                                                fontSize: 10,
-                                                                color: Colors
-                                                                    .black)),
-                                                      ],
-                                                    ),
-                                                    if (_bio.isNotEmpty) ...[
-                                                      const SizedBox(height: 8),
-                                                      Text(
-                                                        _bio,
-                                                        style: const TextStyle(
-                                                            fontSize: 11,
-                                                            fontStyle: FontStyle
-                                                                .italic),
-                                                        maxLines: 4,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ],
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-
-                                        const SizedBox(height: 8),
-
-                                        // ROW 3: Logout (Aligned Right) - Only show if it's MY account, not a managed one
-                                        if (!_isManaged &&
-                                            _profileUid ==
-                                                Provider.of<UserProvider>(
-                                                        context,
-                                                        listen: false)
-                                                    .currentUserId)
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: GestureDetector(
-                                              onTap: () async {
-                                                await FirebaseAuth.instance
-                                                    .signOut();
-                                                if (!context.mounted) return;
-                                                context.go('/login');
-                                              },
-                                              child: const Text('logout',
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.black)),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(width: 16),
-
-                            // RIGHT STICKER: Socials / Tabs (Pinned Top Right, grows Left/Down)
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.zero,
-                                    boxShadow: [
-                                      BoxShadow(
-                                          color: Colors.black12,
-                                          blurRadius: 2,
-                                          offset: Offset(1, 1)),
-                                    ],
-                                  ),
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize
-                                        .min, // Shrink wrap vertically
-                                    crossAxisAlignment: CrossAxisAlignment
-                                        .end, // Right align content inside the box
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize
-                                            .min, // Shrink wrap horizontally
-                                        children: [
-                                          _buildTopTab("socials", 0),
-                                          _buildSeparator(),
-                                          _buildTopTab("affiliations", 1),
-                                          _buildSeparator(),
-                                          _buildTopTab("upcoming", 2),
-                                        ],
-                                      ),
-                                      const Divider(height: 16, thickness: 1),
-
-                                      // Content
-                                      if (_topTabIndex == 0) _buildSocialsTab(),
-                                      if (_topTabIndex == 1)
-                                        const Padding(
-                                            padding: EdgeInsets.all(8),
-                                            child: Text(
-                                                "Affiliations List\n(Coming Soon)",
-                                                textAlign: TextAlign.center)),
-                                      if (_topTabIndex == 2)
-                                        const Padding(
-                                            padding: EdgeInsets.all(8),
-                                            child: Text(
-                                                "Upcoming Cons/Events\n(Coming Soon)",
-                                                textAlign: TextAlign.center)),
-                                    ],
-                                  ),
-                                ),
-                              ],
+            ? Center(
+            child: Text(_errorMessage!,
+                style: const TextStyle(color: Colors.red)))
+            : Column(
+          children: [
+            // TOP ROW (Contact + Linktree)
+            Expanded(
+              flex: 4,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment
+                    .stretch, // Allow full height for pinning
+                children: [
+                  // LEFT STICKER: Contact Info (Takes remaining space, aligned left)
+                  Expanded(
+                    flex: 1,
+                    child: Align(
+                      alignment: Alignment
+                          .centerLeft, // Pinned to the Left (vertically centered)
+                      child: Container(
+                        // Constrain max width for the sticker itself
+                        constraints: const BoxConstraints(
+                            maxWidth:
+                            400), // Increased max width for 2-column layout
+                        width: double.infinity,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.zero,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 2,
+                              offset: Offset(1, 1),
                             ),
                           ],
                         ),
-                      ),
+                        // New Layout Structure
+                        padding: const EdgeInsets.all(8.0),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment:
+                            CrossAxisAlignment.stretch,
+                            children: [
+                              // ROW 1: Edit Info (Aligned Right)
+                              if (_canEdit)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    // Navigate to edit page with parameters
+                                    onTap: () {
+                                      // If we have a valid profile UID, pass it along
+                                      if (_profileUid.isNotEmpty) {
+                                        context.pushNamed('editInfo',
+                                            queryParameters: {
+                                              'userId': _profileUid
+                                            });
+                                      } else {
+                                        context.pushNamed('editInfo');
+                                      }
+                                    },
+                                    child: const Text('edit info',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight:
+                                            FontWeight.bold,
+                                            color: Colors.black)),
+                                  ),
+                                ),
 
-                      const SizedBox(height: 16),
+                              const SizedBox(height: 8),
 
-                      // BOTTOM STICKER: Main Navigation
-                      SizedBox(
-                        height: 50,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            IntrinsicWidth(
-                              child: _buildSticker(
+                              // ROW 2: The Split (Profile Pic | Info)
+                              Expanded(
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                                   children: [
-                                    if (_canEdit) ...[
-                                      _buildNavTab('editor', 0),
-                                      _buildSeparator(isNav: true),
-                                    ],
-                                    _buildNavTab('pages', 1),
-                                    _buildSeparator(isNav: true),
-                                    _buildNavTab('works', 2),
-                                    _buildSeparator(isNav: true),
-                                    _buildNavTab('comments', 3),
-                                    _buildSeparator(isNav: true),
-                                    _buildNavTab('mentions', 4),
-                                    _buildSeparator(isNav: true),
-                                    _buildNavTab('collection', 5),
+                                    // Left Column: Profile Picture
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          right: 12.0),
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                            maxWidth:
+                                            100), // Constraint for profile pic
+                                        child: AspectRatio(
+                                          aspectRatio: 5 / 8,
+                                          child: Container(
+                                            color: Colors.grey[200],
+                                            child: _photoUrl != null && _photoUrl!.isNotEmpty
+                                                ? Image.network(
+                                              _photoUrl!,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (c, e, s) => const Icon(Icons.person, color: Colors.grey),
+                                            )
+                                                : const Icon(Icons.person, color: Colors.grey),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Right Column: Info
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _displayName.isNotEmpty
+                                                ? _displayName
+                                                : (_firstName.isNotEmpty || _lastName.isNotEmpty
+                                                ? '$_firstName $_lastName'.trim()
+                                                : 'User'),
+                                            style: const TextStyle(
+                                                fontWeight:
+                                                FontWeight.bold,
+                                                fontSize: 14),
+                                          ),
+                                          if (_isManaged) ...[
+                                            const SizedBox(height: 2),
+                                            Container(
+                                              padding:
+                                              const EdgeInsets
+                                                  .symmetric(
+                                                  horizontal: 4,
+                                                  vertical: 1),
+                                              color: Colors.grey[200],
+                                              child: const Text(
+                                                  "Managed Profile",
+                                                  style: TextStyle(
+                                                      fontSize: 9,
+                                                      fontStyle:
+                                                      FontStyle
+                                                          .italic)),
+                                            )
+                                          ],
+                                          Text(
+                                            '@$_username',
+                                            style: const TextStyle(
+                                                fontSize: 12),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              GestureDetector(
+                                                onTap: () {},
+                                                child: Container(
+                                                  padding:
+                                                  const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal:
+                                                      6,
+                                                      vertical:
+                                                      2),
+                                                  decoration:
+                                                  BoxDecoration(
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .black),
+                                                    borderRadius:
+                                                    BorderRadius
+                                                        .zero,
+                                                  ),
+                                                  child: const Text(
+                                                      "follow",
+                                                      style: TextStyle(
+                                                          fontSize:
+                                                          10,
+                                                          fontWeight:
+                                                          FontWeight
+                                                              .bold)),
+                                                ),
+                                              ),
+                                              const SizedBox(
+                                                  width: 6),
+                                              const Text(
+                                                  "0 followers",
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors
+                                                          .black)),
+                                            ],
+                                          ),
+                                          if (_bio.isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              _bio,
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontStyle: FontStyle
+                                                      .italic),
+                                              maxLines: 4,
+                                              overflow: TextOverflow
+                                                  .ellipsis,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
+
+                              const SizedBox(height: 8),
+
+                              // ROW 3: Logout (Aligned Right) - Only show if it's MY account, not a managed one
+                              if (!_isManaged &&
+                                  _profileUid ==
+                                      Provider.of<UserProvider>(
+                                          context,
+                                          listen: false)
+                                          .currentUserId)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      await FirebaseAuth.instance
+                                          .signOut();
+                                      if (!context.mounted) return;
+                                      context.go('/login');
+                                    },
+                                    child: const Text('logout',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight:
+                                            FontWeight.bold,
+                                            color: Colors.black)),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  // RIGHT STICKER: Socials / Tabs (Pinned Top Right, grows Left/Down)
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.zero,
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 2,
+                                offset: Offset(1, 1)),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize
+                              .min, // Shrink wrap vertically
+                          crossAxisAlignment: CrossAxisAlignment
+                              .end, // Right align content inside the box
+                          children: [
+                            Row(
+                              mainAxisAlignment:
+                              MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize
+                                  .min, // Shrink wrap horizontally
+                              children: [
+                                _buildTopTab("socials", 0),
+                                _buildSeparator(),
+                                _buildTopTab("affiliations", 1),
+                                _buildSeparator(),
+                                _buildTopTab("upcoming", 2),
+                              ],
                             ),
+                            const Divider(height: 16, thickness: 1),
+
+                            // Content
+                            if (_topTabIndex == 0) _buildSocialsTab(),
+                            if (_topTabIndex == 1)
+                              const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text(
+                                      "Affiliations List\n(Coming Soon)",
+                                      textAlign: TextAlign.center)),
+                            if (_topTabIndex == 2)
+                              const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text(
+                                      "Upcoming Cons/Events\n(Coming Soon)",
+                                      textAlign: TextAlign.center)),
                           ],
                         ),
                       ),
                     ],
                   ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // BOTTOM STICKER: Main Navigation
+            SizedBox(
+              height: 50,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IntrinsicWidth(
+                    child: _buildSticker(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_canEdit) ...[
+                            _buildNavTab('editor', 0),
+                            _buildSeparator(isNav: true),
+                          ],
+                          _buildNavTab('pages', 1),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('works', 2),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('comments', 3),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('mentions', 4),
+                          _buildSeparator(isNav: true),
+                          _buildNavTab('collection', 5),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -611,7 +618,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             padding: EdgeInsets.all(8.0),
             child: Text("No socials linked.",
                 style:
-                    TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+                TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
           ),
       ],
     );
