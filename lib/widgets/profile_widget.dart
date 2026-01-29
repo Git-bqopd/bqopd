@@ -43,7 +43,20 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   bool _isManaged = false;
   List<dynamic> _managers = [];
 
-  final ScrollController _leftStickerScrollController = ScrollController();
+  // Define the common box decoration for white cards
+  final BoxDecoration _whiteBoxDecoration = const BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.zero,
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black12,
+        blurRadius: 2,
+        offset: Offset(1, 1),
+      ),
+    ],
+  );
+
+  final Color _envelopeColor = const Color(0xFFF1B255);
 
   @override
   void initState() {
@@ -64,7 +77,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     final currentUid = provider.currentUserId;
     final targetUid = widget.targetUserId ?? currentUid;
 
-    // If viewing MY profile and it's loaded in provider
     if (currentUid != null && targetUid == currentUid) {
       final data = provider.userProfile;
       if (data != null) {
@@ -80,7 +92,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         });
       }
     } else {
-      // Viewing SOMEONE ELSE'S (or a Managed) profile
       if (targetUid == null) {
         setState(() {
           _errorMessage = "User not found";
@@ -140,7 +151,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       _profileUid = data['uid'] ?? '';
       _isManaged = data['isManaged'] == true;
       _managers = data['managers'] ?? [];
-      _photoUrl = data['photoUrl']; // Populate photoUrl
+      _photoUrl = data['photoUrl'];
       _errorMessage = null;
     });
   }
@@ -151,28 +162,20 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       final provider = Provider.of<UserProvider>(context, listen: false);
       provider.removeListener(_onProviderUpdate);
     } catch (_) {}
-    _leftStickerScrollController.dispose();
     super.dispose();
   }
 
-  /// Determines if the current logged-in user has permission to edit this profile.
   bool get _canEdit {
     final provider = Provider.of<UserProvider>(context, listen: false);
     final currentUid = provider.currentUserId;
     if (currentUid == null) return false;
-
-    // 1. Is it me?
     if (_profileUid == currentUid) return true;
-
-    // 2. Am I a manager of this managed profile?
     if (_isManaged && _managers.contains(currentUid)) return true;
-
     return false;
   }
 
   void _showImageUpload() {
     if (!_canEdit) return;
-
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -181,7 +184,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     );
   }
 
-  // Link Launcher Helper
   Future<void> _launchSocial(String urlString) async {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url)) {
@@ -192,7 +194,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   @override
   Widget build(BuildContext context) {
     if (widget.targetUserId == null) {
-      // Fallback for "My Profile" tab logic if data hasn't loaded via _fetchOtherUser
       final provider = context.watch<UserProvider>();
       if (!provider.isLoading &&
           provider.userProfile != null &&
@@ -202,342 +203,67 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       }
     }
 
-    // 8:5 Aspect Ratio Container
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_errorMessage != null) {
+      return Center(
+          child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)));
+    }
+
+    // RESPONSIVE SWITCHER
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // If width is strictly less than 900px, use the 2-widget stack.
+        // Otherwise, use the unified desktop widget.
+        if (constraints.maxWidth < 600) {
+          return _buildMobileLayout();
+        } else {
+          return _buildDesktopLayout();
+        }
+      },
+    );
+  }
+
+  // --- DESKTOP LAYOUT (Unified) ---
+  Widget _buildDesktopLayout() {
     return AspectRatio(
       aspectRatio: 8 / 5,
       child: Container(
-        color: const Color(0xFFF1B255), // Manilla Envelope Background
-        padding: const EdgeInsets.all(16.0), // Outer Margin
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _errorMessage != null
-            ? Center(
-            child: Text(_errorMessage!,
-                style: const TextStyle(color: Colors.red)))
-            : Column(
+        color: _envelopeColor,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
           children: [
-            // TOP ROW (Contact + Linktree)
+            // Unified White Box (Split Vertical)
             Expanded(
               flex: 4,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment
-                    .stretch, // Allow full height for pinning
-                children: [
-                  // LEFT STICKER: Contact Info (Takes remaining space, aligned left)
-                  Expanded(
-                    flex: 1,
-                    child: Align(
-                      alignment: Alignment
-                          .centerLeft, // Pinned to the Left (vertically centered)
-                      child: Container(
-                        // Constrain max width for the sticker itself
-                        constraints: const BoxConstraints(
-                            maxWidth:
-                            400), // Increased max width for 2-column layout
-                        width: double.infinity,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.zero,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 2,
-                              offset: Offset(1, 1),
-                            ),
-                          ],
-                        ),
-                        // New Layout Structure
-                        padding: const EdgeInsets.all(8.0),
-                        child: IntrinsicHeight(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment:
-                            CrossAxisAlignment.stretch,
-                            children: [
-                              // ROW 1: Edit Info (Aligned Right)
-                              if (_canEdit)
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: GestureDetector(
-                                    // Navigate to edit page with parameters
-                                    onTap: () {
-                                      // If we have a valid profile UID, pass it along
-                                      if (_profileUid.isNotEmpty) {
-                                        context.pushNamed('editInfo',
-                                            queryParameters: {
-                                              'userId': _profileUid
-                                            });
-                                      } else {
-                                        context.pushNamed('editInfo');
-                                      }
-                                    },
-                                    child: const Text('edit info',
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight:
-                                            FontWeight.bold,
-                                            color: Colors.black)),
-                                  ),
-                                ),
-
-                              const SizedBox(height: 8),
-
-                              // ROW 2: The Split (Profile Pic | Info)
-                              Expanded(
-                                child: Row(
-                                  crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                                  children: [
-                                    // Left Column: Profile Picture
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                          right: 12.0),
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                            maxWidth:
-                                            100), // Constraint for profile pic
-                                        child: AspectRatio(
-                                          aspectRatio: 5 / 8,
-                                          child: Container(
-                                            color: Colors.grey[200],
-                                            child: _photoUrl != null && _photoUrl!.isNotEmpty
-                                                ? Image.network(
-                                              _photoUrl!,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (c, e, s) => const Icon(Icons.person, color: Colors.grey),
-                                            )
-                                                : const Icon(Icons.person, color: Colors.grey),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-
-                                    // Right Column: Info
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _displayName.isNotEmpty
-                                                ? _displayName
-                                                : (_firstName.isNotEmpty || _lastName.isNotEmpty
-                                                ? '$_firstName $_lastName'.trim()
-                                                : 'User'),
-                                            style: const TextStyle(
-                                                fontWeight:
-                                                FontWeight.bold,
-                                                fontSize: 14),
-                                          ),
-                                          if (_isManaged) ...[
-                                            const SizedBox(height: 2),
-                                            Container(
-                                              padding:
-                                              const EdgeInsets
-                                                  .symmetric(
-                                                  horizontal: 4,
-                                                  vertical: 1),
-                                              color: Colors.grey[200],
-                                              child: const Text(
-                                                  "Managed Profile",
-                                                  style: TextStyle(
-                                                      fontSize: 9,
-                                                      fontStyle:
-                                                      FontStyle
-                                                          .italic)),
-                                            )
-                                          ],
-                                          Text(
-                                            '@$_username',
-                                            style: const TextStyle(
-                                                fontSize: 12),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              GestureDetector(
-                                                onTap: () {},
-                                                child: Container(
-                                                  padding:
-                                                  const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal:
-                                                      6,
-                                                      vertical:
-                                                      2),
-                                                  decoration:
-                                                  BoxDecoration(
-                                                    border: Border.all(
-                                                        color: Colors
-                                                            .black),
-                                                    borderRadius:
-                                                    BorderRadius
-                                                        .zero,
-                                                  ),
-                                                  child: const Text(
-                                                      "follow",
-                                                      style: TextStyle(
-                                                          fontSize:
-                                                          10,
-                                                          fontWeight:
-                                                          FontWeight
-                                                              .bold)),
-                                                ),
-                                              ),
-                                              const SizedBox(
-                                                  width: 6),
-                                              const Text(
-                                                  "0 followers",
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors
-                                                          .black)),
-                                            ],
-                                          ),
-                                          if (_bio.isNotEmpty) ...[
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              _bio,
-                                              style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontStyle: FontStyle
-                                                      .italic),
-                                              maxLines: 4,
-                                              overflow: TextOverflow
-                                                  .ellipsis,
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              const SizedBox(height: 8),
-
-                              // ROW 3: Logout (Aligned Right) - Only show if it's MY account, not a managed one
-                              if (!_isManaged &&
-                                  _profileUid ==
-                                      Provider.of<UserProvider>(
-                                          context,
-                                          listen: false)
-                                          .currentUserId)
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: GestureDetector(
-                                    onTap: () async {
-                                      await FirebaseAuth.instance
-                                          .signOut();
-                                      if (!context.mounted) return;
-                                      context.go('/login');
-                                    },
-                                    child: const Text('logout',
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight:
-                                            FontWeight.bold,
-                                            color: Colors.black)),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 16),
-
-                  // RIGHT STICKER: Socials / Tabs (Pinned Top Right, grows Left/Down)
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.zero,
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 2,
-                                offset: Offset(1, 1)),
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          mainAxisSize: MainAxisSize
-                              .min, // Shrink wrap vertically
-                          crossAxisAlignment: CrossAxisAlignment
-                              .end, // Right align content inside the box
-                          children: [
-                            Row(
-                              mainAxisAlignment:
-                              MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize
-                                  .min, // Shrink wrap horizontally
-                              children: [
-                                _buildTopTab("socials", 0),
-                                _buildSeparator(),
-                                _buildTopTab("affiliations", 1),
-                                _buildSeparator(),
-                                _buildTopTab("upcoming", 2),
-                              ],
-                            ),
-                            const Divider(height: 16, thickness: 1),
-
-                            // Content
-                            if (_topTabIndex == 0) _buildSocialsTab(),
-                            if (_topTabIndex == 1)
-                              const Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Text(
-                                      "Affiliations List\n(Coming Soon)",
-                                      textAlign: TextAlign.center)),
-                            if (_topTabIndex == 2)
-                              const Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Text(
-                                      "Upcoming Cons/Events\n(Coming Soon)",
-                                      textAlign: TextAlign.center)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: Container(
+                width: double.infinity,
+                decoration: _whiteBoxDecoration,
+                padding: const EdgeInsets.all(24.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // LEFT COLUMN
+                    Expanded(flex: 1, child: _buildProfileInfoContent()),
+                    // DIVIDER
+                    const VerticalDivider(width: 48, thickness: 1, color: Colors.black12),
+                    // RIGHT COLUMN
+                    Expanded(flex: 1, child: _buildRightSideContent()),
+                  ],
+                ),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // BOTTOM STICKER: Main Navigation
+            // Bottom Nav Sticker (Desktop only)
             SizedBox(
               height: 50,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IntrinsicWidth(
-                    child: _buildSticker(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (_canEdit) ...[
-                            _buildNavTab('editor', 0),
-                            _buildSeparator(isNav: true),
-                          ],
-                          _buildNavTab('pages', 1),
-                          _buildSeparator(isNav: true),
-                          _buildNavTab('works', 2),
-                          _buildSeparator(isNav: true),
-                          _buildNavTab('comments', 3),
-                          _buildSeparator(isNav: true),
-                          _buildNavTab('mentions', 4),
-                          _buildSeparator(isNav: true),
-                          _buildNavTab('collection', 5),
-                        ],
-                      ),
+                    child: Container(
+                      decoration: _whiteBoxDecoration,
+                      padding: const EdgeInsets.all(12),
+                      child: _buildNavLinksRow(),
                     ),
                   ),
                 ],
@@ -549,24 +275,261 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     );
   }
 
-  Widget _buildSticker({required Widget child}) {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.zero,
-        boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(1, 1)),
+  // --- MOBILE LAYOUT (Split) ---
+  Widget _buildMobileLayout() {
+    return Column(
+      children: [
+        // Widget 1: Left Side (Profile Info)
+        AspectRatio(
+          aspectRatio: 8 / 5,
+          child: Container(
+            color: _envelopeColor,
+            padding: const EdgeInsets.all(16.0),
+            child: Container(
+              decoration: _whiteBoxDecoration,
+              padding: const EdgeInsets.all(24.0),
+              child: _buildRightSideContent(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Widget 2: Right Side + Controller Links
+        AspectRatio(
+          aspectRatio: 8 / 5,
+          child: Container(
+            color: _envelopeColor,
+            padding: const EdgeInsets.all(16.0),
+            child: Container(
+              decoration: _whiteBoxDecoration,
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  Expanded(child: _buildProfileInfoContent()),
+                  const Divider(height: 24, thickness: 1, color: Colors.black12),
+                  // Nav links inside the box for mobile
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: _buildNavLinksRow(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- COMPONENT BUILDERS ---
+
+  Widget _buildProfileInfoContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Edit Button
+        if (_canEdit)
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: () {
+                if (_profileUid.isNotEmpty) {
+                  context.pushNamed('editInfo',
+                      queryParameters: {'userId': _profileUid});
+                } else {
+                  context.pushNamed('editInfo');
+                }
+              },
+              child: const Text('edit info',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black)),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Photo
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 120),
+                  child: AspectRatio(
+                    aspectRatio: 5 / 8,
+                    child: Container(
+                      color: Colors.grey[200],
+                      child: _photoUrl != null && _photoUrl!.isNotEmpty
+                          ? Image.network(
+                        _photoUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) =>
+                        const Icon(Icons.person, color: Colors.grey),
+                      )
+                          : const Icon(Icons.person, color: Colors.grey),
+                    ),
+                  ),
+                ),
+              ),
+              // Text Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _displayName.isNotEmpty
+                          ? _displayName
+                          : (_firstName.isNotEmpty || _lastName.isNotEmpty
+                          ? '$_firstName $_lastName'.trim()
+                          : 'User'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                    if (_isManaged) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
+                        color: Colors.grey[200],
+                        child: const Text("Managed Profile",
+                            style: TextStyle(
+                                fontSize: 9, fontStyle: FontStyle.italic)),
+                      )
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      '@$_username',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () {},
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.black),
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            child: const Text("follow",
+                                style: TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text("0 followers",
+                            style:
+                            TextStyle(fontSize: 12, color: Colors.black)),
+                      ],
+                    ),
+                    if (_bio.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _bio,
+                        style: const TextStyle(
+                            fontSize: 12, fontStyle: FontStyle.italic),
+                        maxLines: 6,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Logout
+        if (!_isManaged &&
+            _profileUid ==
+                Provider.of<UserProvider>(context, listen: false).currentUserId)
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                if (!context.mounted) return;
+                context.go('/login');
+              },
+              child: const Text('logout',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildRightSideContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Tabs Header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            _buildTopTab("socials", 0),
+            _buildSeparator(),
+            _buildTopTab("affiliations", 1),
+            _buildSeparator(),
+            _buildTopTab("upcoming", 2),
+          ],
+        ),
+        const Divider(height: 24, thickness: 1),
+        // Tab Content
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (_topTabIndex == 0) _buildSocialsTab(),
+                if (_topTabIndex == 1)
+                  const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text("Affiliations List\n(Coming Soon)",
+                          textAlign: TextAlign.right)),
+                if (_topTabIndex == 2)
+                  const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text("Upcoming Cons/Events\n(Coming Soon)",
+                          textAlign: TextAlign.right)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNavLinksRow() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (_canEdit) ...[
+          _buildNavTab('editor', 0),
+          _buildSeparator(isNav: true),
         ],
-      ),
-      padding: const EdgeInsets.all(12),
-      child: child,
+        _buildNavTab('pages', 1),
+        _buildSeparator(isNav: true),
+        _buildNavTab('works', 2),
+        _buildSeparator(isNav: true),
+        _buildNavTab('comments', 3),
+        _buildSeparator(isNav: true),
+        _buildNavTab('mentions', 4),
+        _buildSeparator(isNav: true),
+        _buildNavTab('collection', 5),
+      ],
     );
   }
 
   Widget _buildSocialsTab() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end, // Right align links
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         if (_xHandle.isNotEmpty)
           Padding(
@@ -646,12 +609,10 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   Widget _buildNavTab(String title, int index) {
     final isActive = widget.currentIndex == index;
     final isPagesTab = index == 1;
-    // Check _canEdit instead of _isMyProfile to support managers uploading to managed profiles
     final showUploadLink = isPagesTab && isActive && _canEdit;
 
     if (showUploadLink) {
       return FittedBox(
-        // Shrink if narrow
         fit: BoxFit.scaleDown,
         child: RichText(
           text: TextSpan(
@@ -683,7 +644,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       onTap: () => widget.onTabChanged(index),
       child: Center(
         child: FittedBox(
-          // Shrink if narrow
           fit: BoxFit.scaleDown,
           child: Text(
             title,
