@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Handles persistence for Likes and Comments as defined in the bqopd Design Document.
+/// Handles persistence for Likes, Comments, and Follows.
 class EngagementService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -10,8 +10,8 @@ class EngagementService {
     return _db.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId);
   }
 
-  /// Toggles a like for a specific page.
-  /// Increments/Decrements page likeCount and mirrors state to the user document.
+  // --- Likes & Comments ---
+
   Future<void> toggleLike({
     required String fanzineId,
     required String pageId,
@@ -45,7 +45,6 @@ class EngagementService {
     await batch.commit();
   }
 
-  /// Adds a comment and updates the parent count.
   Future<void> addComment({
     required String fanzineId,
     required String pageId,
@@ -68,7 +67,6 @@ class EngagementService {
     });
   }
 
-  /// Returns a stream of comments for a specific page.
   Stream<QuerySnapshot> getCommentsStream(String fanzineId, String pageId) {
     return _pageRef(fanzineId, pageId)
         .collection('comments')
@@ -76,7 +74,6 @@ class EngagementService {
         .snapshots();
   }
 
-  /// Checks if a user has liked a specific page.
   Stream<bool> isLikedStream(String pageId) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
@@ -88,6 +85,60 @@ class EngagementService {
         .doc('likes')
         .collection('pages')
         .doc(pageId)
+        .snapshots()
+        .map((doc) => doc.exists);
+  }
+
+  // --- Follow Logic ---
+
+  /// Establishes a follow relationship.
+  Future<void> followUser(String targetUid) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null || currentUser.uid == targetUid) return;
+
+    final batch = _db.batch();
+
+    // 1. Add to following subcollection of current user
+    final followingRef = _db.collection('Users').doc(currentUser.uid).collection('following').doc(targetUid);
+    batch.set(followingRef, {'followedAt': FieldValue.serverTimestamp()});
+
+    // 2. Add to followers subcollection of target user
+    final followersRef = _db.collection('Users').doc(targetUid).collection('followers').doc(currentUser.uid);
+    batch.set(followersRef, {'followerAt': FieldValue.serverTimestamp()});
+
+    // 3. Increment counts on both main documents
+    batch.set(_db.collection('Users').doc(currentUser.uid), {'followingCount': FieldValue.increment(1)}, SetOptions(merge: true));
+    batch.set(_db.collection('Users').doc(targetUid), {'followerCount': FieldValue.increment(1)}, SetOptions(merge: true));
+
+    await batch.commit();
+  }
+
+  /// Removes a follow relationship.
+  Future<void> unfollowUser(String targetUid) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    final batch = _db.batch();
+
+    batch.delete(_db.collection('Users').doc(currentUser.uid).collection('following').doc(targetUid));
+    batch.delete(_db.collection('Users').doc(targetUid).collection('followers').doc(currentUser.uid));
+
+    batch.set(_db.collection('Users').doc(currentUser.uid), {'followingCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+    batch.set(_db.collection('Users').doc(targetUid), {'followerCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+
+    await batch.commit();
+  }
+
+  /// Checks if current user is following the target.
+  Stream<bool> isFollowingStream(String targetUid) {
+    final user = _auth.currentUser;
+    if (user == null) return Stream.value(false);
+
+    return _db
+        .collection('Users')
+        .doc(user.uid)
+        .collection('following')
+        .doc(targetUid)
         .snapshots()
         .map((doc) => doc.exists);
   }
