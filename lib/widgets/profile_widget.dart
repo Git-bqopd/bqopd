@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/user_provider.dart';
 import 'image_upload_modal.dart';
+import 'login_widget.dart';
 
 class ProfileWidget extends StatefulWidget {
   final int currentIndex;
@@ -191,6 +192,40 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     }
   }
 
+  // --- FOLLOW LOGIC ---
+  void _handleFollow() {
+    final user = FirebaseAuth.instance.currentUser;
+    final isRealUser = user != null && !user.isAnonymous;
+
+    if (!isRealUser) {
+      // User is not authenticated, show login modal
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+            child: LoginWidget(
+              onTap: () {
+                Navigator.pop(context);
+                context.go('/register');
+              },
+              onLoginSuccess: () {
+                Navigator.pop(context);
+                _loadData();
+              },
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Logic for follow functionality will go here
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Follow logic coming soon!")),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.targetUserId == null) {
@@ -206,13 +241,14 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_errorMessage != null) {
       return Center(
-          child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)));
+          child:
+          Text(_errorMessage!, style: const TextStyle(color: Colors.red)));
     }
 
     // RESPONSIVE SWITCHER
     return LayoutBuilder(
       builder: (context, constraints) {
-        // If width is strictly less than 900px, use the 2-widget stack.
+        // If width is strictly less than 600px, use the 2-widget stack.
         // Otherwise, use the unified desktop widget.
         if (constraints.maxWidth < 600) {
           return _buildMobileLayout();
@@ -245,7 +281,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                     // LEFT COLUMN
                     Expanded(flex: 1, child: _buildProfileInfoContent()),
                     // DIVIDER
-                    const VerticalDivider(width: 48, thickness: 1, color: Colors.black12),
+                    const VerticalDivider(
+                        width: 48, thickness: 1, color: Colors.black12),
                     // RIGHT COLUMN
                     Expanded(flex: 1, child: _buildRightSideContent()),
                   ],
@@ -280,15 +317,16 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     return Column(
       children: [
         // Widget 1: Left Side (Profile Info)
+        // On mobile, profile info comes first usually
         AspectRatio(
-          aspectRatio: 8 / 5,
+          aspectRatio: 8 / 5, // Keep sticker ratio
           child: Container(
             color: _envelopeColor,
             padding: const EdgeInsets.all(16.0),
             child: Container(
               decoration: _whiteBoxDecoration,
-              padding: const EdgeInsets.all(24.0),
-              child: _buildRightSideContent(),
+              padding: const EdgeInsets.all(16.0),
+              child: _buildProfileInfoContent(),
             ),
           ),
         ),
@@ -301,11 +339,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             padding: const EdgeInsets.all(16.0),
             child: Container(
               decoration: _whiteBoxDecoration,
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  Expanded(child: _buildProfileInfoContent()),
-                  const Divider(height: 24, thickness: 1, color: Colors.black12),
+                  Expanded(child: _buildRightSideContent()),
+                  const Divider(
+                      height: 24, thickness: 1, color: Colors.black12),
                   // Nav links inside the box for mobile
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -323,144 +362,164 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   // --- COMPONENT BUILDERS ---
 
   Widget _buildProfileInfoContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Edit Button
-        if (_canEdit)
-          Align(
-            alignment: Alignment.centerRight,
-            child: GestureDetector(
-              onTap: () {
-                if (_profileUid.isNotEmpty) {
-                  context.pushNamed('editInfo',
-                      queryParameters: {'userId': _profileUid});
-                } else {
-                  context.pushNamed('editInfo');
-                }
-              },
-              child: const Text('edit info',
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black)),
-            ),
-          ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final String displayTitle = _displayName.isNotEmpty
+        ? _displayName
+        : (_firstName.isNotEmpty || _lastName.isNotEmpty
+        ? '$_firstName $_lastName'.trim()
+        : 'User');
+
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 1. Top Section: Photo & Stats/Follow Side-by-Side
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Photo
-              Padding(
-                padding: const EdgeInsets.only(right: 16.0),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 120),
-                  child: AspectRatio(
-                    aspectRatio: 5 / 8,
+              // Circular Profile Photo
+              GestureDetector(
+                onTap: _showImageUpload, // Tap photo to upload
+                child: Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black12),
+                    image: _photoUrl != null && _photoUrl!.isNotEmpty
+                        ? DecorationImage(
+                      image: NetworkImage(_photoUrl!),
+                      fit: BoxFit.cover,
+                    )
+                        : null,
+                  ),
+                  child: _photoUrl == null || _photoUrl!.isEmpty
+                      ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 24),
+              // Stats / Follow Button Column
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Follow Button
+                  GestureDetector(
+                    onTap: _handleFollow,
                     child: Container(
-                      color: Colors.grey[200],
-                      child: _photoUrl != null && _photoUrl!.isNotEmpty
-                          ? Image.network(
-                        _photoUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) =>
-                        const Icon(Icons.person, color: Colors.grey),
-                      )
-                          : const Icon(Icons.person, color: Colors.grey),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black),
+                        borderRadius: BorderRadius.zero, // Sharp look
+                      ),
+                      child: const Text("follow",
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black)),
                     ),
                   ),
-                ),
-              ),
-              // Text Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _displayName.isNotEmpty
-                          ? _displayName
-                          : (_firstName.isNotEmpty || _lastName.isNotEmpty
-                          ? '$_firstName $_lastName'.trim()
-                          : 'User'),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                    if (_isManaged) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1),
-                        color: Colors.grey[200],
-                        child: const Text("Managed Profile",
-                            style: TextStyle(
-                                fontSize: 9, fontStyle: FontStyle.italic)),
-                      )
-                    ],
-                    const SizedBox(height: 4),
-                    Text(
-                      '@$_username',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () {},
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.black),
-                              borderRadius: BorderRadius.zero,
-                            ),
-                            child: const Text("follow",
-                                style: TextStyle(
-                                    fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text("0 followers",
-                            style:
-                            TextStyle(fontSize: 12, color: Colors.black)),
-                      ],
-                    ),
-                    if (_bio.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _bio,
-                        style: const TextStyle(
-                            fontSize: 12, fontStyle: FontStyle.italic),
-                        maxLines: 6,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                  const SizedBox(height: 8),
+                  // Placeholder Stats
+                  const Text("0 followers",
+                      style: TextStyle(fontSize: 12, color: Colors.black)),
+                  const Text("0 following",
+                      style: TextStyle(fontSize: 12, color: Colors.black)),
+                ],
+              )
             ],
           ),
-        ),
-        // Logout
-        if (!_isManaged &&
-            _profileUid ==
-                Provider.of<UserProvider>(context, listen: false).currentUserId)
-          Align(
-            alignment: Alignment.centerRight,
-            child: GestureDetector(
-              onTap: () async {
-                await FirebaseAuth.instance.signOut();
-                if (!context.mounted) return;
-                context.go('/login');
-              },
-              child: const Text('logout',
+
+          const SizedBox(height: 16),
+
+          // 2. Name & Handle
+          Text(
+            displayTitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black),
+          ),
+          if (_isManaged)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              color: Colors.grey[200],
+              child: const Text("Managed Profile",
                   style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontStyle: FontStyle.italic,
                       color: Colors.black)),
             ),
+          Text(
+            '@$_username',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Colors.black54),
           ),
-      ],
+
+          // 3. Bio
+          if (_bio.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                _bio,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.black),
+                maxLines: 6,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 20),
+
+          // 4. Admin Actions (Edit / Logout)
+          Wrap(
+            spacing: 20,
+            alignment: WrapAlignment.center,
+            children: [
+              if (_canEdit)
+                GestureDetector(
+                  onTap: () {
+                    if (_profileUid.isNotEmpty) {
+                      context.pushNamed('editInfo',
+                          queryParameters: {'userId': _profileUid});
+                    } else {
+                      context.pushNamed('editInfo');
+                    }
+                  },
+                  child: const Text('edit info',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black)),
+                ),
+              if (!_isManaged &&
+                  _profileUid ==
+                      Provider.of<UserProvider>(context, listen: false)
+                          .currentUserId)
+                GestureDetector(
+                  onTap: () async {
+                    await FirebaseAuth.instance.signOut();
+                    if (!context.mounted) return;
+                    context.go('/login');
+                  },
+                  child: const Text('logout',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black)),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -468,40 +527,109 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Tabs Header
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            _buildTopTab("socials", 0),
-            _buildSeparator(),
-            _buildTopTab("affiliations", 1),
-            _buildSeparator(),
-            _buildTopTab("upcoming", 2),
-          ],
+        // Tabs Header - Centered link menu
+        Center(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(width: 8),
+                _buildTopTab("socials", 0),
+                _buildSeparator(isNav: true),
+                _buildTopTab("affiliations", 1),
+                _buildSeparator(isNav: true),
+                _buildTopTab("upcoming", 2),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
         ),
-        const Divider(height: 24, thickness: 1),
-        // Tab Content
+        const Divider(height: 24, thickness: 1, color: Colors.black12),
+        // Tab Content - Centered "Link Tree" style
         Expanded(
           child: SingleChildScrollView(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 if (_topTabIndex == 0) _buildSocialsTab(),
                 if (_topTabIndex == 1)
                   const Padding(
-                      padding: EdgeInsets.all(8),
+                      padding: EdgeInsets.all(16),
                       child: Text("Affiliations List\n(Coming Soon)",
-                          textAlign: TextAlign.right)),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.black))),
                 if (_topTabIndex == 2)
                   const Padding(
-                      padding: EdgeInsets.all(8),
+                      padding: EdgeInsets.all(16),
                       child: Text("Upcoming Cons/Events\n(Coming Soon)",
-                          textAlign: TextAlign.right)),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.black))),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSocialsTab() {
+    bool hasLinks = false;
+    List<Widget> links = [];
+
+    if (_xHandle.isNotEmpty) {
+      hasLinks = true;
+      links.add(_buildLinkButton(
+          "X (Twitter)", '@$_xHandle', 'https://x.com/$_xHandle'));
+    }
+
+    if (_instagramHandle.isNotEmpty) {
+      hasLinks = true;
+      links.add(_buildLinkButton("Instagram", '@$_instagramHandle',
+          'https://instagram.com/$_instagramHandle'));
+    }
+
+    if (!hasLinks) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text("No socials linked.",
+            style:
+            TextStyle(color: Colors.black54, fontStyle: FontStyle.italic)),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: links
+          .map((w) => Padding(
+          padding: const EdgeInsets.only(bottom: 12), child: w))
+          .toList(),
+    );
+  }
+
+  Widget _buildLinkButton(String platform, String handle, String url) {
+    return GestureDetector(
+      onTap: () => _launchSocial(url),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.black12),
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.zero, // Sharp aesthetic
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("$platform: ",
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.black)),
+            Text(handle,
+                style: const TextStyle(
+                    color: Colors.black, decoration: TextDecoration.underline)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -527,66 +655,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     );
   }
 
-  Widget _buildSocialsTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (_xHandle.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(color: Colors.black),
-                children: [
-                  const TextSpan(
-                      text: 'X: ',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  TextSpan(
-                    text: '@$_xHandle',
-                    style: TextStyle(
-                        color: Theme.of(context).primaryColorDark,
-                        decoration: TextDecoration.underline),
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = () => _launchSocial('https://x.com/$_xHandle'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (_instagramHandle.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(color: Colors.black),
-                children: [
-                  const TextSpan(
-                      text: 'Instagram: ',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  TextSpan(
-                    text: '@$_instagramHandle',
-                    style: TextStyle(
-                        color: Theme.of(context).primaryColorDark,
-                        decoration: TextDecoration.underline),
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = () => _launchSocial(
-                          'https://instagram.com/$_instagramHandle'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (_xHandle.isEmpty && _instagramHandle.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(8.0),
-            child: Text("No socials linked.",
-                style:
-                TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
-          ),
-      ],
-    );
-  }
-
   Widget _buildTopTab(String title, int index) {
     final isActive = _topTabIndex == index;
     return GestureDetector(
@@ -597,7 +665,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
           title,
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).primaryColorDark,
+            color: Colors.black,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
             decoration: isActive ? TextDecoration.underline : null,
           ),
