@@ -22,7 +22,8 @@ import 'pages/settings_page.dart';
 import 'pages/fanzine_editor_page.dart';
 import 'pages/curator_dashboard_page.dart';
 import 'pages/curator_workbench_page.dart';
-import 'pages/fanzine_reader_page.dart'; // NEW Unified Page
+import 'pages/fanzine_reader_page.dart';
+import 'pages/publisher_page.dart'; // NEW
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -92,7 +93,7 @@ class _MyAppState extends State<MyApp> {
         GoRoute(
             path: '/',
             name: 'root',
-            builder: (context, state) => const FanzineReaderPage()), // Updated
+            builder: (context, state) => const FanzineReaderPage()),
         GoRoute(
             path: '/login',
             name: 'login',
@@ -104,7 +105,7 @@ class _MyAppState extends State<MyApp> {
         GoRoute(
             path: '/fanzine',
             name: 'fanzine',
-            builder: (context, state) => const FanzineReaderPage()), // Updated
+            builder: (context, state) => const FanzineReaderPage()),
         GoRoute(
             path: '/profile',
             name: 'profile',
@@ -125,7 +126,6 @@ class _MyAppState extends State<MyApp> {
           },
         ),
 
-        // Updated Reader Route
         GoRoute(
           path: '/reader/:fanzineId',
           name: 'reader',
@@ -133,6 +133,13 @@ class _MyAppState extends State<MyApp> {
             final fanzineId = state.pathParameters['fanzineId']!;
             return FanzineReaderPage(fanzineId: fanzineId);
           },
+        ),
+
+        // NEW PUBLISHER ROUTE
+        GoRoute(
+          path: '/publisher',
+          name: 'publisher',
+          builder: (context, state) => const PublisherPage(),
         ),
 
         GoRoute(

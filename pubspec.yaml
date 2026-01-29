@@ -57,3 +57,4 @@ flutter:
     - assets/logo200.gif
     - assets/logo400.gif
     - assets/config.json
+    - assets/overlays/ # Added so Flutter can see your borders.png
