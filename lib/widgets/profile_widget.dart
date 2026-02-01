@@ -330,113 +330,168 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     final provider = Provider.of<UserProvider>(context);
     final bool isMe = provider.currentUserId == _profileUid;
 
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
+    return ClipRect(
+      child: Stack(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              GestureDetector(
-                onTap: _showImageUpload,
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black12),
-                    image: _photoUrl != null && _photoUrl!.isNotEmpty
-                        ? DecorationImage(image: NetworkImage(_photoUrl!), fit: BoxFit.cover)
+          SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: _showImageUpload,
+                      child: Container(
+                        width: 90,
+                        height: 90,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black12),
+                          image: _photoUrl != null && _photoUrl!.isNotEmpty
+                              ? DecorationImage(image: NetworkImage(_photoUrl!), fit: BoxFit.cover)
+                              : null,
+                        ),
+                        child: _photoUrl == null || _photoUrl!.isEmpty ? const Icon(Icons.person, size: 50, color: Colors.grey) : null,
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (!isMe)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              StreamBuilder<bool>(
+                                stream: _engagementService.isFollowingStream(_profileUid),
+                                builder: (context, snap) {
+                                  final bool isFollowing = snap.data ?? false;
+                                  return GestureDetector(
+                                    onTap: () => _handleFollow(isFollowing),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: isFollowing ? Colors.grey[100] : Colors.transparent,
+                                        border: Border.all(color: Colors.black),
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      child: Text(isFollowing ? "unfollow" : "follow",
+                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          )
+                        else
+                        // Edit Info Button (Sticker Style)
+                          GestureDetector(
+                            onTap: () {
+                              if (_profileUid.isNotEmpty) {
+                                context.pushNamed('editInfo', queryParameters: {'userId': _profileUid});
+                              } else {
+                                context.pushNamed('editInfo');
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                border: Border.all(color: Colors.black),
+                                borderRadius: BorderRadius.zero,
+                              ),
+                              child: const Text("edit info",
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+
+                        // Stats Section
+                        StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance.collection('Users').doc(_profileUid).snapshots(),
+                            builder: (context, snap) {
+                              int followers = 0;
+                              int following = 0;
+                              if (snap.hasData && snap.data!.exists) {
+                                final data = snap.data!.data() as Map<String, dynamic>;
+                                followers = data['followerCount'] ?? 0;
+                                following = data['followingCount'] ?? 0;
+                              }
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => _showListModal("Followers", "followers"),
+                                    child: Text("$followers followers", style: const TextStyle(fontSize: 12, color: Colors.black, decoration: TextDecoration.underline)),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => _showListModal("Following", "following"),
+                                    child: Text("$following following", style: const TextStyle(fontSize: 12, color: Colors.black, decoration: TextDecoration.underline)),
+                                  ),
+                                ],
+                              );
+                            }
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(displayTitle, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black)),
+                Text('@$_username', textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: Colors.black54)),
+                if (_bio.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 8.0), child: Text(_bio, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.black), maxLines: 6, overflow: TextOverflow.ellipsis)),
+                ],
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+          // Corner Banner/Ribbon for Managed Profiles
+          if (_isManaged)
+            Positioned(
+              top: 12,
+              left: -35,
+              child: Transform.rotate(
+                angle: -0.785, // -45 degrees in radians
+                child: Material(
+                  color: Colors.grey[200], // Match placeholder image background
+                  child: InkWell(
+                    onTap: _canEdit
+                        ? () => context.pushNamed('editInfo', queryParameters: {'userId': _profileUid})
                         : null,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 40),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Text(
+                        _canEdit ? "edit managed profile" : "managed profile",
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black54,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
                   ),
-                  child: _photoUrl == null || _photoUrl!.isEmpty ? const Icon(Icons.person, size: 50, color: Colors.grey) : null,
                 ),
               ),
-              const SizedBox(width: 24),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!isMe)
-                    StreamBuilder<bool>(
-                      stream: _engagementService.isFollowingStream(_profileUid),
-                      builder: (context, snap) {
-                        final bool isFollowing = snap.data ?? false;
-                        return GestureDetector(
-                          onTap: () => _handleFollow(isFollowing),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: isFollowing ? Colors.grey[100] : Colors.transparent,
-                              border: Border.all(color: Colors.black),
-                              borderRadius: BorderRadius.zero,
-                            ),
-                            child: Text(isFollowing ? "unfollow" : "follow",
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
-                          ),
-                        );
-                      },
-                    )
-                  else
-                    const Text("MY HUB", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                  const SizedBox(height: 8),
-
-                  // Stats Section
-                  StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance.collection('Users').doc(_profileUid).snapshots(),
-                      builder: (context, snap) {
-                        int followers = 0;
-                        int following = 0;
-                        if (snap.hasData && snap.data!.exists) {
-                          final data = snap.data!.data() as Map<String, dynamic>;
-                          followers = data['followerCount'] ?? 0;
-                          following = data['followingCount'] ?? 0;
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            GestureDetector(
-                              onTap: () => _showListModal("Followers", "followers"),
-                              child: Text("$followers followers", style: const TextStyle(fontSize: 12, color: Colors.black, decoration: TextDecoration.underline)),
-                            ),
-                            GestureDetector(
-                              onTap: () => _showListModal("Following", "following"),
-                              child: Text("$following following", style: const TextStyle(fontSize: 12, color: Colors.black, decoration: TextDecoration.underline)),
-                            ),
-                          ],
-                        );
-                      }
-                  ),
-                ],
-              )
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(displayTitle, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.black)),
-          if (_isManaged)
-            Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), color: Colors.grey[200], child: const Text("Managed Profile", style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.black))),
-          Text('@$_username', textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: Colors.black54)),
-          if (_bio.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 8.0), child: Text(_bio, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.black), maxLines: 6, overflow: TextOverflow.ellipsis)),
-          ],
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 20,
-            alignment: WrapAlignment.center,
-            children: [
-              if (_canEdit) GestureDetector(onTap: () { if (_profileUid.isNotEmpty) { context.pushNamed('editInfo', queryParameters: {'userId': _profileUid}); } else { context.pushNamed('editInfo'); } }, child: const Text('edit info', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black))),
-              if (!_isManaged && _profileUid == provider.currentUserId) GestureDetector(onTap: () async { await FirebaseAuth.instance.signOut(); if (!context.mounted) return; context.go('/login'); }, child: const Text('logout', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black))),
-            ],
-          ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildRightSideContent() {
+    final provider = Provider.of<UserProvider>(context, listen: false);
+    final bool isMe = provider.currentUserId == _profileUid;
+
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Center(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         const SizedBox(width: 8), _buildTopTab("socials", 0), _buildSeparator(isNav: true), _buildTopTab("affiliations", 1), _buildSeparator(isNav: true), _buildTopTab("upcoming", 2), const SizedBox(width: 8),
@@ -447,6 +502,28 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         if (_topTabIndex == 1) const Padding(padding: EdgeInsets.all(16), child: Text("Affiliations List\n(Coming Soon)", textAlign: TextAlign.center, style: TextStyle(color: Colors.black))),
         if (_topTabIndex == 2) const Padding(padding: EdgeInsets.all(16), child: Text("Upcoming Cons/Events\n(Coming Soon)", textAlign: TextAlign.center, style: TextStyle(color: Colors.black))),
       ]))),
+      // Logout Button positioned at the very bottom right
+      if (!_isManaged && isMe)
+        Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: GestureDetector(
+                onTap: () async {
+                  await FirebaseAuth.instance.signOut();
+                  if (!context.mounted) return;
+                  context.go('/login');
+                },
+                child: const Text('logout',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black, // Color changed to black
+                      decoration: TextDecoration.underline,
+                      fontFamily: 'Roboto', // Match socials/nav font
+                    ))),
+          ),
+        ),
     ]);
   }
 
