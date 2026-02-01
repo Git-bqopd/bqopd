@@ -10,7 +10,7 @@ import '../services/user_provider.dart';
 import '../services/engagement_service.dart';
 import 'image_upload_modal.dart';
 import 'login_widget.dart';
-import 'follow_list_modal.dart'; // NEW
+import 'follow_list_modal.dart';
 
 class ProfileWidget extends StatefulWidget {
   final int currentIndex;
@@ -65,12 +65,22 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   @override
   void didUpdateWidget(covariant ProfileWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // CRITICAL FIX: If the targetUserId changes (e.g. clicking a follower), reload data.
     if (oldWidget.targetUserId != widget.targetUserId) {
       _loadData();
     }
   }
 
   void _loadData() {
+    if (!mounted) return;
+
+    // Reset state for new user
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _profileUid = ''; // Clear ID to prevent stale UI during load
+    });
+
     final provider = Provider.of<UserProvider>(context, listen: false);
     final currentUid = provider.currentUserId;
     final targetUid = widget.targetUserId ?? currentUid;
@@ -81,7 +91,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         _populateFields(data);
         setState(() => _isLoading = false);
       } else if (provider.isLoading) {
-        setState(() => _isLoading = true);
+        // Wait for provider to finish its own internal load
         provider.addListener(_onProviderUpdate);
       } else {
         setState(() {
@@ -111,7 +121,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   }
 
   Future<void> _fetchOtherUser(String uid) async {
-    setState(() => _isLoading = true);
     try {
       final doc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
       if (doc.exists && mounted) {
@@ -126,6 +135,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   }
 
   void _populateFields(Map<String, dynamic> data) {
+    if (!mounted) return;
     setState(() {
       _username = data['username'] ?? '';
       _displayName = data['displayName'] ?? '';
@@ -138,12 +148,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       _isManaged = data['isManaged'] == true;
       _managers = data['managers'] ?? [];
       _photoUrl = data['photoUrl'];
-      _errorMessage = null;
     });
   }
 
   @override
   void dispose() {
+    // Ensure we clean up listeners
     try {
       final provider = Provider.of<UserProvider>(context, listen: false);
       provider.removeListener(_onProviderUpdate);
@@ -169,7 +179,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     );
   }
 
-  // --- FOLLOW LOGIC ---
   void _handleFollow(bool isFollowing) async {
     final user = FirebaseAuth.instance.currentUser;
     final isRealUser = user != null && !user.isAnonymous;
@@ -214,15 +223,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.targetUserId == null) {
-      final provider = context.watch<UserProvider>();
-      if (!provider.isLoading && provider.userProfile != null && _profileUid.isEmpty) {
-        _populateFields(provider.userProfile!);
-        _isLoading = false;
-      }
-    }
-
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const SizedBox(height: 300, child: Center(child: CircularProgressIndicator()));
     if (_errorMessage != null) {
       return Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)));
     }
@@ -388,7 +389,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             ],
                           )
                         else
-                        // Edit Info Button (Sticker Style)
                           GestureDetector(
                             onTap: () {
                               if (_profileUid.isNotEmpty) {
@@ -409,8 +409,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             ),
                           ),
                         const SizedBox(height: 8),
-
-                        // Stats Section
                         StreamBuilder<DocumentSnapshot>(
                             stream: FirebaseFirestore.instance.collection('Users').doc(_profileUid).snapshots(),
                             builder: (context, snap) {
@@ -451,15 +449,14 @@ class _ProfileWidgetState extends State<ProfileWidget> {
               ],
             ),
           ),
-          // Corner Banner/Ribbon for Managed Profiles
           if (_isManaged)
             Positioned(
               top: 12,
               left: -35,
               child: Transform.rotate(
-                angle: -0.785, // -45 degrees in radians
+                angle: -0.785,
                 child: Material(
-                  color: Colors.grey[200], // Match placeholder image background
+                  color: Colors.grey[200],
                   child: InkWell(
                     onTap: _canEdit
                         ? () => context.pushNamed('editInfo', queryParameters: {'userId': _profileUid})
@@ -502,7 +499,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         if (_topTabIndex == 1) const Padding(padding: EdgeInsets.all(16), child: Text("Affiliations List\n(Coming Soon)", textAlign: TextAlign.center, style: TextStyle(color: Colors.black))),
         if (_topTabIndex == 2) const Padding(padding: EdgeInsets.all(16), child: Text("Upcoming Cons/Events\n(Coming Soon)", textAlign: TextAlign.center, style: TextStyle(color: Colors.black))),
       ]))),
-      // Logout Button positioned at the very bottom right
       if (!_isManaged && isMe)
         Align(
           alignment: Alignment.bottomRight,
@@ -518,9 +514,9 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black, // Color changed to black
+                      color: Colors.black,
                       decoration: TextDecoration.underline,
-                      fontFamily: 'Roboto', // Match socials/nav font
+                      fontFamily: 'Roboto',
                     ))),
           ),
         ),
