@@ -65,7 +65,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   @override
   void didUpdateWidget(covariant ProfileWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // CRITICAL FIX: If the targetUserId changes (e.g. clicking a follower), reload data.
+    // If the targetUserId changes (e.g. clicking a follower), reload data.
     if (oldWidget.targetUserId != widget.targetUserId) {
       _loadData();
     }
@@ -89,6 +89,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       final data = provider.userProfile;
       if (data != null) {
         _populateFields(data);
+        // Force the URL to sync with the loaded username
+        _syncUrl(data['username']);
         setState(() => _isLoading = false);
       } else if (provider.isLoading) {
         // Wait for provider to finish its own internal load
@@ -115,6 +117,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       provider.removeListener(_onProviderUpdate);
       if (provider.userProfile != null) {
         _populateFields(provider.userProfile!);
+        _syncUrl(provider.userProfile!['username']);
         setState(() => _isLoading = false);
       }
     }
@@ -124,7 +127,9 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     try {
       final doc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
       if (doc.exists && mounted) {
-        _populateFields(doc.data()!);
+        final data = doc.data()!;
+        _populateFields(data);
+        _syncUrl(data['username']);
         setState(() => _isLoading = false);
       } else if (mounted) {
         setState(() { _errorMessage = "User not found."; _isLoading = false; });
@@ -132,6 +137,28 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     } catch (e) {
       if (mounted) { setState(() { _errorMessage = "Error loading data."; _isLoading = false; }); }
     }
+  }
+
+  /// Ensures the browser URL matches the loaded username profile.
+  /// This is the "Vanity URL Enforcement" logic.
+  void _syncUrl(String? username) {
+    if (username == null || username.isEmpty || !mounted) return;
+
+    // We use addPostFrameCallback to ensure the router is ready and avoid the red error crash.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      // Get the current path from GoRouter safely
+      final router = GoRouter.of(context);
+      final currentPath = router.routerDelegate.currentConfiguration.uri.path;
+      final targetPath = '/$username';
+
+      // If the URL in the address bar doesn't match the profile handle we are looking at, FORCE IT.
+      if (currentPath != targetPath) {
+        // We use .go to swap the URL state without creating a redundant history loop
+        router.go(targetPath);
+      }
+    });
   }
 
   void _populateFields(Map<String, dynamic> data) {
