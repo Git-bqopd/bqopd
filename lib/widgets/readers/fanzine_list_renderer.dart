@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:provider/provider.dart';
 import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
+import '../../services/user_provider.dart';
 import '../../components/social_toolbar.dart';
 import '../../utils/link_parser.dart';
+import '../comment_item.dart';
+import '../stats_table.dart';
 
 class FanzineListRenderer extends StatefulWidget {
   final String fanzineId;
@@ -14,8 +18,6 @@ class FanzineListRenderer extends StatefulWidget {
   final ViewService viewService;
   final Function(int)? onOpenGrid;
   final int initialIndex;
-
-  // NEW: Callback for desktop mode to show drawer externally
   final Function(Widget drawerContent)? onExternalDrawerRequest;
 
   const FanzineListRenderer({
@@ -35,346 +37,205 @@ class FanzineListRenderer extends StatefulWidget {
 }
 
 class _FanzineListRendererState extends State<FanzineListRenderer> {
-  final Map<int, bool> _openTextDrawers = {};
-  final Map<int, bool> _openCommentDrawers = {};
+  final Map<int, bool> _openTextRows = {};
+  final Map<int, bool> _openCommentRows = {};
+  final Map<int, bool> _openViewRows = {};
+
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
 
+  String _fanzineTitle = '...';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFanzineMeta();
+  }
+
+  Future<void> _fetchFanzineMeta() async {
+    final doc = await FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).get();
+    if (doc.exists && mounted) {
+      setState(() => _fanzineTitle = doc.data()?['title'] ?? 'Untitled');
+    }
+  }
+
   @override
   void dispose() {
-    for (var c in _commentControllers.values) {
-      c.dispose();
-    }
+    for (var c in _commentControllers.values) c.dispose();
     super.dispose();
   }
 
   void _handleTextToggle(int index, String text) {
     if (widget.onExternalDrawerRequest != null) {
-      // Desktop Mode: Send content to parent
-      // Note: We don't toggle local state
-      widget.onExternalDrawerRequest!(_buildTextDrawerContent(text));
+      widget.onExternalDrawerRequest!(_buildSidebarText(text));
     } else {
-      // Mobile Mode: Toggle local state
       setState(() {
-        final isOpen = _openTextDrawers[index] ?? false;
-        _openTextDrawers[index] = !isOpen;
-        if (_openTextDrawers[index] == true) _openCommentDrawers[index] = false;
+        _openTextRows[index] = !(_openTextRows[index] ?? false);
+        if (_openTextRows[index] == true) { _openCommentRows[index] = false; _openViewRows[index] = false; }
       });
     }
   }
 
-  void _handleCommentToggle(int index, String pageId) {
+  void _handleCommentToggle(int index, String imageId) {
     if (widget.onExternalDrawerRequest != null) {
-      // Desktop Mode
-      widget.onExternalDrawerRequest!(_buildCommentDrawerContent(index, pageId));
+      widget.onExternalDrawerRequest!(_buildSidebarComments(index, imageId));
     } else {
-      // Mobile Mode
       setState(() {
-        final isOpen = _openCommentDrawers[index] ?? false;
-        _openCommentDrawers[index] = !isOpen;
-        if (_openCommentDrawers[index] == true) _openTextDrawers[index] = false;
+        _openCommentRows[index] = !(_openCommentRows[index] ?? false);
+        if (_openCommentRows[index] == true) { _openTextRows[index] = false; _openViewRows[index] = false; }
       });
     }
   }
 
-  // --- DRAWER CONTENT BUILDERS (Shared) ---
-
-  Widget _buildTextDrawerContent(String text) {
-    // Wrapped in a container for the external view consistency
-    return Container(
-      color: const Color(0xFFFDFBF7),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey[200],
-            child: const Text("TRANSCRIPTION", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: text.isEmpty
-                  ? const Center(child: Text("No transcription available.", style: TextStyle(color: Colors.grey)))
-                  : SelectableText.rich(LinkParser.renderLinks(context, text,
-                  baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia'))),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommentDrawerContent(int pageIndex, String pageId) {
-    // Ensure controller exists
-    final controller = _commentControllers.putIfAbsent(pageIndex, () => TextEditingController());
-
-    return Container(
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey[200],
-            child: const Text("COMMENTS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-          ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _engagementService.getCommentsStream(widget.fanzineId, pageId),
-              builder: (context, snap) {
-                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-                final docs = snap.data!.docs;
-                if (docs.isEmpty) return const Center(child: Text("No comments yet."));
-
-                return ListView.separated(
-                  itemCount: docs.length,
-                  separatorBuilder: (c,i) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final data = docs[i].data() as Map<String, dynamic>;
-                    return ListTile(
-                      dense: true,
-                      title: Text(data['username'] ?? 'Anon', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(data['text'] ?? ''),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(8.0),
-            decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade300))
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                        hintText: "Add a comment...",
-                        isDense: true,
-                        border: OutlineInputBorder()),
-                    onSubmitted: (_) => _submitComment(pageIndex, pageId),
-                  ),
-                ),
-                IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () => _submitComment(pageIndex, pageId)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- LOCAL DRAWER BUILDERS (For Mobile Inline) ---
-  // These wrap the content in a constrained box or style appropriate for inline display
-
-  Widget _buildInlineTextDrawer(String text) {
-    if (text.isEmpty) {
-      return Container(
-          padding: const EdgeInsets.all(20),
-          color: Colors.grey[100],
-          alignment: Alignment.center,
-          child: const Text("No transcription available.", style: TextStyle(color: Colors.grey)));
+  void _handleViewToggle(int index, String imageId) {
+    if (widget.onExternalDrawerRequest != null) {
+      widget.onExternalDrawerRequest!(_buildSidebarViews(imageId));
+    } else {
+      setState(() {
+        _openViewRows[index] = !(_openViewRows[index] ?? false);
+        if (_openViewRows[index] == true) { _openTextRows[index] = false; _openCommentRows[index] = false; }
+      });
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
-      decoration: BoxDecoration(
-          color: const Color(0xFFFDFBF7),
-          border: Border(top: BorderSide(color: Colors.grey.shade300))),
-      child: SelectableText.rich(LinkParser.renderLinks(context, text,
-          baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia'))),
-    );
   }
 
-  Widget _buildInlineCommentDrawer(int pageIndex, String pageId) {
+  Widget _buildSidebarText(String text) => _SidebarWrapper(title: "TRANSCRIPTION", child: SelectableText.rich(LinkParser.renderLinks(context, text, baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia'))));
+
+  Widget _buildSidebarComments(int pageIndex, String imageId) {
     final controller = _commentControllers.putIfAbsent(pageIndex, () => TextEditingController());
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey.shade200))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: 200, // Fixed height for inline
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _engagementService.getCommentsStream(widget.fanzineId, pageId),
-              builder: (context, snap) {
-                if (!snap.hasData) return const SizedBox();
-                final docs = snap.data!.docs;
-                if (docs.isEmpty) return const Center(child: Text("No comments yet."));
-                return ListView.builder(
-                  itemCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final data = docs[i].data() as Map<String, dynamic>;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: RichText(text: TextSpan(style: const TextStyle(color: Colors.black), children: [
-                        TextSpan(text: "${data['username']}: ", style: const TextStyle(fontWeight: FontWeight.bold)),
-                        TextSpan(text: "${data['text']}"),
-                      ])),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                      hintText: "Comment...",
-                      isDense: true,
-                      border: OutlineInputBorder()),
-                ),
-              ),
-              IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: () => _submitComment(pageIndex, pageId)),
-            ],
-          ),
-        ],
-      ),
-    );
+    return _SidebarWrapper(title: "COMMENTS", child: Column(children: [Expanded(child: _CommentList(imageId: imageId, service: _engagementService)), _CommentInput(controller: controller, onSend: () => _submitComment(pageIndex, imageId))]));
   }
 
-  Future<void> _submitComment(int pageIndex, String pageId) async {
+  Widget _buildSidebarViews(String imageId) {
+    return _SidebarWrapper(title: "ANALYTICS", child: StatsTable(contentId: imageId, viewService: widget.viewService));
+  }
+
+  Future<void> _submitComment(int pageIndex, String imageId) async {
     final controller = _commentControllers[pageIndex];
     if (controller == null || controller.text.trim().isEmpty) return;
-
     final text = controller.text.trim();
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
     controller.clear();
-    // Only unfocus if on mobile/inline to avoid jarring keyboard dismissal on desktop
-    if (widget.onExternalDrawerRequest == null) {
-      FocusScope.of(context).unfocus();
-    }
-
-    try {
-      await _engagementService.addComment(
-        fanzineId: widget.fanzineId,
-        pageId: pageId,
-        text: text,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
+    if (widget.onExternalDrawerRequest == null) FocusScope.of(context).unfocus();
+    await _engagementService.addComment(imageId: imageId, fanzineId: widget.fanzineId, fanzineTitle: _fanzineTitle, text: text, displayName: userProvider.userProfile?['displayName'], username: userProvider.userProfile?['username']);
   }
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
+    return ListView.separated(
       controller: widget.scrollController,
-      padding: const EdgeInsets.all(8.0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 1, // Single Column
-        childAspectRatio: 0.625, // 5:8 Ratio
-        mainAxisSpacing: 30.0,
-      ),
-      cacheExtent: 5000.0,
+      padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: widget.pages.length + 1,
+      separatorBuilder: (_, __) => const SizedBox(height: 48),
       itemBuilder: (context, index) {
-        if (index == 0) {
-          return widget.headerWidget;
-        }
-
+        if (index == 0) return widget.headerWidget;
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
-        return _KeepAlivePageItem(
+        final imageId = pageData['imageId'] ?? '';
+
+        return _PageWidget(
           index: index,
           pageIndex: pageIndex,
           pageData: pageData,
           fanzineId: widget.fanzineId,
-          isTextOpen: _openTextDrawers[pageIndex] ?? false,
-          isCommentsOpen: _openCommentDrawers[pageIndex] ?? false,
+          fanzineTitle: _fanzineTitle,
+          isTextOpen: _openTextRows[pageIndex] ?? false,
+          isCommentsOpen: _openCommentRows[pageIndex] ?? false,
+          isViewsOpen: _openViewRows[pageIndex] ?? false,
           onToggleText: () => _handleTextToggle(pageIndex, pageData['text_processed'] ?? pageData['text'] ?? ''),
-          onToggleComment: () => _handleCommentToggle(pageIndex, pageData['__id']),
+          onToggleComment: () => _handleCommentToggle(pageIndex, imageId),
+          onToggleViews: () => _handleViewToggle(pageIndex, imageId),
           onOpenGrid: widget.onOpenGrid,
-          // We pass inline builders for the mobile logic
-          inlineTextDrawerBuilder: _buildInlineTextDrawer,
-          inlineCommentDrawerBuilder: _buildInlineCommentDrawer,
+          submitComment: (imgId) => _submitComment(pageIndex, imgId),
+          commentController: _commentControllers.putIfAbsent(pageIndex, () => TextEditingController()),
+          viewService: widget.viewService,
         );
       },
     );
   }
 }
 
-class _KeepAlivePageItem extends StatefulWidget {
+class _PageWidget extends StatefulWidget {
   final int index;
   final int pageIndex;
   final Map<String, dynamic> pageData;
   final String fanzineId;
+  final String fanzineTitle;
   final bool isTextOpen;
   final bool isCommentsOpen;
+  final bool isViewsOpen;
   final VoidCallback onToggleText;
   final VoidCallback onToggleComment;
+  final VoidCallback onToggleViews;
   final Function(int)? onOpenGrid;
-  final Widget Function(String) inlineTextDrawerBuilder;
-  final Widget Function(int, String) inlineCommentDrawerBuilder;
+  final Function(String) submitComment;
+  final TextEditingController commentController;
+  final ViewService viewService;
 
-  const _KeepAlivePageItem({
+  const _PageWidget({
     required this.index,
     required this.pageIndex,
     required this.pageData,
     required this.fanzineId,
+    required this.fanzineTitle,
     required this.isTextOpen,
     required this.isCommentsOpen,
+    required this.isViewsOpen,
     required this.onToggleText,
     required this.onToggleComment,
-    required this.onOpenGrid,
-    required this.inlineTextDrawerBuilder,
-    required this.inlineCommentDrawerBuilder,
+    required this.onToggleViews,
+    this.onOpenGrid,
+    required this.submitComment,
+    required this.commentController,
+    required this.viewService,
   });
 
   @override
-  State<_KeepAlivePageItem> createState() => _KeepAlivePageItemState();
+  State<_PageWidget> createState() => _PageWidgetState();
 }
 
-class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKeepAliveClientMixin {
+class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    final String imageId = widget.pageData['imageId'] ?? '';
+    if (imageId.isNotEmpty) {
+      widget.viewService.recordView(
+        imageId: imageId,
+        fanzineId: widget.fanzineId,
+        fanzineTitle: widget.fanzineTitle,
+        type: ViewType.list,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     super.build(context);
-
-    final imageUrl = widget.pageData['imageUrl'] as String?;
-    final storagePath = widget.pageData['storagePath'] as String?;
-    final imageId = widget.pageData['imageId'] as String?;
-    final pageId = widget.pageData['__id'];
-    final String pageText = widget.pageData['text_processed'] ?? widget.pageData['text'] ?? '';
+    final String pageId = widget.pageData['__id'] ?? 'unknown';
+    final String imageId = widget.pageData['imageId'] ?? '';
+    const double verticalGap = 16.0;
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
+        AspectRatio(
+          aspectRatio: 0.625,
           child: Container(
             color: Colors.grey[100],
-            child: _PageImage(imageUrl: imageUrl, storagePath: storagePath),
+            child: _PageImage(imageUrl: widget.pageData['imageUrl'], storagePath: widget.pageData['storagePath']),
           ),
         ),
+        const SizedBox(height: verticalGap),
         Container(
           color: Colors.white,
           child: FutureBuilder<DocumentSnapshot>(
-            future: imageId != null
-                ? FirebaseFirestore.instance.collection('images').doc(imageId).get()
-                : null,
+            future: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).get() : null,
             builder: (context, snapshot) {
-              bool isGame = false;
-              if (snapshot.hasData && snapshot.data!.exists) {
-                isGame = (snapshot.data!.data() as Map<String, dynamic>)['isGame'] == true;
-              }
+              bool isGame = snapshot.hasData && (snapshot.data!.data() as Map?)?['isGame'] == true;
               return SocialToolbar(
                 imageId: imageId,
                 pageId: pageId,
@@ -384,23 +245,64 @@ class _KeepAlivePageItemState extends State<_KeepAlivePageItem> with AutomaticKe
                 onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
                 onToggleComments: widget.onToggleComment,
                 onToggleText: widget.onToggleText,
+                onToggleViews: widget.onToggleViews,
               );
             },
           ),
         ),
-        // Drawers (Only visible if local state allows)
-        if (widget.isTextOpen)
-          widget.inlineTextDrawerBuilder(pageText),
-        if (widget.isCommentsOpen)
-          widget.inlineCommentDrawerBuilder(widget.pageIndex, pageId ?? 'unknown'),
+        if (widget.isTextOpen) ...[
+          const SizedBox(height: verticalGap),
+          _BonusRowWrapper(color: const Color(0xFFFDFBF7), child: SelectableText.rich(LinkParser.renderLinks(context, widget.pageData['text_processed'] ?? widget.pageData['text'] ?? '', baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia')))),
+        ],
+        if (widget.isCommentsOpen) ...[
+          const SizedBox(height: verticalGap),
+          _BonusRowWrapper(color: Colors.white, child: Column(children: [ConstrainedBox(constraints: const BoxConstraints(maxHeight: 300), child: _CommentList(imageId: imageId, service: EngagementService())), _CommentInput(controller: widget.commentController, onSend: () => widget.submitComment(imageId))])),
+        ],
+        if (widget.isViewsOpen) ...[
+          const SizedBox(height: verticalGap),
+          _BonusRowWrapper(color: Colors.grey[50]!, child: StatsTable(contentId: imageId, viewService: widget.viewService)),
+        ],
       ],
     );
   }
 }
 
+class _BonusRowWrapper extends StatelessWidget {
+  final Widget child; final Color color;
+  const _BonusRowWrapper({required this.child, required this.color});
+  @override
+  Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: color, border: Border(top: BorderSide(color: Colors.grey.shade200), bottom: BorderSide(color: Colors.grey.shade200))), child: child);
+}
+
+class _SidebarWrapper extends StatelessWidget {
+  final String title; final Widget child;
+  const _SidebarWrapper({required this.title, required this.child});
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Container(padding: const EdgeInsets.all(16), color: Colors.grey[200], child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2))), Expanded(child: Padding(padding: const EdgeInsets.all(16), child: child))]);
+}
+
+class _CommentList extends StatelessWidget {
+  final String imageId; final EngagementService service;
+  const _CommentList({required this.imageId, required this.service});
+  @override
+  Widget build(BuildContext context) => StreamBuilder<QuerySnapshot>(stream: service.getCommentsStream(imageId), builder: (context, snap) {
+    if (!snap.hasData) return const SizedBox();
+    final sortedDocs = snap.data!.docs.map((d) { final m = d.data() as Map<String, dynamic>; m['_id'] = d.id; return m; }).toList();
+    sortedDocs.sort((a, b) { final aT = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(); final bT = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(); return aT.compareTo(bT); });
+    if (sortedDocs.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No comments yet.")));
+    return ListView.separated(shrinkWrap: true, physics: const ClampingScrollPhysics(), itemCount: sortedDocs.length, separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12), itemBuilder: (c, i) => CommentItem(data: sortedDocs[i]));
+  });
+}
+
+class _CommentInput extends StatelessWidget {
+  final TextEditingController controller; final VoidCallback onSend;
+  const _CommentInput({required this.controller, required this.onSend});
+  @override
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [Expanded(child: TextField(controller: controller, decoration: const InputDecoration(hintText: "Add a comment...", isDense: true, border: OutlineInputBorder()))), IconButton(icon: const Icon(Icons.send), onPressed: onSend)]));
+}
+
 class _PageImage extends StatefulWidget {
-  final String? imageUrl;
-  final String? storagePath;
+  final String? imageUrl; final String? storagePath;
   const _PageImage({this.imageUrl, this.storagePath});
   @override
   State<_PageImage> createState() => _PageImageState();
@@ -408,34 +310,9 @@ class _PageImage extends StatefulWidget {
 
 class _PageImageState extends State<_PageImage> {
   String? _currentUrl;
-
   @override
-  void initState() {
-    super.initState();
-    _currentUrl = widget.imageUrl;
-    if ((_currentUrl == null || _currentUrl!.isEmpty) && widget.storagePath != null) {
-      _resolveUrl();
-    }
-  }
-
-  Future<void> _resolveUrl() async {
-    if (widget.storagePath != null) {
-      try {
-        final url = await FirebaseStorage.instance.ref(widget.storagePath).getDownloadURL();
-        if (mounted) setState(() => _currentUrl = url);
-      } catch (_) {}
-    }
-  }
-
+  void initState() { super.initState(); _currentUrl = widget.imageUrl; if ((_currentUrl == null || _currentUrl!.isEmpty) && widget.storagePath != null) _resolveUrl(); }
+  Future<void> _resolveUrl() async { try { final url = await FirebaseStorage.instance.ref(widget.storagePath!).getDownloadURL(); if (mounted) setState(() => _currentUrl = url); } catch (_) {} }
   @override
-  Widget build(BuildContext context) {
-    if (_currentUrl == null || _currentUrl!.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return Image.network(
-      _currentUrl!,
-      fit: BoxFit.contain,
-      errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-    );
-  }
+  Widget build(BuildContext context) => _currentUrl == null || _currentUrl!.isEmpty ? const Center(child: CircularProgressIndicator()) : Image.network(_currentUrl!, fit: BoxFit.contain, errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)));
 }

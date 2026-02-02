@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/view_service.dart';
 
-class FanzineGridRenderer extends StatelessWidget {
+class FanzineGridRenderer extends StatefulWidget {
   final List<Map<String, dynamic>> pages;
   final Widget headerWidget;
   final ScrollController scrollController;
@@ -17,58 +18,71 @@ class FanzineGridRenderer extends StatelessWidget {
     required this.viewService,
   });
 
-  void _recordViewForIndex(int index) {
-    if (index > 0 && index <= pages.length) {
-      final pageData = pages[index - 1];
-      final imageId = pageData['imageId'];
-      if (imageId != null) {
-        viewService.recordView(contentId: imageId, contentType: 'images');
-      }
+  @override
+  State<FanzineGridRenderer> createState() => _FanzineGridRendererState();
+}
+
+class _FanzineGridRendererState extends State<FanzineGridRenderer> {
+  String _fanzineId = '';
+  String _fanzineTitle = 'Untitled';
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveFanzineInfo();
+  }
+
+  void _resolveFanzineInfo() {
+    if (widget.pages.isNotEmpty) {
+      // Pages in a zine are typically under /fanzines/{id}/pages/
+      // We can peek at a page to see if it carries the ID, but usually
+      // the parent renderer passes it.
     }
+  }
+
+  void _recordGridView(int index) async {
+    if (index == 0) return;
+    final pageData = widget.pages[index - 1];
+    final String imageId = pageData['imageId'] ?? '';
+
+    // Grid View is a "Glance"
+    widget.viewService.recordView(
+      imageId: imageId,
+      fanzineId: 'grid_view', // Or pass the actual zine ID
+      fanzineTitle: 'Gallery View',
+      type: ViewType.grid,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Standardizing the aspect ratio to 5:8 (0.625)
     const double childAspectRatio = 0.625;
     const double mainAxisSpacing = 30.0;
     const double crossAxisSpacing = 24.0;
     const double padding = 8.0;
 
     return GridView.builder(
-      controller: scrollController,
+      controller: widget.scrollController,
       padding: const EdgeInsets.all(padding),
-      // We use SliverGridDelegateWithFixedCrossAxisCount which responds
-      // automatically to the width of the parent container.
-      // This makes it safe for responsive column resizing.
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: childAspectRatio,
         mainAxisSpacing: mainAxisSpacing,
         crossAxisSpacing: crossAxisSpacing,
       ),
-      // +1 for the Header at index 0
-      itemCount: pages.length + 1,
+      itemCount: widget.pages.length + 1,
       itemBuilder: (context, index) {
-        if (index == 0) {
-          // HEADER CELL
-          return GestureDetector(
-            onTap: () {
-              // Optional: trigger something on cover tap
-            },
-            child: headerWidget,
-          );
-        }
+        if (index == 0) return widget.headerWidget;
 
         final pageIndex = index - 1;
-        final pageData = pages[pageIndex];
+        final pageData = widget.pages[pageIndex];
         final imageUrl = pageData['imageUrl'] ?? '';
         final pageNum = pageData['pageNumber'] ?? (pageIndex + 1);
 
         return GestureDetector(
           onTap: () {
-            _recordViewForIndex(index);
-            onPageTap(index);
+            _recordGridView(index);
+            widget.onPageTap(index);
           },
           child: Container(
             decoration: BoxDecoration(
@@ -84,7 +98,7 @@ class FanzineGridRenderer extends StatelessWidget {
             child: imageUrl.isNotEmpty
                 ? Image.network(
               imageUrl,
-              fit: BoxFit.contain, // Maintain aspect ratio within cell
+              fit: BoxFit.contain,
               errorBuilder: (c, e, s) => Center(
                 child: Text("Page $pageNum",
                     style: const TextStyle(color: Colors.grey)),

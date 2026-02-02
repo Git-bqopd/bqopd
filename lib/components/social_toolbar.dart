@@ -2,21 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import '../services/view_service.dart';
 import '../services/engagement_service.dart';
 import '../services/user_provider.dart';
 import 'social_action_button.dart';
 import '../game/game_lobby.dart';
+import '../widgets/login_widget.dart';
 
 class SocialToolbar extends StatefulWidget {
   final String? imageId;
   final String? pageId;
   final String? fanzineId;
   final int? pageNumber;
-  final bool isGame; // Added to control Terminal visibility
+  final bool isGame;
   final VoidCallback? onOpenGrid;
   final VoidCallback? onToggleComments;
   final VoidCallback? onToggleText;
+  final VoidCallback? onToggleViews;
 
   const SocialToolbar({
     super.key,
@@ -24,10 +28,11 @@ class SocialToolbar extends StatefulWidget {
     this.pageId,
     this.fanzineId,
     this.pageNumber,
-    this.isGame = false, // Default to false
+    this.isGame = false,
     this.onOpenGrid,
     this.onToggleComments,
     this.onToggleText,
+    this.onToggleViews,
   });
 
   @override
@@ -35,7 +40,6 @@ class SocialToolbar extends StatefulWidget {
 }
 
 class _SocialToolbarState extends State<SocialToolbar> {
-  final ViewService _viewService = ViewService();
   final EngagementService _engagementService = EngagementService();
   bool _isButtonsDrawerOpen = false;
 
@@ -45,10 +49,30 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   void _handleLike(bool isLiked) {
     if (widget.fanzineId == null || widget.pageId == null) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      _showLoginPrompt();
+      return;
+    }
     _engagementService.toggleLike(
       fanzineId: widget.fanzineId!,
       pageId: widget.pageId!,
       isCurrentlyLiked: isLiked,
+    );
+  }
+
+  void _showLoginPrompt() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+          child: LoginWidget(
+            onTap: () { Navigator.pop(context); context.go('/register'); },
+            onLoginSuccess: () { Navigator.pop(context); },
+          ),
+        ),
+      ),
     );
   }
 
@@ -65,18 +89,17 @@ class _SocialToolbarState extends State<SocialToolbar> {
           SnackBar(content: Text('Link copied: $url'), duration: const Duration(seconds: 2)),
         );
       }
-    } catch (e) { print("Share error: $e"); }
+    } catch (e) { debugPrint("Share error: $e"); }
   }
 
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final buttonVisibility = userProvider.socialButtonVisibility;
-
-    // Terminal is only visible if the image is marked as a game AND user hasn't hidden it
     final bool canShowTerminal = widget.isGame && (buttonVisibility['Terminal'] == true);
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
@@ -125,18 +148,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
                 const SizedBox(width: 16),
 
                 if (buttonVisibility['Comment'] == true) ...[
-                  if (widget.pageId != null && widget.fanzineId != null)
+                  if (widget.imageId != null && widget.imageId!.isNotEmpty)
                     StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('fanzines')
-                          .doc(widget.fanzineId)
-                          .collection('pages')
-                          .doc(widget.pageId)
-                          .snapshots(),
-                      builder: (context, pageSnap) {
+                      stream: FirebaseFirestore.instance.collection('images').doc(widget.imageId).snapshots(),
+                      builder: (context, imgSnap) {
                         int count = 0;
-                        if (pageSnap.hasData && pageSnap.data!.exists) {
-                          count = (pageSnap.data!.data() as Map<String, dynamic>)['commentCount'] ?? 0;
+                        if (imgSnap.hasData && imgSnap.data!.exists) {
+                          count = (imgSnap.data!.data() as Map<String, dynamic>)['commentCount'] ?? 0;
                         }
                         return SocialActionButton(
                           icon: Icons.comment,
@@ -156,14 +174,28 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
+                // --- UPDATED VIEW COUNTER: SHOWS "LOGGED IN, SINGLE PAGE" ONLY ---
                 if (buttonVisibility['Views'] == true) ...[
-                  SocialActionButton(
-                    icon: Icons.show_chart,
-                    label: 'Views',
-                    countFuture: widget.imageId != null
-                        ? _viewService.getViewCount(contentId: widget.imageId!, contentType: 'images')
-                        : null,
-                  ),
+                  if (widget.imageId != null && widget.imageId!.isNotEmpty)
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance.collection('images').doc(widget.imageId).snapshots(),
+                      builder: (context, imgSnap) {
+                        int count = 0;
+                        if (imgSnap.hasData && imgSnap.data!.exists) {
+                          final data = imgSnap.data!.data() as Map<String, dynamic>;
+                          // Only show the Registered Reader (Logged In + Single Page) stat
+                          count = (data['registeredListViewCount'] ?? 0) as int;
+                        }
+                        return SocialActionButton(
+                          icon: Icons.show_chart,
+                          label: 'Views',
+                          count: count,
+                          onTap: widget.onToggleViews,
+                        );
+                      },
+                    )
+                  else
+                    const SocialActionButton(icon: Icons.show_chart, label: 'Views', count: 0),
                   const SizedBox(width: 16),
                 ],
 
@@ -192,32 +224,26 @@ class _SocialToolbarState extends State<SocialToolbar> {
           Container(
             padding: const EdgeInsets.all(12.0),
             decoration: BoxDecoration(color: Colors.grey.shade50, border: Border(top: BorderSide(color: Colors.grey.shade200))),
-            child: Column(
-              children: [
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _DrawerItem(label: 'Comment', icon: Icons.comment, isSelected: buttonVisibility['Comment']!, onTap: () => userProvider.toggleSocialButton('Comment')),
-                      const SizedBox(width: 10),
-                      _DrawerItem(label: 'Share', icon: Icons.share, isSelected: buttonVisibility['Share']!, onTap: () => userProvider.toggleSocialButton('Share')),
-                      const SizedBox(width: 10),
-                      _DrawerItem(label: 'Views', icon: Icons.show_chart, isSelected: buttonVisibility['Views']!, onTap: () => userProvider.toggleSocialButton('Views')),
-                      const SizedBox(width: 10),
-                      _DrawerItem(label: 'Text', icon: Icons.newspaper, isSelected: buttonVisibility['Text']!, onTap: () => userProvider.toggleSocialButton('Text')),
-                      const SizedBox(width: 10),
-                      _DrawerItem(label: 'Circulation', icon: Icons.print, isSelected: buttonVisibility['Circulation']!, onTap: () => userProvider.toggleSocialButton('Circulation')),
-
-                      // Terminal only appears in the settings drawer if the page is actually a game
-                      if (widget.isGame) ...[
-                        const SizedBox(width: 10),
-                        _DrawerItem(label: 'Terminal, CA', icon: Icons.terminal, isSelected: buttonVisibility['Terminal'] ?? false, onTap: () => userProvider.toggleSocialButton('Terminal')),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _DrawerItem(label: 'Comment', icon: Icons.comment, isSelected: buttonVisibility['Comment']!, onTap: () => userProvider.toggleSocialButton('Comment')),
+                  const SizedBox(width: 10),
+                  _DrawerItem(label: 'Share', icon: Icons.share, isSelected: buttonVisibility['Share']!, onTap: () => userProvider.toggleSocialButton('Share')),
+                  const SizedBox(width: 10),
+                  _DrawerItem(label: 'Views', icon: Icons.show_chart, isSelected: buttonVisibility['Views']!, onTap: () => userProvider.toggleSocialButton('Views')),
+                  const SizedBox(width: 10),
+                  _DrawerItem(label: 'Text', icon: Icons.newspaper, isSelected: buttonVisibility['Text']!, onTap: () => userProvider.toggleSocialButton('Text')),
+                  const SizedBox(width: 10),
+                  _DrawerItem(label: 'Circulation', icon: Icons.print, isSelected: buttonVisibility['Circulation']!, onTap: () => userProvider.toggleSocialButton('Circulation')),
+                  if (widget.isGame) ...[
+                    const SizedBox(width: 10),
+                    _DrawerItem(label: 'Terminal', icon: Icons.terminal, isSelected: buttonVisibility['Terminal'] ?? false, onTap: () => userProvider.toggleSocialButton('Terminal')),
+                  ],
+                ],
+              ),
             ),
           ),
       ],

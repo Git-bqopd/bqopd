@@ -1,99 +1,101 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart';
+
+enum ViewType { list, grid }
 
 class ViewService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
 
-  /// Records a view for a piece of content.
-  ///
-  /// [contentId] is the MASTER ID of the content (e.g. image ID).
-  /// This ensures views are counted towards the creator's original upload,
-  /// regardless of which Fanzine it appears in.
+  // Rule 1 Compliant Path: Logs are stored per Image (the UGC)
+  CollectionReference _viewCollection(String imageId) {
+    return _db
+        .collection('artifacts')
+        .doc('bqopd')
+        .collection('public')
+        .doc('data')
+        .collection('views')
+        .doc(imageId)
+        .collection('logs');
+  }
+
+  /// Records a view for canonical content (Image).
+  /// Tracks "Registered Reader" count on the Image document for the social button.
   Future<void> recordView({
-    required String contentId,
-    required String contentType, // e.g., 'images', 'fanzines'
+    required String imageId,
+    required String fanzineId,
+    required String fanzineTitle,
+    required ViewType type,
   }) async {
+    if (imageId.isEmpty) return;
+
     User? user = _auth.currentUser;
-    // 1. Ensure User ID (Anonymous or Real)
     if (user == null) {
       try {
         final cred = await _auth.signInAnonymously();
         user = cred.user;
-      } catch (e) {
-        // debugPrint("Error signing in anonymously for view tracking: $e");
+      } catch (_) {
         return;
       }
     }
-
     if (user == null) return;
 
-    // 2. Log to Google Analytics
-    try {
-      await _analytics.logEvent(
-        name: 'select_content',
-        parameters: {
-          'content_type': contentType,
-          'content_id': contentId,
-          'user_id': user.uid,
-        },
-      );
-    } catch (e) {
-      // Analytics failures are non-critical
-    }
-
-    // 3. Record Unique View in Firestore
-    final docRef = _db
-        .collection('stats')
-        .doc('views')
-        .collection(contentType)
-        .doc(contentId)
-        .collection('unique_viewers')
-        .doc(user.uid);
+    // Unique View Key: [User] + [Context] + [Type]
+    // This ensures a user is only counted once for "Reading" this image in this specific zine.
+    final String viewId = "${user.uid}_${fanzineId}_${type.name}";
+    final docRef = _viewCollection(imageId).doc(viewId);
 
     try {
-      // Idempotent write
-      await docRef.set({
-        'viewedAt': FieldValue.serverTimestamp(),
-        'uid': user.uid,
-        'isAnonymous': user.isAnonymous,
-      }, SetOptions(merge: true));
-    } catch (e) {
-      // Suppress permission errors specifically to keep console clean during dev
-      if (e.toString().contains('permission-denied')) {
-        // Commented out to silence the specific log as requested
-        debugPrint(
-            "Note: View tracking skipped (Permission Denied). Enable writes to 'stats' collection in Firestore Rules.");
-      } else {
-        debugPrint("Error recording view to Firestore: $e");
+      final existingDoc = await docRef.get();
+
+      if (!existingDoc.exists) {
+        final batch = _db.batch();
+
+        // 1. Record the detailed log under the IMAGE
+        batch.set(docRef, {
+          'userId': user.uid,
+          'isAnonymous': user.isAnonymous,
+          'fanzineId': fanzineId,
+          'fanzineTitle': fanzineTitle,
+          'viewType': type.name,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        // 2. Update canonical counters on the IMAGE
+        batch.update(_db.collection('images').doc(imageId), {
+          'viewCount': FieldValue.increment(1),
+          // "Registered Reader" = Logged In + Single Page
+          if (!user.isAnonymous && type == ViewType.list)
+            'registeredListViewCount': FieldValue.increment(1),
+        });
+
+        // 3. Update the FANZINE counter as a convenience cache for zine-level stats
+        if (fanzineId.isNotEmpty && fanzineId != 'grid_view') {
+          batch.update(_db.collection('fanzines').doc(fanzineId), {
+            'totalEngagementViews': FieldValue.increment(1),
+            if (!user.isAnonymous && type == ViewType.list)
+              'registeredListViewCount': FieldValue.increment(1),
+          });
+        }
+
+        await batch.commit();
       }
+    } catch (e) {
+      debugPrint("View record failed: $e");
     }
   }
 
-  /// Returns the live count of unique viewers.
-  Future<int> getViewCount({
-    required String contentId,
-    required String contentType,
-  }) async {
-    try {
-      final query = _db
-          .collection('stats')
-          .doc('views')
-          .collection(contentType)
-          .doc(contentId)
-          .collection('unique_viewers')
-          .count();
+  /// Returns logs for a specific image.
+  Stream<QuerySnapshot> getViewLogsStream(String imageId) {
+    return _viewCollection(imageId).snapshots();
+  }
 
-      final snapshot = await query.get(source: AggregateSource.server);
-      return snapshot.count ?? 0;
-    } catch (e) {
-      if (!e.toString().contains('permission-denied')) {
-        debugPrint("Error fetching view count: $e");
-      }
-      return 0;
-    }
+  /// Since we store logs under Images, to show a Fanzine's breakdown,
+  /// we fetch the fanzine's own convenience logs if they exist,
+  /// or summarize its cached counter.
+  /// For now, we allow the FanzineWidget to use its own cached buckets.
+  Stream<DocumentSnapshot> getFanzineStatsStream(String fanzineId) {
+    return _db.collection('fanzines').doc(fanzineId).snapshots();
   }
 }
