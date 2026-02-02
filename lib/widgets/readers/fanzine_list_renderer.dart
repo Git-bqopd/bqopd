@@ -201,9 +201,11 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
   void initState() {
     super.initState();
     final String imageId = widget.pageData['imageId'] ?? '';
+    final String pageId = widget.pageData['__id'] ?? '';
     if (imageId.isNotEmpty) {
       widget.viewService.recordView(
         imageId: imageId,
+        pageId: pageId, // Fixed: Added required pageId argument
         fanzineId: widget.fanzineId,
         fanzineTitle: widget.fanzineTitle,
         type: ViewType.list,

@@ -23,32 +23,16 @@ class FanzineGridRenderer extends StatefulWidget {
 }
 
 class _FanzineGridRendererState extends State<FanzineGridRenderer> {
-  String _fanzineId = '';
-  String _fanzineTitle = 'Untitled';
-
-  @override
-  void initState() {
-    super.initState();
-    _resolveFanzineInfo();
-  }
-
-  void _resolveFanzineInfo() {
-    if (widget.pages.isNotEmpty) {
-      // Pages in a zine are typically under /fanzines/{id}/pages/
-      // We can peek at a page to see if it carries the ID, but usually
-      // the parent renderer passes it.
-    }
-  }
-
   void _recordGridView(int index) async {
     if (index == 0) return;
     final pageData = widget.pages[index - 1];
     final String imageId = pageData['imageId'] ?? '';
+    final String pageId = pageData['__id'] ?? '';
 
-    // Grid View is a "Glance"
     widget.viewService.recordView(
       imageId: imageId,
-      fanzineId: 'grid_view', // Or pass the actual zine ID
+      pageId: pageId, // Fixed: Added required pageId argument
+      fanzineId: 'grid_view',
       fanzineTitle: 'Gallery View',
       type: ViewType.grid,
     );
@@ -89,7 +73,7 @@ class _FanzineGridRendererState extends State<FanzineGridRenderer> {
               color: imageUrl.isEmpty ? Colors.grey[300] : Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 )

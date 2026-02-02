@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/view_service.dart';
 
+/// A standardized table displaying view analytics with a nested header.
+/// Now pulls data directly from the Content-Centric (Image) Artifact logs.
 class StatsTable extends StatelessWidget {
   final String contentId;
   final ViewService viewService;
-  final bool isFanzine; // NEW: Distinguish between Image stats and Fanzine stats
+  final bool isFanzine;
 
   const StatsTable({
     super.key,
@@ -16,94 +18,219 @@ class StatsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // If it's a fanzine, we currently rely on the cached totals on the fanzine doc.
-    // In the future, this will expand to a per-page breakdown.
+    // --- FANZINE MODE: Aggregate logs for every image in the zine ---
     if (isFanzine) {
-      return StreamBuilder<DocumentSnapshot>(
-        stream: viewService.getFanzineStatsStream(contentId),
+      return StreamBuilder<QuerySnapshot>(
+        stream: viewService.getFanzinePagesStream(contentId),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
 
-          // Fanzines currently store registered vs guest in flat fields for the summary
-          // We will transition these to full logs later, but for now we show the totals.
-          return _buildTableUI(
-            regList: data['registeredListViewCount'] ?? 0,
-            regGrid: (data['totalEngagementViews'] ?? 0) - (data['registeredListViewCount'] ?? 0),
-            guestList: 0, // Placeholder until fanzine-level bucket logic is deeper
-            guestGrid: 0,
+          final pages = snapshot.data!.docs;
+          if (pages.isEmpty) return const Center(child: Text("No pages found."));
+
+          return _buildTableContainer(
+            title: "DETAILED PAGE STATS",
+            includeLabelColumn: true,
+            labelHeader: "Page",
+            rows: pages.asMap().entries.map((entry) {
+              final pageData = entry.value.data() as Map<String, dynamic>;
+              final String imageId = pageData['imageId'] ?? '';
+              final int pageNum = pageData['pageNumber'] ?? (entry.key + 1);
+
+              // For each row, we use a separate StreamBuilder to look at that IMAGE's logs
+              return _StatRowWrapper(
+                label: "$pageNum",
+                imageId: imageId,
+                fanzineId: contentId,
+                viewService: viewService,
+              );
+            }).toList(),
           );
         },
       );
     }
 
-    // If it's an Image, we query the high-fidelity logs.
-    return StreamBuilder<QuerySnapshot>(
-      stream: viewService.getViewLogsStream(contentId),
-      builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()));
-
-        int regList = 0; int regGrid = 0; int guestList = 0; int guestGrid = 0;
-
-        for (var doc in snap.data!.docs) {
-          final d = doc.data() as Map<String, dynamic>;
-          final bool isAnon = d['isAnonymous'] ?? true;
-          final String type = d['viewType'] ?? 'list';
-          if (isAnon) { if (type == 'list') guestList++; else guestGrid++; }
-          else { if (type == 'list') regList++; else regGrid++; }
-        }
-
-        return _buildTableUI(regList: regList, regGrid: regGrid, guestList: guestList, guestGrid: guestGrid);
-      },
+    // --- IMAGE MODE: Summary for Social Toolbar (Condensed 1-row) ---
+    return Center(
+      child: _buildTableContainer(
+        title: "VIEWER BREAKDOWN",
+        includeLabelColumn: false,
+        labelHeader: "",
+        rows: [
+          _StatRowWrapper(
+            label: "",
+            imageId: contentId,
+            fanzineId: null, // No filter: show global stats for this image
+            viewService: viewService,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildTableUI({required int regList, required int regGrid, required int guestList, required int guestGrid}) {
-    const cellStyle = TextStyle(fontSize: 12);
-    const headerStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey);
+  Widget _buildTableContainer({
+    required String title,
+    required bool includeLabelColumn,
+    required String labelHeader,
+    required List<Widget> rows,
+  }) {
+    const double colWidth = 55.0;
+    const double labelWidth = 70.0;
+    const hStyle = TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF546E7A));
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: isFanzine ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        const Text("VIEWER BREAKDOWN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1.1, color: Colors.grey)),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1.1, color: Colors.grey)),
         const SizedBox(height: 12),
-        Table(
-          columnWidths: const {0: FlexColumnWidth(1.2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
-          border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
-          children: [
-            TableRow(
-              decoration: BoxDecoration(color: Colors.grey[100]),
-              children: [
-                const SizedBox.shrink(),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+        Container(
+          constraints: BoxConstraints(
+            maxWidth: (includeLabelColumn ? labelWidth : 0) + (colWidth * 4) + 2,
+          ),
+          child: Column(
+            children: [
+              // Row 1: Spanning Headers (Two Page / Single Page)
+              Row(
+                children: [
+                  if (includeLabelColumn) const SizedBox(width: labelWidth),
+                  _buildSpanningHeader("Two Page", icon: Icons.menu_book, width: colWidth * 2),
+                  _buildSpanningHeader("Single Page", width: colWidth * 2),
+                ],
+              ),
+              // Row 2+: Table Content
+              Table(
+                columnWidths: {
+                  0: includeLabelColumn ? const FixedColumnWidth(labelWidth) : const FixedColumnWidth(0),
+                  1: const FixedColumnWidth(colWidth),
+                  2: const FixedColumnWidth(colWidth),
+                  3: const FixedColumnWidth(colWidth),
+                  4: const FixedColumnWidth(colWidth),
+                },
+                border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
+                children: [
+                  // Sub-header row (Users | Anon)
+                  TableRow(
+                    decoration: BoxDecoration(color: Colors.grey[50]),
                     children: [
-                      const Icon(Icons.menu_book, size: 14, color: Colors.blueGrey),
-                      const SizedBox(width: 4),
-                      const Text("Two Page", style: headerStyle),
+                      if (includeLabelColumn) _buildCell(labelHeader, hStyle) else const SizedBox.shrink(),
+                      _buildCell("Users", hStyle),
+                      _buildCell("Anon", hStyle),
+                      _buildCell("Users", hStyle),
+                      _buildCell("Anon", hStyle),
                     ],
                   ),
-                ),
-                Padding(padding: const EdgeInsets.all(8.0), child: Center(child: const Text("Single Page", style: headerStyle))),
-              ],
-            ),
-            TableRow(children: [
-              _buildCell("Logged In", headerStyle),
-              _buildCell("$regGrid", cellStyle),
-              _buildCell("$regList", cellStyle),
-            ]),
-            TableRow(children: [
-              _buildCell("Unregistered", headerStyle),
-              _buildCell("$guestGrid", cellStyle),
-              _buildCell("$guestList", cellStyle),
-            ]),
-          ],
+                ],
+              ),
+              // Data Rows (rendered as a list to allow StreamBuilders inside)
+              ...rows,
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildCell(String text, TextStyle style) => Padding(padding: const EdgeInsets.all(8.0), child: Center(child: Text(text, style: style)));
+  Widget _buildSpanningHeader(String text, {required double width, IconData? icon}) {
+    return Container(
+      width: width,
+      height: 28,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey.shade300, width: 0.5),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (icon != null) Icon(icon, size: 10, color: const Color(0xFF546E7A)),
+          if (icon != null) const SizedBox(width: 4),
+          Text(text, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF546E7A))),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildCell(String text, TextStyle style) {
+    return Container(
+      height: 32,
+      alignment: Alignment.center,
+      child: Text(text, style: style, textAlign: TextAlign.center),
+    );
+  }
+}
+
+/// A wrapper that fetches logs for a specific Image and renders a TableRow.
+class _StatRowWrapper extends StatelessWidget {
+  final String label;
+  final String imageId;
+  final String? fanzineId; // If provided, filters logs by this context
+  final ViewService viewService;
+
+  const _StatRowWrapper({
+    required this.label,
+    required this.imageId,
+    this.fanzineId,
+    required this.viewService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const double colWidth = 55.0;
+    const double labelWidth = 70.0;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: viewService.getViewLogsStream(imageId),
+      builder: (context, snap) {
+        int regList = 0; int regGrid = 0; int anonList = 0; int anonGrid = 0;
+
+        if (snap.hasData) {
+          for (var doc in snap.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+
+            // FILTER: If we are in Fanzine mode, only count logs from THIS zine
+            if (fanzineId != null && data['fanzineId'] != fanzineId) continue;
+
+            final bool isAnon = data['isAnonymous'] ?? true;
+            final String type = data['viewType'] ?? 'list';
+
+            if (isAnon) {
+              if (type == 'list') anonList++; else anonGrid++;
+            } else {
+              if (type == 'list') regList++; else regGrid++;
+            }
+          }
+        }
+
+        return Table(
+          columnWidths: {
+            0: label.isNotEmpty ? const FixedColumnWidth(labelWidth) : const FixedColumnWidth(0),
+            1: const FixedColumnWidth(colWidth),
+            2: const FixedColumnWidth(colWidth),
+            3: const FixedColumnWidth(colWidth),
+            4: const FixedColumnWidth(colWidth),
+          },
+          border: TableBorder(
+            verticalInside: BorderSide(color: Colors.grey.shade300, width: 0.5),
+            bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
+            left: BorderSide(color: Colors.grey.shade300, width: 0.5),
+            right: BorderSide(color: Colors.grey.shade300, width: 0.5),
+          ),
+          children: [
+            TableRow(
+              children: [
+                if (label.isNotEmpty)
+                  StatsTable._buildCell(label, const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))
+                else
+                  const SizedBox.shrink(),
+                StatsTable._buildCell("$regGrid", const TextStyle(fontSize: 12)),
+                StatsTable._buildCell("$anonGrid", const TextStyle(fontSize: 12)),
+                StatsTable._buildCell("$regList", const TextStyle(fontSize: 12)),
+                StatsTable._buildCell("$anonList", const TextStyle(fontSize: 12)),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

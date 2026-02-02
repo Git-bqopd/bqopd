@@ -21,9 +21,10 @@ class ViewService {
   }
 
   /// Records a view for canonical content (Image).
-  /// Tracks "Registered Reader" count on the Image document for the social button.
+  /// Tracks engagement buckets on the Image, the Fanzine, AND the specific Page.
   Future<void> recordView({
     required String imageId,
+    required String? pageId, // Now required for per-page fanzine stats
     required String fanzineId,
     required String fanzineTitle,
     required ViewType type,
@@ -41,8 +42,6 @@ class ViewService {
     }
     if (user == null) return;
 
-    // Unique View Key: [User] + [Context] + [Type]
-    // This ensures a user is only counted once for "Reading" this image in this specific zine.
     final String viewId = "${user.uid}_${fanzineId}_${type.name}";
     final docRef = _viewCollection(imageId).doc(viewId);
 
@@ -52,7 +51,6 @@ class ViewService {
       if (!existingDoc.exists) {
         final batch = _db.batch();
 
-        // 1. Record the detailed log under the IMAGE
         batch.set(docRef, {
           'userId': user.uid,
           'isAnonymous': user.isAnonymous,
@@ -62,21 +60,38 @@ class ViewService {
           'timestamp': FieldValue.serverTimestamp(),
         });
 
-        // 2. Update canonical counters on the IMAGE
+        // 1. Update counters on the IMAGE (Global UGC Stats)
         batch.update(_db.collection('images').doc(imageId), {
           'viewCount': FieldValue.increment(1),
-          // "Registered Reader" = Logged In + Single Page
           if (!user.isAnonymous && type == ViewType.list)
             'registeredListViewCount': FieldValue.increment(1),
         });
 
-        // 3. Update the FANZINE counter as a convenience cache for zine-level stats
+        // 2. Update counters on the FANZINE (Publication Summary)
         if (fanzineId.isNotEmpty && fanzineId != 'grid_view') {
           batch.update(_db.collection('fanzines').doc(fanzineId), {
             'totalEngagementViews': FieldValue.increment(1),
             if (!user.isAnonymous && type == ViewType.list)
               'registeredListViewCount': FieldValue.increment(1),
           });
+
+          // 3. Update counters on the specific PAGE (Detailed Breakdown)
+          if (pageId != null && pageId.isNotEmpty) {
+            final pageRef = _db.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId);
+
+            // Determine which specific bucket to increment
+            String field = '';
+            if (user.isAnonymous) {
+              field = (type == ViewType.list) ? 'anonListCount' : 'anonGridCount';
+            } else {
+              field = (type == ViewType.list) ? 'regListCount' : 'regGridCount';
+            }
+
+            batch.update(pageRef, {
+              field: FieldValue.increment(1),
+              'totalViews': FieldValue.increment(1),
+            });
+          }
         }
 
         await batch.commit();
@@ -86,16 +101,12 @@ class ViewService {
     }
   }
 
-  /// Returns logs for a specific image.
   Stream<QuerySnapshot> getViewLogsStream(String imageId) {
     return _viewCollection(imageId).snapshots();
   }
 
-  /// Since we store logs under Images, to show a Fanzine's breakdown,
-  /// we fetch the fanzine's own convenience logs if they exist,
-  /// or summarize its cached counter.
-  /// For now, we allow the FanzineWidget to use its own cached buckets.
-  Stream<DocumentSnapshot> getFanzineStatsStream(String fanzineId) {
-    return _db.collection('fanzines').doc(fanzineId).snapshots();
+  /// Streams all pages for a fanzine to build the detailed stats table.
+  Stream<QuerySnapshot> getFanzinePagesStream(String fanzineId) {
+    return _db.collection('fanzines').doc(fanzineId).collection('pages').orderBy('pageNumber').snapshots();
   }
 }

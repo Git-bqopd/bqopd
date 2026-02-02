@@ -141,7 +141,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: Column(
           children: [
-            // Use StatsTable for the Fanzine context
+            // Detailed Table: Page #, [Icon] Reg-2P, [Icon] Anon-2P, Reg-1P, Anon-1P
             StatsTable(contentId: _fanzineId!, viewService: _viewService, isFanzine: true),
             const SizedBox(height: 16),
             const Divider(),
