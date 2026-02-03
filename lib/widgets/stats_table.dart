@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/view_service.dart';
 
-/// A standardized table displaying view analytics with a nested header.
-/// Now pulls data directly from the Content-Centric (Image) Artifact logs.
+/// A standardized table displaying view analytics for unique content (Images).
+/// It aggregates data globally for the image, deduplicating viewers who have
+/// seen the content in different contexts (e.g., both Two-Page and Single-Page views).
 class StatsTable extends StatelessWidget {
   final String contentId;
   final ViewService viewService;
@@ -18,7 +19,7 @@ class StatsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- FANZINE MODE: Aggregate logs for every image in the zine ---
+    // --- FANZINE MODE: Show a breakdown of all images in this zine ---
     if (isFanzine) {
       return StreamBuilder<QuerySnapshot>(
         stream: viewService.getFanzinePagesStream(contentId),
@@ -29,7 +30,7 @@ class StatsTable extends StatelessWidget {
           if (pages.isEmpty) return const Center(child: Text("No pages found."));
 
           return _buildTableContainer(
-            title: "DETAILED PAGE STATS",
+            title: "DETAILED PAGE STATS (GLOBAL TOTALS)",
             includeLabelColumn: true,
             labelHeader: "Page",
             rows: pages.asMap().entries.map((entry) {
@@ -37,11 +38,9 @@ class StatsTable extends StatelessWidget {
               final String imageId = pageData['imageId'] ?? '';
               final int pageNum = pageData['pageNumber'] ?? (entry.key + 1);
 
-              // For each row, we use a separate StreamBuilder to look at that IMAGE's logs
               return _StatRowWrapper(
                 label: "$pageNum",
                 imageId: imageId,
-                fanzineId: contentId,
                 viewService: viewService,
               );
             }).toList(),
@@ -60,7 +59,6 @@ class StatsTable extends StatelessWidget {
           _StatRowWrapper(
             label: "",
             imageId: contentId,
-            fanzineId: null, // No filter: show global stats for this image
             viewService: viewService,
           ),
         ],
@@ -90,7 +88,7 @@ class StatsTable extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Row 1: Spanning Headers (Two Page / Single Page)
+              // Header spans for View Types
               Row(
                 children: [
                   if (includeLabelColumn) const SizedBox(width: labelWidth),
@@ -98,7 +96,6 @@ class StatsTable extends StatelessWidget {
                   _buildSpanningHeader("Single Page", width: colWidth * 2),
                 ],
               ),
-              // Row 2+: Table Content
               Table(
                 columnWidths: {
                   0: includeLabelColumn ? const FixedColumnWidth(labelWidth) : const FixedColumnWidth(0),
@@ -109,7 +106,6 @@ class StatsTable extends StatelessWidget {
                 },
                 border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
                 children: [
-                  // Sub-header row (Users | Anon)
                   TableRow(
                     decoration: BoxDecoration(color: Colors.grey[50]),
                     children: [
@@ -122,7 +118,6 @@ class StatsTable extends StatelessWidget {
                   ),
                 ],
               ),
-              // Data Rows (rendered as a list to allow StreamBuilders inside)
               ...rows,
             ],
           ),
@@ -159,17 +154,14 @@ class StatsTable extends StatelessWidget {
   }
 }
 
-/// A wrapper that fetches logs for a specific Image and renders a TableRow.
 class _StatRowWrapper extends StatelessWidget {
   final String label;
   final String imageId;
-  final String? fanzineId; // If provided, filters logs by this context
   final ViewService viewService;
 
   const _StatRowWrapper({
     required this.label,
     required this.imageId,
-    this.fanzineId,
     required this.viewService,
   });
 
@@ -183,15 +175,17 @@ class _StatRowWrapper extends StatelessWidget {
       builder: (context, snap) {
         int regList = 0; int regGrid = 0; int anonList = 0; int anonGrid = 0;
 
+        // Tracking unique users across the whole image to eventually calculate "True Unique Viewers"
+        final Set<String> uniqueUserIds = {};
+
         if (snap.hasData) {
           for (var doc in snap.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
-
-            // FILTER: If we are in Fanzine mode, only count logs from THIS zine
-            if (fanzineId != null && data['fanzineId'] != fanzineId) continue;
-
             final bool isAnon = data['isAnonymous'] ?? true;
             final String type = data['viewType'] ?? 'list';
+            final String userId = data['userId'] ?? 'anon';
+
+            if (!isAnon) uniqueUserIds.add(userId);
 
             if (isAnon) {
               if (type == 'list') anonList++; else anonGrid++;
