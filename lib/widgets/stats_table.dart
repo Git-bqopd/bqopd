@@ -3,8 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/view_service.dart';
 
 /// A standardized table displaying view analytics for unique content (Images).
-/// It aggregates data globally for the image, deduplicating viewers who have
-/// seen the content in different contexts (e.g., both Two-Page and Single-Page views).
+/// Reads directly from the Image's 'views' subcollection (Ledger).
 class StatsTable extends StatelessWidget {
   final String contentId;
   final ViewService viewService;
@@ -19,7 +18,7 @@ class StatsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- FANZINE MODE: Show a breakdown of all images in this zine ---
+    // --- FANZINE MODE ---
     if (isFanzine) {
       return StreamBuilder<QuerySnapshot>(
         stream: viewService.getFanzinePagesStream(contentId),
@@ -30,7 +29,7 @@ class StatsTable extends StatelessWidget {
           if (pages.isEmpty) return const Center(child: Text("No pages found."));
 
           return _buildTableContainer(
-            title: "DETAILED PAGE STATS (GLOBAL TOTALS)",
+            title: "IMAGE ANALYTICS (GLOBAL LIFETIME)",
             includeLabelColumn: true,
             labelHeader: "Page",
             rows: pages.asMap().entries.map((entry) {
@@ -49,7 +48,7 @@ class StatsTable extends StatelessWidget {
       );
     }
 
-    // --- IMAGE MODE: Summary for Social Toolbar (Condensed 1-row) ---
+    // --- IMAGE MODE ---
     return Center(
       child: _buildTableContainer(
         title: "VIEWER BREAKDOWN",
@@ -72,8 +71,8 @@ class StatsTable extends StatelessWidget {
     required String labelHeader,
     required List<Widget> rows,
   }) {
-    const double colWidth = 55.0;
-    const double labelWidth = 70.0;
+    const double colWidth = 60.0;
+    const double labelWidth = 50.0;
     const hStyle = TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF546E7A));
 
     return Column(
@@ -88,12 +87,11 @@ class StatsTable extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Header spans for View Types
               Row(
                 children: [
                   if (includeLabelColumn) const SizedBox(width: labelWidth),
-                  _buildSpanningHeader("Two Page", icon: Icons.menu_book, width: colWidth * 2),
-                  _buildSpanningHeader("Single Page", width: colWidth * 2),
+                  _buildSpanningHeader("Grid (Glance)", icon: Icons.grid_view, width: colWidth * 2),
+                  _buildSpanningHeader("List (Read)", icon: Icons.view_list, width: colWidth * 2),
                 ],
               ),
               Table(
@@ -110,9 +108,9 @@ class StatsTable extends StatelessWidget {
                     decoration: BoxDecoration(color: Colors.grey[50]),
                     children: [
                       if (includeLabelColumn) _buildCell(labelHeader, hStyle) else const SizedBox.shrink(),
-                      _buildCell("Users", hStyle),
+                      _buildCell("User", hStyle),
                       _buildCell("Anon", hStyle),
-                      _buildCell("Users", hStyle),
+                      _buildCell("User", hStyle),
                       _buildCell("Anon", hStyle),
                     ],
                   ),
@@ -167,25 +165,19 @@ class _StatRowWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double colWidth = 55.0;
-    const double labelWidth = 70.0;
+    const double colWidth = 60.0;
+    const double labelWidth = 50.0;
 
     return StreamBuilder<QuerySnapshot>(
       stream: viewService.getViewLogsStream(imageId),
       builder: (context, snap) {
         int regList = 0; int regGrid = 0; int anonList = 0; int anonGrid = 0;
 
-        // Tracking unique users across the whole image to eventually calculate "True Unique Viewers"
-        final Set<String> uniqueUserIds = {};
-
         if (snap.hasData) {
           for (var doc in snap.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
             final bool isAnon = data['isAnonymous'] ?? true;
             final String type = data['viewType'] ?? 'list';
-            final String userId = data['userId'] ?? 'anon';
-
-            if (!isAnon) uniqueUserIds.add(userId);
 
             if (isAnon) {
               if (type == 'list') anonList++; else anonGrid++;
@@ -218,7 +210,7 @@ class _StatRowWrapper extends StatelessWidget {
                   const SizedBox.shrink(),
                 StatsTable._buildCell("$regGrid", const TextStyle(fontSize: 12)),
                 StatsTable._buildCell("$anonGrid", const TextStyle(fontSize: 12)),
-                StatsTable._buildCell("$regList", const TextStyle(fontSize: 12)),
+                StatsTable._buildCell("$regList", const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo)),
                 StatsTable._buildCell("$anonList", const TextStyle(fontSize: 12)),
               ],
             ),

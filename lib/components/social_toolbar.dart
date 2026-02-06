@@ -174,7 +174,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
-                // --- UPDATED VIEW COUNTER: SHOWS "LOGGED IN, SINGLE PAGE" ONLY ---
+                // --- UPDATED VIEW COUNTER: SHOWS ONLY 'regListCount' ---
                 if (buttonVisibility['Views'] == true) ...[
                   if (widget.imageId != null && widget.imageId!.isNotEmpty)
                     StreamBuilder<DocumentSnapshot>(
@@ -183,8 +183,8 @@ class _SocialToolbarState extends State<SocialToolbar> {
                         int count = 0;
                         if (imgSnap.hasData && imgSnap.data!.exists) {
                           final data = imgSnap.data!.data() as Map<String, dynamic>;
-                          // Only show the Registered Reader (Logged In + Single Page) stat
-                          count = (data['registeredListViewCount'] ?? 0) as int;
+                          // DISPLAY RULE: Only Registered Users in List View
+                          count = (data['regListCount'] ?? 0) as int;
                         }
                         return SocialActionButton(
                           icon: Icons.show_chart,
