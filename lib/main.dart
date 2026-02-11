@@ -23,7 +23,8 @@ import 'pages/fanzine_editor_page.dart';
 import 'pages/curator_dashboard_page.dart';
 import 'pages/curator_workbench_page.dart';
 import 'pages/fanzine_reader_page.dart';
-import 'pages/publisher_page.dart'; // NEW
+import 'pages/publisher_page.dart';
+import 'pages/moderator_feed_page.dart'; // NEW
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -78,6 +79,7 @@ class _MyAppState extends State<MyApp> {
             path == '/settings' ||
             path == '/edit-info' ||
             path == '/dashboard' ||
+            path == '/moderator' ||
             (routePattern != null && routePattern.startsWith('/editor')) ||
             (routePattern != null && routePattern.startsWith('/workbench'));
 
@@ -117,6 +119,13 @@ class _MyAppState extends State<MyApp> {
           builder: (context, state) => const CuratorDashboardPage(),
         ),
 
+        // NEW MODERATOR ROUTE
+        GoRoute(
+          path: '/moderator',
+          name: 'moderatorFeed',
+          builder: (context, state) => const ModeratorFeedPage(),
+        ),
+
         GoRoute(
           path: '/workbench/:fanzineId',
           name: 'curatorWorkbench',
@@ -135,7 +144,6 @@ class _MyAppState extends State<MyApp> {
           },
         ),
 
-        // NEW PUBLISHER ROUTE
         GoRoute(
           path: '/publisher',
           name: 'publisher',

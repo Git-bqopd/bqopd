@@ -52,7 +52,7 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
     if (_isUploading) return;
 
     if (!_formKey.currentState!.validate()) return;
-    if (_pickedFile == null) {
+    if (_pickedFile == null || _pickedFileBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select an image.')),
       );
@@ -71,8 +71,10 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
 
       // 1. Upload to Storage
       final Reference storageRef =
-          FirebaseStorage.instance.ref().child(filePath);
-      final fileData = await _pickedFile!.readAsBytes();
+      FirebaseStorage.instance.ref().child(filePath);
+
+      // Use the bytes we already loaded into memory
+      final fileData = _pickedFileBytes!;
 
       final uploadTask = storageRef.putData(
         fileData,
@@ -84,8 +86,6 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
       final String downloadUrl = await snapshot.ref.getDownloadURL();
 
       // 2. Save to Firestore
-      // We don't need to pre-generate an ID or a shortcode.
-      // We just let Firestore generate the ID (.doc())
       final newImageRef = FirebaseFirestore.instance.collection('images').doc();
 
       await newImageRef.set({
@@ -94,10 +94,11 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
         'fileUrl': downloadUrl,
         'uploaderId': widget.userId,
         'fileName': fileName,
-        // We use the Document ID as the reference code if needed internally,
-        // or just the filename. We DO NOT use the global shortcode generator.
         'internalRef': newImageRef.id,
         'timestamp': FieldValue.serverTimestamp(),
+        // --- Moderation Fields ---
+        'status': 'pending', // Default for moderation queue
+        'tags': {}, // Initialize empty tags map for voting
       });
 
       if (mounted) {
@@ -131,81 +132,137 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Upload Image'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              if (_isUploading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20.0),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              if (!_isUploading) ...[
-                ElevatedButton.icon(
-                  onPressed: _pickImage,
-                  icon: const Icon(Icons.image),
-                  label: const Text('Pick Image'),
-                ),
-                const SizedBox(height: 10),
-                if (_pickedFile != null) ...[
-                  Text('Selected: ${_pickedFile!.name}'),
-                  if (_pickedFileBytes != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(_pickedFileBytes!,
-                            height: 150,
-                            width: double.infinity,
-                            fit: BoxFit.cover),
+    // Using a standard Dialog with explicit constraints avoids the layout race conditions
+    // often seen with AlertDialog + Image.memory on Flutter Web.
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Text('Upload Image',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 20),
+                  if (_isUploading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40.0),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else ...[
+                    // Image Preview
+                    if (_pickedFileBytes != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: Container(
+                          height: 200,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(
+                              _pickedFileBytes!,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) =>
+                              const Center(
+                                  child: Icon(Icons.broken_image,
+                                      color: Colors.grey)),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    Center(
+                      child: ElevatedButton.icon(
+                        onPressed: _pickImage,
+                        icon: Icon(_pickedFile == null
+                            ? Icons.add_photo_alternate
+                            : Icons.change_circle),
+                        label: Text(_pickedFile == null
+                            ? 'Select Image'
+                            : 'Change Image'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigo.shade50,
+                          foregroundColor: Colors.indigo,
+                          elevation: 0,
+                        ),
                       ),
                     ),
+
+                    if (_pickedFile != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Center(
+                          child: Text(
+                            'Selected: ${_pickedFile!.name}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+
+                    const SizedBox(height: 20),
+
+                    TextFormField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Title',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Please enter a title'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _descriptionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      maxLines: 3,
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Please enter a description'
+                          : null,
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _handleSubmit,
+                          child: const Text('Upload'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Title',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) => value == null || value.isEmpty
-                      ? 'Please enter a title'
-                      : null,
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                  validator: (value) => value == null || value.isEmpty
-                      ? 'Please enter a description'
-                      : null,
-                ),
-              ],
-            ],
+              ),
+            ),
           ),
         ),
       ),
-      actions: <Widget>[
-        if (!_isUploading)
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        if (!_isUploading)
-          ElevatedButton(
-            onPressed: _handleSubmit,
-            child: const Text('Submit'),
-          ),
-      ],
     );
   }
 }

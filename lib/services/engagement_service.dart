@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Handles persistence for Likes, Comments, and Follows.
+/// Handles persistence for Likes, Comments, Follows, and Hashtags.
 class EngagementService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -196,5 +196,41 @@ class EngagementService {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
     return _db.collection('Users').doc(user.uid).collection('following').doc(targetUid).snapshots().map((doc) => doc.exists);
+  }
+
+  // --- Hashtag / Voting Logic ---
+
+  /// Toggles a user's vote on a hashtag for a specific image.
+  /// Handles "Status Sync": If the 'approved' tag is toggled, update the 'status' field.
+  Future<void> toggleHashtag(String imageId, String tag, bool isVoting) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final imageRef = _db.collection('images').doc(imageId);
+    // Sanitize tag (lowercase, no hash, no spaces)
+    final cleanTag = tag.toLowerCase().replaceAll('#', '').trim();
+    if (cleanTag.isEmpty) return;
+
+    final Map<String, dynamic> updateData = {};
+
+    if (isVoting) {
+      // Add vote
+      updateData['tags.$cleanTag'] = FieldValue.arrayUnion([user.uid]);
+      // If prioritizing this tag changes the document status
+      if (cleanTag == 'approved') {
+        updateData['status'] = 'approved';
+      }
+    } else {
+      // Remove vote
+      updateData['tags.$cleanTag'] = FieldValue.arrayRemove([user.uid]);
+      // If removing approval, revert to pending
+      // NOTE: This assumes removing your vote removes approval. In a real community system,
+      // you might check if *anyone* else has approved it, but for a mod tool, this toggle is fine.
+      if (cleanTag == 'approved') {
+        updateData['status'] = 'pending';
+      }
+    }
+
+    await imageRef.update(updateData);
   }
 }

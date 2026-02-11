@@ -7,9 +7,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart'; // Ensure this import is present
 import '../services/user_provider.dart';
-import '../services/user_bootstrap.dart'; // For createManagedProfile
-import '../services/username_service.dart'; // For createAlias, normalizeHandle
+import '../services/user_bootstrap.dart';
+import '../services/username_service.dart';
 
 class CuratorDashboardPage extends StatefulWidget {
   const CuratorDashboardPage({super.key});
@@ -64,8 +65,8 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
             customMetadata: {
               'uploaderId': mounted
                   ? Provider.of<UserProvider>(context, listen: false)
-                          .currentUserId ??
-                      'unknown'
+                  .currentUserId ??
+                  'unknown'
                   : 'unknown',
               'originalName': fileName,
             },
@@ -158,6 +159,21 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           controller: _tabController,
           tabs: const [Tab(text: "Review Fanzines"), Tab(text: "Entities")],
         ),
+        actions: [
+          // NEW MODERATOR FEED BUTTON
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: OutlinedButton.icon(
+              onPressed: () => context.pushNamed('moderatorFeed'),
+              icon: const Icon(Icons.grading),
+              label: const Text("Mod Feed"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.black,
+                side: const BorderSide(color: Colors.black54),
+              ),
+            ),
+          ),
+        ],
       ),
       body: TabBarView(
         controller: _tabController,
@@ -183,16 +199,16 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
                 onPressed: _isUploading ? null : _uploadPdf,
                 style: ElevatedButton.styleFrom(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
                 ),
                 icon: _isUploading
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.upload_file),
                 label: Text(_isUploading ? "Uploading..." : "Upload PDF"),
               ),
@@ -223,7 +239,45 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text("Error: ${snapshot.error}"));
+          final errorMsg = snapshot.error.toString();
+          // Check for Firestore Index requirement
+          if (errorMsg.contains('failed-precondition') ||
+              errorMsg.contains('requires an index')) {
+            // Try to extract URL
+            final urlRegex =
+            RegExp(r'https://console\.firebase\.google\.com[^\s]+');
+            final match = urlRegex.firstMatch(errorMsg);
+            final indexUrl = match?.group(0);
+
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("Database Index Required",
+                        style: TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text(
+                        "To view this list sorted by date, a Firestore index is needed.",
+                        textAlign: TextAlign.center),
+                    if (indexUrl != null) ...[
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => launchUrl(Uri.parse(indexUrl)),
+                        child: const Text("Create Index"),
+                      )
+                    ] else
+                      SelectableText(errorMsg,
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            );
+          }
+          return Center(child: SelectableText('Error: $errorMsg'));
         }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -269,7 +323,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
                 )),
                 DataCell(Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(4),
@@ -307,7 +361,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
   }
 
   Widget _buildEntitiesList() {
-    // 1. Get ALL draft AND working fanzines to aggregate entities
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('fanzines')
@@ -320,7 +373,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           return const Center(child: CircularProgressIndicator());
         }
 
-        // Aggregate counts: { "Julius Schwartz": 5, "Gardner Fox": 2 }
         final Map<String, int> entityCounts = {};
         for (var doc in fanzineSnapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
@@ -335,7 +387,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
               child: Text("No entities found in current drafts."));
         }
 
-        // Sort by Count (Descending), then Alphabetical
         final sortedNames = entityCounts.keys.toList()
           ..sort((a, b) {
             int countCompare = entityCounts[b]!.compareTo(entityCounts[a]!);
@@ -367,8 +418,6 @@ class _EntityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Generate the handle exactly as our bootstrap logic does now
-    // (lowercase, alphanumeric+hyphen only, no trailing hyphen)
     final handle = normalizeHandle(name);
 
     return StreamBuilder<DocumentSnapshot>(
@@ -377,7 +426,6 @@ class _EntityRow extends StatelessWidget {
           .doc(handle)
           .snapshots(),
       builder: (context, snapshot) {
-        // --- Widget States ---
         Widget statusWidget;
 
         if (!snapshot.hasData) {
@@ -386,7 +434,6 @@ class _EntityRow extends StatelessWidget {
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2));
         } else if (snapshot.data!.exists) {
-          // EXISTS: Show Link
           final data = snapshot.data!.data() as Map<String, dynamic>;
           String linkText = '/$handle';
 
@@ -410,20 +457,19 @@ class _EntityRow extends StatelessWidget {
             ),
           );
         } else {
-          // MISSING: Show Create Buttons
           statusWidget = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextButton(
                 onPressed: () => _createProfile(context, name),
                 child:
-                    const Text("Create", style: TextStyle(color: Colors.green)),
+                const Text("Create", style: TextStyle(color: Colors.green)),
               ),
               const SizedBox(width: 8),
               TextButton(
                 onPressed: () => _createAlias(context, name),
                 child:
-                    const Text("Alias", style: TextStyle(color: Colors.orange)),
+                const Text("Alias", style: TextStyle(color: Colors.orange)),
               ),
             ],
           );
@@ -451,7 +497,6 @@ class _EntityRow extends StatelessWidget {
   }
 
   Future<void> _createProfile(BuildContext context, String name) async {
-    // Basic splitting logic to handle "Name Surname"
     String first = name;
     String last = "";
 
@@ -468,7 +513,6 @@ class _EntityRow extends StatelessWidget {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text("Profile Created!")));
       }
-      // Force rebuild? The FutureBuilder will re-run if parent rebuilds, but local state might stick.
       if (context.mounted) {
         (context as Element).markNeedsBuild();
       }
@@ -492,7 +536,7 @@ class _EntityRow extends StatelessWidget {
               TextField(
                   controller: controller,
                   decoration:
-                      const InputDecoration(hintText: "e.g. julius-schwartz"))
+                  const InputDecoration(hintText: "e.g. julius-schwartz"))
             ]),
             actions: [
               TextButton(
@@ -551,7 +595,7 @@ class _ErrorCounter extends StatelessWidget {
         if (ocrErrors == 0 && entErrors == 0) {
           return const Text("OK",
               style:
-                  TextStyle(color: Colors.green, fontWeight: FontWeight.bold));
+              TextStyle(color: Colors.green, fontWeight: FontWeight.bold));
         }
 
         return Text("OCR: $ocrErrors | Ent: $entErrors",
