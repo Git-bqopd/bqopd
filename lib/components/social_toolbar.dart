@@ -21,6 +21,11 @@ class SocialToolbar extends StatefulWidget {
   final VoidCallback? onToggleComments;
   final VoidCallback? onToggleText;
   final VoidCallback? onToggleViews;
+  final VoidCallback? onToggleCredits;
+
+  // Editor Callbacks
+  final VoidCallback? onApprove;
+  final VoidCallback? onFanzine;
 
   const SocialToolbar({
     super.key,
@@ -33,6 +38,9 @@ class SocialToolbar extends StatefulWidget {
     this.onToggleComments,
     this.onToggleText,
     this.onToggleViews,
+    this.onToggleCredits,
+    this.onApprove,
+    this.onFanzine,
   });
 
   @override
@@ -96,7 +104,9 @@ class _SocialToolbarState extends State<SocialToolbar> {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final buttonVisibility = userProvider.socialButtonVisibility;
+
     final bool canShowTerminal = widget.isGame && (buttonVisibility['Terminal'] == true);
+    final bool isEditor = userProvider.isEditor;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -183,7 +193,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
                         int count = 0;
                         if (imgSnap.hasData && imgSnap.data!.exists) {
                           final data = imgSnap.data!.data() as Map<String, dynamic>;
-                          // DISPLAY RULE: Only Registered Users in List View
                           count = (data['regListCount'] ?? 0) as int;
                         }
                         return SocialActionButton(
@@ -214,6 +223,22 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
+                // EDITOR ONLY BUTTONS
+                if (isEditor && buttonVisibility['Approve'] == true) ...[
+                  SocialActionButton(icon: Icons.verified, label: 'Approve', onTap: widget.onApprove),
+                  const SizedBox(width: 16),
+                ],
+
+                if (isEditor && buttonVisibility['Fanzine'] == true) ...[
+                  SocialActionButton(icon: Icons.auto_stories, label: 'Fanzine', onTap: widget.onFanzine),
+                  const SizedBox(width: 16),
+                ],
+
+                if (isEditor && buttonVisibility['Credits'] == true) ...[
+                  SocialActionButton(icon: Icons.people, label: 'Credits', onTap: widget.onToggleCredits),
+                  const SizedBox(width: 16),
+                ],
+
                 SocialActionButton(icon: Icons.apps, label: 'Buttons', isActive: _isButtonsDrawerOpen, onTap: _toggleButtonsDrawer),
               ],
             ),
@@ -224,25 +249,40 @@ class _SocialToolbarState extends State<SocialToolbar> {
           Container(
             padding: const EdgeInsets.all(12.0),
             decoration: BoxDecoration(color: Colors.grey.shade50, border: Border(top: BorderSide(color: Colors.grey.shade200))),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _DrawerItem(label: 'Comment', icon: Icons.comment, isSelected: buttonVisibility['Comment']!, onTap: () => userProvider.toggleSocialButton('Comment')),
-                  const SizedBox(width: 10),
-                  _DrawerItem(label: 'Share', icon: Icons.share, isSelected: buttonVisibility['Share']!, onTap: () => userProvider.toggleSocialButton('Share')),
-                  const SizedBox(width: 10),
-                  _DrawerItem(label: 'Views', icon: Icons.show_chart, isSelected: buttonVisibility['Views']!, onTap: () => userProvider.toggleSocialButton('Views')),
-                  const SizedBox(width: 10),
-                  _DrawerItem(label: 'Text', icon: Icons.newspaper, isSelected: buttonVisibility['Text']!, onTap: () => userProvider.toggleSocialButton('Text')),
-                  const SizedBox(width: 10),
-                  _DrawerItem(label: 'Circulation', icon: Icons.print, isSelected: buttonVisibility['Circulation']!, onTap: () => userProvider.toggleSocialButton('Circulation')),
-                  if (widget.isGame) ...[
+            child: Center(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _DrawerItem(label: 'Comment', icon: Icons.comment, isSelected: buttonVisibility['Comment'] ?? true, onTap: () => userProvider.toggleSocialButton('Comment')),
                     const SizedBox(width: 10),
-                    _DrawerItem(label: 'Terminal', icon: Icons.terminal, isSelected: buttonVisibility['Terminal'] ?? false, onTap: () => userProvider.toggleSocialButton('Terminal')),
+                    _DrawerItem(label: 'Share', icon: Icons.share, isSelected: buttonVisibility['Share'] ?? true, onTap: () => userProvider.toggleSocialButton('Share')),
+                    const SizedBox(width: 10),
+                    _DrawerItem(label: 'Views', icon: Icons.show_chart, isSelected: buttonVisibility['Views'] ?? true, onTap: () => userProvider.toggleSocialButton('Views')),
+                    const SizedBox(width: 10),
+                    _DrawerItem(label: 'Text', icon: Icons.newspaper, isSelected: buttonVisibility['Text'] ?? true, onTap: () => userProvider.toggleSocialButton('Text')),
+                    const SizedBox(width: 10),
+                    _DrawerItem(label: 'Circulation', icon: Icons.print, isSelected: buttonVisibility['Circulation'] ?? true, onTap: () => userProvider.toggleSocialButton('Circulation')),
+
+                    if (widget.isGame) ...[
+                      const SizedBox(width: 10),
+                      _DrawerItem(label: 'Terminal', icon: Icons.terminal, isSelected: buttonVisibility['Terminal'] ?? false, onTap: () => userProvider.toggleSocialButton('Terminal')),
+                    ],
+
+                    // Editor Only Toggles
+                    if (isEditor) ...[
+                      const SizedBox(width: 10),
+                      Container(height: 30, width: 2, color: Colors.grey.shade300), // Separator
+                      const SizedBox(width: 10),
+                      _DrawerItem(label: 'Approve', icon: Icons.verified, isSelected: buttonVisibility['Approve'] ?? false, onTap: () => userProvider.toggleSocialButton('Approve')),
+                      const SizedBox(width: 10),
+                      _DrawerItem(label: 'Fanzine', icon: Icons.auto_stories, isSelected: buttonVisibility['Fanzine'] ?? false, onTap: () => userProvider.toggleSocialButton('Fanzine')),
+                      const SizedBox(width: 10),
+                      _DrawerItem(label: 'Credits', icon: Icons.people, isSelected: buttonVisibility['Credits'] ?? false, onTap: () => userProvider.toggleSocialButton('Credits')),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

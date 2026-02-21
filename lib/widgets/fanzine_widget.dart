@@ -34,6 +34,24 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   static const Color kBgLight = Color(0xFFF8F7F6);
   static const double kInternalContentWidth = 200.0; // The "mobile" width constraint
 
+  // --- DUMMY DATA FOR UI ITERATION ---
+  final String _dummyIndicia =
+      "© 2026 BQOPD Collective. All rights reserved.\n\n"
+      "Published digitally on the bqopd platform. No part of this publication "
+      "may be reproduced, distributed, or transmitted in any form or by any means, "
+      "including photocopying, recording, or other electronic or mechanical methods, "
+      "without the prior written permission of the publisher, except in the case of "
+      "brief quotations embodied in critical reviews and certain other noncommercial "
+      "uses permitted by copyright law.\n\n"
+      "Characters and likenesses remain the property of their respective trademark holders.";
+
+  final List<Map<String, dynamic>> _dummyCreators = [
+    {"name": "Jack Kirby", "uid": "dummy_1", "role": "Penciller"},
+    {"name": "Stan Lee", "uid": "dummy_2", "role": "Writer / Editor"},
+    {"name": "Artie Simek", "uid": null, "role": "Letterer"}, // Example of non-platform user
+    {"name": "Marie Severin", "uid": null, "role": "Colorist"},
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -205,23 +223,41 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                       child: _DashedSeparator(height: 1, color: Color(0xFFD1D1D1)),
                     ),
 
-                    // --- CONTENT AREA (Centered & Constrained) ---
+                    // --- CONTENT AREA ---
                     Expanded(
                       child: _isLoadingData
                           ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                          : Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
-                          child: PageView(
-                            controller: _pageController,
-                            onPageChanged: (index) => setState(() => _currentPage = index),
-                            children: [
-                              _buildIndiciaTab(),
-                              _buildCreatorsTab(),
-                              _buildStatsTab(),
-                            ],
+                          : PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) => setState(() => _currentPage = index),
+                        children: [
+                          // Tab 0: Indicia (Constrained to 200px)
+                          Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
+                              child: _buildIndiciaTab(),
+                            ),
                           ),
-                        ),
+                          // Tab 1: Creators (Constrained to 200px)
+                          Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
+                              child: _buildCreatorsTab(),
+                            ),
+                          ),
+                          // Tab 2: Stats (Unconstrained width, centered, scrolls if needed)
+                          Center(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: SingleChildScrollView(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                  child: _buildStatsTab(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -237,26 +273,30 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   // --- SUB-WIDGETS FOR TABS ---
 
   Widget _buildIndiciaTab() {
-    if (_fanzineData == null) return const Center(child: Text("Pending...", style: TextStyle(fontSize: 10)));
+    if (_fanzineData == null && _isLoadingData) return const Center(child: Text("Pending...", style: TextStyle(fontSize: 10)));
 
-    return Padding(
+    final indiciaText = _fanzineData?['masterIndicia'] as String? ?? _dummyIndicia;
+    final title = _fanzineData?['title'] ?? 'Untitled';
+    final status = _fanzineData?['status'] ?? 'Draft';
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-              (_fanzineData!['title'] ?? 'Untitled').toString(),
-              style: const TextStyle(fontSize: 10, height: 1.5, color: Colors.black, fontFamily: 'Arial')
+              title.toString().toUpperCase(),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, height: 1.2, color: Colors.black, fontFamily: 'Arial')
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
-              "Status: ${_fanzineData!['status']}",
-              style: const TextStyle(fontSize: 10, height: 1.5, color: Colors.black54, fontFamily: 'Arial')
+              "STATUS: ${status.toString().toUpperCase()}",
+              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.black54, fontFamily: 'Arial')
           ),
-          const SizedBox(height: 8),
-          const Text(
-            "A collaborative effort by underground artists pushing the boundaries of the grid-based layout systems.",
-            style: TextStyle(fontSize: 10, height: 1.5, color: Colors.black, fontFamily: 'Arial'),
+          const SizedBox(height: 12),
+          Text(
+            indiciaText,
+            style: const TextStyle(fontSize: 10, height: 1.5, color: Colors.black87, fontFamily: 'Georgia'),
             textAlign: TextAlign.justify,
           ),
         ],
@@ -265,95 +305,146 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   }
 
   Widget _buildCreatorsTab() {
-    final mentions = List<String>.from(_fanzineData?['mentionedUsers'] ?? []);
-    if (mentions.isEmpty) {
+    // 1. Prioritize masterCreators from DB
+    // 2. Fall back to _dummyCreators for testing UI
+    final rawCreators = _fanzineData?['masterCreators'] as List<dynamic>?;
+    final creators = rawCreators != null
+        ? rawCreators.map((e) => e as Map<String, dynamic>).toList()
+        : _dummyCreators;
+
+    if (creators.isEmpty) {
       return const Center(child: Text("No creators listed.", style: TextStyle(fontSize: 10, color: Colors.grey)));
     }
 
-    // Using ListView to allow scrolling if list is long, but constrained width keeps formatting tight
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      itemCount: mentions.length,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      itemCount: creators.length,
       separatorBuilder: (c, i) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
-        final parts = mentions[index].split(':');
-        final uid = parts.last;
+        final creator = creators[index];
+        final String role = (creator['role'] ?? 'Creator').toString().toUpperCase();
+        final String fallbackName = (creator['name'] ?? 'Unknown').toString().toUpperCase();
+        final String? uid = creator['uid'];
 
-        return FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
-            builder: (context, snap) {
-              final data = snap.data?.data() as Map<String, dynamic>?;
-              final String name = (data?['displayName'] ?? data?['username'] ?? 'Unknown').toString().toUpperCase();
-              final String handle = "@${data?['username'] ?? 'user'}".toLowerCase();
-              final String? photoUrl = data?['photoUrl'];
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Role Column
+            SizedBox(
+                width: 45,
+                child: Text(
+                  role,
+                  style: const TextStyle(fontSize: 8, color: Colors.black54, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                )
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6.0),
+              child: Text("|", style: TextStyle(fontSize: 10, color: Colors.black12)),
+            ),
 
-              return Row(
+            // User Info Column
+            Expanded(
+              child: _buildCreatorInfo(uid, fallbackName),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCreatorInfo(String? uid, String fallbackName) {
+    if (uid == null || uid.isEmpty) {
+      // Non-platform user (Guest Contributor)
+      return Row(
+          children: [
+            Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.05),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black.withOpacity(0.1)),
+              ),
+              child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Fake Date Column (Placeholder to match design)
-                  const SizedBox(
-                      width: 28,
-                      child: Text("2026", style: TextStyle(fontSize: 9, color: Colors.black87))
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6.0),
-                    child: Text("|", style: TextStyle(fontSize: 9, color: Colors.black12)),
-                  ),
+                  Text(fallbackName, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text("Guest Contributor", style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4), fontStyle: FontStyle.italic)),
+                ],
+              ),
+            )
+          ]
+      );
+    }
 
-                  // Avatar
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(100), // Full circle
-                      border: Border.all(color: Colors.black.withOpacity(0.1)),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: photoUrl != null
-                        ? ColorFiltered(
-                        colorFilter: const ColorFilter.matrix(<double>[
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0,      0,      0,      1, 0,
-                        ]),
-                        child: Image.network(photoUrl, fit: BoxFit.cover)
-                    )
-                        : const Icon(Icons.person, size: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(width: 8),
+    // Platform user (Fetch data from Users collection)
+    return FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
+        builder: (context, snap) {
+          String name = fallbackName;
+          String handle = "fetching...";
+          String? photoUrl;
+          bool userExists = false;
 
-                  // Name & Handle
-                  Expanded(
+          if (snap.hasData && snap.data!.exists) {
+            userExists = true;
+            final data = snap.data!.data() as Map<String, dynamic>;
+            name = (data['displayName'] ?? data['username'] ?? fallbackName).toString().toUpperCase();
+            handle = "@${data['username'] ?? 'user'}".toLowerCase();
+            photoUrl = data['photoUrl'];
+          } else if (snap.connectionState == ConnectionState.done) {
+            handle = "@unknown";
+          }
+
+          return Row(
+              children: [
+                Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.05),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black.withOpacity(0.1)),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: photoUrl != null
+                      ? ColorFiltered(
+                      colorFilter: const ColorFilter.matrix(<double>[
+                        0.2126, 0.7152, 0.0722, 0, 0,
+                        0.2126, 0.7152, 0.0722, 0, 0,
+                        0.2126, 0.7152, 0.0722, 0, 0,
+                        0,      0,      0,      1, 0,
+                      ]),
+                      child: Image.network(photoUrl, fit: BoxFit.cover)
+                  )
+                      : Center(child: Text(name.isNotEmpty ? name[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (userExists && handle != "@unknown") {
+                        // route expects code without '@'
+                        context.goNamed('shortlink', pathParameters: {'code': handle.substring(1)});
+                      }
+                    },
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name,
-                          style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.black,
-                              height: 1.0,
-                              letterSpacing: 0.5
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(handle,
-                            style: TextStyle(
-                                fontSize: 8,
-                                color: Colors.black.withOpacity(0.4),
-                                height: 1.2
-                            )
-                        ),
+                        Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(handle, style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4))),
                       ],
                     ),
                   ),
-                ],
-              );
-            }
-        );
-      },
+                ),
+              ]
+          );
+        }
     );
   }
 

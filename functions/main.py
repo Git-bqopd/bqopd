@@ -76,12 +76,13 @@ def extract_json_from_text(text):
         except json.JSONDecodeError:
             pass
             
-    # Last ditch: strip markdown code blocks
+    # Last ditch: strip markdown code blocks safely bypassing UI parser bugs
     clean = text.strip()
-    if clean.startswith("```json"): clean = clean[7:]
-    if clean.startswith("```"): clean = clean[3:]
-    if clean.endswith("```"): clean = clean[:-3]
-    
+    backticks = "`" * 3
+    if clean.startswith(backticks + "json"): clean = clean[7:]
+    if clean.startswith(backticks): clean = clean[3:]
+    if clean.endswith(backticks): clean = clean[:-3]
+
     try:
         return json.loads(clean.strip())
     except:
@@ -125,12 +126,12 @@ def fanzine_traffic_manager(event: firestore_fn.Event[firestore_fn.Change[firest
     if status == 'review_needed':
         # Check if all pages are marked 'complete'
         pages_ref = fref.collection('pages')
-        # We check for any page that is NOT complete. 
+        # We check for any page that is NOT complete.
         # Since != might require specific indexes, we check for known non-complete statuses.
         # Note: 'ocr_complete' is deprecated but included for backward compatibility if any exist.
         non_complete_statuses = ['review_needed', 'error', 'ready', 'queued', 'ocr_complete']
         pending_review = list(pages_ref.where(filter=firestore.FieldFilter('status', 'in', non_complete_statuses)).limit(1).stream())
-        
+
         if not pending_review:
             fref.update({'processingStatus': 'ready_for_agg'})
         return
@@ -203,13 +204,13 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
                     safety_settings=safety_settings
                 )
             )
-            
+
             # Check for RECITATION stop reason specifically
             # Convert to string to handle Enum values like FinishReason.RECITATION
             finish_reason_str = str(response.candidates[0].finish_reason) if response.candidates else ""
             if "RECITATION" in finish_reason_str:
                 raise ValueError(f"FinishReason.RECITATION found in {model_name}")
-                
+
         except Exception as e:
             if "RECITATION" in str(e):
                 print(f"Gemini 3 Flash hit RECITATION. Falling back to Gemini 1.5 Pro...")
@@ -280,7 +281,7 @@ def trigger_batch_ocr(req: https_fn.CallableRequest):
     """
     fid = req.data.get('fanzineId')
     print(f"--- trigger_batch_ocr CALLED for fid: {fid} ---")
-    if not fid: 
+    if not fid:
         print("Error: Missing fanzineId")
         return {"error": "Missing fanzineId"}
 
@@ -440,21 +441,58 @@ def _do_aggregation(fanzine_id):
     fref = db.collection('fanzines').document(fanzine_id)
     try:
         all_ents = set()
-        pages = fref.collection('pages').stream()
+        master_creators = []
+        seen_creators = set()
+        indicia_list = []
 
-        # Aggregate entities
+        # Stream pages in order so indicia text reads chronologically
+        pages = fref.collection('pages').order_by('pageNumber').stream()
+
         for p in pages:
             d = p.to_dict()
+
+            # 1. Aggregate OCR Entities
             for e in d.get('detected_entities', []):
                 all_ents.add(e)
+
+            # 2. Aggregate Archival Metadata (from UGC Images)
+            image_id = d.get('imageId')
+            if image_id:
+                img_doc = db.collection('images').document(image_id).get()
+                if img_doc.exists:
+                    img_data = img_doc.to_dict()
+
+                    # A. Deduplicate and collect Indicia
+                    indicia = img_data.get('indicia', '').strip()
+                    if indicia and indicia not in indicia_list:
+                        indicia_list.append(indicia)
+
+                    # B. Deduplicate and collect Creators
+                    creators = img_data.get('creators', [])
+                    for c in creators:
+                        c_uid = c.get('uid')
+                        c_name = c.get('name', 'Unknown')
+                        c_role = c.get('role', 'Creator')
+
+                        # Generate unique key to prevent listing the same creator/role twice
+                        c_key = f"{c_uid}_{c_role}" if c_uid else f"{c_name}_{c_role}"
+                        if c_key not in seen_creators:
+                            seen_creators.add(c_key)
+                            master_creators.append(c)
+
+        # Join unique indicia blocks
+        master_indicia = "\n\n".join(indicia_list)
 
         # Update main doc
         fref.update({
             'draftEntities': list(all_ents),
+            'masterCreators': master_creators,
+            'masterIndicia': master_indicia,
             'processingStatus': 'complete',
             'aggregatedAt': firestore.SERVER_TIMESTAMP
         })
     except Exception as e:
+        print(f"Aggregation Error: {e}")
         fref.update({'processingStatus': 'error', 'error_agg': str(e)})
 
 # --------------------------------------------------------------------------------
@@ -490,7 +528,7 @@ def prepare_graph_payload(source_id, target_id, relationship_type, timestamp, me
     Sanitizes and prepares a JSON payload for external graph sync.
     """
     if metadata is None: metadata = {}
-    
+
     # Convert timestamp to milliseconds if it's a Firestore Timestamp
     created_at_ms = int(time.time() * 1000)
     if hasattr(timestamp, 'timestamp'):
@@ -514,12 +552,12 @@ def on_follow_user(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> 
     """
     user_id = event.params['userId']
     target_user_id = event.params['targetUserId']
-    
+
     data = event.data.to_dict() if event.data else {}
     timestamp = data.get('createdAt', firestore.SERVER_TIMESTAMP)
 
     payload = prepare_graph_payload(user_id, target_user_id, "FOLLOWS", timestamp)
-    
+
     print(f"Graph Sync [FOLLOW]: {json.dumps(payload)}")
     # TODO: Push to Neo4j
 
@@ -531,7 +569,7 @@ def on_like_content(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) ->
     data = event.data.to_dict() if event.data else {}
     user_id = data.get('userId')
     content_id = data.get('contentId')
-    
+
     if not user_id or not content_id:
         print(f"Invalid Like document: {event.params['likeId']}")
         return
@@ -550,7 +588,7 @@ def on_remix_content(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -
     data = event.data.to_dict() if event.data else {}
     user_id = data.get('userId') # The remixer
     original_content_id = data.get('originalContentId')
-    
+
     if not user_id or not original_content_id:
         print(f"Invalid Remix document: {event.params['remixId']}")
         return

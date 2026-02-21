@@ -25,6 +25,7 @@ class UserProvider extends ChangeNotifier {
     'Terminal': false, // Starts hidden
     'Approve': false, // Editor tool - starts hidden
     'Fanzine': false, // Editor tool - starts hidden
+    'Credits': false,  // Editor tool - starts hidden
   };
 
   UserProvider() {
@@ -81,32 +82,32 @@ class UserProvider extends ChangeNotifier {
     _profileSubscription?.cancel();
     _profileSubscription =
         _db.collection('Users').doc(uid).snapshots().listen((snapshot) {
-      if (snapshot.exists) {
-        _userProfile = snapshot.data();
+          if (snapshot.exists) {
+            _userProfile = snapshot.data();
 
-        // --- Sync Toolbar Preferences from Firestore ---
-        if (_userProfile != null &&
-            _userProfile!.containsKey('socialToolbar')) {
-          final savedPrefs = _userProfile!['socialToolbar'];
-          if (savedPrefs is Map<String, dynamic>) {
-            savedPrefs.forEach((key, value) {
-              if (value is bool && _socialButtonVisibility.containsKey(key)) {
-                _socialButtonVisibility[key] = value;
+            // --- Sync Toolbar Preferences from Firestore ---
+            if (_userProfile != null &&
+                _userProfile!.containsKey('socialToolbar')) {
+              final savedPrefs = _userProfile!['socialToolbar'];
+              if (savedPrefs is Map<String, dynamic>) {
+                savedPrefs.forEach((key, value) {
+                  if (value is bool && _socialButtonVisibility.containsKey(key)) {
+                    _socialButtonVisibility[key] = value;
+                  }
+                });
               }
-            });
+            }
+          } else {
+            // Doc doesn't exist yet (or deleted)
+            _userProfile = {};
           }
-        }
-      } else {
-        // Doc doesn't exist yet (or deleted)
-        _userProfile = {};
-      }
-      _isLoading = false;
-      notifyListeners();
-    }, onError: (error) {
-      debugPrint("UserProvider Error: $error");
-      _isLoading = false;
-      notifyListeners();
-    });
+          _isLoading = false;
+          notifyListeners();
+        }, onError: (error) {
+          debugPrint("UserProvider Error: $error");
+          _isLoading = false;
+          notifyListeners();
+        });
   }
 
   // --- Preference Methods ---
