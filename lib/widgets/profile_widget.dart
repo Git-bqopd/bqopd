@@ -478,6 +478,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     List<Widget> links = [];
     final xHandle = widget.userData['xHandle'] ?? '';
     final instaHandle = widget.userData['instagramHandle'] ?? '';
+    final githubHandle = widget.userData['githubHandle'] ?? '';
 
     if (xHandle.isNotEmpty)
       links.add(_buildLinkButton(
@@ -485,6 +486,9 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     if (instaHandle.isNotEmpty)
       links.add(_buildLinkButton("Instagram", '@$instaHandle',
           'https://instagram.com/$instaHandle'));
+    if (githubHandle.isNotEmpty)
+      links.add(_buildLinkButton("GitHub", '@$githubHandle',
+          'https://github.com/$githubHandle'));
 
     if (links.isEmpty)
       return const Padding(
@@ -602,9 +606,6 @@ class ProfileNavBar extends StatelessWidget {
   Widget _buildNavTab(String title, int index) {
     final isActive = currentIndex == index;
 
-    // Modified: removed the logic that showed inline "(upload image)" text.
-    // Now it just displays the tab title. The upload action is moved to a secondary bar in ProfilePage.
-
     return GestureDetector(
         onTap: () => onTabChanged(index),
         child: Center(
@@ -620,7 +621,7 @@ class ProfileNavBar extends StatelessWidget {
                         isActive ? TextDecoration.underline : null)))));
   }
 
-  Widget _buildSeparator() => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+  Widget _buildSeparator() => const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: Text('|', style: TextStyle(color: Colors.black)));
 }

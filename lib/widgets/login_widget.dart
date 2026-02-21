@@ -1,7 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../services/user_provider.dart';
 import '../components/button.dart';
 import '../components/textfield.dart';
 import '../services/user_bootstrap.dart';
@@ -35,7 +33,6 @@ class _LoginWidgetState extends State<LoginWidget> {
     setState(() {
       _isLoading = true;
     });
-    // Removed FocusScope.of(context).unfocus(); as it can trigger assertions on Web
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -75,7 +72,7 @@ class _LoginWidgetState extends State<LoginWidget> {
     return Container(
       color: const Color(0xFFF1B255), // Manilla Envelope Color
       padding:
-          const EdgeInsets.all(24.0), // Padding = The visible envelope edge
+      const EdgeInsets.all(24.0), // Padding = The visible envelope edge
       child: Center(
         child: AspectRatio(
           // 2. The "Sticker" Shape (5:8)
@@ -84,7 +81,7 @@ class _LoginWidgetState extends State<LoginWidget> {
             decoration: BoxDecoration(
               color: Colors.white, // Sticker Color
               borderRadius:
-                  BorderRadius.circular(12.0), // Rounded corners for sticker
+              BorderRadius.circular(12.0), // Rounded corners for sticker
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.1),
@@ -117,7 +114,7 @@ class _LoginWidgetState extends State<LoginWidget> {
                               MyTextField(
                                 controller: emailController,
                                 focusNode: emailFocusNode,
-                                hintText: "Email",
+                                hintText: "email",
                                 obscureText: false,
                                 autofillHints: const [AutofillHints.email],
                               ),
@@ -125,7 +122,7 @@ class _LoginWidgetState extends State<LoginWidget> {
                               MyTextField(
                                 controller: passwordController,
                                 focusNode: passwordFocusNode,
-                                hintText: "Password",
+                                hintText: "password",
                                 obscureText: true,
                                 autofillHints: const [AutofillHints.password],
                               ),
@@ -140,11 +137,11 @@ class _LoginWidgetState extends State<LoginWidget> {
                           GestureDetector(
                             onTap: () {
                               displayMessageToUser(
-                                  "Forgot Password Tapped (Not Implemented)",
+                                  "forgot password tapped (not implemented)",
                                   context);
                             },
                             child: const Text(
-                              "Forgot password?",
+                              "forgot password?",
                               style: TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 12),
                             ),
@@ -153,42 +150,26 @@ class _LoginWidgetState extends State<LoginWidget> {
                       ),
                       const SizedBox(height: 25),
                       MyButton(
-                        text: "Login",
+                        text: "login",
                         onTap: login,
                         isLoading: _isLoading,
-                      ),
-                      const SizedBox(height: 10),
-                      TextButton(
-                        onPressed: () {
-                          Provider.of<UserProvider>(context, listen: false)
-                              .enableDevBypass();
-                          if (widget.onLoginSuccess != null) {
-                            widget.onLoginSuccess!();
-                          } else {
-                            // If no callback, router will handle redirect
-                            // via refreshListenable
-                          }
-                        },
-                        child: const Text("Dev Auth Bypass (Testing Only)",
-                            style: TextStyle(
-                                color: Colors.indigo,
-                                fontWeight: FontWeight.bold)),
+                        color: Colors.grey,
                       ),
                       const SizedBox(height: 25),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("Not cool yet?",
+                          const Text("not cool yet?",
                               style: TextStyle(fontSize: 12)),
                           const SizedBox(width: 4),
                           GestureDetector(
                             onTap: widget.onTap,
-                            child: Text(
-                              "Register here",
+                            child: const Text(
+                              "register here",
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
-                                color: Theme.of(context).primaryColorDark,
+                                color: Colors.black,
                               ),
                             ),
                           ),

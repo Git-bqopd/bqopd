@@ -39,8 +39,8 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
   // Socials Controllers
   final TextEditingController xHandleController = TextEditingController();
-  final TextEditingController instagramHandleController =
-  TextEditingController();
+  final TextEditingController instagramHandleController = TextEditingController();
+  final TextEditingController githubHandleController = TextEditingController();
 
   String? _profilePhotoUrl; // State for the photo URL
 
@@ -92,6 +92,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     lastNameController.dispose();
     xHandleController.dispose();
     instagramHandleController.dispose();
+    githubHandleController.dispose();
     super.dispose();
   }
 
@@ -221,6 +222,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
             xHandleController.text = data['xHandle'] ?? '';
             instagramHandleController.text = data['instagramHandle'] ?? '';
+            githubHandleController.text = data['githubHandle'] ?? '';
             _profilePhotoUrl = data['photoUrl'];
 
             // If Managed user has a stored email field (rare), show it
@@ -276,8 +278,8 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
           // Socials
           'xHandle': xHandleController.text.trim().replaceAll('@', ''),
-          'instagramHandle':
-          instagramHandleController.text.trim().replaceAll('@', ''),
+          'instagramHandle': instagramHandleController.text.trim().replaceAll('@', ''),
+          'githubHandle': githubHandleController.text.trim().replaceAll('@', ''),
 
           // Only update email if we are editing ourselves
           if (widget.targetUserId == null && currentUser != null)
@@ -493,6 +495,11 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
                           controller: instagramHandleController,
                           decoration: defaultDecoration.copyWith(
                               hintText: "Instagram Username")),
+                      const SizedBox(height: 10),
+                      TextField(
+                          controller: githubHandleController,
+                          decoration: defaultDecoration.copyWith(
+                              hintText: "GitHub Username")),
                     ],
                   );
 

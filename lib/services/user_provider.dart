@@ -11,7 +11,6 @@ class UserProvider extends ChangeNotifier {
   User? _currentUser;
   Map<String, dynamic>? _userProfile;
   StreamSubscription? _profileSubscription;
-  bool _isDevBypass = false;
   bool _isLoading = true;
 
   // --- Session Preferences (Social Toolbar) ---
@@ -34,16 +33,15 @@ class UserProvider extends ChangeNotifier {
 
   // Getters
   bool get isLoading => _isLoading;
-  bool get isLoggedIn => _isDevBypass || _currentUser != null;
+  bool get isLoggedIn => _currentUser != null;
   User? get currentUser => _currentUser;
-  bool get isDevBypass => _isDevBypass;
   Map<String, dynamic>? get userProfile => _userProfile;
   Map<String, bool> get socialButtonVisibility => _socialButtonVisibility;
 
   // Helpers
   String get username => _userProfile?['username'] ?? '';
-  bool get isEditor => _isDevBypass || _userProfile?['Editor'] == true;
-  String? get currentUserId => _isDevBypass ? 'dev-user' : _currentUser?.uid;
+  bool get isEditor => _userProfile?['Editor'] == true;
+  String? get currentUserId => _currentUser?.uid;
 
   void _init() {
     // Listen to Auth State (Login/Logout)
@@ -61,18 +59,6 @@ class UserProvider extends ChangeNotifier {
         notifyListeners();
       }
     });
-  }
-
-  void enableDevBypass() {
-    _isDevBypass = true;
-    _isLoading = false;
-    _userProfile = {
-      'username': 'dev-curator',
-      'Editor': true,
-      'firstName': 'Dev',
-      'lastName': 'Curator'
-    };
-    notifyListeners();
   }
 
   void _subscribeToUserProfile(String uid) {

@@ -53,7 +53,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
 
     try {
       UserCredential? userCredential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: emailController.text.trim(),
         password: pwController.text,
       );
@@ -116,7 +116,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                           MyTextField(
                             controller: userNameController,
                             focusNode: userNameFocusNode,
-                            hintText: "Username",
+                            hintText: "username",
                             obscureText: false,
                             autofillHints: const [AutofillHints.username],
                           ),
@@ -124,7 +124,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                           MyTextField(
                             controller: emailController,
                             focusNode: emailFocusNode,
-                            hintText: "Email",
+                            hintText: "email",
                             obscureText: false,
                             autofillHints: const [AutofillHints.email],
                           ),
@@ -132,7 +132,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                           MyTextField(
                             controller: pwController,
                             focusNode: pwFocusNode,
-                            hintText: "Password",
+                            hintText: "password",
                             obscureText: true,
                             autofillHints: const [AutofillHints.newPassword],
                           ),
@@ -140,7 +140,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                           MyTextField(
                             controller: confirmPwController,
                             focusNode: confirmPwFocusNode,
-                            hintText: "Confirm Password",
+                            hintText: "confirm password",
                             obscureText: true,
                             autofillHints: const [AutofillHints.password],
                           ),
@@ -150,7 +150,7 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                   ),
                   const SizedBox(height: 25),
                   MyButton(
-                    text: "Register",
+                    text: "register",
                     onTap: registerUser,
                     isLoading: _isLoading,
                   ),
@@ -158,12 +158,12 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("Already cool?"),
+                      const Text("already cool?"),
                       const SizedBox(width: 5),
                       GestureDetector(
                         onTap: widget.onTap,
                         child: Text(
-                          "Login here",
+                          "login here",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).primaryColorDark,
