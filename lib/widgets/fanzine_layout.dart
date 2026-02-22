@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../services/view_service.dart';
 import 'readers/fanzine_grid_renderer.dart';
 import 'readers/fanzine_list_renderer.dart';
@@ -10,12 +11,14 @@ class FanzineLayout extends StatelessWidget {
   final List<Map<String, dynamic>> pages;
   final String fanzineId;
   final Widget headerWidget;
-  final ScrollController scrollController;
-  final ViewService viewService;
 
-  // Callbacks for mode switching
+  final ScrollController gridScrollController;
+  final ItemScrollController listScrollController;
+  final int initialIndex;
+
+  final ViewService viewService;
   final Function(int pageIndex) onSwitchToSingle;
-  final Function(int pageIndex)? onSwitchToGrid; // Nullable if grid is disabled
+  final Function(int pageIndex)? onSwitchToGrid;
 
   const FanzineLayout({
     super.key,
@@ -23,7 +26,9 @@ class FanzineLayout extends StatelessWidget {
     required this.pages,
     required this.fanzineId,
     required this.headerWidget,
-    required this.scrollController,
+    required this.gridScrollController,
+    required this.listScrollController,
+    required this.initialIndex,
     required this.viewService,
     required this.onSwitchToSingle,
     this.onSwitchToGrid,
@@ -35,19 +40,17 @@ class FanzineLayout extends StatelessWidget {
       return FanzineGridRenderer(
         pages: pages,
         headerWidget: headerWidget,
-        scrollController: scrollController,
+        scrollController: gridScrollController,
         viewService: viewService,
-        onPageTap: (index) {
-          // Grid index 0 is header, so pages start at 1
-          onSwitchToSingle(index);
-        },
+        onPageTap: onSwitchToSingle,
       );
     } else {
       return FanzineListRenderer(
         fanzineId: fanzineId,
         pages: pages,
         headerWidget: headerWidget,
-        scrollController: scrollController,
+        itemScrollController: listScrollController,
+        initialIndex: initialIndex,
         viewService: viewService,
         onOpenGrid: onSwitchToGrid,
       );

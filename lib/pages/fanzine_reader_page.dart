@@ -3,13 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../services/view_service.dart';
 import '../widgets/fanzine_widget.dart';
+import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
-
-enum FanzineViewMode { grid, single }
 
 class FanzineReaderPage extends StatefulWidget {
   final String? fanzineId;
@@ -45,15 +45,16 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Widget? _activeDrawerContent;
 
   // Desktop Widths
-  // Default Split: Grid 300 + List 900 = 1200 Total
   double _desktopGridWidth = 300.0;
   double _desktopListWidth = 600.0;
-  // Single View Fixed Width
   final double _singleViewFixedWidth = 900.0;
 
-  ScrollController? _mobileScrollController;
+  // Controllers
+  ScrollController? _mobileGridScrollController;
+  final ItemScrollController _mobileListScrollController = ItemScrollController();
+
   ScrollController? _desktopGridScrollController;
-  ScrollController? _desktopListScrollController;
+  final ItemScrollController _desktopListScrollController = ItemScrollController();
 
   @override
   void initState() {
@@ -63,9 +64,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   void dispose() {
-    _mobileScrollController?.dispose();
+    _mobileGridScrollController?.dispose();
     _desktopGridScrollController?.dispose();
-    _desktopListScrollController?.dispose();
     super.dispose();
   }
 
@@ -76,7 +76,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     String? targetShortCode = widget.shortCode;
     String? targetId = widget.fanzineId;
 
-    // Resolve Identity
     if (targetShortCode == null && targetId == null) {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && !user.isAnonymous) {
@@ -109,8 +108,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     _resolvedShortCode = targetShortCode;
 
     if (_resolvedFanzineId != null) {
-      await _fetchFanzineData(_resolvedFanzineId!);
       _processDeepLink();
+      await _fetchFanzineData(_resolvedFanzineId!);
       _updateUrlIfNeeded();
     } else {
       if (mounted) setState(() => _isLoading = false);
@@ -145,18 +144,24 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
       if (mounted) {
         setState(() {
-          _twoPagePreference = twoPage;
           _pages = docs;
-          _isLoading = false;
 
-          // Set Initial Desktop State based on Preference
-          if (_twoPagePreference) {
-            _showGrid = true;
-            _showList = false;
-          } else {
-            _showGrid = false;
-            _showList = true;
+          if (_targetIndex > _pages.length) {
+            _targetIndex = _pages.length;
           }
+
+          if (_targetIndex == 0) {
+            _twoPagePreference = twoPage;
+            if (_twoPagePreference) {
+              _showGrid = true;
+              _showList = false;
+            } else {
+              _showGrid = false;
+              _showList = true;
+            }
+          }
+
+          _isLoading = false;
         });
       }
     } catch (e) {
@@ -167,15 +172,16 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   void _processDeepLink() {
     try {
       final router = GoRouter.of(context);
-      final fragment = router.routerDelegate.currentConfiguration.uri.fragment;
-      if (fragment.startsWith('p')) {
-        final pageNum = int.tryParse(fragment.substring(1));
+      final pQuery = router.routerDelegate.currentConfiguration.uri.queryParameters['p'];
+
+      if (pQuery != null) {
+        final pageNum = int.tryParse(pQuery);
         if (pageNum != null && pageNum > 0) {
           setState(() {
             _targetIndex = pageNum;
-            // On deep link, default to Single View (List) if desktop
             _showGrid = false;
             _showList = true;
+            _twoPagePreference = false;
           });
         }
       }
@@ -196,51 +202,36 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     }
   }
 
-  // --- MOBILE LOGIC ---
-  ScrollController _getMobileScrollController(bool isGrid, double maxWidth) {
-    if (_mobileScrollController != null) _mobileScrollController!.dispose();
-
-    // Simple rough calculation for initial offset jump
-    double itemHeight = isGrid ? (maxWidth / 2) / 0.625 : maxWidth / 0.625;
-    double offset = (_targetIndex / (isGrid ? 2 : 1)) * (itemHeight + 30);
-
-    _mobileScrollController = ScrollController(initialScrollOffset: offset);
-    return _mobileScrollController!;
+  ScrollController _getMobileGridScrollController(double maxWidth) {
+    if (_mobileGridScrollController != null) return _mobileGridScrollController!;
+    double itemHeight = (maxWidth / 2) / 0.625;
+    double offset = (_targetIndex / 2) * (itemHeight + 30);
+    _mobileGridScrollController = ScrollController(initialScrollOffset: offset);
+    return _mobileGridScrollController!;
   }
 
-  // --- DESKTOP LOGIC ---
-
   void _onDesktopGridTap(int index) {
+    bool listWasNotShowing = !_showList;
+
     setState(() {
       _targetIndex = index;
-      _showList = true; // Open List alongside Grid
-      // _showGrid remains true (Split View)
+      _showList = true;
 
-      // Ensure defaults for Split View if we were in Single View
       if (_desktopGridWidth == 900.0) _desktopGridWidth = 300.0;
       if (_desktopListWidth < 300.0) _desktopListWidth = 900.0;
     });
 
-    // Scroll List to target
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_desktopListScrollController != null && _desktopListScrollController!.hasClients) {
-        // Approximate jump logic or rely on ListRenderer to handle init?
-        // For now, let's just ensure controller is fresh
-      }
-    });
-  }
-
-  ScrollController _getDesktopListController(BoxConstraints constraints) {
-    _desktopListScrollController?.dispose();
-
-    // Calculate offset based on current width constraint of the list column
-    final width = constraints.maxWidth;
-    final itemHeight = width / 0.625;
-    final rowHeight = itemHeight + 30.0;
-    final offset = _targetIndex * rowHeight;
-
-    _desktopListScrollController = ScrollController(initialScrollOffset: offset);
-    return _desktopListScrollController!;
+    if (!listWasNotShowing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_desktopListScrollController.isAttached) {
+          _desktopListScrollController.scrollTo(
+            index: _targetIndex,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
   }
 
   void _handleDesktopDrawerRequest(Widget content) {
@@ -255,10 +246,18 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     });
   }
 
+  // RESTORED: This was the working fix that avoided the "Widget already in tree" crash
+  Widget _buildHeader() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: FanzineWidget(fanzineShortCode: _resolvedShortCode),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final headerWidget = FanzineWidget(fanzineShortCode: _resolvedShortCode);
-
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
@@ -268,21 +267,23 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
             // --- MOBILE LAYOUT (< 900px) ---
             if (!isDesktop) {
-              return PageWrapper(
-                maxWidth: 1000,
-                scroll: false,
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : FanzineLayout(
-                  viewMode: _twoPagePreference ? FanzineViewMode.grid : FanzineViewMode.single,
-                  pages: _pages,
-                  fanzineId: _resolvedFanzineId ?? '',
-                  headerWidget: headerWidget,
-                  scrollController: _getMobileScrollController(_twoPagePreference, constraints.maxWidth),
-                  viewService: _viewService,
-                  onSwitchToSingle: (idx) => setState(() { _targetIndex = idx; _twoPagePreference = false; }),
-                  onSwitchToGrid: (idx) => setState(() { _targetIndex = idx; _twoPagePreference = true; }),
-                ),
+              return _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : FanzineLayout(
+                viewMode: _twoPagePreference ? FanzineViewMode.grid : FanzineViewMode.single,
+                pages: _pages,
+                fanzineId: _resolvedFanzineId ?? '',
+                headerWidget: _buildHeader(),
+                gridScrollController: _getMobileGridScrollController(constraints.maxWidth),
+                listScrollController: _mobileListScrollController,
+                initialIndex: _targetIndex,
+                viewService: _viewService,
+                onSwitchToSingle: (idx) {
+                  setState(() { _targetIndex = idx; _twoPagePreference = false; });
+                },
+                onSwitchToGrid: (idx) {
+                  setState(() { _targetIndex = idx; _twoPagePreference = true; });
+                },
               );
             }
 
@@ -293,15 +294,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             final bool isSplitView = _showGrid && _showList;
             final bool isSingleGrid = _showGrid && !_showList;
 
-            // Layout Components Construction
-
             // 1. Grid Component
             Widget gridComponent = Container(
               color: Colors.grey[200],
-              alignment: Alignment.topCenter,
               child: FanzineGridRenderer(
                 pages: _pages,
-                headerWidget: headerWidget,
+                headerWidget: _buildHeader(), // Copy A
                 scrollController: _desktopGridScrollController ??= ScrollController(),
                 viewService: _viewService,
                 onPageTap: _onDesktopGridTap,
@@ -311,55 +309,49 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             // 2. List Component
             Widget listComponent = Container(
               color: Colors.white,
-              alignment: Alignment.topCenter,
-              child: LayoutBuilder(
-                  builder: (ctx, listConstraints) {
-                    return Stack(
-                      children: [
-                        FanzineListRenderer(
-                          fanzineId: _resolvedFanzineId ?? '',
-                          pages: _pages,
-                          headerWidget: headerWidget,
-                          scrollController: _getDesktopListController(listConstraints),
-                          viewService: _viewService,
-                          onOpenGrid: null,
-                          onExternalDrawerRequest: _handleDesktopDrawerRequest,
-                        ),
-                        if (isSplitView)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: FloatingActionButton.small(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                              elevation: 2,
-                              child: const Icon(Icons.close),
-                              onPressed: () {
-                                setState(() {
-                                  _showList = false;
-                                  _activeDrawerContent = null;
-                                });
-                              },
-                            ),
-                          ),
-                      ],
-                    );
-                  }
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fill(
+                    child: FanzineListRenderer(
+                      fanzineId: _resolvedFanzineId ?? '',
+                      pages: _pages,
+                      headerWidget: _buildHeader(), // Copy B
+                      itemScrollController: _desktopListScrollController,
+                      initialIndex: _targetIndex,
+                      viewService: _viewService,
+                      onOpenGrid: null,
+                      onExternalDrawerRequest: _handleDesktopDrawerRequest,
+                    ),
+                  ),
+                  if (isSplitView)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: FloatingActionButton.small(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        elevation: 2,
+                        child: const Icon(Icons.close),
+                        onPressed: () {
+                          setState(() {
+                            _showList = false;
+                            _activeDrawerContent = null;
+                          });
+                        },
+                      ),
+                    ),
+                ],
               ),
             );
 
             // 3. Reader Block Construction
             Widget readerBlock;
-            double currentReaderWidth;
-
             if (isSplitView) {
-              currentReaderWidth = _desktopGridWidth + _desktopListWidth;
               readerBlock = Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Grid Column
                   SizedBox(width: _desktopGridWidth, child: gridComponent),
-
-                  // Inner Resizer (Between Grid & List)
                   MouseRegion(
                     cursor: SystemMouseCursors.resizeColumn,
                     child: GestureDetector(
@@ -367,7 +359,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                       onHorizontalDragUpdate: (details) {
                         setState(() {
                           final double delta = details.delta.dx;
-                          // Constraints: Columns shouldn't disappear
                           if (_desktopGridWidth + delta > 100 && _desktopListWidth - delta > 300) {
                             _desktopGridWidth += delta;
                             _desktopListWidth -= delta;
@@ -381,14 +372,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                       ),
                     ),
                   ),
-
-                  // List Column
                   SizedBox(width: _desktopListWidth, child: listComponent),
                 ],
               );
             } else {
-              // Single View (Fixed 900px)
-              currentReaderWidth = _singleViewFixedWidth;
               readerBlock = SizedBox(
                 width: _singleViewFixedWidth,
                 child: isSingleGrid ? gridComponent : listComponent,
@@ -399,44 +386,22 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // LEFT SPACE
-                // If drawer is closed, use Spacer/Expanded to center the ReaderBlock.
-                // If drawer is open, remove left spacer to align ReaderBlock to the left.
-                if (!drawerOpen)
-                  const Expanded(child: SizedBox()), // Centering Spacer Left
-
-                // READER BLOCK
+                if (!drawerOpen) const Expanded(child: SizedBox()),
                 readerBlock,
-
-                // RIGHT SPACE / DRAWER
                 if (!drawerOpen) ...[
-                  const Expanded(child: SizedBox()), // Centering Spacer Right
+                  const Expanded(child: SizedBox()),
                 ] else ...[
-                  // Outer Resizer (Between Reader & Drawer)
                   MouseRegion(
                     cursor: SystemMouseCursors.resizeColumn,
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
                       onHorizontalDragUpdate: (details) {
                         setState(() {
-                          // Resizing this edge changes the Right-most column of the reader block.
-                          // If Split: Modify _desktopListWidth
-                          // If Single Grid: Modify implied grid width? (Allow single view to resize if drawer is open?)
-                          // Prompt says "Grabbing the edge between fanzine_list_renderer... resize those two columns"
-
                           if (isSplitView) {
                             if (_desktopListWidth + details.delta.dx > 300) {
                               _desktopListWidth += details.delta.dx;
                             }
                           }
-                          // If Single view, user implicitly wants to resize it against the drawer?
-                          // Let's assume fixed 900px for single view unless dragging happens?
-                          // For simplicity, strict adherence: drag affects "columns to either side".
-                          // Implementation: Since single view is fixed 900, let's keep it fixed
-                          // unless we want to convert it to a flexible variable.
-                          // Prompt implies resizability.
-                          // BUT for now, let's only enable resizing for Split View List/Drawer edge
-                          // or let the drawer consume remaining space.
                         });
                       },
                       child: Container(
@@ -446,8 +411,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                       ),
                     ),
                   ),
-
-                  // DRAWER COLUMN (Fills remaining space)
                   Expanded(
                     child: Material(
                       elevation: 4,
@@ -476,51 +439,5 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         ),
       ),
     );
-  }
-}
-
-// Wrapper for Mobile
-class FanzineLayout extends StatelessWidget {
-  final FanzineViewMode viewMode;
-  final List<Map<String, dynamic>> pages;
-  final String fanzineId;
-  final Widget headerWidget;
-  final ScrollController scrollController;
-  final ViewService viewService;
-  final Function(int pageIndex) onSwitchToSingle;
-  final Function(int pageIndex)? onSwitchToGrid;
-
-  const FanzineLayout({
-    super.key,
-    required this.viewMode,
-    required this.pages,
-    required this.fanzineId,
-    required this.headerWidget,
-    required this.scrollController,
-    required this.viewService,
-    required this.onSwitchToSingle,
-    this.onSwitchToGrid,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (viewMode == FanzineViewMode.grid) {
-      return FanzineGridRenderer(
-        pages: pages,
-        headerWidget: headerWidget,
-        scrollController: scrollController,
-        viewService: viewService,
-        onPageTap: onSwitchToSingle,
-      );
-    } else {
-      return FanzineListRenderer(
-        fanzineId: fanzineId,
-        pages: pages,
-        headerWidget: headerWidget,
-        scrollController: scrollController,
-        viewService: viewService,
-        onOpenGrid: onSwitchToGrid,
-      );
-    }
   }
 }

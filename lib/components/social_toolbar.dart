@@ -90,7 +90,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
       final doc = await FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).get();
       final shortCode = doc.data()?['shortCode'] ?? widget.fanzineId;
       String url = "https://bqopd.com/$shortCode";
-      if (widget.pageNumber != null) url += "#p${widget.pageNumber}";
+
+      // RESTORED: Query parameter formatting for reliable deep linking
+      if (widget.pageNumber != null) url += "?p=${widget.pageNumber}";
+
       await Clipboard.setData(ClipboardData(text: url));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -184,7 +187,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
-                // --- UPDATED VIEW COUNTER: SHOWS ONLY 'regListCount' ---
                 if (buttonVisibility['Views'] == true) ...[
                   if (widget.imageId != null && widget.imageId!.isNotEmpty)
                     StreamBuilder<DocumentSnapshot>(

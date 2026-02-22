@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
 import '../../services/user_provider.dart';
@@ -15,7 +16,7 @@ class FanzineListRenderer extends StatefulWidget {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
   final Widget headerWidget;
-  final ScrollController scrollController;
+  final ItemScrollController itemScrollController;
   final ViewService viewService;
   final Function(int)? onOpenGrid;
   final int initialIndex;
@@ -26,7 +27,7 @@ class FanzineListRenderer extends StatefulWidget {
     required this.fanzineId,
     required this.pages,
     required this.headerWidget,
-    required this.scrollController,
+    required this.itemScrollController,
     required this.viewService,
     this.onOpenGrid,
     this.initialIndex = 0,
@@ -154,13 +155,16 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      controller: widget.scrollController,
+    // RESTORED: Using ScrollablePositionedList
+    return ScrollablePositionedList.separated(
+      itemScrollController: widget.itemScrollController,
+      initialScrollIndex: widget.initialIndex,
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: widget.pages.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 48),
       itemBuilder: (context, index) {
         if (index == 0) return widget.headerWidget;
+
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
         final imageId = pageData['imageId'] ?? '';
