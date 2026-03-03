@@ -11,6 +11,7 @@ import '../../components/social_toolbar.dart';
 import '../../utils/link_parser.dart';
 import '../comment_item.dart';
 import '../stats_table.dart';
+import '../youtube_player_widget.dart';
 
 class FanzineListRenderer extends StatefulWidget {
   final String fanzineId;
@@ -43,6 +44,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   final Map<int, bool> _openCommentRows = {};
   final Map<int, bool> _openViewRows = {};
   final Map<int, bool> _openCreditRows = {};
+  final Map<int, bool> _openYouTubeRows = {};
 
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
@@ -78,6 +80,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           _openCommentRows[index] = false;
           _openViewRows[index] = false;
           _openCreditRows[index] = false;
+          _openYouTubeRows[index] = false;
         }
       });
     }
@@ -93,6 +96,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           _openTextRows[index] = false;
           _openViewRows[index] = false;
           _openCreditRows[index] = false;
+          _openYouTubeRows[index] = false;
         }
       });
     }
@@ -108,6 +112,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           _openTextRows[index] = false;
           _openCommentRows[index] = false;
           _openCreditRows[index] = false;
+          _openYouTubeRows[index] = false;
         }
       });
     }
@@ -123,6 +128,23 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           _openTextRows[index] = false;
           _openCommentRows[index] = false;
           _openViewRows[index] = false;
+          _openYouTubeRows[index] = false;
+        }
+      });
+    }
+  }
+
+  void _handleYouTubeToggle(int index, String imageId) {
+    if (widget.onExternalDrawerRequest != null) {
+      widget.onExternalDrawerRequest!(_buildSidebarYouTube(imageId));
+    } else {
+      setState(() {
+        _openYouTubeRows[index] = !(_openYouTubeRows[index] ?? false);
+        if (_openYouTubeRows[index] == true) {
+          _openTextRows[index] = false;
+          _openCommentRows[index] = false;
+          _openViewRows[index] = false;
+          _openCreditRows[index] = false;
         }
       });
     }
@@ -143,6 +165,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     return _SidebarWrapper(title: "ARCHIVAL METADATA & CREDITS", child: _CreditsEditorWidget(imageId: imageId));
   }
 
+  Widget _buildSidebarYouTube(String imageId) {
+    return _SidebarWrapper(title: "VIDEO", child: YouTubePlayerWidget(imageId: imageId));
+  }
+
   Future<void> _submitComment(int pageIndex, String imageId) async {
     final controller = _commentControllers[pageIndex];
     if (controller == null || controller.text.trim().isEmpty) return;
@@ -155,7 +181,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
   @override
   Widget build(BuildContext context) {
-    // RESTORED: Using ScrollablePositionedList
     return ScrollablePositionedList.separated(
       itemScrollController: widget.itemScrollController,
       initialScrollIndex: widget.initialIndex,
@@ -179,10 +204,12 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           isCommentsOpen: _openCommentRows[pageIndex] ?? false,
           isViewsOpen: _openViewRows[pageIndex] ?? false,
           isCreditsOpen: _openCreditRows[pageIndex] ?? false,
+          isYouTubeOpen: _openYouTubeRows[pageIndex] ?? false,
           onToggleText: () => _handleTextToggle(pageIndex, pageData['text_processed'] ?? pageData['text'] ?? ''),
           onToggleComment: () => _handleCommentToggle(pageIndex, imageId),
           onToggleViews: () => _handleViewToggle(pageIndex, imageId),
           onToggleCredits: () => _handleCreditToggle(pageIndex, imageId),
+          onToggleYouTube: () => _handleYouTubeToggle(pageIndex, imageId),
           onOpenGrid: widget.onOpenGrid,
           submitComment: (imgId) => _submitComment(pageIndex, imgId),
           commentController: _commentControllers.putIfAbsent(pageIndex, () => TextEditingController()),
@@ -203,10 +230,12 @@ class _PageWidget extends StatefulWidget {
   final bool isCommentsOpen;
   final bool isViewsOpen;
   final bool isCreditsOpen;
+  final bool isYouTubeOpen;
   final VoidCallback onToggleText;
   final VoidCallback onToggleComment;
   final VoidCallback onToggleViews;
   final VoidCallback onToggleCredits;
+  final VoidCallback onToggleYouTube;
   final Function(int)? onOpenGrid;
   final Function(String) submitComment;
   final TextEditingController commentController;
@@ -222,10 +251,12 @@ class _PageWidget extends StatefulWidget {
     required this.isCommentsOpen,
     required this.isViewsOpen,
     required this.isCreditsOpen,
+    required this.isYouTubeOpen,
     required this.onToggleText,
     required this.onToggleComment,
     required this.onToggleViews,
     required this.onToggleCredits,
+    required this.onToggleYouTube,
     this.onOpenGrid,
     required this.submitComment,
     required this.commentController,
@@ -281,17 +312,21 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
             future: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).get() : null,
             builder: (context, snapshot) {
               bool isGame = snapshot.hasData && (snapshot.data!.data() as Map?)?['isGame'] == true;
+              String? youtubeId = snapshot.hasData ? (snapshot.data!.data() as Map?)?['youtubeId'] as String? : null;
+
               return SocialToolbar(
                 imageId: imageId,
                 pageId: pageId,
                 fanzineId: widget.fanzineId,
                 pageNumber: widget.pageIndex + 1,
                 isGame: isGame,
+                youtubeId: youtubeId,
                 onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
                 onToggleComments: widget.onToggleComment,
                 onToggleText: widget.onToggleText,
                 onToggleViews: widget.onToggleViews,
                 onToggleCredits: widget.onToggleCredits,
+                onToggleYouTube: widget.onToggleYouTube,
               );
             },
           ),
@@ -299,6 +334,10 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
         if (widget.isTextOpen) ...[
           const SizedBox(height: verticalGap),
           _BonusRowWrapper(color: const Color(0xFFFDFBF7), child: SelectableText.rich(LinkParser.renderLinks(context, widget.pageData['text_processed'] ?? widget.pageData['text'] ?? '', baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia')))),
+        ],
+        if (widget.isYouTubeOpen) ...[
+          const SizedBox(height: verticalGap),
+          _BonusRowWrapper(color: Colors.black, child: YouTubePlayerWidget(imageId: imageId)),
         ],
         if (widget.isCommentsOpen) ...[
           const SizedBox(height: verticalGap),

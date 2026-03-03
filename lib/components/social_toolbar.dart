@@ -17,11 +17,13 @@ class SocialToolbar extends StatefulWidget {
   final String? fanzineId;
   final int? pageNumber;
   final bool isGame;
+  final String? youtubeId;
   final VoidCallback? onOpenGrid;
   final VoidCallback? onToggleComments;
   final VoidCallback? onToggleText;
   final VoidCallback? onToggleViews;
   final VoidCallback? onToggleCredits;
+  final VoidCallback? onToggleYouTube;
 
   // Editor Callbacks
   final VoidCallback? onApprove;
@@ -34,11 +36,13 @@ class SocialToolbar extends StatefulWidget {
     this.fanzineId,
     this.pageNumber,
     this.isGame = false,
+    this.youtubeId,
     this.onOpenGrid,
     this.onToggleComments,
     this.onToggleText,
     this.onToggleViews,
     this.onToggleCredits,
+    this.onToggleYouTube,
     this.onApprove,
     this.onFanzine,
   });
@@ -91,7 +95,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
       final shortCode = doc.data()?['shortCode'] ?? widget.fanzineId;
       String url = "https://bqopd.com/$shortCode";
 
-      // RESTORED: Query parameter formatting for reliable deep linking
       if (widget.pageNumber != null) url += "?p=${widget.pageNumber}";
 
       await Clipboard.setData(ClipboardData(text: url));
@@ -215,6 +218,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   const SizedBox(width: 16),
                 ],
 
+                if (buttonVisibility['YouTube'] == true && widget.youtubeId != null && widget.youtubeId!.isNotEmpty) ...[
+                  SocialActionButton(icon: Icons.play_circle_outline, label: 'Video', onTap: widget.onToggleYouTube),
+                  const SizedBox(width: 16),
+                ],
+
                 if (buttonVisibility['Circulation'] == true) ...[
                   const SocialActionButton(icon: Icons.print, label: 'Circulation'),
                   const SizedBox(width: 16),
@@ -264,6 +272,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
                     _DrawerItem(label: 'Views', icon: Icons.show_chart, isSelected: buttonVisibility['Views'] ?? true, onTap: () => userProvider.toggleSocialButton('Views')),
                     const SizedBox(width: 10),
                     _DrawerItem(label: 'Text', icon: Icons.newspaper, isSelected: buttonVisibility['Text'] ?? true, onTap: () => userProvider.toggleSocialButton('Text')),
+
+                    if (widget.youtubeId != null && widget.youtubeId!.isNotEmpty) ...[
+                      const SizedBox(width: 10),
+                      _DrawerItem(label: 'Video', icon: Icons.play_circle_outline, isSelected: buttonVisibility['YouTube'] ?? true, onTap: () => userProvider.toggleSocialButton('YouTube')),
+                    ],
+
                     const SizedBox(width: 10),
                     _DrawerItem(label: 'Circulation', icon: Icons.print, isSelected: buttonVisibility['Circulation'] ?? true, onTap: () => userProvider.toggleSocialButton('Circulation')),
 

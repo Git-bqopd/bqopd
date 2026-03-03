@@ -1,5 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../components/social_toolbar.dart'; // Updated import
+import '../components/social_toolbar.dart';
+import 'youtube_player_widget.dart'; // NEW
 
 class ImageViewModal extends StatefulWidget {
   final String imageUrl;
@@ -23,18 +25,30 @@ class _ImageViewModalState extends State<ImageViewModal> {
   bool _showComments = false;
   bool _showText = false;
   bool _showShortCode = false;
+  bool _showYouTube = false;
 
   void _toggleComments() {
     setState(() {
       _showComments = !_showComments;
       _showText = false;
       _showShortCode = false;
+      _showYouTube = false;
     });
   }
 
   void _toggleText() {
     setState(() {
       _showText = !_showText;
+      _showComments = false;
+      _showShortCode = false;
+      _showYouTube = false;
+    });
+  }
+
+  void _toggleYouTube() {
+    setState(() {
+      _showYouTube = !_showYouTube;
+      _showText = false;
       _showComments = false;
       _showShortCode = false;
     });
@@ -86,13 +100,22 @@ class _ImageViewModalState extends State<ImageViewModal> {
                 elevation: 1,
                 color: Colors.white,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: SocialToolbar(
-                    imageId: widget.imageId,
-                    onToggleComments: _toggleComments,
-                    onToggleText: _toggleText,
-                    // Note: 'Open' button won't appear as we don't pass onOpenGrid
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance.collection('images').doc(widget.imageId).get(),
+                    builder: (context, snapshot) {
+                      bool isGame = snapshot.hasData && (snapshot.data!.data() as Map?)?['isGame'] == true;
+                      String? youtubeId = snapshot.hasData ? (snapshot.data!.data() as Map?)?['youtubeId'] as String? : null;
+
+                      return SocialToolbar(
+                        imageId: widget.imageId,
+                        isGame: isGame,
+                        youtubeId: youtubeId,
+                        onToggleComments: _toggleComments,
+                        onToggleText: _toggleText,
+                        onToggleYouTube: _toggleYouTube,
+                      );
+                    },
                   ),
                 ),
               ),
@@ -111,7 +134,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
   }
 
   Widget _buildDetailsArea() {
-    final showAnything = _showComments || _showText || _showShortCode;
+    final showAnything = _showComments || _showText || _showShortCode || _showYouTube;
     if (!showAnything) return const SizedBox.shrink();
 
     return SizedBox(
@@ -141,8 +164,15 @@ class _ImageViewModalState extends State<ImageViewModal> {
               Text(widget.imageText ?? 'no text available.'),
               const SizedBox(height: 16),
             ],
-            // Keep ShortCode display for now if triggered manually,
-            // though SocialToolbar doesn't trigger it yet.
+            if (_showYouTube) ...[
+              const Text('Video', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Container(
+                color: Colors.black,
+                child: YouTubePlayerWidget(imageId: widget.imageId),
+              ),
+              const SizedBox(height: 16),
+            ],
             if (_showShortCode) ...[
               const Text('Short Code',
                   style: TextStyle(fontWeight: FontWeight.w600)),

@@ -30,9 +30,8 @@ dependencies:
   cloud_functions: ^5.1.0
   flutter_google_places_sdk: ^0.3.3
   url_launcher: ^6.3.0
-
-  # RESTORED: For precise, index-based scrolling in the Reader
   scrollable_positioned_list: ^0.3.8
+  youtube_player_iframe: ^5.1.2
 
   flutter_web_plugins:
     sdk: flutter

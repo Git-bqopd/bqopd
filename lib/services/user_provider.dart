@@ -21,6 +21,7 @@ class UserProvider extends ChangeNotifier {
     'Views': true,
     'Text': true,
     'Circulation': true,
+    'YouTube': true,
     'Terminal': false, // Starts hidden
     'Approve': false, // Editor tool - starts hidden
     'Fanzine': false, // Editor tool - starts hidden
