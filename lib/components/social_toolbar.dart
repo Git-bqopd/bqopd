@@ -219,7 +219,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
                 ],
 
                 if (buttonVisibility['YouTube'] == true && widget.youtubeId != null && widget.youtubeId!.isNotEmpty) ...[
-                  SocialActionButton(icon: Icons.play_circle_outline, label: 'Video', onTap: widget.onToggleYouTube),
+                  SocialActionButton(icon: Icons.ondemand_video_outlined, label: 'YouTube', onTap: widget.onToggleYouTube),
                   const SizedBox(width: 16),
                 ],
 

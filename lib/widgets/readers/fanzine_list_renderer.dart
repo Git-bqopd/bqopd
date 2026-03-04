@@ -311,8 +311,14 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
           child: FutureBuilder<DocumentSnapshot>(
             future: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).get() : null,
             builder: (context, snapshot) {
-              bool isGame = snapshot.hasData && (snapshot.data!.data() as Map?)?['isGame'] == true;
-              String? youtubeId = snapshot.hasData ? (snapshot.data!.data() as Map?)?['youtubeId'] as String? : null;
+              bool isGame = false;
+              String? youtubeId;
+
+              if (snapshot.hasData && snapshot.data?.data() != null) {
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+                isGame = data['isGame'] == true;
+                youtubeId = data['youtubeId'] as String?;
+              }
 
               return SocialToolbar(
                 imageId: imageId,
@@ -358,21 +364,21 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
 
 class _BonusRowWrapper extends StatelessWidget {
   final Widget child; final Color color;
-  const _BonusRowWrapper({required this.child, required this.color});
+  const _BonusRowWrapper({super.key, required this.child, required this.color});
   @override
   Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: color, border: Border(top: BorderSide(color: Colors.grey.shade200), bottom: BorderSide(color: Colors.grey.shade200))), child: child);
 }
 
 class _SidebarWrapper extends StatelessWidget {
   final String title; final Widget child;
-  const _SidebarWrapper({required this.title, required this.child});
+  const _SidebarWrapper({super.key, required this.title, required this.child});
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Container(padding: const EdgeInsets.all(16), color: Colors.grey[200], child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2))), Expanded(child: Padding(padding: const EdgeInsets.all(16), child: child))]);
 }
 
 class _CommentList extends StatelessWidget {
   final String imageId; final EngagementService service;
-  const _CommentList({required this.imageId, required this.service});
+  const _CommentList({super.key, required this.imageId, required this.service});
   @override
   Widget build(BuildContext context) => StreamBuilder<QuerySnapshot>(stream: service.getCommentsStream(imageId), builder: (context, snap) {
     if (!snap.hasData) return const SizedBox();
@@ -385,14 +391,14 @@ class _CommentList extends StatelessWidget {
 
 class _CommentInput extends StatelessWidget {
   final TextEditingController controller; final VoidCallback onSend;
-  const _CommentInput({required this.controller, required this.onSend});
+  const _CommentInput({super.key, required this.controller, required this.onSend});
   @override
   Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [Expanded(child: TextField(controller: controller, decoration: const InputDecoration(hintText: "Add a comment...", isDense: true, border: OutlineInputBorder()))), IconButton(icon: const Icon(Icons.send), onPressed: onSend)]));
 }
 
 class _PageImage extends StatefulWidget {
   final String? imageUrl; final String? storagePath;
-  const _PageImage({this.imageUrl, this.storagePath});
+  const _PageImage({super.key, this.imageUrl, this.storagePath});
   @override
   State<_PageImage> createState() => _PageImageState();
 }
@@ -408,7 +414,7 @@ class _PageImageState extends State<_PageImage> {
 
 class _CreditsEditorWidget extends StatefulWidget {
   final String imageId;
-  const _CreditsEditorWidget({required this.imageId});
+  const _CreditsEditorWidget({super.key, required this.imageId});
 
   @override
   State<_CreditsEditorWidget> createState() => _CreditsEditorWidgetState();

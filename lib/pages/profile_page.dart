@@ -523,6 +523,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   return _FanzineCoverTile(
                     fanzineId: docId,
                     title: data['title'] ?? 'Untitled',
+                    shouldEdit: _currentIndex == 0, // NEW: Conditional route
                   );
                 } else {
                   // Images
@@ -588,12 +589,17 @@ class _ProfileTabsDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-// Copied helper from previous file to ensure self-contained Page
+// Updated helper to handle conditional navigation
 class _FanzineCoverTile extends StatelessWidget {
   final String fanzineId;
   final String title;
+  final bool shouldEdit; // Added field
 
-  const _FanzineCoverTile({required this.fanzineId, required this.title});
+  const _FanzineCoverTile({
+    required this.fanzineId,
+    required this.title,
+    this.shouldEdit = false, // Default to Reader
+  });
 
   Future<String?> _fetchCoverUrl() async {
     try {
@@ -628,7 +634,14 @@ class _FanzineCoverTile extends StatelessWidget {
       builder: (context, snapshot) {
         final imageUrl = snapshot.data;
         return GestureDetector(
-          onTap: () => context.push('/reader/$fanzineId'),
+          onTap: () {
+            // Conditional Routing based on tab context
+            if (shouldEdit) {
+              context.push('/editor/$fanzineId');
+            } else {
+              context.push('/reader/$fanzineId');
+            }
+          },
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,

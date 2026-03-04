@@ -104,8 +104,14 @@ class _ImageViewModalState extends State<ImageViewModal> {
                   child: FutureBuilder<DocumentSnapshot>(
                     future: FirebaseFirestore.instance.collection('images').doc(widget.imageId).get(),
                     builder: (context, snapshot) {
-                      bool isGame = snapshot.hasData && (snapshot.data!.data() as Map?)?['isGame'] == true;
-                      String? youtubeId = snapshot.hasData ? (snapshot.data!.data() as Map?)?['youtubeId'] as String? : null;
+                      bool isGame = false;
+                      String? youtubeId;
+
+                      if (snapshot.hasData && snapshot.data?.data() != null) {
+                        final data = snapshot.data!.data() as Map<String, dynamic>;
+                        isGame = data['isGame'] == true;
+                        youtubeId = data['youtubeId'] as String?;
+                      }
 
                       return SocialToolbar(
                         imageId: widget.imageId,
