@@ -10,18 +10,18 @@ import '../widgets/fanzine_widget.dart';
 import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
-import '../widgets/fanzine_editor_widget.dart'; // NEW IMPORT
+import '../widgets/fanzine_editor_widget.dart';
 
 class FanzineReaderPage extends StatefulWidget {
   final String? fanzineId;
   final String? shortCode;
-  final bool isEditingMode; // NEW: Flag to swap layouts
+  final bool isEditingMode;
 
   const FanzineReaderPage({
     super.key,
     this.fanzineId,
     this.shortCode,
-    this.isEditingMode = false, // Default to Reader mode
+    this.isEditingMode = false,
   });
 
   @override
@@ -36,27 +36,21 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   String? _resolvedShortCode;
   List<Map<String, dynamic>> _pages = [];
 
-  // Data State
-  bool _twoPagePreference = true; // Default from DB
-  bool _isEditingMode = false; // NEW: Local state for the toggle
+  bool _twoPagePreference = true;
+  bool _isEditingMode = false;
 
-  // Navigation State
   int _targetIndex = 0;
 
-  // Desktop Layout State
   bool _showGrid = true;
   bool _showList = false;
   Widget? _activeDrawerContent;
 
-  // Desktop Widths
   double _desktopGridWidth = 300.0;
   double _desktopListWidth = 600.0;
   final double _singleViewFixedWidth = 900.0;
 
-  // Controllers
   ScrollController? _mobileGridScrollController;
   final ItemScrollController _mobileListScrollController = ItemScrollController();
-
   ScrollController? _desktopGridScrollController;
   final ItemScrollController _desktopListScrollController = ItemScrollController();
 
@@ -98,7 +92,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           .where('shortCode', isEqualTo: targetShortCode)
           .limit(1)
           .get();
-
       if (fanzineQuery.docs.isNotEmpty) {
         targetId = fanzineQuery.docs.first.id;
       } else {
@@ -125,69 +118,38 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     try {
       final fanzineDoc = await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).get();
       if (!fanzineDoc.exists) throw Exception("Fanzine not found");
-
       final fanzineData = fanzineDoc.data() ?? {};
       final bool twoPage = fanzineData['twoPage'] ?? true;
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('fanzines')
-          .doc(fanzineId)
-          .collection('pages')
-          .get();
-
+      final snapshot = await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').get();
       final docs = snapshot.docs.map((d) {
         final data = d.data();
         data['__id'] = d.id;
         return data;
       }).toList();
-
-      docs.sort((a, b) {
-        int aNum = (a['pageNumber'] ?? a['index'] ?? 0) as int;
-        int bNum = (b['pageNumber'] ?? b['index'] ?? 0) as int;
-        return aNum.compareTo(bNum);
-      });
+      docs.sort((a, b) => (a['pageNumber'] as int).compareTo(b['pageNumber'] as int));
 
       if (mounted) {
         setState(() {
           _pages = docs;
-
-          if (_targetIndex > _pages.length) {
-            _targetIndex = _pages.length;
-          }
-
+          if (_targetIndex > _pages.length) _targetIndex = _pages.length;
           if (_targetIndex == 0) {
             _twoPagePreference = twoPage;
-            if (_twoPagePreference) {
-              _showGrid = true;
-              _showList = false;
-            } else {
-              _showGrid = false;
-              _showList = true;
-            }
+            if (_twoPagePreference) { _showGrid = true; _showList = false; } else { _showGrid = false; _showList = true; }
           }
-
           _isLoading = false;
         });
       }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    } catch (e) { if (mounted) setState(() => _isLoading = false); }
   }
 
   void _processDeepLink() {
     try {
       final router = GoRouter.of(context);
       final pQuery = router.routerDelegate.currentConfiguration.uri.queryParameters['p'];
-
       if (pQuery != null) {
         final pageNum = int.tryParse(pQuery);
         if (pageNum != null && pageNum > 0) {
-          setState(() {
-            _targetIndex = pageNum;
-            _showGrid = false;
-            _showList = true;
-            _twoPagePreference = false;
-          });
+          setState(() { _targetIndex = pageNum; _showGrid = false; _showList = true; _twoPagePreference = false; });
         }
       }
     } catch (_) {}
@@ -199,7 +161,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-          if (!currentLoc.contains(_resolvedShortCode!) && !widget.isEditingMode) {
+          if (!currentLoc.contains(_resolvedShortCode!) && !_isEditingMode) {
             context.go('/$_resolvedShortCode');
           }
         } catch (_) {}
@@ -217,49 +179,45 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   void _onDesktopGridTap(int index) {
     bool listWasNotShowing = !_showList;
-
     setState(() {
       _targetIndex = index;
       _showList = true;
-
       if (_desktopGridWidth == 900.0) _desktopGridWidth = 300.0;
       if (_desktopListWidth < 300.0) _desktopListWidth = 900.0;
     });
-
     if (!listWasNotShowing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_desktopListScrollController.isAttached) {
-          _desktopListScrollController.scrollTo(
-            index: _targetIndex,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
+          _desktopListScrollController.scrollTo(index: _targetIndex, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
         }
       });
     }
   }
 
   void _handleDesktopDrawerRequest(Widget content) {
-    setState(() {
-      _activeDrawerContent = content;
-    });
+    setState(() { _activeDrawerContent = content; });
   }
 
   void _closeDesktopDrawer() {
-    setState(() {
-      _activeDrawerContent = null;
-    });
+    setState(() { _activeDrawerContent = null; });
   }
 
   void _toggleEditMode() {
     setState(() {
       _isEditingMode = !_isEditingMode;
-      _activeDrawerContent = null; // Close any open drawers when switching modes
+      _activeDrawerContent = null;
     });
   }
 
+  void _handleOCRDrawer(String imageId) {
+    _handleDesktopDrawerRequest(Container(padding: const EdgeInsets.all(16), child: const Text("OCR Processing logic coming soon in Phase 3 Task 2.")));
+  }
+
+  void _handleEntitiesDrawer(String imageId) {
+    _handleDesktopDrawerRequest(Container(padding: const EdgeInsets.all(16), child: const Text("Entity Validation logic coming soon in Phase 3 Task 2.")));
+  }
+
   Widget _buildHeader() {
-    // NEW: Render the Editor Control Panel if we are in Editing Mode
     if (_isEditingMode && _resolvedFanzineId != null) {
       return Center(
         child: ConstrainedBox(
@@ -271,7 +229,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         ),
       );
     }
-
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 450),
@@ -288,8 +245,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final bool isDesktop = constraints.maxWidth > 900;
-
-            // --- MOBILE LAYOUT (< 900px) ---
             if (!isDesktop) {
               return _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -304,35 +259,27 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 viewService: _viewService,
                 isEditingMode: _isEditingMode,
                 onToggleEditMode: _toggleEditMode,
-                onSwitchToSingle: (idx) {
-                  setState(() { _targetIndex = idx; _twoPagePreference = false; });
-                },
-                onSwitchToGrid: (idx) {
-                  setState(() { _targetIndex = idx; _twoPagePreference = true; });
-                },
+                onSwitchToSingle: (idx) { setState(() { _targetIndex = idx; _twoPagePreference = false; }); },
+                onSwitchToGrid: (idx) { setState(() { _targetIndex = idx; _twoPagePreference = true; }); },
               );
             }
 
-            // --- DESKTOP LAYOUT (> 900px) ---
             if (_isLoading) return const Center(child: CircularProgressIndicator());
-
             final bool drawerOpen = _activeDrawerContent != null;
             final bool isSplitView = _showGrid && _showList;
             final bool isSingleGrid = _showGrid && !_showList;
 
-            // 1. Grid Component
             Widget gridComponent = Container(
               color: Colors.grey[200],
               child: FanzineGridRenderer(
                 pages: _pages,
-                headerWidget: _buildHeader(), // Copy A
+                headerWidget: _buildHeader(),
                 scrollController: _desktopGridScrollController ??= ScrollController(),
                 viewService: _viewService,
                 onPageTap: _onDesktopGridTap,
               ),
             );
 
-            // 2. List Component
             Widget listComponent = Container(
               color: Colors.white,
               child: Stack(
@@ -342,7 +289,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                     child: FanzineListRenderer(
                       fanzineId: _resolvedFanzineId ?? '',
                       pages: _pages,
-                      headerWidget: _buildHeader(), // Copy B
+                      headerWidget: _buildHeader(),
                       itemScrollController: _desktopListScrollController,
                       initialIndex: _targetIndex,
                       viewService: _viewService,
@@ -354,29 +301,19 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                   ),
                   if (isSplitView)
                     Positioned(
-                      top: 8,
-                      right: 8,
+                      top: 8, right: 8,
                       child: FloatingActionButton.small(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        elevation: 2,
+                        backgroundColor: Colors.white, foregroundColor: Colors.black, elevation: 2,
                         child: const Icon(Icons.close),
-                        onPressed: () {
-                          setState(() {
-                            _showList = false;
-                            _activeDrawerContent = null;
-                          });
-                        },
+                        onPressed: () { setState(() { _showList = false; _activeDrawerContent = null; }); },
                       ),
                     ),
                 ],
               ),
             );
 
-            // 3. Reader Block Construction
-            Widget readerBlock;
-            if (isSplitView) {
-              readerBlock = Row(
+            Widget readerBlock = isSplitView
+                ? Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(width: _desktopGridWidth, child: gridComponent),
@@ -388,72 +325,42 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                         setState(() {
                           final double delta = details.delta.dx;
                           if (_desktopGridWidth + delta > 100 && _desktopListWidth - delta > 300) {
-                            _desktopGridWidth += delta;
-                            _desktopListWidth -= delta;
+                            _desktopGridWidth += delta; _desktopListWidth -= delta;
                           }
                         });
                       },
-                      child: Container(
-                        width: 16,
-                        color: Colors.grey[300],
-                        child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey)),
-                      ),
+                      child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
                     ),
                   ),
                   SizedBox(width: _desktopListWidth, child: listComponent),
-                ],
-              );
-            } else {
-              readerBlock = SizedBox(
-                width: _singleViewFixedWidth,
-                child: isSingleGrid ? gridComponent : listComponent,
-              );
-            }
+                ])
+                : SizedBox(width: _singleViewFixedWidth, child: isSingleGrid ? gridComponent : listComponent);
 
-            // --- FINAL ASSEMBLY ---
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!drawerOpen) const Expanded(child: SizedBox()),
                 readerBlock,
-                if (!drawerOpen) ...[
-                  const Expanded(child: SizedBox()),
-                ] else ...[
+                if (!drawerOpen) const Expanded(child: SizedBox())
+                else ...[
                   MouseRegion(
                     cursor: SystemMouseCursors.resizeColumn,
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
                       onHorizontalDragUpdate: (details) {
-                        setState(() {
-                          if (isSplitView) {
-                            if (_desktopListWidth + details.delta.dx > 300) {
-                              _desktopListWidth += details.delta.dx;
-                            }
-                          }
-                        });
+                        setState(() { if (isSplitView && _desktopListWidth + details.delta.dx > 300) _desktopListWidth += details.delta.dx; });
                       },
-                      child: Container(
-                        width: 16,
-                        color: Colors.grey[300],
-                        child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey)),
-                      ),
+                      child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
                     ),
                   ),
                   Expanded(
                     child: Material(
-                      elevation: 4,
-                      color: Colors.white,
+                      elevation: 4, color: Colors.white,
                       child: Column(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            color: Colors.grey[100],
-                            child: Row(
-                              children: [
-                                const Spacer(),
-                                IconButton(icon: const Icon(Icons.close), onPressed: _closeDesktopDrawer)
-                              ],
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), color: Colors.grey[100],
+                            child: Row(children: [const Spacer(), IconButton(icon: const Icon(Icons.close), onPressed: _closeDesktopDrawer)]),
                           ),
                           Expanded(child: _activeDrawerContent!),
                         ],
