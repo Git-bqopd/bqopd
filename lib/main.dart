@@ -19,12 +19,12 @@ import 'pages/profile_page.dart';
 import 'pages/short_link_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/settings_page.dart';
-import 'pages/fanzine_editor_page.dart';
+import 'pages/fanzine_editor_page.dart'; // Keeping import just in case, but no longer the primary route
 import 'pages/curator_dashboard_page.dart';
 import 'pages/curator_workbench_page.dart';
 import 'pages/fanzine_reader_page.dart';
 import 'pages/publisher_page.dart';
-import 'pages/moderator_feed_page.dart'; // NEW
+import 'pages/moderator_feed_page.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -119,7 +119,6 @@ class _MyAppState extends State<MyApp> {
           builder: (context, state) => const CuratorDashboardPage(),
         ),
 
-        // NEW MODERATOR ROUTE
         GoRoute(
           path: '/moderator',
           name: 'moderatorFeed',
@@ -163,12 +162,17 @@ class _MyAppState extends State<MyApp> {
             path: '/settings',
             name: 'settings',
             builder: (context, state) => const SettingsPage()),
+
+        // UPDATED: Now maps to FanzineReaderPage in editing mode!
         GoRoute(
           path: '/editor/:fanzineId',
           name: 'fanzineEditor',
           builder: (context, state) {
             final fanzineId = state.pathParameters['fanzineId']!;
-            return FanzineEditorPage(fanzineId: fanzineId);
+            return FanzineReaderPage(
+              fanzineId: fanzineId,
+              isEditingMode: true,
+            );
           },
         ),
         GoRoute(

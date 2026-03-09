@@ -26,6 +26,7 @@ class UserProvider extends ChangeNotifier {
     'Approve': false, // Editor tool - starts hidden
     'Fanzine': false, // Editor tool - starts hidden
     'Credits': false,  // Editor tool - starts hidden
+    'Edit': true,     // Edit toggle - starts visible for editors
   };
 
   UserProvider() {
