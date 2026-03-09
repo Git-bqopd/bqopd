@@ -16,6 +16,10 @@ class FanzineLayout extends StatelessWidget {
   final ItemScrollController listScrollController;
   final int initialIndex;
 
+  // New fields for Inline Editor Migration
+  final bool isEditingMode;
+  final VoidCallback onToggleEditMode;
+
   final ViewService viewService;
   final Function(int pageIndex) onSwitchToSingle;
   final Function(int pageIndex)? onSwitchToGrid;
@@ -29,6 +33,8 @@ class FanzineLayout extends StatelessWidget {
     required this.gridScrollController,
     required this.listScrollController,
     required this.initialIndex,
+    required this.isEditingMode,
+    required this.onToggleEditMode,
     required this.viewService,
     required this.onSwitchToSingle,
     this.onSwitchToGrid,
@@ -52,6 +58,8 @@ class FanzineLayout extends StatelessWidget {
         itemScrollController: listScrollController,
         initialIndex: initialIndex,
         viewService: viewService,
+        isEditingMode: isEditingMode,
+        onToggleEditMode: onToggleEditMode,
         onOpenGrid: onSwitchToGrid,
       );
     }

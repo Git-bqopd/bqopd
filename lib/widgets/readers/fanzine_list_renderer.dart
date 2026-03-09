@@ -12,6 +12,7 @@ import '../../utils/link_parser.dart';
 import '../comment_item.dart';
 import '../stats_table.dart';
 import '../youtube_player_widget.dart';
+import '../templates/basic_text_template.dart';
 
 class FanzineListRenderer extends StatefulWidget {
   final String fanzineId;
@@ -19,6 +20,8 @@ class FanzineListRenderer extends StatefulWidget {
   final Widget headerWidget;
   final ItemScrollController itemScrollController;
   final ViewService viewService;
+  final bool isEditingMode;
+  final VoidCallback onToggleEditMode;
   final Function(int)? onOpenGrid;
   final int initialIndex;
   final Function(Widget drawerContent)? onExternalDrawerRequest;
@@ -30,6 +33,8 @@ class FanzineListRenderer extends StatefulWidget {
     required this.headerWidget,
     required this.itemScrollController,
     required this.viewService,
+    this.isEditingMode = false,
+    required this.onToggleEditMode,
     this.onOpenGrid,
     this.initialIndex = 0,
     this.onExternalDrawerRequest,
@@ -70,9 +75,11 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     super.dispose();
   }
 
-  void _handleTextToggle(int index, String text) {
+  // --- TOGGLE HANDLERS ---
+
+  void _handleTextToggle(int index, String text, String imageId) {
     if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarText(text));
+      widget.onExternalDrawerRequest!(_buildSidebarText(text, imageId));
     } else {
       setState(() {
         _openTextRows[index] = !(_openTextRows[index] ?? false);
@@ -150,7 +157,16 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     }
   }
 
-  Widget _buildSidebarText(String text) => _SidebarWrapper(title: "TRANSCRIPTION", child: SelectableText.rich(LinkParser.renderLinks(context, text, baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia'))));
+  // --- SIDEBAR BUILDERS ---
+
+  Widget _buildSidebarText(String text, String imageId) {
+    return _SidebarWrapper(
+        title: "", // Removed "TRANSCRIPTION" header
+        child: widget.isEditingMode
+            ? _InlineTextEditor(imageId: imageId, initialText: text)
+            : SelectableText.rich(LinkParser.renderLinks(context, text, baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia')))
+    );
+  }
 
   Widget _buildSidebarComments(int pageIndex, String imageId) {
     final controller = _commentControllers.putIfAbsent(pageIndex, () => TextEditingController());
@@ -200,12 +216,14 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           pageData: pageData,
           fanzineId: widget.fanzineId,
           fanzineTitle: _fanzineTitle,
+          isEditingMode: widget.isEditingMode,
+          onToggleEditMode: widget.onToggleEditMode,
           isTextOpen: _openTextRows[pageIndex] ?? false,
           isCommentsOpen: _openCommentRows[pageIndex] ?? false,
           isViewsOpen: _openViewRows[pageIndex] ?? false,
           isCreditsOpen: _openCreditRows[pageIndex] ?? false,
           isYouTubeOpen: _openYouTubeRows[pageIndex] ?? false,
-          onToggleText: () => _handleTextToggle(pageIndex, pageData['text_processed'] ?? pageData['text'] ?? ''),
+          onToggleText: (actualText) => _handleTextToggle(pageIndex, actualText, imageId),
           onToggleComment: () => _handleCommentToggle(pageIndex, imageId),
           onToggleViews: () => _handleViewToggle(pageIndex, imageId),
           onToggleCredits: () => _handleCreditToggle(pageIndex, imageId),
@@ -226,12 +244,14 @@ class _PageWidget extends StatefulWidget {
   final Map<String, dynamic> pageData;
   final String fanzineId;
   final String fanzineTitle;
+  final bool isEditingMode;
+  final VoidCallback onToggleEditMode;
   final bool isTextOpen;
   final bool isCommentsOpen;
   final bool isViewsOpen;
   final bool isCreditsOpen;
   final bool isYouTubeOpen;
-  final VoidCallback onToggleText;
+  final Function(String actualText) onToggleText;
   final VoidCallback onToggleComment;
   final VoidCallback onToggleViews;
   final VoidCallback onToggleCredits;
@@ -247,6 +267,8 @@ class _PageWidget extends StatefulWidget {
     required this.pageData,
     required this.fanzineId,
     required this.fanzineTitle,
+    required this.isEditingMode,
+    required this.onToggleEditMode,
     required this.isTextOpen,
     required this.isCommentsOpen,
     required this.isViewsOpen,
@@ -306,57 +328,72 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
           ),
         ),
         const SizedBox(height: verticalGap),
-        Container(
-          color: Colors.white,
-          child: FutureBuilder<DocumentSnapshot>(
-            future: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).get() : null,
-            builder: (context, snapshot) {
-              bool isGame = false;
-              String? youtubeId;
 
-              if (snapshot.hasData && snapshot.data?.data() != null) {
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                isGame = data['isGame'] == true;
-                youtubeId = data['youtubeId'] as String?;
-              }
+        // Use FutureBuilder to load metadata from top-level 'images' collection
+        FutureBuilder<DocumentSnapshot>(
+          future: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).get() : null,
+          builder: (context, snapshot) {
+            bool isGame = false;
+            String? youtubeId;
+            String actualText = "";
 
-              return SocialToolbar(
-                imageId: imageId,
-                pageId: pageId,
-                fanzineId: widget.fanzineId,
-                pageNumber: widget.pageIndex + 1,
-                isGame: isGame,
-                youtubeId: youtubeId,
-                onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
-                onToggleComments: widget.onToggleComment,
-                onToggleText: widget.onToggleText,
-                onToggleViews: widget.onToggleViews,
-                onToggleCredits: widget.onToggleCredits,
-                onToggleYouTube: widget.onToggleYouTube,
-              );
-            },
-          ),
+            if (snapshot.hasData && snapshot.data?.data() != null) {
+              final data = snapshot.data!.data() as Map<String, dynamic>;
+              isGame = data['isGame'] == true;
+              youtubeId = data['youtubeId'] as String?;
+              actualText = data['text_processed'] ?? data['text'] ?? '';
+            }
+
+            return Column(
+              children: [
+                Container(
+                  color: Colors.white,
+                  child: SocialToolbar(
+                    imageId: imageId,
+                    pageId: pageId,
+                    fanzineId: widget.fanzineId,
+                    pageNumber: widget.pageIndex + 1,
+                    isGame: isGame,
+                    youtubeId: youtubeId,
+                    isEditingMode: widget.isEditingMode,
+                    onToggleEditMode: widget.onToggleEditMode,
+                    onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
+                    onToggleComments: widget.onToggleComment,
+                    onToggleText: () => widget.onToggleText(actualText),
+                    onToggleViews: widget.onToggleViews,
+                    onToggleCredits: widget.onToggleCredits,
+                    onToggleYouTube: widget.onToggleYouTube,
+                  ),
+                ),
+                if (widget.isTextOpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(
+                    color: const Color(0xFFFDFBF7),
+                    child: widget.isEditingMode
+                        ? _InlineTextEditor(imageId: imageId, initialText: actualText)
+                        : SelectableText.rich(LinkParser.renderLinks(context, actualText, baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia'))),
+                  ),
+                ],
+                if (widget.isYouTubeOpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(color: Colors.black, child: YouTubePlayerWidget(imageId: imageId)),
+                ],
+                if (widget.isCommentsOpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(color: Colors.white, child: Column(children: [ConstrainedBox(constraints: const BoxConstraints(maxHeight: 300), child: _CommentList(imageId: imageId, service: EngagementService())), _CommentInput(controller: widget.commentController, onSend: () => widget.submitComment(imageId))])),
+                ],
+                if (widget.isViewsOpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(color: Colors.grey[50]!, child: StatsTable(contentId: imageId, viewService: widget.viewService)),
+                ],
+                if (widget.isCreditsOpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(color: Colors.white, child: _CreditsEditorWidget(imageId: imageId)),
+                ],
+              ],
+            );
+          },
         ),
-        if (widget.isTextOpen) ...[
-          const SizedBox(height: verticalGap),
-          _BonusRowWrapper(color: const Color(0xFFFDFBF7), child: SelectableText.rich(LinkParser.renderLinks(context, widget.pageData['text_processed'] ?? widget.pageData['text'] ?? '', baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia')))),
-        ],
-        if (widget.isYouTubeOpen) ...[
-          const SizedBox(height: verticalGap),
-          _BonusRowWrapper(color: Colors.black, child: YouTubePlayerWidget(imageId: imageId)),
-        ],
-        if (widget.isCommentsOpen) ...[
-          const SizedBox(height: verticalGap),
-          _BonusRowWrapper(color: Colors.white, child: Column(children: [ConstrainedBox(constraints: const BoxConstraints(maxHeight: 300), child: _CommentList(imageId: imageId, service: EngagementService())), _CommentInput(controller: widget.commentController, onSend: () => widget.submitComment(imageId))])),
-        ],
-        if (widget.isViewsOpen) ...[
-          const SizedBox(height: verticalGap),
-          _BonusRowWrapper(color: Colors.grey[50]!, child: StatsTable(contentId: imageId, viewService: widget.viewService)),
-        ],
-        if (widget.isCreditsOpen) ...[
-          const SizedBox(height: verticalGap),
-          _BonusRowWrapper(color: Colors.white, child: _CreditsEditorWidget(imageId: imageId)),
-        ],
       ],
     );
   }
@@ -373,7 +410,11 @@ class _SidebarWrapper extends StatelessWidget {
   final String title; final Widget child;
   const _SidebarWrapper({super.key, required this.title, required this.child});
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Container(padding: const EdgeInsets.all(16), color: Colors.grey[200], child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2))), Expanded(child: Padding(padding: const EdgeInsets.all(16), child: child))]);
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    if (title.isNotEmpty)
+      Container(padding: const EdgeInsets.all(16), color: Colors.grey[200], child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2))),
+    Expanded(child: Padding(padding: const EdgeInsets.all(16), child: child))
+  ]);
 }
 
 class _CommentList extends StatelessWidget {
@@ -744,6 +785,150 @@ class _CreditsEditorWidgetState extends State<_CreditsEditorWidget> {
               ]
           );
         }
+    );
+  }
+}
+
+class _InlineTextEditor extends StatefulWidget {
+  final String imageId;
+  final String initialText;
+
+  const _InlineTextEditor({super.key, required this.imageId, required this.initialText});
+
+  @override
+  State<_InlineTextEditor> createState() => _InlineTextEditorState();
+}
+
+class _InlineTextEditorState extends State<_InlineTextEditor> {
+  late TextEditingController _controller;
+  bool _isSaving = false;
+  bool _showPreview = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void didUpdateWidget(covariant _InlineTextEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the imageId changes, we update the controller
+    if (oldWidget.imageId != widget.imageId) {
+      _controller.text = widget.initialText;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _isSaving = true);
+    try {
+      await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({
+        'text': _controller.text,
+        'text_processed': _controller.text,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Text saved!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text("TEXT EDITOR", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => setState(() => _showPreview = !_showPreview),
+                  icon: Icon(_showPreview ? Icons.visibility_off : Icons.visibility, size: 16),
+                  label: Text(_showPreview ? "Hide Preview" : "Show Preview", style: const TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _save,
+                  icon: _isSaving
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.save, size: 16),
+                  label: const Text("Save", style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: Size.zero,
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _controller,
+          maxLines: null,
+          minLines: 5,
+          decoration: const InputDecoration(
+            hintText: "Enter text transcription...",
+            border: OutlineInputBorder(),
+            fillColor: Colors.white,
+            filled: true,
+          ),
+          style: const TextStyle(fontFamily: 'Courier', fontSize: 14),
+        ),
+        if (_showPreview) ...[
+          const SizedBox(height: 16),
+          const Text("LIVE PREVIEW (2000x3200 Scale)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)),
+            child: ListenableBuilder(
+              listenable: _controller,
+              builder: (context, _) {
+                final pagesOfBlocks = BasicTextTemplate.paginateContent(_controller.text);
+                if (pagesOfBlocks.isEmpty) return const SizedBox(height: 200, child: Center(child: Text("No content")));
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: pagesOfBlocks.length,
+                  separatorBuilder: (c, i) => const Divider(height: 32, thickness: 2),
+                  itemBuilder: (context, index) {
+                    return Column(
+                      children: [
+                        Text("Page ${index + 1}", style: const TextStyle(color: Colors.grey)),
+                        const SizedBox(height: 8),
+                        AspectRatio(
+                          aspectRatio: 2000 / 3200,
+                          child: FittedBox(
+                            fit: BoxFit.contain,
+                            child: BasicTextTemplate(
+                              columns: pagesOfBlocks[index],
+                              showOverlay: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ]
+      ],
     );
   }
 }

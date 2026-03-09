@@ -10,15 +10,18 @@ import '../widgets/fanzine_widget.dart';
 import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
+import '../widgets/fanzine_editor_widget.dart'; // NEW IMPORT
 
 class FanzineReaderPage extends StatefulWidget {
   final String? fanzineId;
   final String? shortCode;
+  final bool isEditingMode; // NEW: Flag to swap layouts
 
   const FanzineReaderPage({
     super.key,
     this.fanzineId,
     this.shortCode,
+    this.isEditingMode = false, // Default to Reader mode
   });
 
   @override
@@ -35,6 +38,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   // Data State
   bool _twoPagePreference = true; // Default from DB
+  bool _isEditingMode = false; // NEW: Local state for the toggle
 
   // Navigation State
   int _targetIndex = 0;
@@ -59,6 +63,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   @override
   void initState() {
     super.initState();
+    _isEditingMode = widget.isEditingMode;
     _initData();
   }
 
@@ -194,7 +199,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-          if (!currentLoc.contains(_resolvedShortCode!)) {
+          if (!currentLoc.contains(_resolvedShortCode!) && !widget.isEditingMode) {
             context.go('/$_resolvedShortCode');
           }
         } catch (_) {}
@@ -246,8 +251,27 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     });
   }
 
-  // RESTORED: This was the working fix that avoided the "Widget already in tree" crash
+  void _toggleEditMode() {
+    setState(() {
+      _isEditingMode = !_isEditingMode;
+      _activeDrawerContent = null; // Close any open drawers when switching modes
+    });
+  }
+
   Widget _buildHeader() {
+    // NEW: Render the Editor Control Panel if we are in Editing Mode
+    if (_isEditingMode && _resolvedFanzineId != null) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: FanzineEditorWidget(fanzineId: _resolvedFanzineId!),
+          ),
+        ),
+      );
+    }
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 450),
@@ -278,6 +302,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 listScrollController: _mobileListScrollController,
                 initialIndex: _targetIndex,
                 viewService: _viewService,
+                isEditingMode: _isEditingMode,
+                onToggleEditMode: _toggleEditMode,
                 onSwitchToSingle: (idx) {
                   setState(() { _targetIndex = idx; _twoPagePreference = false; });
                 },
@@ -320,6 +346,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                       itemScrollController: _desktopListScrollController,
                       initialIndex: _targetIndex,
                       viewService: _viewService,
+                      isEditingMode: _isEditingMode,
+                      onToggleEditMode: _toggleEditMode,
                       onOpenGrid: null,
                       onExternalDrawerRequest: _handleDesktopDrawerRequest,
                     ),
