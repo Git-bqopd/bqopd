@@ -54,6 +54,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
 
+  // Global Font Size Notifier for the reader session
+  final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
+
   String _fanzineTitle = '...';
 
   @override
@@ -72,6 +75,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   @override
   void dispose() {
     for (var c in _commentControllers.values) c.dispose();
+    _fontSizeNotifier.dispose();
     super.dispose();
   }
 
@@ -161,10 +165,26 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
   Widget _buildSidebarText(String text, String imageId) {
     return _SidebarWrapper(
-        title: "", // Removed "TRANSCRIPTION" header
-        child: widget.isEditingMode
-            ? _InlineTextEditor(imageId: imageId, initialText: text)
-            : SelectableText.rich(LinkParser.renderLinks(context, text, baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia')))
+      title: "", // Removed "TRANSCRIPTION" header
+      child: widget.isEditingMode
+          ? _InlineTextEditor(imageId: imageId, initialText: text)
+          : Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FontSizeSlider(fontSizeNotifier: _fontSizeNotifier),
+          Expanded(
+            child: ValueListenableBuilder<double>(
+              valueListenable: _fontSizeNotifier,
+              builder: (context, size, _) {
+                return SelectableText.rich(
+                  LinkParser.renderLinks(context, text, baseStyle: TextStyle(fontSize: size, fontFamily: 'Georgia')),
+                  textAlign: TextAlign.justify,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -232,6 +252,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           submitComment: (imgId) => _submitComment(pageIndex, imgId),
           commentController: _commentControllers.putIfAbsent(pageIndex, () => TextEditingController()),
           viewService: widget.viewService,
+          fontSizeNotifier: _fontSizeNotifier,
         );
       },
     );
@@ -260,6 +281,7 @@ class _PageWidget extends StatefulWidget {
   final Function(String) submitComment;
   final TextEditingController commentController;
   final ViewService viewService;
+  final ValueNotifier<double> fontSizeNotifier;
 
   const _PageWidget({
     required this.index,
@@ -283,6 +305,7 @@ class _PageWidget extends StatefulWidget {
     required this.submitComment,
     required this.commentController,
     required this.viewService,
+    required this.fontSizeNotifier,
   });
 
   @override
@@ -329,7 +352,6 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
         ),
         const SizedBox(height: verticalGap),
 
-        // Use FutureBuilder to load metadata from top-level 'images' collection
         FutureBuilder<DocumentSnapshot>(
           future: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).get() : null,
           builder: (context, snapshot) {
@@ -369,9 +391,23 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                   const SizedBox(height: verticalGap),
                   _BonusRowWrapper(
                     color: const Color(0xFFFDFBF7),
-                    child: widget.isEditingMode
-                        ? _InlineTextEditor(imageId: imageId, initialText: actualText)
-                        : SelectableText.rich(LinkParser.renderLinks(context, actualText, baseStyle: const TextStyle(fontSize: 14, fontFamily: 'Georgia'))),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!widget.isEditingMode) _FontSizeSlider(fontSizeNotifier: widget.fontSizeNotifier),
+                        widget.isEditingMode
+                            ? _InlineTextEditor(imageId: imageId, initialText: actualText)
+                            : ValueListenableBuilder<double>(
+                          valueListenable: widget.fontSizeNotifier,
+                          builder: (context, size, _) {
+                            return SelectableText.rich(
+                              LinkParser.renderLinks(context, actualText, baseStyle: TextStyle(fontSize: size, fontFamily: 'Georgia')),
+                              textAlign: TextAlign.justify,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ],
                 if (widget.isYouTubeOpen) ...[
@@ -395,6 +431,53 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
           },
         ),
       ],
+    );
+  }
+}
+
+class _FontSizeSlider extends StatelessWidget {
+  final ValueNotifier<double> fontSizeNotifier;
+  const _FontSizeSlider({required this.fontSizeNotifier});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        children: [
+          const Icon(Icons.format_size, size: 14, color: Colors.grey),
+          Expanded(
+            child: ValueListenableBuilder<double>(
+              valueListenable: fontSizeNotifier,
+              builder: (context, size, _) {
+                return SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 2,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                    activeTrackColor: Colors.black54,
+                    inactiveTrackColor: Colors.black12,
+                    thumbColor: Colors.black,
+                  ),
+                  child: Slider(
+                    value: size,
+                    min: 12.0,
+                    max: 48.0,
+                    divisions: 36,
+                    onChanged: (val) => fontSizeNotifier.value = val,
+                  ),
+                );
+              },
+            ),
+          ),
+          ValueListenableBuilder<double>(
+            valueListenable: fontSizeNotifier,
+            builder: (context, size, _) {
+              return Text("${size.toInt()}px", style: const TextStyle(fontSize: 10, color: Colors.grey));
+            },
+          ),
+        ],
+      ),
     );
   }
 }
@@ -813,7 +896,6 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
   @override
   void didUpdateWidget(covariant _InlineTextEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If the imageId changes, we update the controller
     if (oldWidget.imageId != widget.imageId) {
       _controller.text = widget.initialText;
     }
