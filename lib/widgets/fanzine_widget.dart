@@ -96,7 +96,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         _showLoginLink = false;
         final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
         final myUsername = userDoc.data()?['username'] ?? 'user';
-        _displayUrl = 'bqopd.com/@$myUsername';
+        _displayUrl = 'bqopd.com/$myUsername';
         _targetShortCode = myUsername;
       }
     } catch (e) {
@@ -114,7 +114,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
       if (userDoc.exists) {
         final username = userDoc.data()?['username'] as String?;
-        _displayUrl = 'bqopd.com/@$username';
+        _displayUrl = 'bqopd.com/$username';
         _targetShortCode = username;
       }
     } catch (e) {
