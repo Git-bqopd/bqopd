@@ -209,14 +209,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     });
   }
 
-  void _handleOCRDrawer(String imageId) {
-    _handleDesktopDrawerRequest(Container(padding: const EdgeInsets.all(16), child: const Text("OCR Processing logic coming soon in Phase 3 Task 2.")));
-  }
-
-  void _handleEntitiesDrawer(String imageId) {
-    _handleDesktopDrawerRequest(Container(padding: const EdgeInsets.all(16), child: const Text("Entity Validation logic coming soon in Phase 3 Task 2.")));
-  }
-
   Widget _buildHeader() {
     if (_isEditingMode && _resolvedFanzineId != null) {
       return Center(

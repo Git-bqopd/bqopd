@@ -26,8 +26,9 @@ class SocialToolbar extends StatefulWidget {
   final VoidCallback? onToggleViews;
   final VoidCallback? onToggleCredits;
   final VoidCallback? onToggleYouTube;
-  final VoidCallback? onToggleOCR;      // NEW
-  final VoidCallback? onToggleEntities; // NEW
+  final VoidCallback? onToggleOCR;
+  final VoidCallback? onToggleEntities;
+  final VoidCallback? onTogglePublisher;
 
   final VoidCallback? onApprove;
   final VoidCallback? onFanzine;
@@ -50,6 +51,7 @@ class SocialToolbar extends StatefulWidget {
     this.onToggleYouTube,
     this.onToggleOCR,
     this.onToggleEntities,
+    this.onTogglePublisher,
     this.onApprove,
     this.onFanzine,
   });
@@ -147,6 +149,9 @@ class _SocialToolbarState extends State<SocialToolbar> {
                     SocialActionButton(icon: Icons.person_search, label: 'Entities', onTap: widget.onToggleEntities),
                     const SizedBox(width: 16),
                   ],
+                  SocialActionButton(icon: Icons.auto_awesome_motion, label: 'Publisher', onTap: widget.onTogglePublisher),
+                  const SizedBox(width: 16),
+
                   if (buttonVisibility['Approve'] == true) ...[
                     SocialActionButton(icon: Icons.verified, label: 'Approve', onTap: widget.onApprove),
                     const SizedBox(width: 16),

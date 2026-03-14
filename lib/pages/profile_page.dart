@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:bqopd/widgets/page_wrapper.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
@@ -31,9 +33,14 @@ class _ProfilePageState extends State<ProfilePage> {
   // false = published (default), true = drafts (pending)
   bool _showDrafts = false;
 
+  // Local state for Editor tab sub-filter
+  // 0 = curator (in-process), 1 = publisher (live)
+  int _editorSubTabIndex = 0;
+
   // Data fetching state
   Map<String, dynamic>? _userData;
   bool _isLoadingData = true;
+  bool _isUploadingPdf = false;
   String? _errorMessage;
 
   @override
@@ -51,6 +58,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadAllData() async {
+    if (!mounted) return;
     setState(() {
       _isLoadingData = true;
       _errorMessage = null;
@@ -65,14 +73,11 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
 
-    // 1. Fetch User Data
     try {
       if (currentUid != null && targetId == currentUid) {
-        // Viewing Self
         if (provider.userProfile != null) {
           _userData = provider.userProfile;
         } else {
-          // Wait for provider? Or fetch directly. Fetching directly is safer here.
           final doc = await FirebaseFirestore.instance
               .collection('Users')
               .doc(targetId)
@@ -80,7 +85,6 @@ class _ProfilePageState extends State<ProfilePage> {
           if (doc.exists) _userData = doc.data();
         }
       } else {
-        // Viewing Others
         final doc = await FirebaseFirestore.instance
             .collection('Users')
             .doc(targetId)
@@ -92,7 +96,6 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
 
-      // Sync URL vanity check
       if (_userData != null) {
         _syncUrl(_userData!['username']);
       }
@@ -100,7 +103,6 @@ class _ProfilePageState extends State<ProfilePage> {
       _errorMessage = "Error loading user: $e";
     }
 
-    // 2. Determine Tab
     await _determineInitialTab(targetId);
 
     if (mounted) setState(() => _isLoadingData = false);
@@ -115,7 +117,6 @@ class _ProfilePageState extends State<ProfilePage> {
         final currentPath = router.routerDelegate.currentConfiguration.uri.path;
         final targetPath = '/$username';
         if (currentPath != targetPath && currentPath != '/profile') {
-          // Only redirect if we are on a generic route and want a vanity one
           router.go(targetPath);
         }
       } catch (_) {}
@@ -166,6 +167,56 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _handlePdfUpload(String userId) async {
+    if (_isUploadingPdf) return;
+
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+
+      if (result != null) {
+        setState(() => _isUploadingPdf = true);
+
+        PlatformFile file = result.files.first;
+        Uint8List? fileBytes = file.bytes;
+        String fileName = file.name;
+
+        if (fileBytes != null) {
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('uploads/raw_pdfs/$fileName');
+
+          final metadata = SettableMetadata(
+            contentType: 'application/pdf',
+            customMetadata: {
+              'uploaderId': userId,
+              'originalName': fileName,
+            },
+          );
+
+          await storageRef.putData(fileBytes, metadata);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Uploaded "$fileName". Curator processing started.')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPdf = false);
+    }
+  }
+
   bool _canEdit(String profileUid) {
     final provider = Provider.of<UserProvider>(context, listen: false);
     final currentUid = provider.currentUserId;
@@ -183,7 +234,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final currentUid = userProvider.currentUserId;
     final targetUserId = widget.userId ?? currentUid;
 
-    // Login Wall
     if (!userProvider.isLoading && targetUserId == null) {
       return Scaffold(
         backgroundColor: Colors.grey[200],
@@ -208,11 +258,10 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SafeArea(
         child: PageWrapper(
           maxWidth: 900,
-          scroll: false, // CustomScrollView handles scrolling
-          padding: EdgeInsets.zero, // Handle padding inside slivers
+          scroll: false,
+          padding: EdgeInsets.zero,
           child: CustomScrollView(
             slivers: [
-              // 1. Profile Header (Scrolls naturally)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(8.0),
@@ -224,19 +273,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
 
-              // 2. Sticky Tab Bar
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _ProfileTabsDelegate(
                   child: SizedBox(
-                    height: 50, // Force height to match minExtent/maxExtent
+                    height: 50,
                     child: ProfileNavBar(
                       currentIndex: _currentIndex ?? 5,
                       onTabChanged: (idx) =>
                           setState(() {
                             _currentIndex = idx;
-                            // Reset drafts view when switching tabs
                             if (idx != 1) _showDrafts = false;
+                            if (idx != 0) _editorSubTabIndex = 0;
                           }),
                       canEdit: canEditProfile,
                       onUploadImage: () => _showImageUpload(targetUserId),
@@ -245,40 +293,91 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
 
-              // 2.5 Secondary Toolbar (Pages Tab Only) - Also Sticky
-              // Only show if user is viewing their own profile (isOwner) AND on 'pages' tab
+              // Sub-navigation for Editor Tab
+              if (_currentIndex == 0 && canEditProfile && isOwner)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _ProfileTabsDelegate(
+                    child: Container(
+                      height: 50,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(bottom: BorderSide(color: Colors.black12)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: _isUploadingPdf ? null : () => _handlePdfUpload(targetUserId),
+                            child: Text(
+                              _isUploadingPdf ? "uploading..." : "upload PDF",
+                              style: const TextStyle(color: Colors.black),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Text("|", style: TextStyle(color: Colors.grey)),
+                          ),
+                          GestureDetector(
+                            onTap: () => setState(() => _editorSubTabIndex = 0),
+                            child: Text(
+                              "curator",
+                              style: TextStyle(
+                                color: _editorSubTabIndex == 0 ? Colors.black : Colors.grey,
+                                fontWeight: _editorSubTabIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                                decoration: _editorSubTabIndex == 0 ? TextDecoration.underline : null,
+                              ),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Text("|", style: TextStyle(color: Colors.grey)),
+                          ),
+                          GestureDetector(
+                            onTap: () => setState(() => _editorSubTabIndex = 1),
+                            child: Text(
+                              "publisher",
+                              style: TextStyle(
+                                color: _editorSubTabIndex == 1 ? Colors.black : Colors.grey,
+                                fontWeight: _editorSubTabIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                                decoration: _editorSubTabIndex == 1 ? TextDecoration.underline : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Sub-navigation for Pages Tab
               if (_currentIndex == 1 && canEditProfile && isOwner)
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: _ProfileTabsDelegate(
                     child: Container(
-                      height: 50, // Match the delegate's extent
+                      height: 50,
                       decoration: const BoxDecoration(
                         color: Colors.white,
-                        border: Border(
-                            bottom: BorderSide(color: Colors.black12)),
+                        border: Border(bottom: BorderSide(color: Colors.black12)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           GestureDetector(
                             onTap: () => _showImageUpload(targetUserId),
-                            child: const Text("upload image",
-                                style: TextStyle(
-                                    fontWeight: FontWeight.normal, // No longer bold
-                                    color: Colors.black)),
+                            child: const Text("upload image", style: TextStyle(color: Colors.black)),
                           ),
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 8.0),
-                            child: Text("|",
-                                style: TextStyle(color: Colors.grey)),
+                            child: Text("|", style: TextStyle(color: Colors.grey)),
                           ),
                           GestureDetector(
                             onTap: () => setState(() => _showDrafts = false),
                             child: Text(
                               "published pages",
                               style: TextStyle(
-                                color: !_showDrafts ? Colors.black : Colors.grey, // Active color logic
+                                color: !_showDrafts ? Colors.black : Colors.grey,
                                 fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal,
                                 decoration: !_showDrafts ? TextDecoration.underline : null,
                               ),
@@ -286,15 +385,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 8.0),
-                            child: Text("|",
-                                style: TextStyle(color: Colors.grey)),
+                            child: Text("|", style: TextStyle(color: Colors.grey)),
                           ),
                           GestureDetector(
                             onTap: () => setState(() => _showDrafts = true),
                             child: Text(
                               "draft pages",
                               style: TextStyle(
-                                color: _showDrafts ? Colors.black : Colors.grey, // Active color logic
+                                color: _showDrafts ? Colors.black : Colors.grey,
                                 fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal,
                                 decoration: _showDrafts ? TextDecoration.underline : null,
                               ),
@@ -306,14 +404,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
 
-              // 3. Spacing
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-              // 4. Content Grid
-              _buildContentSliver(
-                  targetUserId, isOwner, userProvider.isEditor),
+              _buildContentSliver(targetUserId, isOwner, userProvider.isEditor),
 
-              // 5. Bottom Padding
               const SliverToBoxAdapter(child: SizedBox(height: 64)),
             ],
           ),
@@ -322,52 +416,70 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildContentSliver(
-      String targetUserId, bool isOwner, bool isEditor) {
+  Widget _buildContentSliver(String targetUserId, bool isOwner, bool isEditor) {
     Stream<List<QueryDocumentSnapshot>>? stream;
     Widget? placeholder;
 
-    // ... (Existing logic for selecting stream source remains the same) ...
-    // Copying the switch logic from previous implementation
     switch (_currentIndex) {
       case 0: // EDITOR
-        if (!isOwner && !isEditor)
-          return const SliverToBoxAdapter(child: SizedBox());
+        if (!isOwner && !isEditor) return const SliverToBoxAdapter(child: SizedBox());
+
+        // Fetch all user zines and filter client-side to avoid index requirements
         stream = FirebaseFirestore.instance
             .collection('fanzines')
-            .where('editorId', isEqualTo: targetUserId)
-            .orderBy('creationDate', descending: true)
             .snapshots()
-            .map((snap) => snap.docs);
+            .map((snap) {
+          final List<QueryDocumentSnapshot> filtered = snap.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+
+            final hasSourceFile = data.containsKey('sourceFile');
+            final isLive = data['status'] == 'live';
+
+            if (_editorSubTabIndex == 0) {
+              // CURATOR: Show all in-process PDF zines that haven't gone live.
+              // Mirroring the Dashboard logic: any zine not live that has a source file.
+              return hasSourceFile && !isLive;
+            } else {
+              // PUBLISHER: Show zines that were manually created OR are now live.
+              // Only show for the specific user being viewed.
+              final isUserInvolved = data['editorId'] == targetUserId || data['uploaderId'] == targetUserId;
+              if (!isUserInvolved) return false;
+              return !hasSourceFile || isLive;
+            }
+          }).toList();
+
+          // Memory sort by creationDate descending
+          filtered.sort((a, b) {
+            final aT = (a.data() as Map)['creationDate'] as Timestamp?;
+            final bT = (b.data() as Map)['creationDate'] as Timestamp?;
+            if (aT == null) return 1;
+            if (bT == null) return -1;
+            return bT.compareTo(aT);
+          });
+
+          return filtered;
+        });
         break;
       case 1: // PAGES
-        Query query = FirebaseFirestore.instance
+        stream = FirebaseFirestore.instance
             .collection('images')
-            .where('uploaderId', isEqualTo: targetUserId);
-
-        // Fetch ALL images for this user, then filter client-side.
-        // This avoids complex index requirements and handles legacy data (missing status field).
-        stream = query
+            .where('uploaderId', isEqualTo: targetUserId)
             .orderBy('timestamp', descending: true)
             .snapshots()
             .map((snap) {
           if (isOwner) {
             if (_showDrafts) {
-              // Show only Pending
               return snap.docs.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return data['status'] == 'pending';
               }).toList();
             } else {
-              // Show Published (Approved OR Legacy/No Status)
-              // Explicitly exclude 'pending', include everything else.
               return snap.docs.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return data['status'] != 'pending';
               }).toList();
             }
           }
-          // If not owner (viewing someone else), only show published
           return snap.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             return data['status'] != 'pending';
@@ -383,8 +495,7 @@ class _ProfilePageState extends State<ProfilePage> {
             .map((snap) => snap.docs);
         break;
       case 3: // COMMENTS
-        placeholder = const Center(
-            child: Text("Letters of Comment functionality coming soon."));
+        placeholder = const Center(child: Text("Letters of Comment functionality coming soon."));
         break;
       case 4: // MENTIONS
         stream = FirebaseFirestore.instance
@@ -395,14 +506,12 @@ class _ProfilePageState extends State<ProfilePage> {
             .map((snap) => snap.docs);
         break;
       case 5: // COLLECTION
-        placeholder =
-        const Center(child: Text("User collection coming soon."));
+        placeholder = const Center(child: Text("User collection coming soon."));
         break;
     }
 
     if (placeholder != null) {
-      return SliverToBoxAdapter(
-          child: SizedBox(height: 200, child: placeholder));
+      return SliverToBoxAdapter(child: SizedBox(height: 200, child: placeholder));
     }
 
     if (stream == null) return const SliverToBoxAdapter(child: SizedBox());
@@ -411,14 +520,12 @@ class _ProfilePageState extends State<ProfilePage> {
       stream: stream,
       builder: (context, snapshot) {
         final buttons = <Widget>[];
-        // Reconstruct Buttons
-        if (_currentIndex == 0 && isOwner) {
+        if (_currentIndex == 0 && isOwner && _editorSubTabIndex == 1) {
           if (isEditor) {
             buttons.add(TextButton(
                 style: TextButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
-                    shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero)),
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
                 onPressed: () => _showNewFanzineModal(targetUserId),
                 child: const Text("make new fanzine",
                     textAlign: TextAlign.center,
@@ -427,61 +534,19 @@ class _ProfilePageState extends State<ProfilePage> {
           buttons.add(TextButton(
               style: TextButton.styleFrom(
                   backgroundColor: Colors.grey,
-                  shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero)),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
               onPressed: () => context.pushNamed('settings'),
               child: const Text("settings",
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white))));
         }
 
-        // --- ERROR HANDLING START ---
         if (snapshot.hasError) {
-          final errorMsg = snapshot.error.toString();
-          // Check for Firestore Index requirement
-          if (errorMsg.contains('failed-precondition') ||
-              errorMsg.contains('requires an index')) {
-            final urlRegex = RegExp(r'https://console\.firebase\.google\.com[^\s]+');
-            final match = urlRegex.firstMatch(errorMsg);
-            final indexUrl = match?.group(0);
-
-            return SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text("Database Index Required",
-                          style: TextStyle(
-                              color: Colors.red, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      const Text(
-                          "To filter this view properly, a Firestore index is needed.",
-                          textAlign: TextAlign.center),
-                      if (indexUrl != null) ...[
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: () => launchUrl(Uri.parse(indexUrl)),
-                          child: const Text("Create Index"),
-                        )
-                      ] else
-                        SelectableText(errorMsg,
-                            style: const TextStyle(
-                                fontSize: 10, color: Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
-          return SliverToBoxAdapter(child: Center(child: Text("Error: $errorMsg")));
+          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}")));
         }
-        // --- ERROR HANDLING END ---
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SliverToBoxAdapter(
-              child: Center(child: CircularProgressIndicator()));
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         }
 
         final docs = snapshot.data ?? [];
@@ -491,11 +556,10 @@ class _ProfilePageState extends State<ProfilePage> {
           String emptyMsg = "No items found.";
           if (_currentIndex == 1 && isOwner) {
             emptyMsg = _showDrafts ? "No pending drafts." : "No published pages.";
+          } else if (_currentIndex == 0 && isOwner) {
+            emptyMsg = _editorSubTabIndex == 0 ? "No zines in curator queue." : "No live fanzines.";
           }
-          return SliverToBoxAdapter(
-              child: SizedBox(
-                  height: 100,
-                  child: Center(child: Text(emptyMsg))));
+          return SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text(emptyMsg))));
         }
 
         return SliverPadding(
@@ -516,30 +580,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 final data = doc.data() as Map<String, dynamic>;
                 final docId = doc.id;
 
-                if (_currentIndex == 0 ||
-                    _currentIndex == 2 ||
-                    _currentIndex == 4) {
-                  // Fanzines
+                if (_currentIndex == 0 || _currentIndex == 2 || _currentIndex == 4) {
                   return _FanzineCoverTile(
                     fanzineId: docId,
                     title: data['title'] ?? 'Untitled',
-                    shouldEdit: _currentIndex == 0, // NEW: Conditional route
+                    shouldEdit: _currentIndex == 0,
                   );
                 } else {
-                  // Images
                   String? imageUrl = data['fileUrl'];
-                  if (imageUrl == null || imageUrl.isEmpty)
-                    return const SizedBox();
-
-                  Widget imageWidget = ClipRect(
-                      child: Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                        const Center(
-                            child: Icon(Icons.broken_image,
-                                color: Colors.grey)),
-                      ));
+                  if (imageUrl == null || imageUrl.isEmpty) return const SizedBox();
 
                   return GestureDetector(
                     onTap: () {
@@ -551,7 +600,13 @@ class _ProfilePageState extends State<ProfilePage> {
                               shortCode: data['shortCode'],
                               imageId: docId));
                     },
-                    child: imageWidget,
+                    child: ClipRect(
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                          const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                        )),
                   );
                 }
               },
@@ -564,41 +619,34 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-// Delegate for the Sticky Header
 class _ProfileTabsDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
-
   _ProfileTabsDelegate({required this.child});
 
   @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Material(elevation: overlapsContent ? 4 : 0, child: child);
   }
 
   @override
-  double get maxExtent => 50.0; // Approx height of tab bar
+  double get maxExtent => 50.0;
 
   @override
   double get minExtent => 50.0;
 
   @override
-  bool shouldRebuild(covariant _ProfileTabsDelegate oldDelegate) {
-    // Rebuild if child changes (e.g. index updated)
-    return true;
-  }
+  bool shouldRebuild(covariant _ProfileTabsDelegate oldDelegate) => true;
 }
 
-// Updated helper to handle conditional navigation
 class _FanzineCoverTile extends StatelessWidget {
   final String fanzineId;
   final String title;
-  final bool shouldEdit; // Added field
+  final bool shouldEdit;
 
   const _FanzineCoverTile({
     required this.fanzineId,
     required this.title,
-    this.shouldEdit = false, // Default to Reader
+    this.shouldEdit = false,
   });
 
   Future<String?> _fetchCoverUrl() async {
@@ -632,10 +680,11 @@ class _FanzineCoverTile extends StatelessWidget {
     return FutureBuilder<String?>(
       future: _fetchCoverUrl(),
       builder: (context, snapshot) {
+        final bool isLoading = snapshot.connectionState == ConnectionState.waiting;
         final imageUrl = snapshot.data;
+
         return GestureDetector(
           onTap: () {
-            // Conditional Routing based on tab context
             if (shouldEdit) {
               context.push('/editor/$fanzineId');
             } else {
@@ -658,9 +707,29 @@ class _FanzineCoverTile extends StatelessWidget {
               children: [
                 if (imageUrl != null)
                   Image.network(imageUrl, fit: BoxFit.cover)
+                else if (isLoading)
+                  const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 else
-                  const Center(
-                      child: Icon(Icons.book, size: 40, color: Colors.grey)),
+                // Improved Placeholder for unprocessed zines
+                  Container(
+                    color: Colors.grey[200],
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.pending_actions, size: 40, color: Colors.grey[400]),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Text(
+                            "Ingesting...",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey[500], fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 Positioned(
                   bottom: 0,
                   left: 0,

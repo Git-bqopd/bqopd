@@ -13,6 +13,8 @@ import '../comment_item.dart';
 import '../stats_table.dart';
 import '../youtube_player_widget.dart';
 import '../templates/basic_text_template.dart';
+import '../../services/user_bootstrap.dart';
+import '../../services/username_service.dart';
 
 class FanzineListRenderer extends StatefulWidget {
   final String fanzineId;
@@ -50,11 +52,12 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   final Map<int, bool> _openViewRows = {};
   final Map<int, bool> _openCreditRows = {};
   final Map<int, bool> _openYouTubeRows = {};
+  final Map<int, bool> _openOCRRows = {};
+  final Map<int, bool> _openEntityRows = {};
+  final Map<int, bool> _openPublisherRows = {};
 
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
-
-  // Global Font Size Notifier for the reader session
   final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
 
   String _fanzineTitle = '...';
@@ -79,20 +82,61 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     super.dispose();
   }
 
-  // --- TOGGLE HANDLERS ---
+  void _closeAllBonusRows(int index) {
+    _openTextRows[index] = false;
+    _openCommentRows[index] = false;
+    _openViewRows[index] = false;
+    _openCreditRows[index] = false;
+    _openYouTubeRows[index] = false;
+    _openOCRRows[index] = false;
+    _openEntityRows[index] = false;
+    _openPublisherRows[index] = false;
+  }
 
   void _handleTextToggle(int index, String text, String imageId) {
     if (widget.onExternalDrawerRequest != null) {
       widget.onExternalDrawerRequest!(_buildSidebarText(text, imageId));
     } else {
       setState(() {
-        _openTextRows[index] = !(_openTextRows[index] ?? false);
-        if (_openTextRows[index] == true) {
-          _openCommentRows[index] = false;
-          _openViewRows[index] = false;
-          _openCreditRows[index] = false;
-          _openYouTubeRows[index] = false;
-        }
+        final val = !(_openTextRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openTextRows[index] = val;
+      });
+    }
+  }
+
+  void _handleOCRToggle(int index, String imageId, String pageId) {
+    if (widget.onExternalDrawerRequest != null) {
+      widget.onExternalDrawerRequest!(_buildSidebarOCR(imageId, pageId));
+    } else {
+      setState(() {
+        final val = !(_openOCRRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openOCRRows[index] = val;
+      });
+    }
+  }
+
+  void _handleEntityToggle(int index, String imageId, String text) {
+    if (widget.onExternalDrawerRequest != null) {
+      widget.onExternalDrawerRequest!(_buildSidebarEntities(imageId, text));
+    } else {
+      setState(() {
+        final val = !(_openEntityRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openEntityRows[index] = val;
+      });
+    }
+  }
+
+  void _handlePublisherToggle(int index, String text, String imageId) {
+    if (widget.onExternalDrawerRequest != null) {
+      widget.onExternalDrawerRequest!(_buildSidebarPublisher(text, imageId));
+    } else {
+      setState(() {
+        final val = !(_openPublisherRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openPublisherRows[index] = val;
       });
     }
   }
@@ -102,13 +146,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
       widget.onExternalDrawerRequest!(_buildSidebarComments(index, imageId));
     } else {
       setState(() {
-        _openCommentRows[index] = !(_openCommentRows[index] ?? false);
-        if (_openCommentRows[index] == true) {
-          _openTextRows[index] = false;
-          _openViewRows[index] = false;
-          _openCreditRows[index] = false;
-          _openYouTubeRows[index] = false;
-        }
+        final val = !(_openCommentRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openCommentRows[index] = val;
       });
     }
   }
@@ -118,13 +158,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
       widget.onExternalDrawerRequest!(_buildSidebarViews(imageId));
     } else {
       setState(() {
-        _openViewRows[index] = !(_openViewRows[index] ?? false);
-        if (_openViewRows[index] == true) {
-          _openTextRows[index] = false;
-          _openCommentRows[index] = false;
-          _openCreditRows[index] = false;
-          _openYouTubeRows[index] = false;
-        }
+        final val = !(_openViewRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openViewRows[index] = val;
       });
     }
   }
@@ -134,13 +170,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
       widget.onExternalDrawerRequest!(_buildSidebarCredits(imageId));
     } else {
       setState(() {
-        _openCreditRows[index] = !(_openCreditRows[index] ?? false);
-        if (_openCreditRows[index] == true) {
-          _openTextRows[index] = false;
-          _openCommentRows[index] = false;
-          _openViewRows[index] = false;
-          _openYouTubeRows[index] = false;
-        }
+        final val = !(_openCreditRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openCreditRows[index] = val;
       });
     }
   }
@@ -150,22 +182,16 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
       widget.onExternalDrawerRequest!(_buildSidebarYouTube(imageId));
     } else {
       setState(() {
-        _openYouTubeRows[index] = !(_openYouTubeRows[index] ?? false);
-        if (_openYouTubeRows[index] == true) {
-          _openTextRows[index] = false;
-          _openCommentRows[index] = false;
-          _openViewRows[index] = false;
-          _openCreditRows[index] = false;
-        }
+        final val = !(_openYouTubeRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openYouTubeRows[index] = val;
       });
     }
   }
 
-  // --- SIDEBAR BUILDERS ---
-
   Widget _buildSidebarText(String text, String imageId) {
     return _SidebarWrapper(
-      title: "", // Removed "TRANSCRIPTION" header
+      title: "",
       child: widget.isEditingMode
           ? _InlineTextEditor(imageId: imageId, initialText: text)
           : Column(
@@ -185,6 +211,27 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSidebarOCR(String imageId, String pageId) {
+    return _SidebarWrapper(
+      title: "OCR PIPELINE (EGG EDITOR)",
+      child: _OCRStatusView(fanzineId: widget.fanzineId, pageId: pageId, imageId: imageId),
+    );
+  }
+
+  Widget _buildSidebarEntities(String imageId, String text) {
+    return _SidebarWrapper(
+      title: "PAGE ENTITIES",
+      child: _PageEntitiesView(text: text),
+    );
+  }
+
+  Widget _buildSidebarPublisher(String text, String imageId) {
+    return _SidebarWrapper(
+      title: "PUBLISHER (CHICKEN EDITOR)",
+      child: _InlineTextEditor(imageId: imageId, initialText: text, showPublisherPreview: true),
     );
   }
 
@@ -228,7 +275,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
-        final imageId = pageData['imageId'] ?? '';
+
+        // ROBUST ID CHECK: Fallback check for standard Firestore ID maps
+        final String pageId = pageData['id'] ?? pageData['__id'] ?? '';
+        final String imageId = pageData['imageId'] ?? '';
 
         return _PageWidget(
           index: index,
@@ -243,7 +293,13 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           isViewsOpen: _openViewRows[pageIndex] ?? false,
           isCreditsOpen: _openCreditRows[pageIndex] ?? false,
           isYouTubeOpen: _openYouTubeRows[pageIndex] ?? false,
+          isOCROpen: _openOCRRows[pageIndex] ?? false,
+          isEntitiesOpen: _openEntityRows[pageIndex] ?? false,
+          isPublisherOpen: _openPublisherRows[pageIndex] ?? false,
           onToggleText: (actualText) => _handleTextToggle(pageIndex, actualText, imageId),
+          onToggleOCR: () => _handleOCRToggle(pageIndex, imageId, pageId),
+          onToggleEntities: (actualText) => _handleEntityToggle(pageIndex, imageId, actualText),
+          onTogglePublisher: (actualText) => _handlePublisherToggle(pageIndex, actualText, imageId),
           onToggleComment: () => _handleCommentToggle(pageIndex, imageId),
           onToggleViews: () => _handleViewToggle(pageIndex, imageId),
           onToggleCredits: () => _handleCreditToggle(pageIndex, imageId),
@@ -272,7 +328,13 @@ class _PageWidget extends StatefulWidget {
   final bool isViewsOpen;
   final bool isCreditsOpen;
   final bool isYouTubeOpen;
+  final bool isOCROpen;
+  final bool isEntitiesOpen;
+  final bool isPublisherOpen;
   final Function(String actualText) onToggleText;
+  final VoidCallback onToggleOCR;
+  final Function(String actualText) onToggleEntities;
+  final Function(String actualText) onTogglePublisher;
   final VoidCallback onToggleComment;
   final VoidCallback onToggleViews;
   final VoidCallback onToggleCredits;
@@ -296,7 +358,13 @@ class _PageWidget extends StatefulWidget {
     required this.isViewsOpen,
     required this.isCreditsOpen,
     required this.isYouTubeOpen,
+    required this.isOCROpen,
+    required this.isEntitiesOpen,
+    required this.isPublisherOpen,
     required this.onToggleText,
+    required this.onToggleOCR,
+    required this.onToggleEntities,
+    required this.onTogglePublisher,
     required this.onToggleComment,
     required this.onToggleViews,
     required this.onToggleCredits,
@@ -320,7 +388,7 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
   void initState() {
     super.initState();
     final String imageId = widget.pageData['imageId'] ?? '';
-    final String pageId = widget.pageData['__id'] ?? '';
+    final String pageId = widget.pageData['id'] ?? widget.pageData['__id'] ?? '';
     if (imageId.isNotEmpty) {
       widget.viewService.recordView(
         imageId: imageId,
@@ -335,7 +403,7 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final String pageId = widget.pageData['__id'] ?? 'unknown';
+    final String pageId = widget.pageData['id'] ?? widget.pageData['__id'] ?? '';
     final String imageId = widget.pageData['imageId'] ?? '';
     const double verticalGap = 16.0;
 
@@ -352,8 +420,8 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
         ),
         const SizedBox(height: verticalGap),
 
-        FutureBuilder<DocumentSnapshot>(
-          future: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).get() : null,
+        StreamBuilder<DocumentSnapshot>(
+          stream: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots() : null,
           builder: (context, snapshot) {
             bool isGame = false;
             String? youtubeId;
@@ -363,7 +431,7 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
               final data = snapshot.data!.data() as Map<String, dynamic>;
               isGame = data['isGame'] == true;
               youtubeId = data['youtubeId'] as String?;
-              actualText = data['text_processed'] ?? data['text'] ?? '';
+              actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
             }
 
             return Column(
@@ -382,6 +450,9 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                     onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
                     onToggleComments: widget.onToggleComment,
                     onToggleText: () => widget.onToggleText(actualText),
+                    onToggleOCR: widget.onToggleOCR,
+                    onToggleEntities: () => widget.onToggleEntities(actualText),
+                    onTogglePublisher: () => widget.onTogglePublisher(actualText),
                     onToggleViews: widget.onToggleViews,
                     onToggleCredits: widget.onToggleCredits,
                     onToggleYouTube: widget.onToggleYouTube,
@@ -394,10 +465,8 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (!widget.isEditingMode) _FontSizeSlider(fontSizeNotifier: widget.fontSizeNotifier),
-                        widget.isEditingMode
-                            ? _InlineTextEditor(imageId: imageId, initialText: actualText)
-                            : ValueListenableBuilder<double>(
+                        _FontSizeSlider(fontSizeNotifier: widget.fontSizeNotifier),
+                        ValueListenableBuilder<double>(
                           valueListenable: widget.fontSizeNotifier,
                           builder: (context, size, _) {
                             return SelectableText.rich(
@@ -410,6 +479,27 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                     ),
                   ),
                 ],
+                if (widget.isOCROpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(
+                      color: Colors.grey[50]!,
+                      child: _OCRStatusView(fanzineId: widget.fanzineId, pageId: pageId, imageId: imageId)
+                  ),
+                ],
+                if (widget.isEntitiesOpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(
+                      color: Colors.white,
+                      child: _PageEntitiesView(text: actualText)
+                  ),
+                ],
+                if (widget.isPublisherOpen) ...[
+                  const SizedBox(height: verticalGap),
+                  _BonusRowWrapper(
+                      color: Colors.white,
+                      child: _InlineTextEditor(imageId: imageId, initialText: actualText, showPublisherPreview: true)
+                  ),
+                ],
                 if (widget.isYouTubeOpen) ...[
                   const SizedBox(height: verticalGap),
                   _BonusRowWrapper(color: Colors.black, child: YouTubePlayerWidget(imageId: imageId)),
@@ -420,7 +510,7 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                 ],
                 if (widget.isViewsOpen) ...[
                   const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(color: Colors.grey[50]!, child: StatsTable(contentId: imageId, viewService: widget.viewService)),
+                  _BonusRowWrapper(color: Colors.grey[50]!, child: imageId.isNotEmpty ? StatsTable(contentId: imageId, viewService: widget.viewService) : const Text("Image not yet registered. Wait for OCR.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))),
                 ],
                 if (widget.isCreditsOpen) ...[
                   const SizedBox(height: verticalGap),
@@ -435,10 +525,147 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
   }
 }
 
+class _OCRStatusView extends StatelessWidget {
+  final String fanzineId;
+  final String pageId;
+  final String imageId;
+  const _OCRStatusView({required this.fanzineId, required this.pageId, required this.imageId});
+
+  @override
+  Widget build(BuildContext context) {
+    // SAFEGUARD: Ensure we don't query with an empty ID and crash the app
+    if (fanzineId.isEmpty || pageId.isEmpty) {
+      return const Text("Pipeline data unavailable (Missing Page ID).", style: TextStyle(color: Colors.red, fontSize: 12));
+    }
+
+    return StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId).snapshots(),
+        builder: (context, snap) {
+          if (!snap.hasData) return const SizedBox(height: 50, child: Center(child: CircularProgressIndicator()));
+          final data = snap.data!.data() as Map<String, dynamic>?;
+          if (data == null) return const Text("Page data missing.");
+
+          final status = data['status'] ?? 'ready';
+          final error = data['errorLog'];
+
+          Color statusColor = Colors.grey;
+          if (status == 'ocr_complete' || status == 'complete' || status == 'review_needed' || status == 'transcribed') statusColor = Colors.green;
+          if (status == 'queued' || status == 'entity_queued') statusColor = Colors.orange;
+          if (status == 'error') statusColor = Colors.red;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("OCR STATUS (EGG MODE)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  if (status == 'review_needed' || status == 'complete')
+                    const Icon(Icons.check_circle, color: Colors.green, size: 14),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Text(status.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: statusColor)),
+                ],
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 12),
+                const Text("Error Log:", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+                Text(error, style: TextStyle(fontSize: 10, color: Colors.red[700], fontFamily: 'Courier')),
+                const SizedBox(height: 12),
+                // NEW: Instant Retry Button for errored pages
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                      icon: const Icon(Icons.refresh, size: 14, color: Colors.red),
+                      label: const Text("Retry Transcription", style: TextStyle(color: Colors.red, fontSize: 11)),
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+                      onPressed: () {
+                        FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId).update({
+                          'status': 'queued',
+                          'errorLog': FieldValue.delete()
+                        });
+                      }
+                  ),
+                )
+              ],
+              const SizedBox(height: 16),
+              const Divider(),
+              const Text("RAW EXTRACTION", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+
+              // SAFEGUARD: Don't fetch empty image document
+              if (imageId.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
+                  child: const Text("Image not registered yet. Waiting for initial pipeline run...", style: TextStyle(fontSize: 12, fontFamily: 'Courier', color: Colors.grey)),
+                )
+              else
+                FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance.collection('images').doc(imageId).get(),
+                    builder: (context, imgSnap) {
+                      final raw = (imgSnap.data?.data() as Map?)?['text_raw'] ?? "Pending...";
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
+                        child: Text(raw, style: const TextStyle(fontSize: 12, fontFamily: 'Courier')),
+                      );
+                    }
+                )
+            ],
+          );
+        }
+    );
+  }
+}
+
+class _PageEntitiesView extends StatelessWidget {
+  final String text;
+  const _PageEntitiesView({required this.text});
+
+  List<String> _parseEntities(String content) {
+    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+    final matches = regex.allMatches(content);
+    final Set<String> results = {};
+    for (final m in matches) {
+      final name = m.group(1);
+      if (name != null && name.isNotEmpty) results.add(name);
+    }
+    return results.toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entities = _parseEntities(text);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("DETECTED ENTITIES", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 8),
+        if (entities.isEmpty)
+          const Text("No entity links found in page text.", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey))
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: entities.length,
+            separatorBuilder: (c, i) => const Divider(height: 1),
+            itemBuilder: (c, i) => _EntityRow(name: entities[i]),
+          ),
+      ],
+    );
+  }
+}
+
 class _FontSizeSlider extends StatelessWidget {
   final ValueNotifier<double> fontSizeNotifier;
   const _FontSizeSlider({required this.fontSizeNotifier});
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -451,31 +678,13 @@ class _FontSizeSlider extends StatelessWidget {
               valueListenable: fontSizeNotifier,
               builder: (context, size, _) {
                 return SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                    activeTrackColor: Colors.black54,
-                    inactiveTrackColor: Colors.black12,
-                    thumbColor: Colors.black,
-                  ),
-                  child: Slider(
-                    value: size,
-                    min: 12.0,
-                    max: 48.0,
-                    divisions: 36,
-                    onChanged: (val) => fontSizeNotifier.value = val,
-                  ),
+                  data: SliderTheme.of(context).copyWith(trackHeight: 2, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), overlayShape: const RoundSliderOverlayShape(overlayRadius: 14), activeTrackColor: Colors.black54, inactiveTrackColor: Colors.black12, thumbColor: Colors.black),
+                  child: Slider(value: size, min: 12.0, max: 48.0, divisions: 36, onChanged: (val) => fontSizeNotifier.value = val),
                 );
               },
             ),
           ),
-          ValueListenableBuilder<double>(
-            valueListenable: fontSizeNotifier,
-            builder: (context, size, _) {
-              return Text("${size.toInt()}px", style: const TextStyle(fontSize: 10, color: Colors.grey));
-            },
-          ),
+          ValueListenableBuilder<double>(valueListenable: fontSizeNotifier, builder: (context, size, _) => Text("${size.toInt()}px", style: const TextStyle(fontSize: 10, color: Colors.grey))),
         ],
       ),
     );
@@ -484,45 +693,47 @@ class _FontSizeSlider extends StatelessWidget {
 
 class _BonusRowWrapper extends StatelessWidget {
   final Widget child; final Color color;
-  const _BonusRowWrapper({super.key, required this.child, required this.color});
+  const _BonusRowWrapper({required this.child, required this.color});
   @override
   Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: color, border: Border(top: BorderSide(color: Colors.grey.shade200), bottom: BorderSide(color: Colors.grey.shade200))), child: child);
 }
 
 class _SidebarWrapper extends StatelessWidget {
   final String title; final Widget child;
-  const _SidebarWrapper({super.key, required this.title, required this.child});
+  const _SidebarWrapper({required this.title, required this.child});
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-    if (title.isNotEmpty)
-      Container(padding: const EdgeInsets.all(16), color: Colors.grey[200], child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2))),
+    if (title.isNotEmpty) Container(padding: const EdgeInsets.all(16), color: Colors.grey[200], child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2))),
     Expanded(child: Padding(padding: const EdgeInsets.all(16), child: child))
   ]);
 }
 
 class _CommentList extends StatelessWidget {
   final String imageId; final EngagementService service;
-  const _CommentList({super.key, required this.imageId, required this.service});
+  const _CommentList({required this.imageId, required this.service});
   @override
-  Widget build(BuildContext context) => StreamBuilder<QuerySnapshot>(stream: service.getCommentsStream(imageId), builder: (context, snap) {
-    if (!snap.hasData) return const SizedBox();
-    final sortedDocs = snap.data!.docs.map((d) { final m = d.data() as Map<String, dynamic>; m['_id'] = d.id; return m; }).toList();
-    sortedDocs.sort((a, b) { final aT = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(); final bT = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(); return aT.compareTo(bT); });
-    if (sortedDocs.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No comments yet.")));
-    return ListView.separated(shrinkWrap: true, physics: const ClampingScrollPhysics(), itemCount: sortedDocs.length, separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12), itemBuilder: (c, i) => CommentItem(data: sortedDocs[i]));
-  });
+  Widget build(BuildContext context) {
+    if (imageId.isEmpty) return const SizedBox();
+    return StreamBuilder<QuerySnapshot>(stream: service.getCommentsStream(imageId), builder: (context, snap) {
+      if (!snap.hasData) return const SizedBox();
+      final sortedDocs = snap.data!.docs.map((d) { final m = d.data() as Map<String, dynamic>; m['_id'] = d.id; return m; }).toList();
+      sortedDocs.sort((a, b) { final aT = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(); final bT = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(); return aT.compareTo(bT); });
+      if (sortedDocs.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No comments yet.")));
+      return ListView.separated(shrinkWrap: true, physics: const ClampingScrollPhysics(), itemCount: sortedDocs.length, separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12), itemBuilder: (c, i) => CommentItem(data: sortedDocs[i]));
+    });
+  }
 }
 
 class _CommentInput extends StatelessWidget {
   final TextEditingController controller; final VoidCallback onSend;
-  const _CommentInput({super.key, required this.controller, required this.onSend});
+  const _CommentInput({required this.controller, required this.onSend});
   @override
   Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [Expanded(child: TextField(controller: controller, decoration: const InputDecoration(hintText: "Add a comment...", isDense: true, border: OutlineInputBorder()))), IconButton(icon: const Icon(Icons.send), onPressed: onSend)]));
 }
 
 class _PageImage extends StatefulWidget {
   final String? imageUrl; final String? storagePath;
-  const _PageImage({super.key, this.imageUrl, this.storagePath});
+  const _PageImage({this.imageUrl, this.storagePath});
   @override
   State<_PageImage> createState() => _PageImageState();
 }
@@ -530,487 +741,178 @@ class _PageImage extends StatefulWidget {
 class _PageImageState extends State<_PageImage> {
   String? _currentUrl;
   @override
-  void initState() { super.initState(); _currentUrl = widget.imageUrl; if ((_currentUrl == null || _currentUrl!.isEmpty) && widget.storagePath != null) _resolveUrl(); }
-  Future<void> _resolveUrl() async { try { final url = await FirebaseStorage.instance.ref(widget.storagePath!).getDownloadURL(); if (mounted) setState(() => _currentUrl = url); } catch (_) {} }
+  void initState() {
+    super.initState();
+    if (widget.storagePath != null && widget.storagePath!.isNotEmpty) {
+      _resolveUrl();
+    } else {
+      _currentUrl = widget.imageUrl;
+    }
+  }
+  Future<void> _resolveUrl() async {
+    try {
+      final url = await FirebaseStorage.instance.ref(widget.storagePath!).getDownloadURL();
+      if (mounted) setState(() => _currentUrl = url);
+    } catch (_) {
+      if (mounted) setState(() => _currentUrl = widget.imageUrl);
+    }
+  }
   @override
   Widget build(BuildContext context) => _currentUrl == null || _currentUrl!.isEmpty ? const Center(child: CircularProgressIndicator()) : Image.network(_currentUrl!, fit: BoxFit.contain, errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image, color: Colors.grey)));
 }
 
 class _CreditsEditorWidget extends StatefulWidget {
   final String imageId;
-  const _CreditsEditorWidget({super.key, required this.imageId});
-
+  const _CreditsEditorWidget({required this.imageId});
   @override
   State<_CreditsEditorWidget> createState() => _CreditsEditorWidgetState();
 }
 
 class _CreditsEditorWidgetState extends State<_CreditsEditorWidget> {
-  final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _roleController = TextEditingController();
-  final TextEditingController _indiciaController = TextEditingController();
-
-  List<Map<String, dynamic>> _creators = [];
-  bool _isLoading = true;
-  bool _isSaving = false;
-
+  final TextEditingController _sC = TextEditingController(), _rC = TextEditingController(), _iC = TextEditingController();
+  List<Map<String, dynamic>> _creators = []; bool _loading = true, _saving = false;
   @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    if (widget.imageId.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
-
+  void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    if (widget.imageId.isEmpty) { setState(() => _loading = false); return; }
     try {
       final doc = await FirebaseFirestore.instance.collection('images').doc(widget.imageId).get();
       if (doc.exists && mounted) {
-        final data = doc.data() as Map<String, dynamic>;
-        setState(() {
-          _indiciaController.text = data['indicia'] ?? '';
-          final rawCreators = data['creators'] as List<dynamic>? ?? [];
-          _creators = rawCreators.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          _isLoading = false;
-        });
-      } else if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      debugPrint("Error loading credits: $e");
-      if (mounted) setState(() => _isLoading = false);
-    }
+        final d = doc.data() as Map<String, dynamic>;
+        setState(() { _iC.text = d['indicia'] ?? ''; _creators = (d['creators'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(); _loading = false; });
+      } else { setState(() => _loading = false); }
+    } catch (_) { setState(() => _loading = false); }
   }
-
-  Future<void> _addCreator() async {
-    final input = _searchController.text.trim();
-    final role = _roleController.text.trim();
-    if (input.isEmpty || role.isEmpty) return;
-
-    setState(() => _isSaving = true);
-
-    String? uid;
-    String name = input;
-
-    if (input.startsWith('@')) {
-      final handle = input.substring(1).toLowerCase();
-      try {
-        final query = await FirebaseFirestore.instance.collection('Users').where('username', isEqualTo: handle).limit(1).get();
-        if (query.docs.isNotEmpty) {
-          uid = query.docs.first.id;
-          final data = query.docs.first.data();
-          name = data['displayName'] ?? data['username'] ?? input;
-        }
-      } catch (e) {
-        debugPrint("Error looking up user: $e");
-      }
-    }
-
-    setState(() {
-      _creators.add({
-        'uid': uid,
-        'name': name,
-        'role': role,
-      });
-      _searchController.clear();
-      _roleController.clear();
-      _isSaving = false;
-    });
-  }
-
-  Future<void> _saveData() async {
+  Future<void> _save() async {
     if (widget.imageId.isEmpty) return;
-
-    setState(() => _isSaving = true);
-    try {
-      await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({
-        'indicia': _indiciaController.text.trim(),
-        'creators': _creators,
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Archival metadata saved!')));
-      }
-    } catch (e) {
-      debugPrint("Error saving metadata: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+    setState(() => _saving = true);
+    try { await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'indicia': _iC.text.trim(), 'creators': _creators}); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!'))); }
+    finally { if (mounted) setState(() => _saving = false); }
   }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _roleController.dispose();
-    _indiciaController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: Padding(padding: EdgeInsets.all(20.0), child: CircularProgressIndicator()));
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text("Indicia / Copyright Notice", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _indiciaController,
-          maxLines: 3,
-          style: const TextStyle(fontSize: 12, fontFamily: 'Georgia'),
-          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, hintText: "Enter copyright boilerplate..."),
-        ),
-        const SizedBox(height: 20),
-
-        const Text("Creators", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-        const SizedBox(height: 8),
-        if (_creators.isEmpty)
-          const Text("No creators added.", style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.grey)),
-
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _creators.length,
-          itemBuilder: (context, index) {
-            final creator = _creators[index];
-            final String role = (creator['role'] ?? 'Creator').toString().toUpperCase();
-            final String fallbackName = (creator['name'] ?? 'Unknown').toString().toUpperCase();
-            final String? uid = creator['uid'];
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  SizedBox(
-                      width: 55,
-                      child: Text(
-                        role,
-                        style: const TextStyle(fontSize: 9, color: Colors.black54, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.right,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Text("|", style: TextStyle(fontSize: 12, color: Colors.black12)),
-                  ),
-                  Expanded(
-                    child: _buildCreatorInfo(uid, fallbackName),
-                  ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () => setState(() => _creators.removeAt(index)),
-                    child: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 20),
-                  )
-                ],
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-
-        const Text("Add Co-Creator", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(
-                    hintText: "Search user by @handle...",
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    border: OutlineInputBorder()
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 2,
-              child: TextField(
-                controller: _roleController,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(
-                    hintText: "Role (e.g. Inker)",
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    border: OutlineInputBorder()
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: _isSaving ? null : _addCreator,
-              icon: const Icon(Icons.add_circle, color: Color(0xFFF1B255), size: 32),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            )
-          ],
-        ),
-
-        const SizedBox(height: 24),
-        ElevatedButton(
-          onPressed: _isSaving ? null : _saveData,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFF1B255),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          child: _isSaving
-              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Text("SAVE CREDITS & INDICIA", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCreatorInfo(String? uid, String fallbackName) {
-    if (uid == null || uid.isEmpty) {
-      return Row(
-          children: [
-            Container(
-              width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.05),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.black.withOpacity(0.1)),
-              ),
-              child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(fallbackName, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text("Guest Contributor", style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4), fontStyle: FontStyle.italic)),
-                ],
-              ),
-            )
-          ]
-      );
-    }
-
-    return FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
-        builder: (context, snap) {
-          String name = fallbackName;
-          String handle = "fetching...";
-          String? photoUrl;
-          bool userExists = false;
-
-          if (snap.hasData && snap.data!.exists) {
-            userExists = true;
-            final data = snap.data!.data() as Map<String, dynamic>;
-            name = (data['displayName'] ?? data['username'] ?? fallbackName).toString().toUpperCase();
-            handle = "@${data['username'] ?? 'user'}".toLowerCase();
-            photoUrl = data['photoUrl'];
-          } else if (snap.connectionState == ConnectionState.done) {
-            handle = "@unknown";
-          }
-
-          return Row(
-              children: [
-                Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.05),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black.withOpacity(0.1)),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: photoUrl != null
-                      ? ColorFiltered(
-                      colorFilter: const ColorFilter.matrix(<double>[
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0,      0,      0,      1, 0,
-                      ]),
-                      child: Image.network(photoUrl, fit: BoxFit.cover)
-                  )
-                      : Center(child: Text(name.isNotEmpty ? name[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      if (userExists && handle != "@unknown") {
-                        context.goNamed('shortlink', pathParameters: {'code': handle.substring(1)});
-                      }
-                    },
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(handle, style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4))),
-                      ],
-                    ),
-                  ),
-                ),
-              ]
-          );
-        }
-    );
+    if (widget.imageId.isEmpty) return const Text("Image not yet registered.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic));
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text("Indicia / Copyright", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      TextField(controller: _iC, maxLines: 3, style: const TextStyle(fontSize: 12), decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true)),
+      const SizedBox(height: 16),
+      const Text("Creators", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      ..._creators.map((c) => ListTile(dense: true, title: Text("${c['name']} (${c['role']})"), trailing: IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setState(() => _creators.remove(c))))),
+      Row(children: [Expanded(child: TextField(controller: _sC, decoration: const InputDecoration(hintText: "@handle"))), const SizedBox(width: 8), Expanded(child: TextField(controller: _rC, decoration: const InputDecoration(hintText: "Role"))), IconButton(icon: const Icon(Icons.add), onPressed: () { if (_sC.text.isNotEmpty) setState(() => _creators.add({'name': _sC.text, 'role': _rC.text})); _sC.clear(); _rC.clear(); })]),
+      ElevatedButton(onPressed: _saving ? null : _save, child: Text(_saving ? "Saving..." : "Save Metadata"))
+    ]);
   }
 }
 
 class _InlineTextEditor extends StatefulWidget {
   final String imageId;
   final String initialText;
+  final bool showPublisherPreview;
 
-  const _InlineTextEditor({super.key, required this.imageId, required this.initialText});
-
+  const _InlineTextEditor({required this.imageId, required this.initialText, this.showPublisherPreview = false});
   @override
   State<_InlineTextEditor> createState() => _InlineTextEditorState();
 }
 
 class _InlineTextEditorState extends State<_InlineTextEditor> {
-  late TextEditingController _controller;
-  bool _isSaving = false;
-  bool _showPreview = false;
-
+  late TextEditingController _c; bool _s = false, _p = false;
   @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialText);
-  }
-
+  void initState() { super.initState(); _c = TextEditingController(text: widget.initialText); _p = widget.showPublisherPreview; }
   @override
-  void didUpdateWidget(covariant _InlineTextEditor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageId != widget.imageId) {
-      _controller.text = widget.initialText;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
+  void dispose() { _c.dispose(); super.dispose(); }
   Future<void> _save() async {
-    setState(() => _isSaving = true);
-    try {
-      await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({
-        'text': _controller.text,
-        'text_processed': _controller.text,
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Text saved!')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+    if (widget.imageId.isEmpty) return;
+    setState(() => _s = true);
+    try { await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'text': _c.text, 'text_processed': _c.text}); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!'))); }
+    finally { if (mounted) setState(() => _s = false); }
   }
+  @override
+  Widget build(BuildContext context) {
+    if (widget.imageId.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(8.0),
+        child: Text("Waiting for OCR Pipeline to register this page before editing is allowed.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+      );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(widget.showPublisherPreview ? "CHICKEN EDITOR (PUBLISHER)" : "TEXT EDITOR", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        Row(children: [IconButton(icon: Icon(_p ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _p = !_p)), IconButton(icon: const Icon(Icons.save), onPressed: _s ? null : _save)])
+      ]),
+      TextField(controller: _c, maxLines: null, minLines: 5, decoration: const InputDecoration(border: OutlineInputBorder(), fillColor: Colors.white, filled: true), style: const TextStyle(fontFamily: 'Courier', fontSize: 14)),
+      if (_p) ...[
+        const SizedBox(height: 16),
+        const Text("LIVE PREVIEW (2000x3200 SCALE)", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        AspectRatio(
+            aspectRatio: 2000/3200,
+            child: Container(
+                decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)),
+                child: FittedBox(
+                    child: BasicTextTemplate(columns: BasicTextTemplate.paginateContent(_c.text)[0])
+                )
+            )
+        )
+      ]
+    ]);
+  }
+}
+
+class _EntityRow extends StatelessWidget {
+  final String name;
+  const _EntityRow({required this.name});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text("TEXT EDITOR", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: () => setState(() => _showPreview = !_showPreview),
-                  icon: Icon(_showPreview ? Icons.visibility_off : Icons.visibility, size: 16),
-                  label: Text(_showPreview ? "Hide Preview" : "Show Preview", style: const TextStyle(fontSize: 12)),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _save,
-                  icon: _isSaving
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.save, size: 16),
-                  label: const Text("Save", style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    minimumSize: Size.zero,
-                  ),
-                ),
-              ],
-            )
-          ],
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _controller,
-          maxLines: null,
-          minLines: 5,
-          decoration: const InputDecoration(
-            hintText: "Enter text transcription...",
-            border: OutlineInputBorder(),
-            fillColor: Colors.white,
-            filled: true,
-          ),
-          style: const TextStyle(fontFamily: 'Courier', fontSize: 14),
-        ),
-        if (_showPreview) ...[
-          const SizedBox(height: 16),
-          const Text("LIVE PREVIEW (2000x3200 Scale)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)),
-            child: ListenableBuilder(
-              listenable: _controller,
-              builder: (context, _) {
-                final pagesOfBlocks = BasicTextTemplate.paginateContent(_controller.text);
-                if (pagesOfBlocks.isEmpty) return const SizedBox(height: 200, child: Center(child: Text("No content")));
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: pagesOfBlocks.length,
-                  separatorBuilder: (c, i) => const Divider(height: 32, thickness: 2),
-                  itemBuilder: (context, index) {
-                    return Column(
-                      children: [
-                        Text("Page ${index + 1}", style: const TextStyle(color: Colors.grey)),
-                        const SizedBox(height: 8),
-                        AspectRatio(
-                          aspectRatio: 2000 / 3200,
-                          child: FittedBox(
-                            fit: BoxFit.contain,
-                            child: BasicTextTemplate(
-                              columns: pagesOfBlocks[index],
-                              showOverlay: true,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ]
-      ],
+    final handle = normalizeHandle(name);
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('usernames').doc(handle).snapshots(),
+      builder: (context, snapshot) {
+        Widget statusWidget;
+        if (!snapshot.hasData) {
+          statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
+        } else if (snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          String linkText = '/$handle';
+          if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
+          statusWidget = Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
+        } else {
+          statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
+            TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
+            TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
+          ]);
+        }
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Row(children: [
+            Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
+            statusWidget,
+          ]),
+        );
+      },
     );
+  }
+
+  Future<void> _createProfile(BuildContext context, String name) async {
+    String first = name; String last = "";
+    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    try {
+      await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
+    } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
+  }
+
+  Future<void> _createAlias(BuildContext context, String name) async {
+    final target = await showDialog<String>(context: context, builder: (c) {
+      final controller = TextEditingController();
+      return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
+    });
+    if (target == null || target.isEmpty) return;
+    try {
+      await createAlias(aliasHandle: name, targetHandle: target);
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
+    } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
   }
 }

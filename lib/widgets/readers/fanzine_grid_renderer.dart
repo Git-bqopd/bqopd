@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/view_service.dart';
 
 class FanzineGridRenderer extends StatefulWidget {
@@ -45,7 +46,6 @@ class _FanzineGridRendererState extends State<FanzineGridRenderer> {
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
 
-        // Use extracted widget to handle initState logic per tile
         return _GridTile(
           index: index,
           pageData: pageData,
@@ -57,7 +57,6 @@ class _FanzineGridRendererState extends State<FanzineGridRenderer> {
   }
 }
 
-/// Extracted tile to handle its own initState for view tracking on scroll
 class _GridTile extends StatefulWidget {
   final int index;
   final Map<String, dynamic> pageData;
@@ -76,10 +75,30 @@ class _GridTile extends StatefulWidget {
 }
 
 class _GridTileState extends State<_GridTile> {
+  String? _resolvedImageUrl;
+  bool _isLoading = true;
+
   @override
   void initState() {
     super.initState();
     _recordView();
+    _resolveUrl();
+  }
+
+  // UPDATED: Added authenticated URL resolution for Grid View
+  Future<void> _resolveUrl() async {
+    final storagePath = widget.pageData['storagePath'];
+    final imageUrl = widget.pageData['imageUrl'];
+
+    if (storagePath != null && storagePath.toString().isNotEmpty) {
+      try {
+        final url = await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
+        if (mounted) setState(() { _resolvedImageUrl = url; _isLoading = false; });
+        return;
+      } catch (_) {}
+    }
+
+    if (mounted) setState(() { _resolvedImageUrl = imageUrl; _isLoading = false; });
   }
 
   void _recordView() {
@@ -99,14 +118,13 @@ class _GridTileState extends State<_GridTile> {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = widget.pageData['imageUrl'] ?? '';
     final pageNum = widget.pageData['pageNumber'] ?? widget.index;
 
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: imageUrl.isEmpty ? Colors.grey[300] : Colors.white,
+          color: Colors.white,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
@@ -115,9 +133,11 @@ class _GridTileState extends State<_GridTile> {
             )
           ],
         ),
-        child: imageUrl.isNotEmpty
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            : (_resolvedImageUrl != null && _resolvedImageUrl!.isNotEmpty)
             ? Image.network(
-          imageUrl,
+          _resolvedImageUrl!,
           fit: BoxFit.contain,
           errorBuilder: (c, e, s) => Center(
             child: Text("Page $pageNum",

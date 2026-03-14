@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../utils/link_parser.dart';
+import '../utils/shortcode_generator.dart';
 import '../services/user_bootstrap.dart';
 import '../services/username_service.dart';
 
@@ -30,21 +31,28 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
 
   Future<void> _updateTitle(String newTitle) async {
     if (newTitle.trim().isEmpty) return;
-
     setState(() => _isProcessing = true);
     try {
       await _db.collection('fanzines').doc(widget.fanzineId).update({'title': newTitle.trim()});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fanzine title updated!')),
-        );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated!')));
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _assignMissingShortcode() async {
+    setState(() => _isProcessing = true);
+    try {
+      final String? code = await assignShortcode(_db, 'fanzine', widget.fanzineId);
+      if (code != null) {
+        await _db.collection('fanzines').doc(widget.fanzineId).update({
+          'shortCode': code,
+          'shortCodeKey': code.toUpperCase()
+        });
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Shortcode assigned: $code')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating title: $e')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -53,7 +61,6 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
   Future<void> _addPage() async {
     final shortcode = _shortcodeController.text.trim();
     if (shortcode.isEmpty) return;
-
     setState(() => _isProcessing = true);
     try {
       final imageQuery = await _db.collection('images').where('shortCode', isEqualTo: shortcode).limit(1).get();
@@ -61,18 +68,21 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image not found.')));
         return;
       }
-
       final imageDoc = imageQuery.docs.first;
       final imageId = imageDoc.id;
       final imageUrl = imageDoc.data()['fileUrl'];
 
       final pagesQuery = await _db.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber', descending: true).limit(1).get();
-      int nextNum = 1;
-      if (pagesQuery.docs.isNotEmpty) nextNum = (pagesQuery.docs.first.data()['pageNumber'] ?? 0) + 1;
+      int nextNum = pagesQuery.docs.isNotEmpty ? (pagesQuery.docs.first.data()['pageNumber'] ?? 0) + 1 : 1;
 
       final batch = _db.batch();
       final newPageRef = _db.collection('fanzines').doc(widget.fanzineId).collection('pages').doc();
-      batch.set(newPageRef, {'imageId': imageId, 'imageUrl': imageUrl, 'pageNumber': nextNum});
+      batch.set(newPageRef, {
+        'imageId': imageId,
+        'imageUrl': imageUrl,
+        'pageNumber': nextNum,
+        'status': 'ready'
+      });
       batch.update(_db.collection('images').doc(imageId), {'usedInFanzines': FieldValue.arrayUnion([widget.fanzineId])});
       await batch.commit();
 
@@ -86,7 +96,6 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
     final int currentPos = doc.get('pageNumber');
     final int targetPos = currentPos + delta;
     if (targetPos < 1 || targetPos > allPages.length) return;
-
     final targetDoc = allPages.firstWhere((p) => p.get('pageNumber') == targetPos);
     final batch = _db.batch();
     batch.update(doc.reference, {'pageNumber': targetPos});
@@ -133,9 +142,9 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
     setState(() => _isProcessing = true);
     try {
       await FirebaseFunctions.instance.httpsCallable('trigger_batch_ocr').call({'fanzineId': widget.fanzineId});
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Batch OCR Dispatching...')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transcription Pipeline Started...')));
     } catch (e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -144,10 +153,44 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
   Future<void> _runEntityRecognition() async {
     setState(() => _isProcessing = true);
     try {
-      final result = await FirebaseFunctions.instance.httpsCallable('finalize_fanzine_data').call({'fanzineId': widget.fanzineId});
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Entity Recognition complete. Found ${result.data['entity_count'] ?? 0} items.')));
+      // Step A: Trigger Entity matching for transcribed pages
+      await FirebaseFunctions.instance.httpsCallable('trigger_batch_entities').call({'fanzineId': widget.fanzineId});
+      // Step B: Finalize aggregation
+      await FirebaseFunctions.instance.httpsCallable('finalize_fanzine_data').call({'fanzineId': widget.fanzineId});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entity Extraction & Aggregation Triggered.')));
     } catch (e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _rescanPdf() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Rescan PDF?"),
+        content: const Text("This will delete all current pages and re-extract them from the source PDF. This cannot be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("NUKE & START OVER", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      await FirebaseFunctions.instance.httpsCallable('rescan_fanzine').call({'fanzineId': widget.fanzineId});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rescan triggered. Images will appear shortly.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -163,9 +206,10 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final data = snapshot.data!.data() as Map<String, dynamic>;
           final title = data['title'] ?? 'Untitled';
-          final shortCode = data['shortCode'] ?? 'None';
+          final shortCode = data['shortCode'];
           final status = data['status'] ?? 'draft';
           final twoPage = data['twoPage'] ?? false;
+          final hasSourceFile = data.containsKey('sourceFile');
           final List<String> entities = List<String>.from(data['draftEntities'] ?? []);
 
           if (_lastSyncedTitle != title) {
@@ -174,7 +218,7 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
           }
 
           return Container(
-            height: 480, // Height increased for nested tabs
+            height: 480,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -215,7 +259,17 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                               ElevatedButton(onPressed: _isProcessing ? null : _addPage, child: const Text('Add Page')),
                             ]),
                             const SizedBox(height: 12),
-                            Text('Shortcode: $shortCode', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Shortcode: ${shortCode ?? 'None'}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                if (shortCode == null)
+                                  TextButton(
+                                    onPressed: _isProcessing ? null : _assignMissingShortcode,
+                                    child: const Text("GENERATE SHORTCODE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                  )
+                              ],
+                            ),
                             const SizedBox(height: 8),
                             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                               const Text('Has two page spread view', style: TextStyle(fontSize: 12)),
@@ -239,6 +293,15 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                               style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Colors.white),
                               child: _isProcessing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text("SAVE SETTINGS"),
                             ),
+                            if (hasSourceFile) ...[
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: _isProcessing ? null : _rescanPdf,
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text("RESCAN PDF (RESET)"),
+                                style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -250,7 +313,7 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                           children: [
                             const Text('PAGE ORDER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                             const SizedBox(height: 8),
-                            Expanded(child: SingleChildScrollView(child: _PageList(fanzineId: widget.fanzineId, onReorder: _reorderPage))),
+                            Expanded(child: _PageList(fanzineId: widget.fanzineId, onReorder: _reorderPage)),
                           ],
                         ),
                       ),
@@ -264,14 +327,14 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                               unselectedLabelColor: Colors.grey,
                               indicatorColor: Colors.black54,
                               tabs: [
-                                Tab(text: "Batch OCR"),
-                                Tab(text: "Batch Entity Recognition"),
+                                Tab(text: "Transcription"),
+                                Tab(text: "Entities"),
                               ],
                             ),
                             Expanded(
                               child: TabBarView(
                                 children: [
-                                  // SUB-TAB 1: BATCH OCR
+                                  // SUB-TAB 1: BATCH TRANSCRIPTION
                                   SingleChildScrollView(
                                     padding: const EdgeInsets.all(16.0),
                                     child: Column(
@@ -280,24 +343,47 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                                         StreamBuilder<QuerySnapshot>(
                                             stream: _db.collection('fanzines').doc(widget.fanzineId).collection('pages').snapshots(),
                                             builder: (context, snap) {
-                                              int ready = 0; int queued = 0; int done = 0;
+                                              int ready = 0; int queued = 0; int done = 0; int err = 0;
                                               if (snap.hasData) {
                                                 for (var doc in snap.data!.docs) {
                                                   final s = (doc.data() as Map)['status'];
-                                                  if (s == 'ready') ready++; else if (s == 'queued') queued++; else if (s == 'ocr_complete' || s == 'complete') done++;
+                                                  if (s == 'ready') ready++;
+                                                  else if (s == 'queued' || s == 'entity_queued') queued++;
+                                                  else if (s == 'transcribed' || s == 'complete' || s == 'review_needed') done++;
+
+                                                  if (s == 'error') err++;
                                                 }
                                               }
-                                              return Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                                                _Counter(label: "Ready", count: ready, color: Colors.blue),
-                                                _Counter(label: "Queued", count: queued, color: Colors.orange),
-                                                _Counter(label: "Done", count: done, color: Colors.green),
-                                              ]);
+                                              return Column(
+                                                children: [
+                                                  Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                                      children: [
+                                                        _Counter(label: "Ready", count: ready, color: Colors.blue),
+                                                        _Counter(label: "Queued", count: queued, color: Colors.orange),
+                                                        _Counter(label: "Done", count: done, color: Colors.green),
+                                                      ]
+                                                  ),
+                                                  if (err > 0) ...[
+                                                    const SizedBox(height: 16),
+                                                    _ErrorBadge(label: "Errors Detected", count: err),
+                                                  ],
+                                                ],
+                                              );
                                             }
                                         ),
                                         const SizedBox(height: 24),
-                                        ElevatedButton.icon(onPressed: _isProcessing ? null : _runBatchOCR, icon: const Icon(Icons.bolt), label: const Text("Batch OCR")),
+                                        ElevatedButton.icon(
+                                            onPressed: _isProcessing ? null : _runBatchOCR,
+                                            icon: const Icon(Icons.bolt),
+                                            label: const Text("Batch Transcription")
+                                        ),
                                         const SizedBox(height: 16),
-                                        const Text("Note: Extracted text is editable directly on pages via the 'Text' social button.", style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic), textAlign: TextAlign.center),
+                                        const Text(
+                                            "Note: Extracted text is editable directly on pages via the 'Text' social button.",
+                                            style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
+                                            textAlign: TextAlign.center
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -307,7 +393,11 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                                     children: [
                                       Padding(
                                         padding: const EdgeInsets.all(12.0),
-                                        child: ElevatedButton.icon(onPressed: _isProcessing ? null : _runEntityRecognition, icon: const Icon(Icons.person_search), label: const Text("Batch Entity Recognition")),
+                                        child: ElevatedButton.icon(
+                                            onPressed: _isProcessing ? null : _runEntityRecognition,
+                                            icon: const Icon(Icons.person_search),
+                                            label: const Text("Run Entity Recognition")
+                                        ),
                                       ),
                                       Expanded(
                                         child: entities.isEmpty
@@ -339,15 +429,43 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
   }
 }
 
+// -----------------------------------------------------------------------------
+// HELPER CLASSES (Previously omitted with // ...)
+// -----------------------------------------------------------------------------
+
 class _Counter extends StatelessWidget {
-  final String label; final int count; final Color color;
+  final String label;
+  final int count;
+  final Color color;
+
   const _Counter({required this.label, required this.count, required this.color});
+
   @override
   Widget build(BuildContext context) {
     return Column(children: [
       Text("$count", style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 18)),
       Text(label, style: const TextStyle(fontSize: 10))
     ]);
+  }
+}
+
+class _ErrorBadge extends StatelessWidget {
+  final String label;
+  final int count;
+
+  const _ErrorBadge({required this.label, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+          color: Colors.red[50],
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.red[200]!)
+      ),
+      child: Text("$label: $count", style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
   }
 }
 
@@ -371,8 +489,14 @@ class _EntityRow extends StatelessWidget {
           statusWidget = Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
         } else {
           statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
-            TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
-            TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
+            TextButton(
+                onPressed: () => _createProfile(context, name),
+                child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))
+            ),
+            TextButton(
+                onPressed: () => _createAlias(context, name),
+                child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))
+            ),
           ]);
         }
         return Padding(
@@ -388,29 +512,51 @@ class _EntityRow extends StatelessWidget {
 
   Future<void> _createProfile(BuildContext context, String name) async {
     String first = name; String last = "";
-    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    if (name.contains(' ')) {
+      final parts = name.split(' ');
+      first = parts.first;
+      last = parts.sublist(1).join(' ');
+    }
     try {
       await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
-    } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 
   Future<void> _createAlias(BuildContext context, String name) async {
     final target = await showDialog<String>(context: context, builder: (c) {
       final controller = TextEditingController();
-      return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
+      return AlertDialog(
+          title: Text("Create Alias for '$name'"),
+          content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("Enter EXISTING username (target):"),
+                TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))
+              ]
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+            TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))
+          ]
+      );
     });
     if (target == null || target.isEmpty) return;
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
-    } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 }
 
 class _PageList extends StatelessWidget {
   final String fanzineId;
   final Function(DocumentSnapshot, int, List<DocumentSnapshot>) onReorder;
+
   const _PageList({required this.fanzineId, required this.onReorder});
 
   @override
@@ -421,11 +567,17 @@ class _PageList extends StatelessWidget {
         if (!snapshot.hasData) return const SizedBox();
         final docs = snapshot.data!.docs;
         if (docs.isEmpty) return const Text('No pages added.', style: TextStyle(color: Colors.grey, fontSize: 12));
-        return Column(
-          children: docs.map((doc) {
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final doc = docs[index];
             final data = doc.data() as Map<String, dynamic>;
             final num = data['pageNumber'] ?? 0;
             final imageId = data['imageId'] ?? '...';
+
             return FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance.collection('images').doc(imageId).get(),
                 builder: (context, imgSnap) {
@@ -438,15 +590,25 @@ class _PageList extends StatelessWidget {
                         Text('$num.', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                         const SizedBox(width: 8),
                         Expanded(child: Text(imgTitle, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-                        IconButton(icon: const Icon(Icons.arrow_upward, size: 14), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: num > 1 ? () => onReorder(doc, -1, docs) : null),
+                        IconButton(
+                            icon: const Icon(Icons.arrow_upward, size: 14),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: num > 1 ? () => onReorder(doc, -1, docs) : null
+                        ),
                         const SizedBox(width: 4),
-                        IconButton(icon: const Icon(Icons.arrow_downward, size: 14), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: num < docs.length ? () => onReorder(doc, 1, docs) : null),
+                        IconButton(
+                            icon: const Icon(Icons.arrow_downward, size: 14),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: num < docs.length ? () => onReorder(doc, 1, docs) : null
+                        ),
                       ],
                     ),
                   );
                 }
             );
-          }).toList(),
+          },
         );
       },
     );
