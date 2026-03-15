@@ -6,8 +6,9 @@ import '../components/textfield.dart';
 
 class RegisterWidget extends StatefulWidget {
   final void Function()? onTap;
+  final VoidCallback? onRegisterSuccess; // NEW: Callback when registered
 
-  const RegisterWidget({super.key, required this.onTap});
+  const RegisterWidget({super.key, required this.onTap, this.onRegisterSuccess});
 
   @override
   State<RegisterWidget> createState() => _RegisterWidgetState();
@@ -59,6 +60,10 @@ class _RegisterWidgetState extends State<RegisterWidget> {
       );
 
       await createUserDocument(userCredential);
+
+      if (widget.onRegisterSuccess != null) {
+        widget.onRegisterSuccess!();
+      }
     } on FirebaseAuthException catch (e) {
       if (mounted) displayMessageToUser(e.message ?? e.code, context);
     } finally {
@@ -94,85 +99,104 @@ class _RegisterWidgetState extends State<RegisterWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFF1B255),
-      child: ClipRRect(
-        child: Center(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(25.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset('assets/logo200.gif', width: 150),
-                  const SizedBox(height: 25),
-                  const Text('bqopd', style: TextStyle(fontSize: 20)),
-                  const SizedBox(height: 50),
-                  Form(
-                    child: AutofillGroup(
-                      child: Column(
-                        children: [
-                          MyTextField(
-                            controller: userNameController,
-                            focusNode: userNameFocusNode,
-                            hintText: "username",
-                            obscureText: false,
-                            autofillHints: const [AutofillHints.username],
-                          ),
-                          const SizedBox(height: 10),
-                          MyTextField(
-                            controller: emailController,
-                            focusNode: emailFocusNode,
-                            hintText: "email",
-                            obscureText: false,
-                            autofillHints: const [AutofillHints.email],
-                          ),
-                          const SizedBox(height: 10),
-                          MyTextField(
-                            controller: pwController,
-                            focusNode: pwFocusNode,
-                            hintText: "password",
-                            obscureText: true,
-                            autofillHints: const [AutofillHints.newPassword],
-                          ),
-                          const SizedBox(height: 10),
-                          MyTextField(
-                            controller: confirmPwController,
-                            focusNode: confirmPwFocusNode,
-                            hintText: "confirm password",
-                            obscureText: true,
-                            autofillHints: const [AutofillHints.password],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  MyButton(
-                    text: "register",
-                    onTap: registerUser,
-                    isLoading: _isLoading,
-                  ),
-                  const SizedBox(height: 25),
-                  Row(
+    return AspectRatio(
+      aspectRatio: 5 / 8,
+      child: Container(
+        color: const Color(0xFFF1B255),
+        padding: const EdgeInsets.all(10.0), // Match FanzineWidget padding
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              )
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12.0),
+            child: Center(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text("already cool?"),
-                      const SizedBox(width: 5),
-                      GestureDetector(
-                        onTap: widget.onTap,
-                        child: Text(
-                          "login here",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).primaryColorDark,
+                      Image.asset('assets/logo200.gif', width: 150),
+                      const SizedBox(height: 25),
+                      const Text('bqopd', style: TextStyle(fontSize: 20)),
+                      const SizedBox(height: 30),
+                      Form(
+                        child: AutofillGroup(
+                          child: Column(
+                            children: [
+                              MyTextField(
+                                controller: userNameController,
+                                focusNode: userNameFocusNode,
+                                hintText: "username",
+                                obscureText: false,
+                                autofillHints: const [AutofillHints.username],
+                              ),
+                              const SizedBox(height: 10),
+                              MyTextField(
+                                controller: emailController,
+                                focusNode: emailFocusNode,
+                                hintText: "email",
+                                obscureText: false,
+                                autofillHints: const [AutofillHints.email],
+                              ),
+                              const SizedBox(height: 10),
+                              MyTextField(
+                                controller: pwController,
+                                focusNode: pwFocusNode,
+                                hintText: "password",
+                                obscureText: true,
+                                autofillHints: const [AutofillHints.newPassword],
+                              ),
+                              const SizedBox(height: 10),
+                              MyTextField(
+                                controller: confirmPwController,
+                                focusNode: confirmPwFocusNode,
+                                hintText: "confirm password",
+                                obscureText: true,
+                                autofillHints: const [AutofillHints.password],
+                              ),
+                            ],
                           ),
                         ),
                       ),
+                      const SizedBox(height: 25),
+                      MyButton(
+                        text: "register",
+                        onTap: registerUser,
+                        isLoading: _isLoading,
+                      ),
+                      const SizedBox(height: 25),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text("already cool?"),
+                          const SizedBox(width: 5),
+                          GestureDetector(
+                            onTap: widget.onTap,
+                            child: Text(
+                              "login here",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).primaryColorDark,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
                     ],
-                  )
-                ],
+                  ),
+                ),
               ),
             ),
           ),

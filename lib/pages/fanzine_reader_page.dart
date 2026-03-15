@@ -11,6 +11,10 @@ import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
 import '../widgets/fanzine_editor_widget.dart';
+import '../widgets/login_widget.dart';
+import '../widgets/register_widget.dart';
+
+enum HeaderMode { fanzine, login, register }
 
 class FanzineReaderPage extends StatefulWidget {
   final String? fanzineId;
@@ -38,6 +42,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   bool _twoPagePreference = true;
   bool _isEditingMode = false;
+
+  HeaderMode _headerMode = HeaderMode.fanzine;
 
   int _targetIndex = 0;
 
@@ -209,7 +215,61 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     });
   }
 
-  Widget _buildHeader() {
+  void _scrollToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_mobileListScrollController.isAttached) {
+        _mobileListScrollController.scrollTo(
+          index: 0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+      if (_desktopListScrollController.isAttached) {
+        _desktopListScrollController.scrollTo(
+          index: 0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  void _showLoginHeader() {
+    setState(() {
+      _headerMode = HeaderMode.login;
+      _twoPagePreference = false;
+
+      if (!_showList) {
+        _showList = true;
+        if (_desktopGridWidth == 900.0) _desktopGridWidth = 300.0;
+        if (_desktopListWidth < 300.0) _desktopListWidth = 900.0;
+      }
+      _targetIndex = 0;
+    });
+    _scrollToTop();
+  }
+
+  void _onAuthSuccess() {
+    setState(() {
+      _headerMode = HeaderMode.fanzine;
+    });
+    _initData();
+  }
+
+  Widget _buildHeader({bool isStickerOnly = false}) {
+    if (isStickerOnly) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450),
+          child: FanzineWidget(
+            fanzineShortCode: _resolvedShortCode,
+            isStickerOnly: true,
+            onLoginRequested: _showLoginHeader,
+          ),
+        ),
+      );
+    }
+
     if (_isEditingMode && _resolvedFanzineId != null) {
       return Center(
         child: ConstrainedBox(
@@ -221,10 +281,43 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         ),
       );
     }
+
+    if (_headerMode == HeaderMode.login) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450), // Matching the FanzineWidget width
+          child: LoginWidget(
+            onTap: () {
+              setState(() => _headerMode = HeaderMode.register);
+              _scrollToTop();
+            },
+            onLoginSuccess: _onAuthSuccess,
+          ),
+        ),
+      );
+    } else if (_headerMode == HeaderMode.register) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450), // Matching the FanzineWidget width
+          child: RegisterWidget(
+            onTap: () {
+              setState(() => _headerMode = HeaderMode.login);
+              _scrollToTop();
+            },
+            onRegisterSuccess: _onAuthSuccess,
+          ),
+        ),
+      );
+    }
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 450),
-        child: FanzineWidget(fanzineShortCode: _resolvedShortCode),
+        child: FanzineWidget(
+          fanzineShortCode: _resolvedShortCode,
+          isStickerOnly: false,
+          onLoginRequested: _showLoginHeader,
+        ),
       ),
     );
   }
@@ -265,7 +358,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               color: Colors.grey[200],
               child: FanzineGridRenderer(
                 pages: _pages,
-                headerWidget: _buildHeader(),
+                headerWidget: _buildHeader(isStickerOnly: isSplitView), // Simplified in split mode
                 scrollController: _desktopGridScrollController ??= ScrollController(),
                 viewService: _viewService,
                 onPageTap: _onDesktopGridTap,
@@ -281,7 +374,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                     child: FanzineListRenderer(
                       fanzineId: _resolvedFanzineId ?? '',
                       pages: _pages,
-                      headerWidget: _buildHeader(),
+                      headerWidget: _buildHeader(isStickerOnly: false), // Always full size in list
                       itemScrollController: _desktopListScrollController,
                       initialIndex: _targetIndex,
                       viewService: _viewService,

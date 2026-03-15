@@ -5,10 +5,7 @@ import '../components/textfield.dart';
 import '../services/user_bootstrap.dart';
 
 class LoginWidget extends StatefulWidget {
-  // Callback function to trigger switching to the register page
   final void Function()? onTap;
-
-  // NEW: Callback when login is successful (to close modals, etc.)
   final VoidCallback? onLoginSuccess;
 
   const LoginWidget({
@@ -68,30 +65,27 @@ class _LoginWidgetState extends State<LoginWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. The "Envelope" (Manilla Background)
-    return Container(
-      color: const Color(0xFFF1B255), // Manilla Envelope Color
-      padding:
-      const EdgeInsets.all(24.0), // Padding = The visible envelope edge
-      child: Center(
-        child: AspectRatio(
-          // 2. The "Sticker" Shape (5:8)
-          aspectRatio: 5 / 8,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white, // Sticker Color
-              borderRadius:
-              BorderRadius.circular(12.0), // Rounded corners for sticker
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12.0),
+    return AspectRatio(
+      aspectRatio: 5 / 8,
+      child: Container(
+        color: const Color(0xFFF1B255),
+        padding: const EdgeInsets.all(10.0), // Match FanzineWidget padding
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12.0),
+            child: Center(
               child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(24.0),
@@ -101,12 +95,12 @@ class _LoginWidgetState extends State<LoginWidget> {
                     children: [
                       Image.asset(
                         'assets/logo200.gif',
-                        width: 100,
+                        width: 150,
                         semanticLabel: 'Company Logo',
                       ),
-                      const SizedBox(height: 10),
-                      const Text('bqopd', style: TextStyle(fontSize: 16)),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 25),
+                      const Text('bqopd', style: TextStyle(fontSize: 20)),
+                      const SizedBox(height: 30),
                       Form(
                         child: AutofillGroup(
                           child: Column(

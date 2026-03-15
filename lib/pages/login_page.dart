@@ -9,8 +9,7 @@ class LoginPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // This page is now exclusively dedicated to displaying the full Login form,
-    // usually reached via router redirect for protected paths.
+    // The LoginWidget now includes its own aspect ratio and styling wrapper
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
@@ -18,26 +17,10 @@ class LoginPage extends StatelessWidget {
           maxWidth: 1000,
           scroll: true,
           child: Center(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 400),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    spreadRadius: 1,
-                    blurRadius: 5,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12.0),
-                // Display the full Login Form
-                child: LoginWidget(
-                  // When the internal widget is done, navigate away.
-                  onTap: () => context.go('/register'),
-                ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 450),
+              child: LoginWidget(
+                onTap: () => context.go('/register'),
               ),
             ),
           ),

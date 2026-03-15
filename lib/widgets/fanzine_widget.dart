@@ -9,8 +9,15 @@ import 'login_widget.dart';
 
 class FanzineWidget extends StatefulWidget {
   final String? fanzineShortCode;
+  final bool isStickerOnly; // NEW: Flag to render a simplified view
+  final VoidCallback? onLoginRequested; // NEW: Callback for inline login
 
-  const FanzineWidget({super.key, this.fanzineShortCode});
+  const FanzineWidget({
+    super.key,
+    this.fanzineShortCode,
+    this.isStickerOnly = false, // Default to false for backwards compatibility
+    this.onLoginRequested,
+  });
 
   @override
   State<FanzineWidget> createState() => _FanzineWidgetState();
@@ -124,18 +131,22 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   void _handleLinkTap() {
     if (_showLoginLink) {
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
-            child: LoginWidget(
-                onTap: () { Navigator.pop(context); context.go('/register'); },
-                onLoginSuccess: () { Navigator.pop(context); _loadData(); }
+      if (widget.onLoginRequested != null) {
+        widget.onLoginRequested!();
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+              child: LoginWidget(
+                  onTap: () { Navigator.pop(context); context.go('/register'); },
+                  onLoginSuccess: () { Navigator.pop(context); _loadData(); }
+              ),
             ),
           ),
-        ),
-      );
+        );
+      }
     } else if (_targetShortCode != null) {
       context.goNamed('shortlink', pathParameters: {'code': _targetShortCode!});
     }
@@ -154,119 +165,153 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       child: Container(
         color: kPrimaryColor,
         padding: const EdgeInsets.all(10.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // --- TOP PILL (URL) ---
-            Center(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(50),
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                margin: const EdgeInsets.only(bottom: 10),
-                child: RichText(
-                  text: TextSpan(
-                    text: _displayUrl.toLowerCase(),
-                    style: const TextStyle(
-                      fontFamily: 'Impact', // Or fallback to heavyweight
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black,
-                      letterSpacing: 0.5,
-                    ),
-                    recognizer: TapGestureRecognizer()..onTap = _handleLinkTap,
-                  ),
-                ),
-              ),
-            ),
+        child: widget.isStickerOnly
+            ? _buildStickerOnlyView()
+            : _buildFullInteractiveView(),
+      ),
+    );
+  }
 
-            // --- MAIN CARD ---
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    // --- NAVIGATION ROW ---
-                    Container(
-                      padding: const EdgeInsets.only(top: 12, bottom: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          _buildNavText("indicia", 0),
-                          _buildNavDivider(),
-                          _buildNavText("creators", 1),
-                          _buildNavDivider(),
-                          _buildNavText("stats", 2),
-                        ],
-                      ),
-                    ),
-
-                    // --- PERFORATED LINE ---
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8.0),
-                      child: _DashedSeparator(height: 1, color: Color(0xFFD1D1D1)),
-                    ),
-
-                    // --- CONTENT AREA ---
-                    Expanded(
-                      child: _isLoadingData
-                          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                          : PageView(
-                        controller: _pageController,
-                        onPageChanged: (index) => setState(() => _currentPage = index),
-                        children: [
-                          // Tab 0: Indicia (Constrained to 200px)
-                          Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
-                              child: _buildIndiciaTab(),
-                            ),
-                          ),
-                          // Tab 1: Creators (Constrained to 200px)
-                          Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
-                              child: _buildCreatorsTab(),
-                            ),
-                          ),
-                          // Tab 2: Stats (Unconstrained width, centered, scrolls if needed)
-                          Center(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: SingleChildScrollView(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                  child: _buildStatsTab(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+  // --- NEW: SIMPLIFIED VIEW FOR SPLIT SCREEN ---
+  Widget _buildStickerOnlyView() {
+    // Wrapped the white container in Center to shrink-wrap its children
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1)
+            )
           ],
         ),
+        child: Image.asset(
+          'assets/logo200.gif',
+          width: 100, // Slightly smaller width for the sticker
+          fit: BoxFit.contain,
+        ),
       ),
+    );
+  }
+
+  // --- EXISTING LOGIC REFACTORED INTO OWN METHOD ---
+  Widget _buildFullInteractiveView() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // --- TOP PILL (URL) ---
+        Center(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(50),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+              ],
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            margin: const EdgeInsets.only(bottom: 10),
+            child: RichText(
+              text: TextSpan(
+                text: _displayUrl.toLowerCase(),
+                style: const TextStyle(
+                  fontFamily: 'Impact', // Or fallback to heavyweight
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black,
+                  letterSpacing: 0.5,
+                ),
+                recognizer: TapGestureRecognizer()..onTap = _handleLinkTap,
+              ),
+            ),
+          ),
+        ),
+
+        // --- MAIN CARD ---
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                // --- NAVIGATION ROW ---
+                Container(
+                  padding: const EdgeInsets.only(top: 12, bottom: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      _buildNavText("indicia", 0),
+                      _buildNavDivider(),
+                      _buildNavText("creators", 1),
+                      _buildNavDivider(),
+                      _buildNavText("stats", 2),
+                    ],
+                  ),
+                ),
+
+                // --- PERFORATED LINE ---
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _DashedSeparator(height: 1, color: Color(0xFFD1D1D1)),
+                ),
+
+                // --- CONTENT AREA ---
+                Expanded(
+                  child: _isLoadingData
+                      ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                      : PageView(
+                    controller: _pageController,
+                    onPageChanged: (index) => setState(() => _currentPage = index),
+                    children: [
+                      // Tab 0: Indicia (Constrained to 200px)
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
+                          child: _buildIndiciaTab(),
+                        ),
+                      ),
+                      // Tab 1: Creators (Constrained to 200px)
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
+                          child: _buildCreatorsTab(),
+                        ),
+                      ),
+                      // Tab 2: Stats (Unconstrained width, centered, scrolls if needed)
+                      Center(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SingleChildScrollView(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                              child: _buildStatsTab(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
