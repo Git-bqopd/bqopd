@@ -25,6 +25,7 @@ class UserProvider extends ChangeNotifier {
     'Approve': false,
     'Fanzine': false,
     'Credits': false,
+    'Indicia': true, // NEW: For reading and editing issue-wide indicia
     'Edit': true,
     'OCR': false,      // NEW: Editor tool
     'Entities': false, // NEW: Editor tool

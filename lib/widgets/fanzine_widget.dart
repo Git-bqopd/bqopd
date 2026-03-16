@@ -9,8 +9,8 @@ import 'login_widget.dart';
 
 class FanzineWidget extends StatefulWidget {
   final String? fanzineShortCode;
-  final bool isStickerOnly; // NEW: Flag to render a simplified view
-  final VoidCallback? onLoginRequested; // NEW: Callback for inline login
+  final bool isStickerOnly; // Flag to render a simplified view
+  final VoidCallback? onLoginRequested; // Callback for inline login
 
   const FanzineWidget({
     super.key,
@@ -172,9 +172,8 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     );
   }
 
-  // --- NEW: SIMPLIFIED VIEW FOR SPLIT SCREEN ---
+  // --- SIMPLIFIED VIEW FOR SPLIT SCREEN ---
   Widget _buildStickerOnlyView() {
-    // Wrapped the white container in Center to shrink-wrap its children
     return Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -199,7 +198,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     );
   }
 
-  // --- EXISTING LOGIC REFACTORED INTO OWN METHOD ---
+  // --- FULL INTERACTIVE VIEW ---
   Widget _buildFullInteractiveView() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -321,24 +320,12 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     if (_fanzineData == null && _isLoadingData) return const Center(child: Text("Pending...", style: TextStyle(fontSize: 10)));
 
     final indiciaText = _fanzineData?['masterIndicia'] as String? ?? _dummyIndicia;
-    final title = _fanzineData?['title'] ?? 'Untitled';
-    final status = _fanzineData?['status'] ?? 'Draft';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-              title.toString().toUpperCase(),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, height: 1.2, color: Colors.black, fontFamily: 'Arial')
-          ),
-          const SizedBox(height: 4),
-          Text(
-              "STATUS: ${status.toString().toUpperCase()}",
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.black54, fontFamily: 'Arial')
-          ),
-          const SizedBox(height: 12),
           Text(
             indiciaText,
             style: const TextStyle(fontSize: 10, height: 1.5, color: Colors.black87, fontFamily: 'Georgia'),
@@ -350,8 +337,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   }
 
   Widget _buildCreatorsTab() {
-    // 1. Prioritize masterCreators from DB
-    // 2. Fall back to _dummyCreators for testing UI
     final rawCreators = _fanzineData?['masterCreators'] as List<dynamic>?;
     final creators = rawCreators != null
         ? rawCreators.map((e) => e as Map<String, dynamic>).toList()
@@ -402,7 +387,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   Widget _buildCreatorInfo(String? uid, String fallbackName) {
     if (uid == null || uid.isEmpty) {
-      // Non-platform user (Guest Contributor)
       return Row(
           children: [
             Container(
@@ -428,7 +412,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       );
     }
 
-    // Platform user (Fetch data from Users collection)
     return FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
         builder: (context, snap) {
@@ -474,7 +457,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                   child: GestureDetector(
                     onTap: () {
                       if (userExists && handle != "@unknown") {
-                        // route expects code without '@'
                         context.goNamed('shortlink', pathParameters: {'code': handle.substring(1)});
                       }
                     },
@@ -496,18 +478,12 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   Widget _buildStatsTab() {
     if (_fanzineId == null) return const Center(child: Text("Loading...", style: TextStyle(fontSize: 10)));
 
-    // We wrap the StatsTable but customize it to look like the HTML grid
-    // Since StatsTable is complex, we will stick to a simplified representation matching the HTML
-    // using the existing StatsTable data logic but applying our constraints.
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
       child: StatsTable(
         contentId: _fanzineId!,
         viewService: _viewService,
         isFanzine: true,
-        // Passing a flag or creating a custom styled version would be ideal,
-        // but StatsTable is a separate widget. For now, it will render inside
-        // our 200px constraint, which forces it to look compact like the design.
       ),
     );
   }
@@ -567,6 +543,8 @@ class _DashedSeparator extends StatelessWidget {
         final dashHeight = height;
         final dashCount = (boxWidth / (2 * dashWidth)).floor();
         return Flex(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          direction: Axis.horizontal,
           children: List.generate(dashCount, (_) {
             return SizedBox(
               width: dashWidth,
@@ -574,8 +552,6 @@ class _DashedSeparator extends StatelessWidget {
               child: DecoratedBox(decoration: BoxDecoration(color: color)),
             );
           }),
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          direction: Axis.horizontal,
         );
       },
     );

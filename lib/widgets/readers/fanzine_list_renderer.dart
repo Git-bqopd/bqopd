@@ -55,6 +55,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   final Map<int, bool> _openOCRRows = {};
   final Map<int, bool> _openEntityRows = {};
   final Map<int, bool> _openPublisherRows = {};
+  final Map<int, bool> _openIndiciaRows = {};
 
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
@@ -91,6 +92,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     _openOCRRows[index] = false;
     _openEntityRows[index] = false;
     _openPublisherRows[index] = false;
+    _openIndiciaRows[index] = false;
   }
 
   void _handleTextToggle(int index, String text, String imageId) {
@@ -189,6 +191,18 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     }
   }
 
+  void _handleIndiciaToggle(int index, String imageId) {
+    if (widget.onExternalDrawerRequest != null) {
+      widget.onExternalDrawerRequest!(_buildSidebarIndicia(imageId));
+    } else {
+      setState(() {
+        final val = !(_openIndiciaRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openIndiciaRows[index] = val;
+      });
+    }
+  }
+
   Widget _buildSidebarText(String text, String imageId) {
     return _SidebarWrapper(
       title: "",
@@ -252,6 +266,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     return _SidebarWrapper(title: "VIDEO", child: YouTubePlayerWidget(imageId: imageId));
   }
 
+  Widget _buildSidebarIndicia(String imageId) {
+    return _SidebarWrapper(title: "ISSUE INDICIA", child: _MasterIndiciaWidget(fanzineId: widget.fanzineId, isEditingMode: widget.isEditingMode));
+  }
+
   Future<void> _submitComment(int pageIndex, String imageId) async {
     final controller = _commentControllers[pageIndex];
     if (controller == null || controller.text.trim().isEmpty) return;
@@ -276,7 +294,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
 
-        // ROBUST ID CHECK: Fallback check for standard Firestore ID maps
         final String pageId = pageData['id'] ?? pageData['__id'] ?? '';
         final String imageId = pageData['imageId'] ?? '';
 
@@ -296,6 +313,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           isOCROpen: _openOCRRows[pageIndex] ?? false,
           isEntitiesOpen: _openEntityRows[pageIndex] ?? false,
           isPublisherOpen: _openPublisherRows[pageIndex] ?? false,
+          isIndiciaOpen: _openIndiciaRows[pageIndex] ?? false,
           onToggleText: (actualText) => _handleTextToggle(pageIndex, actualText, imageId),
           onToggleOCR: () => _handleOCRToggle(pageIndex, imageId, pageId),
           onToggleEntities: (actualText) => _handleEntityToggle(pageIndex, imageId, actualText),
@@ -304,6 +322,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           onToggleViews: () => _handleViewToggle(pageIndex, imageId),
           onToggleCredits: () => _handleCreditToggle(pageIndex, imageId),
           onToggleYouTube: () => _handleYouTubeToggle(pageIndex, imageId),
+          onToggleIndicia: () => _handleIndiciaToggle(pageIndex, imageId),
           onOpenGrid: widget.onOpenGrid,
           submitComment: (imgId) => _submitComment(pageIndex, imgId),
           commentController: _commentControllers.putIfAbsent(pageIndex, () => TextEditingController()),
@@ -331,6 +350,7 @@ class _PageWidget extends StatefulWidget {
   final bool isOCROpen;
   final bool isEntitiesOpen;
   final bool isPublisherOpen;
+  final bool isIndiciaOpen;
   final Function(String actualText) onToggleText;
   final VoidCallback onToggleOCR;
   final Function(String actualText) onToggleEntities;
@@ -339,6 +359,7 @@ class _PageWidget extends StatefulWidget {
   final VoidCallback onToggleViews;
   final VoidCallback onToggleCredits;
   final VoidCallback onToggleYouTube;
+  final VoidCallback onToggleIndicia;
   final Function(int)? onOpenGrid;
   final Function(String) submitComment;
   final TextEditingController commentController;
@@ -361,6 +382,7 @@ class _PageWidget extends StatefulWidget {
     required this.isOCROpen,
     required this.isEntitiesOpen,
     required this.isPublisherOpen,
+    required this.isIndiciaOpen,
     required this.onToggleText,
     required this.onToggleOCR,
     required this.onToggleEntities,
@@ -369,6 +391,7 @@ class _PageWidget extends StatefulWidget {
     required this.onToggleViews,
     required this.onToggleCredits,
     required this.onToggleYouTube,
+    required this.onToggleIndicia,
     this.onOpenGrid,
     required this.submitComment,
     required this.commentController,
@@ -421,104 +444,118 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
         const SizedBox(height: verticalGap),
 
         StreamBuilder<DocumentSnapshot>(
-          stream: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots() : null,
-          builder: (context, snapshot) {
-            bool isGame = false;
-            String? youtubeId;
-            String actualText = "";
+            stream: FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).snapshots(),
+            builder: (context, fzSnapshot) {
+              final fzData = fzSnapshot.data?.data() as Map<String, dynamic>?;
+              final indiciaPageId = fzData?['indiciaPageId'];
+              final isIndiciaPage = pageId == indiciaPageId;
 
-            if (snapshot.hasData && snapshot.data?.data() != null) {
-              final data = snapshot.data!.data() as Map<String, dynamic>;
-              isGame = data['isGame'] == true;
-              youtubeId = data['youtubeId'] as String?;
-              actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
-            }
+              return StreamBuilder<DocumentSnapshot>(
+                stream: imageId.isNotEmpty ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots() : null,
+                builder: (context, snapshot) {
+                  bool isGame = false;
+                  String? youtubeId;
+                  String actualText = "";
 
-            return Column(
-              children: [
-                Container(
-                  color: Colors.white,
-                  child: SocialToolbar(
-                    imageId: imageId,
-                    pageId: pageId,
-                    fanzineId: widget.fanzineId,
-                    pageNumber: widget.pageIndex + 1,
-                    isGame: isGame,
-                    youtubeId: youtubeId,
-                    isEditingMode: widget.isEditingMode,
-                    onToggleEditMode: widget.onToggleEditMode,
-                    onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
-                    onToggleComments: widget.onToggleComment,
-                    onToggleText: () => widget.onToggleText(actualText),
-                    onToggleOCR: widget.onToggleOCR,
-                    onToggleEntities: () => widget.onToggleEntities(actualText),
-                    onTogglePublisher: () => widget.onTogglePublisher(actualText),
-                    onToggleViews: widget.onToggleViews,
-                    onToggleCredits: widget.onToggleCredits,
-                    onToggleYouTube: widget.onToggleYouTube,
-                  ),
-                ),
-                if (widget.isTextOpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(
-                    color: const Color(0xFFFDFBF7),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _FontSizeSlider(fontSizeNotifier: widget.fontSizeNotifier),
-                        ValueListenableBuilder<double>(
-                          valueListenable: widget.fontSizeNotifier,
-                          builder: (context, size, _) {
-                            return SelectableText.rich(
-                              LinkParser.renderLinks(context, actualText, baseStyle: TextStyle(fontSize: size, fontFamily: 'Georgia')),
-                              textAlign: TextAlign.justify,
-                            );
-                          },
+                  if (snapshot.hasData && snapshot.data?.data() != null) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>;
+                    isGame = data['isGame'] == true;
+                    youtubeId = data['youtubeId'] as String?;
+                    actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
+                  }
+
+                  return Column(
+                    children: [
+                      Container(
+                        color: Colors.white,
+                        child: SocialToolbar(
+                          imageId: imageId,
+                          pageId: pageId,
+                          fanzineId: widget.fanzineId,
+                          pageNumber: widget.pageIndex + 1,
+                          isGame: isGame,
+                          youtubeId: youtubeId,
+                          isEditingMode: widget.isEditingMode,
+                          onToggleEditMode: widget.onToggleEditMode,
+                          onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
+                          onToggleComments: widget.onToggleComment,
+                          onToggleText: () => widget.onToggleText(actualText),
+                          onToggleOCR: widget.onToggleOCR,
+                          onToggleEntities: () => widget.onToggleEntities(actualText),
+                          onTogglePublisher: () => widget.onTogglePublisher(actualText),
+                          onToggleViews: widget.onToggleViews,
+                          onToggleCredits: widget.onToggleCredits,
+                          onToggleYouTube: widget.onToggleYouTube,
+                          onToggleIndicia: isIndiciaPage ? widget.onToggleIndicia : null, // Restricted
+                        ),
+                      ),
+                      if (widget.isTextOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(
+                          color: const Color(0xFFFDFBF7),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _FontSizeSlider(fontSizeNotifier: widget.fontSizeNotifier),
+                              ValueListenableBuilder<double>(
+                                valueListenable: widget.fontSizeNotifier,
+                                builder: (context, size, _) {
+                                  return SelectableText.rich(
+                                    LinkParser.renderLinks(context, actualText, baseStyle: TextStyle(fontSize: size, fontFamily: 'Georgia')),
+                                    textAlign: TextAlign.justify,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ],
-                    ),
-                  ),
-                ],
-                if (widget.isOCROpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(
-                      color: Colors.grey[50]!,
-                      child: _OCRStatusView(fanzineId: widget.fanzineId, pageId: pageId, imageId: imageId)
-                  ),
-                ],
-                if (widget.isEntitiesOpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(
-                      color: Colors.white,
-                      child: _PageEntitiesView(text: actualText)
-                  ),
-                ],
-                if (widget.isPublisherOpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(
-                      color: Colors.white,
-                      child: _InlineTextEditor(imageId: imageId, initialText: actualText, showPublisherPreview: true)
-                  ),
-                ],
-                if (widget.isYouTubeOpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(color: Colors.black, child: YouTubePlayerWidget(imageId: imageId)),
-                ],
-                if (widget.isCommentsOpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(color: Colors.white, child: Column(children: [ConstrainedBox(constraints: const BoxConstraints(maxHeight: 300), child: _CommentList(imageId: imageId, service: EngagementService())), _CommentInput(controller: widget.commentController, onSend: () => widget.submitComment(imageId))])),
-                ],
-                if (widget.isViewsOpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(color: Colors.grey[50]!, child: imageId.isNotEmpty ? StatsTable(contentId: imageId, viewService: widget.viewService) : const Text("Image not yet registered. Wait for OCR.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))),
-                ],
-                if (widget.isCreditsOpen) ...[
-                  const SizedBox(height: verticalGap),
-                  _BonusRowWrapper(color: Colors.white, child: _CreditsEditorWidget(imageId: imageId)),
-                ],
-              ],
-            );
-          },
+                      if (widget.isOCROpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(
+                            color: Colors.grey[50]!,
+                            child: _OCRStatusView(fanzineId: widget.fanzineId, pageId: pageId, imageId: imageId)
+                        ),
+                      ],
+                      if (widget.isEntitiesOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(
+                            color: Colors.white,
+                            child: _PageEntitiesView(text: actualText)
+                        ),
+                      ],
+                      if (widget.isPublisherOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(
+                            color: Colors.white,
+                            child: _InlineTextEditor(imageId: imageId, initialText: actualText, showPublisherPreview: true)
+                        ),
+                      ],
+                      if (widget.isYouTubeOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(color: Colors.black, child: YouTubePlayerWidget(imageId: imageId)),
+                      ],
+                      if (widget.isCommentsOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(color: Colors.white, child: Column(children: [ConstrainedBox(constraints: const BoxConstraints(maxHeight: 300), child: _CommentList(imageId: imageId, service: EngagementService())), _CommentInput(controller: widget.commentController, onSend: () => widget.submitComment(imageId))])),
+                      ],
+                      if (widget.isViewsOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(color: Colors.grey[50]!, child: imageId.isNotEmpty ? StatsTable(contentId: imageId, viewService: widget.viewService) : const Text("Image not yet registered. Wait for OCR.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))),
+                      ],
+                      if (widget.isCreditsOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(color: Colors.white, child: _CreditsEditorWidget(imageId: imageId)),
+                      ],
+                      if (widget.isIndiciaOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(color: Colors.white, child: _MasterIndiciaWidget(fanzineId: widget.fanzineId, isEditingMode: widget.isEditingMode)),
+                      ],
+                    ],
+                  );
+                },
+              );
+            }
         ),
       ],
     );
@@ -533,7 +570,6 @@ class _OCRStatusView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // SAFEGUARD: Ensure we don't query with an empty ID and crash the app
     if (fanzineId.isEmpty || pageId.isEmpty) {
       return const Text("Pipeline data unavailable (Missing Page ID).", style: TextStyle(color: Colors.red, fontSize: 12));
     }
@@ -577,7 +613,6 @@ class _OCRStatusView extends StatelessWidget {
                 const Text("Error Log:", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
                 Text(error, style: TextStyle(fontSize: 10, color: Colors.red[700], fontFamily: 'Courier')),
                 const SizedBox(height: 12),
-                // NEW: Instant Retry Button for errored pages
                 Align(
                   alignment: Alignment.centerLeft,
                   child: OutlinedButton.icon(
@@ -597,8 +632,6 @@ class _OCRStatusView extends StatelessWidget {
               const Divider(),
               const Text("RAW EXTRACTION", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
-
-              // SAFEGUARD: Don't fetch empty image document
               if (imageId.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -914,5 +947,149 @@ class _EntityRow extends StatelessWidget {
       await createAlias(aliasHandle: name, targetHandle: target);
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
     } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
+  }
+}
+
+class _MasterIndiciaWidget extends StatefulWidget {
+  final String fanzineId;
+  final bool isEditingMode;
+  const _MasterIndiciaWidget({required this.fanzineId, required this.isEditingMode});
+
+  @override
+  State<_MasterIndiciaWidget> createState() => _MasterIndiciaWidgetState();
+}
+
+class _MasterIndiciaWidgetState extends State<_MasterIndiciaWidget> {
+  final TextEditingController _c = TextEditingController();
+  List<Map<String, dynamic>> _assembledCreators = [];
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final doc = await FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).get();
+    if (doc.exists && mounted) {
+      setState(() {
+        _c.text = doc.data()?['masterIndicia'] ?? '';
+        _assembledCreators = (doc.data()?['masterCreators'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).update({
+        'masterIndicia': _c.text.trim(),
+        'masterCreators': _assembledCreators,
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _autoAssemble() async {
+    setState(() => _loading = true);
+    try {
+      final pagesSnap = await FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber').get();
+      List<String> assembledIndicia = [];
+      List<Map<String, dynamic>> allCreators = [];
+      Set<String> seenCreatorKeys = {};
+
+      for (var p in pagesSnap.docs) {
+        final pData = p.data();
+        final imageId = pData['imageId'];
+        if (imageId != null && imageId.toString().isNotEmpty) {
+          final imgDoc = await FirebaseFirestore.instance.collection('images').doc(imageId).get();
+          if (imgDoc.exists) {
+            final imgData = imgDoc.data() as Map<String, dynamic>;
+
+            // Collect Unique Creators
+            final creators = imgData['creators'] as List? ?? [];
+            for (var c in creators) {
+              final cMap = Map<String, dynamic>.from(c as Map);
+              final key = "${cMap['uid']}_${cMap['name']}_${cMap['role']}";
+              if (!seenCreatorKeys.contains(key)) {
+                seenCreatorKeys.add(key);
+                allCreators.add(cMap);
+              }
+            }
+
+            // Collect Indicia text only
+            final imgIndicia = imgData['indicia'] as String?;
+            if (imgIndicia != null && imgIndicia.trim().isNotEmpty) {
+              assembledIndicia.add(imgIndicia.trim());
+            }
+          }
+        }
+      }
+
+      setState(() {
+        _c.text = assembledIndicia.join('\n\n').trim();
+        _assembledCreators = allCreators;
+      });
+
+    } catch (e) {
+      debugPrint("Assemble error: $e");
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+
+    if (!widget.isEditingMode) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text("ISSUE INDICIA", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Text(_c.text.isEmpty ? "No indicia available for this issue." : _c.text, style: const TextStyle(fontSize: 12, fontFamily: 'Georgia', height: 1.5)),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text("INDICIA EDITOR", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            ElevatedButton.icon(
+              onPressed: _autoAssemble,
+              icon: const Icon(Icons.auto_awesome, size: 14),
+              label: const Text("Auto-Assemble Meta", style: TextStyle(fontSize: 11)),
+              style: ElevatedButton.styleFrom(visualDensity: VisualDensity.compact),
+            )
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _c,
+          maxLines: null,
+          minLines: 5,
+          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "Master Indicia text..."),
+          style: const TextStyle(fontSize: 12, fontFamily: 'Georgia', height: 1.5),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? "Saving..." : "Save Master Meta"),
+          ),
+        )
+      ],
+    );
   }
 }

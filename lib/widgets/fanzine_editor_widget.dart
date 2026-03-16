@@ -217,8 +217,8 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
             _lastSyncedTitle = title;
           }
 
+          // REMOVED: Fixed height: 480 to allow content expansion
           return Container(
-            height: 480,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -226,6 +226,7 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
               boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min, // Shrink-wrap content
               children: [
                 TabBar(
                   labelColor: Theme.of(context).primaryColor,
@@ -237,7 +238,12 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                     Tab(text: "OCR / Ent", icon: Icon(Icons.auto_awesome, size: 20)),
                   ],
                 ),
-                Expanded(
+                // Since fixed height was removed, TabBarView needs a calculated height or wrapping.
+                // Using IntrinsicHeight doesn't work well with TabBarView.
+                // We'll give it a reasonable height but allow internal scrolling if needed,
+                // though the goal is visibility without heavy scrolling.
+                SizedBox(
+                  height: 600, // Adjusted to fit the new "Special Pages" fields comfortably
                   child: TabBarView(
                     children: [
                       // --- SETTINGS TAB ---
@@ -287,6 +293,59 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                                 const Text('Live', style: TextStyle(fontSize: 12)),
                               ])
                             ]),
+
+                            const Divider(height: 24),
+                            const Text('SPECIAL PAGES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                            const SizedBox(height: 8),
+                            StreamBuilder<QuerySnapshot>(
+                                stream: _db.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber').snapshots(),
+                                builder: (context, pagesSnap) {
+                                  if (!pagesSnap.hasData) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator()));
+                                  final pages = pagesSnap.data!.docs;
+                                  List<DropdownMenuItem<String?>> items = [
+                                    const DropdownMenuItem(value: null, child: Text("None"))
+                                  ];
+                                  for (var p in pages) {
+                                    final pData = p.data() as Map<String, dynamic>;
+                                    items.add(DropdownMenuItem(
+                                      value: p.id,
+                                      child: Text("Page ${pData['pageNumber']}"),
+                                    ));
+                                  }
+
+                                  Widget buildDropdown(String label, String field, String? currentValue) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8.0),
+                                      child: Row(
+                                        children: [
+                                          Expanded(flex: 2, child: Text(label, style: const TextStyle(fontSize: 12))),
+                                          Expanded(
+                                            flex: 3,
+                                            child: DropdownButtonFormField<String?>(
+                                              value: items.any((i) => i.value == currentValue) ? currentValue : null,
+                                              items: items,
+                                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                                              onChanged: (val) {
+                                                _db.collection('fanzines').doc(widget.fanzineId).update({field: val});
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+
+                                  return Column(
+                                    children: [
+                                      buildDropdown("Indicia", "indiciaPageId", data['indiciaPageId']),
+                                      buildDropdown("Credits", "creditsPageId", data['creditsPageId']),
+                                      buildDropdown("Table of Contents", "tocPageId", data['tocPageId']),
+                                      buildDropdown("Advertiser Index", "adIndexPageId", data['adIndexPageId']),
+                                    ],
+                                  );
+                                }
+                            ),
+
                             const SizedBox(height: 16),
                             ElevatedButton(
                               onPressed: _isProcessing ? null : () => _updateTitle(_titleController.text),
