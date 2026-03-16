@@ -13,6 +13,8 @@ import '../comment_item.dart';
 import '../stats_table.dart';
 import '../youtube_player_widget.dart';
 import '../templates/basic_text_template.dart';
+import '../templates/calendar_template.dart';
+import '../calendar_editor_widget.dart';
 import '../../services/user_bootstrap.dart';
 import '../../services/username_service.dart';
 
@@ -131,15 +133,27 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     }
   }
 
-  void _handlePublisherToggle(int index, String text, String imageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarPublisher(text, imageId));
+  void _handlePublisherToggle(int index, String text, String imageId, String? templateId) {
+    if (templateId != null && templateId.startsWith('calendar')) {
+      if (widget.onExternalDrawerRequest != null) {
+        widget.onExternalDrawerRequest!(CalendarEditorWidget(folioId: widget.fanzineId));
+      } else {
+        setState(() {
+          final val = !(_openPublisherRows[index] ?? false);
+          _closeAllBonusRows(index);
+          _openPublisherRows[index] = val;
+        });
+      }
     } else {
-      setState(() {
-        final val = !(_openPublisherRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openPublisherRows[index] = val;
-      });
+      if (widget.onExternalDrawerRequest != null) {
+        widget.onExternalDrawerRequest!(_buildSidebarPublisher(text, imageId));
+      } else {
+        setState(() {
+          final val = !(_openPublisherRows[index] ?? false);
+          _closeAllBonusRows(index);
+          _openPublisherRows[index] = val;
+        });
+      }
     }
   }
 
@@ -169,7 +183,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
   void _handleCreditToggle(int index, String imageId) {
     if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarCredits(imageId));
+      widget.onExternalDrawerRequest!(_buildSidebarCredits(index, imageId));
     } else {
       setState(() {
         final val = !(_openCreditRows[index] ?? false);
@@ -177,6 +191,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
         _openCreditRows[index] = val;
       });
     }
+  }
+
+  Widget _buildSidebarCredits(int index, String imageId) {
+    return _SidebarWrapper(title: "ARCHIVAL METADATA & CREDITS", child: _CreditsEditorWidget(imageId: imageId));
   }
 
   void _handleYouTubeToggle(int index, String imageId) {
@@ -258,10 +276,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     return _SidebarWrapper(title: "ANALYTICS", child: StatsTable(contentId: imageId, viewService: widget.viewService));
   }
 
-  Widget _buildSidebarCredits(String imageId) {
-    return _SidebarWrapper(title: "ARCHIVAL METADATA & CREDITS", child: _CreditsEditorWidget(imageId: imageId));
-  }
-
   Widget _buildSidebarYouTube(String imageId) {
     return _SidebarWrapper(title: "VIDEO", child: YouTubePlayerWidget(imageId: imageId));
   }
@@ -289,18 +303,25 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
       itemCount: widget.pages.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 48),
       itemBuilder: (context, index) {
-        if (index == 0) return widget.headerWidget;
+        if (index == 0) {
+          return ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 600),
+            child: widget.headerWidget,
+          );
+        }
 
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
 
         final String pageId = pageData['id'] ?? pageData['__id'] ?? '';
         final String imageId = pageData['imageId'] ?? '';
+        final String? templateId = pageData['templateId'];
 
         return _PageWidget(
           index: index,
           pageIndex: pageIndex,
           pageData: pageData,
+          templateId: templateId,
           fanzineId: widget.fanzineId,
           fanzineTitle: _fanzineTitle,
           isEditingMode: widget.isEditingMode,
@@ -317,7 +338,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           onToggleText: (actualText) => _handleTextToggle(pageIndex, actualText, imageId),
           onToggleOCR: () => _handleOCRToggle(pageIndex, imageId, pageId),
           onToggleEntities: (actualText) => _handleEntityToggle(pageIndex, imageId, actualText),
-          onTogglePublisher: (actualText) => _handlePublisherToggle(pageIndex, actualText, imageId),
+          onTogglePublisher: (actualText) => _handlePublisherToggle(pageIndex, actualText, imageId, templateId),
           onToggleComment: () => _handleCommentToggle(pageIndex, imageId),
           onToggleViews: () => _handleViewToggle(pageIndex, imageId),
           onToggleCredits: () => _handleCreditToggle(pageIndex, imageId),
@@ -338,6 +359,7 @@ class _PageWidget extends StatefulWidget {
   final int index;
   final int pageIndex;
   final Map<String, dynamic> pageData;
+  final String? templateId;
   final String fanzineId;
   final String fanzineTitle;
   final bool isEditingMode;
@@ -370,6 +392,7 @@ class _PageWidget extends StatefulWidget {
     required this.index,
     required this.pageIndex,
     required this.pageData,
+    this.templateId,
     required this.fanzineId,
     required this.fanzineTitle,
     required this.isEditingMode,
@@ -428,6 +451,7 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
     super.build(context);
     final String pageId = widget.pageData['id'] ?? widget.pageData['__id'] ?? '';
     final String imageId = widget.pageData['imageId'] ?? '';
+    final String? templateId = widget.templateId;
     const double verticalGap = 16.0;
 
     return Column(
@@ -438,7 +462,11 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
           aspectRatio: 0.625,
           child: Container(
             color: Colors.grey[100],
-            child: _PageImage(imageUrl: widget.pageData['imageUrl'], storagePath: widget.pageData['storagePath']),
+            child: templateId == 'calendar_left'
+                ? CalendarPageRenderer(isLeft: true, folioId: widget.fanzineId)
+                : templateId == 'calendar_right'
+                ? CalendarPageRenderer(isLeft: false, folioId: widget.fanzineId)
+                : _PageImage(imageUrl: widget.pageData['imageUrl'], storagePath: widget.pageData['storagePath']),
           ),
         ),
         const SizedBox(height: verticalGap),
@@ -528,7 +556,9 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(
                             color: Colors.white,
-                            child: _InlineTextEditor(imageId: imageId, initialText: actualText, showPublisherPreview: true)
+                            child: templateId != null && templateId.startsWith('calendar')
+                                ? CalendarEditorWidget(folioId: widget.fanzineId)
+                                : _InlineTextEditor(imageId: imageId, initialText: actualText, showPublisherPreview: true)
                         ),
                       ],
                       if (widget.isYouTubeOpen) ...[

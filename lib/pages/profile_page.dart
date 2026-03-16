@@ -167,6 +167,47 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _createCalendarFanzine(String userId) async {
+    setState(() => _isLoadingData = true);
+    try {
+      final db = FirebaseFirestore.instance;
+      final fanzineRef = db.collection('fanzines').doc();
+
+      final shortCode = fanzineRef.id.substring(0, 7);
+
+      await fanzineRef.set({
+        'title': 'Convention Calendar 2026',
+        'editorId': userId,
+        'status': 'working',
+        'processingStatus': 'complete',
+        'creationDate': FieldValue.serverTimestamp(),
+        'type': 'calendar',
+        'shortCode': shortCode,
+        'shortCodeKey': shortCode.toUpperCase(),
+        'twoPage': true,
+      });
+
+      await fanzineRef.collection('pages').add({
+        'pageNumber': 1,
+        'templateId': 'calendar_left',
+        'status': 'ready',
+      });
+      await fanzineRef.collection('pages').add({
+        'pageNumber': 2,
+        'templateId': 'calendar_right',
+        'status': 'ready',
+      });
+
+      if (mounted) context.push('/editor/${fanzineRef.id}');
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoadingData = false);
+    }
+  }
+
   Future<void> _handlePdfUpload(String userId) async {
     if (_isUploadingPdf) return;
 
@@ -201,7 +242,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Uploaded "$fileName". Curator processing started.')),
+              SnackBar(
+                  content: Text(
+                      'Uploaded "$fileName". Curator processing started.')),
             );
           }
         }
@@ -280,12 +323,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     height: 50,
                     child: ProfileNavBar(
                       currentIndex: _currentIndex ?? 5,
-                      onTabChanged: (idx) =>
-                          setState(() {
-                            _currentIndex = idx;
-                            if (idx != 1) _showDrafts = false;
-                            if (idx != 0) _editorSubTabIndex = 0;
-                          }),
+                      onTabChanged: (idx) => setState(() {
+                        _currentIndex = idx;
+                        if (idx != 1) _showDrafts = false;
+                        if (idx != 0) _editorSubTabIndex = 0;
+                      }),
                       canEdit: canEditProfile,
                       onUploadImage: () => _showImageUpload(targetUserId),
                     ),
@@ -302,13 +344,16 @@ class _ProfilePageState extends State<ProfilePage> {
                       height: 50,
                       decoration: const BoxDecoration(
                         color: Colors.white,
-                        border: Border(bottom: BorderSide(color: Colors.black12)),
+                        border:
+                        Border(bottom: BorderSide(color: Colors.black12)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           GestureDetector(
-                            onTap: _isUploadingPdf ? null : () => _handlePdfUpload(targetUserId),
+                            onTap: _isUploadingPdf
+                                ? null
+                                : () => _handlePdfUpload(targetUserId),
                             child: Text(
                               _isUploadingPdf ? "uploading..." : "upload PDF",
                               style: const TextStyle(color: Colors.black),
@@ -323,9 +368,15 @@ class _ProfilePageState extends State<ProfilePage> {
                             child: Text(
                               "curator",
                               style: TextStyle(
-                                color: _editorSubTabIndex == 0 ? Colors.black : Colors.grey,
-                                fontWeight: _editorSubTabIndex == 0 ? FontWeight.bold : FontWeight.normal,
-                                decoration: _editorSubTabIndex == 0 ? TextDecoration.underline : null,
+                                color: _editorSubTabIndex == 0
+                                    ? Colors.black
+                                    : Colors.grey,
+                                fontWeight: _editorSubTabIndex == 0
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                decoration: _editorSubTabIndex == 0
+                                    ? TextDecoration.underline
+                                    : null,
                               ),
                             ),
                           ),
@@ -338,9 +389,15 @@ class _ProfilePageState extends State<ProfilePage> {
                             child: Text(
                               "publisher",
                               style: TextStyle(
-                                color: _editorSubTabIndex == 1 ? Colors.black : Colors.grey,
-                                fontWeight: _editorSubTabIndex == 1 ? FontWeight.bold : FontWeight.normal,
-                                decoration: _editorSubTabIndex == 1 ? TextDecoration.underline : null,
+                                color: _editorSubTabIndex == 1
+                                    ? Colors.black
+                                    : Colors.grey,
+                                fontWeight: _editorSubTabIndex == 1
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                decoration: _editorSubTabIndex == 1
+                                    ? TextDecoration.underline
+                                    : null,
                               ),
                             ),
                           ),
@@ -359,14 +416,16 @@ class _ProfilePageState extends State<ProfilePage> {
                       height: 50,
                       decoration: const BoxDecoration(
                         color: Colors.white,
-                        border: Border(bottom: BorderSide(color: Colors.black12)),
+                        border:
+                        Border(bottom: BorderSide(color: Colors.black12)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           GestureDetector(
                             onTap: () => _showImageUpload(targetUserId),
-                            child: const Text("upload image", style: TextStyle(color: Colors.black)),
+                            child: const Text("upload image",
+                                style: TextStyle(color: Colors.black)),
                           ),
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 8.0),
@@ -377,9 +436,14 @@ class _ProfilePageState extends State<ProfilePage> {
                             child: Text(
                               "published pages",
                               style: TextStyle(
-                                color: !_showDrafts ? Colors.black : Colors.grey,
-                                fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal,
-                                decoration: !_showDrafts ? TextDecoration.underline : null,
+                                color:
+                                !_showDrafts ? Colors.black : Colors.grey,
+                                fontWeight: !_showDrafts
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                decoration: !_showDrafts
+                                    ? TextDecoration.underline
+                                    : null,
                               ),
                             ),
                           ),
@@ -393,8 +457,12 @@ class _ProfilePageState extends State<ProfilePage> {
                               "draft pages",
                               style: TextStyle(
                                 color: _showDrafts ? Colors.black : Colors.grey,
-                                fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal,
-                                decoration: _showDrafts ? TextDecoration.underline : null,
+                                fontWeight: _showDrafts
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                decoration: _showDrafts
+                                    ? TextDecoration.underline
+                                    : null,
                               ),
                             ),
                           ),
@@ -422,7 +490,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
     switch (_currentIndex) {
       case 0: // EDITOR
-        if (!isOwner && !isEditor) return const SliverToBoxAdapter(child: SizedBox());
+        if (!isOwner && !isEditor)
+          return const SliverToBoxAdapter(child: SizedBox());
 
         // Fetch all user zines and filter client-side to avoid index requirements
         stream = FirebaseFirestore.instance
@@ -442,7 +511,8 @@ class _ProfilePageState extends State<ProfilePage> {
             } else {
               // PUBLISHER: Show zines that were manually created OR are now live.
               // Only show for the specific user being viewed.
-              final isUserInvolved = data['editorId'] == targetUserId || data['uploaderId'] == targetUserId;
+              final isUserInvolved = data['editorId'] == targetUserId ||
+                  data['uploaderId'] == targetUserId;
               if (!isUserInvolved) return false;
               return !hasSourceFile || isLive;
             }
@@ -495,7 +565,8 @@ class _ProfilePageState extends State<ProfilePage> {
             .map((snap) => snap.docs);
         break;
       case 3: // COMMENTS
-        placeholder = const Center(child: Text("Letters of Comment functionality coming soon."));
+        placeholder = const Center(
+            child: Text("Letters of Comment functionality coming soon."));
         break;
       case 4: // MENTIONS
         stream = FirebaseFirestore.instance
@@ -511,7 +582,8 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     if (placeholder != null) {
-      return SliverToBoxAdapter(child: SizedBox(height: 200, child: placeholder));
+      return SliverToBoxAdapter(
+          child: SizedBox(height: 200, child: placeholder));
     }
 
     if (stream == null) return const SliverToBoxAdapter(child: SizedBox());
@@ -525,16 +597,28 @@ class _ProfilePageState extends State<ProfilePage> {
             buttons.add(TextButton(
                 style: TextButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
-                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero)),
                 onPressed: () => _showNewFanzineModal(targetUserId),
                 child: const Text("make new fanzine",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white))));
+
+            buttons.add(TextButton(
+                style: TextButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero)),
+                onPressed: () => _createCalendarFanzine(targetUserId),
+                child: const Text("con calendar",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white))));
           }
           buttons.add(TextButton(
               style: TextButton.styleFrom(
                   backgroundColor: Colors.grey,
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero)),
               onPressed: () => context.pushNamed('settings'),
               child: const Text("settings",
                   textAlign: TextAlign.center,
@@ -542,11 +626,13 @@ class _ProfilePageState extends State<ProfilePage> {
         }
 
         if (snapshot.hasError) {
-          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}")));
+          return SliverToBoxAdapter(
+              child: Center(child: Text("Error: ${snapshot.error}")));
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+          return const SliverToBoxAdapter(
+              child: Center(child: CircularProgressIndicator()));
         }
 
         final docs = snapshot.data ?? [];
@@ -557,9 +643,12 @@ class _ProfilePageState extends State<ProfilePage> {
           if (_currentIndex == 1 && isOwner) {
             emptyMsg = _showDrafts ? "No pending drafts." : "No published pages.";
           } else if (_currentIndex == 0 && isOwner) {
-            emptyMsg = _editorSubTabIndex == 0 ? "No zines in curator queue." : "No live fanzines.";
+            emptyMsg = _editorSubTabIndex == 0
+                ? "No zines in curator queue."
+                : "No live fanzines.";
           }
-          return SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text(emptyMsg))));
+          return SliverToBoxAdapter(
+              child: SizedBox(height: 100, child: Center(child: Text(emptyMsg))));
         }
 
         return SliverPadding(
@@ -580,7 +669,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 final data = doc.data() as Map<String, dynamic>;
                 final docId = doc.id;
 
-                if (_currentIndex == 0 || _currentIndex == 2 || _currentIndex == 4) {
+                if (_currentIndex == 0 ||
+                    _currentIndex == 2 ||
+                    _currentIndex == 4) {
                   return _FanzineCoverTile(
                     fanzineId: docId,
                     title: data['title'] ?? 'Untitled',
@@ -588,7 +679,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   );
                 } else {
                   String? imageUrl = data['fileUrl'];
-                  if (imageUrl == null || imageUrl.isEmpty) return const SizedBox();
+                  if (imageUrl == null || imageUrl.isEmpty)
+                    return const SizedBox();
 
                   return GestureDetector(
                     onTap: () {
@@ -605,7 +697,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           imageUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
-                          const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                          const Center(
+                              child: Icon(Icons.broken_image, color: Colors.grey)),
                         )),
                   );
                 }
@@ -624,7 +717,8 @@ class _ProfileTabsDelegate extends SliverPersistentHeaderDelegate {
   _ProfileTabsDelegate({required this.child});
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Material(elevation: overlapsContent ? 4 : 0, child: child);
   }
 
@@ -680,7 +774,8 @@ class _FanzineCoverTile extends StatelessWidget {
     return FutureBuilder<String?>(
       future: _fetchCoverUrl(),
       builder: (context, snapshot) {
-        final bool isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final bool isLoading =
+            snapshot.connectionState == ConnectionState.waiting;
         final imageUrl = snapshot.data;
 
         return GestureDetector(
@@ -716,14 +811,18 @@ class _FanzineCoverTile extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.pending_actions, size: 40, color: Colors.grey[400]),
+                        Icon(Icons.pending_actions,
+                            size: 40, color: Colors.grey[400]),
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: Text(
                             "Ingesting...",
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey[500], fontSize: 10, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],

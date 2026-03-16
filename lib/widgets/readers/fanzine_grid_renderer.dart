@@ -30,6 +30,14 @@ class _FanzineGridRendererState extends State<FanzineGridRenderer> {
     const double crossAxisSpacing = 24.0;
     const double padding = 8.0;
 
+    // Check if folio begins with a two-page spread
+    // We also treat template pages (like the calendar) as spreads by default
+    final bool startsWithSpread = widget.pages.isNotEmpty &&
+        (widget.pages[0]['isSpread'] == true || widget.pages[0]['templateId'] != null);
+
+    // If starts with spread, we add a placeholder at index 1 (between header and first page)
+    final int extraTiles = startsWithSpread ? 1 : 0;
+
     return GridView.builder(
       controller: widget.scrollController,
       padding: const EdgeInsets.all(padding),
@@ -39,11 +47,31 @@ class _FanzineGridRendererState extends State<FanzineGridRenderer> {
         mainAxisSpacing: mainAxisSpacing,
         crossAxisSpacing: crossAxisSpacing,
       ),
-      itemCount: widget.pages.length + 1,
+      itemCount: widget.pages.length + 1 + extraTiles,
       itemBuilder: (context, index) {
+        // 0. Header Widget
         if (index == 0) return widget.headerWidget;
 
-        final pageIndex = index - 1;
+        // 1. Optional Placeholder for Spreads
+        if (startsWithSpread && index == 1) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.black12, width: 0.5),
+            ),
+            child: const Center(
+              child: Text(
+                "Cover Position\n(Spread Start)",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic),
+              ),
+            ),
+          );
+        }
+
+        // 2. Normal Pages
+        final pageIndex = index - 1 - extraTiles;
         final pageData = widget.pages[pageIndex];
 
         return _GridTile(
@@ -85,7 +113,6 @@ class _GridTileState extends State<_GridTile> {
     _resolveUrl();
   }
 
-  // UPDATED: Added authenticated URL resolution for Grid View
   Future<void> _resolveUrl() async {
     final storagePath = widget.pageData['storagePath'];
     final imageUrl = widget.pageData['imageUrl'];

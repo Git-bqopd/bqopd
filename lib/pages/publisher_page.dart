@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../widgets/templates/basic_text_template.dart';
+import '../widgets/templates/calendar_template.dart';
 
 class PublisherPage extends StatefulWidget {
   const PublisherPage({super.key});
@@ -16,6 +17,9 @@ class _PublisherPageState extends State<PublisherPage> {
   late TextEditingController _textController;
   bool _isTextDrawerOpen = true;
   bool _isSaving = false;
+
+  // Template Selection State
+  String _selectedTemplate = 'calendar';
 
   final String _initialText = """
 # THE COMET
@@ -72,12 +76,12 @@ If you can read this, the system is working.
     try {
       await FirebaseFirestore.instance.collection('images').add({
         'uploaderId': user.uid,
-        'type': 'text_template',
-        'templateId': 'basic_text_3col',
-        'text': _textController.text,
+        'type': 'template',
+        'templateId': _selectedTemplate,
+        'text': _selectedTemplate == 'basic_text' ? _textController.text : 'Calendar Data',
         'title': 'Generated Page',
         'timestamp': FieldValue.serverTimestamp(),
-        'fileUrl': 'https://placehold.co/400x600/png?text=Text+Page',
+        'fileUrl': 'https://placehold.co/400x600/png?text=Generated+Page',
         'isGenerated': true,
       });
 
@@ -106,6 +110,25 @@ If you can read this, the system is working.
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
+          // Template Selector
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: DropdownButton<String>(
+              value: _selectedTemplate,
+              dropdownColor: Colors.grey[900],
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              underline: const SizedBox(),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+              items: const [
+                DropdownMenuItem(value: 'basic_text', child: Text("Basic Text Template")),
+                DropdownMenuItem(value: 'calendar', child: Text("Calendar Spread")),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedTemplate = val);
+              },
+            ),
+          ),
+          const VerticalDivider(color: Colors.white24, width: 1, indent: 12, endIndent: 12),
           if (_isSaving)
             const Center(child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.0),
@@ -131,48 +154,17 @@ If you can read this, the system is working.
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 16.0),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
                           child: Text(
-                            "Live Preview (2000 x 3200)",
-                            style: TextStyle(color: Colors.white70),
+                            _selectedTemplate == 'calendar'
+                                ? "Live Preview (4000 x 3200 Spread)"
+                                : "Live Preview (2000 x 3200)",
+                            style: const TextStyle(color: Colors.white70),
                           ),
                         ),
                         Expanded(
-                          child: ListenableBuilder(
-                            listenable: _textController,
-                            builder: (context, _) {
-                              // Use the correct pagination method: paginateContent
-                              final pagesOfBlocks = BasicTextTemplate.paginateContent(_textController.text);
-
-                              return ListView.separated(
-                                itemCount: pagesOfBlocks.length,
-                                separatorBuilder: (c, i) => const SizedBox(height: 40),
-                                itemBuilder: (context, index) {
-                                  return Column(
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.only(bottom: 8.0),
-                                        child: Text(
-                                          "Page ${index + 1}",
-                                          style: const TextStyle(color: Colors.white54),
-                                        ),
-                                      ),
-                                      Center(
-                                        child: FittedBox(
-                                          fit: BoxFit.contain,
-                                          child: BasicTextTemplate(
-                                            columns: pagesOfBlocks[index],
-                                            showOverlay: true,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
-                            },
-                          ),
+                          child: _buildPreviewArea(),
                         ),
                       ],
                     ),
@@ -190,7 +182,7 @@ If you can read this, the system is working.
               ],
             ),
           ),
-          if (_isTextDrawerOpen)
+          if (_isTextDrawerOpen && _selectedTemplate == 'basic_text')
             Container(
               width: 400,
               decoration: BoxDecoration(
@@ -233,6 +225,56 @@ If you can read this, the system is working.
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPreviewArea() {
+    if (_selectedTemplate == 'calendar') {
+      return InteractiveViewer(
+        constrained: false,
+        minScale: 0.1,
+        maxScale: 2.0,
+        boundaryMargin: const EdgeInsets.all(400),
+        child: CalendarSpreadTemplate(
+          leftPageMonths: CalendarDummyData.getLeftPageBase(),
+          rightPageMonths: CalendarDummyData.getRightPageBase(),
+        ),
+      );
+    }
+
+    // Default: Basic Text
+    return ListenableBuilder(
+      listenable: _textController,
+      builder: (context, _) {
+        final pagesOfBlocks = BasicTextTemplate.paginateContent(_textController.text);
+
+        return ListView.separated(
+          itemCount: pagesOfBlocks.length,
+          separatorBuilder: (c, i) => const SizedBox(height: 40),
+          itemBuilder: (context, index) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    "Page ${index + 1}",
+                    style: const TextStyle(color: Colors.white54),
+                  ),
+                ),
+                Center(
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: BasicTextTemplate(
+                      columns: pagesOfBlocks[index],
+                      showOverlay: true,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -11,6 +11,7 @@ import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
 import '../widgets/fanzine_editor_widget.dart';
+import '../widgets/calendar_editor_widget.dart';
 import '../widgets/login_widget.dart';
 import '../widgets/register_widget.dart';
 
@@ -38,6 +39,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   bool _isLoading = true;
   String? _resolvedFanzineId;
   String? _resolvedShortCode;
+  String? _resolvedType;
   List<Map<String, dynamic>> _pages = [];
 
   bool _twoPagePreference = true;
@@ -125,6 +127,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       final fanzineDoc = await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).get();
       if (!fanzineDoc.exists) throw Exception("Fanzine not found");
       final fanzineData = fanzineDoc.data() ?? {};
+
+      _resolvedType = fanzineData['type'] ?? 'fanzine';
+
       final bool twoPage = fanzineData['twoPage'] ?? true;
       final snapshot = await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').get();
       final docs = snapshot.docs.map((d) {
@@ -276,7 +281,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           constraints: const BoxConstraints(maxWidth: 800),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: FanzineEditorWidget(fanzineId: _resolvedFanzineId!),
+            child: _resolvedType == 'calendar'
+                ? CalendarEditorWidget(folioId: _resolvedFanzineId!)
+                : FanzineEditorWidget(fanzineId: _resolvedFanzineId!),
           ),
         ),
       );
@@ -285,7 +292,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     if (_headerMode == HeaderMode.login) {
       return Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 450), // Matching the FanzineWidget width
+          constraints: const BoxConstraints(maxWidth: 450),
           child: LoginWidget(
             onTap: () {
               setState(() => _headerMode = HeaderMode.register);
@@ -298,7 +305,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     } else if (_headerMode == HeaderMode.register) {
       return Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 450), // Matching the FanzineWidget width
+          constraints: const BoxConstraints(maxWidth: 450),
           child: RegisterWidget(
             onTap: () {
               setState(() => _headerMode = HeaderMode.login);
@@ -358,7 +365,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               color: Colors.grey[200],
               child: FanzineGridRenderer(
                 pages: _pages,
-                headerWidget: _buildHeader(isStickerOnly: isSplitView), // Simplified in split mode
+                headerWidget: _buildHeader(isStickerOnly: isSplitView),
                 scrollController: _desktopGridScrollController ??= ScrollController(),
                 viewService: _viewService,
                 onPageTap: _onDesktopGridTap,
@@ -368,13 +375,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             Widget listComponent = Container(
               color: Colors.white,
               child: Stack(
-                fit: StackFit.expand,
                 children: [
                   Positioned.fill(
                     child: FanzineListRenderer(
                       fanzineId: _resolvedFanzineId ?? '',
                       pages: _pages,
-                      headerWidget: _buildHeader(isStickerOnly: false), // Always full size in list
+                      headerWidget: _buildHeader(isStickerOnly: false),
                       itemScrollController: _desktopListScrollController,
                       initialIndex: _targetIndex,
                       viewService: _viewService,
@@ -388,7 +394,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                     Positioned(
                       top: 8, right: 8,
                       child: FloatingActionButton.small(
-                        backgroundColor: Colors.white, foregroundColor: Colors.black, elevation: 2,
+                        backgroundColor: Colors.white, foregroundColor: Colors.black, elevation: 4,
                         child: const Icon(Icons.close),
                         onPressed: () { setState(() { _showList = false; _activeDrawerContent = null; }); },
                       ),
