@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/con_week.dart';
+import '../models/page_event.dart';
 
 /// The editor settings widget for Calendar "Folios".
 /// Sits in the sidebar drawer or "Settings" tab of the Fanzine View Editor.
@@ -16,11 +18,14 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final TextEditingController _titleController = TextEditingController();
 
-  final _nameCtrl = TextEditingController();
-  final _handleCtrl = TextEditingController();
-  final _locationCtrl = TextEditingController();
-  String _selectedMonth = 'February';
-  String _selectedDay = '13';
+  // Phase 1: Week Selection State
+  List<ConWeek> _availableWeeks = [];
+  ConWeek? _selectedWeek;
+
+  // Phase 2 & 3: Selection State
+  PageEvent? _selectedEvent;
+
+  // Toggles
   bool _isHighlighted = false;
   bool _bqopdAttending = false;
 
@@ -47,8 +52,21 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> {
         _titleController.text = data['title'] ?? '';
         _startMonth = data['startMonth'] ?? 2;
         _startYear = data['startYear'] ?? 2026;
+        _initializeWeeks();
       });
     }
+  }
+
+  void _initializeWeeks() {
+    final startMonthStr = _months[_startMonth - 1];
+    final startYearStr = _startYear.toString();
+
+    setState(() {
+      _availableWeeks = generateConWeeks(startMonthStr, startYearStr);
+      if (_availableWeeks.isNotEmpty) {
+        _selectedWeek = _availableWeeks.first;
+      }
+    });
   }
 
   Future<void> _updateSettings() async {
@@ -57,26 +75,48 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> {
       'startMonth': _startMonth,
       'startYear': _startYear,
     });
+
+    // Refresh weeks if the start date changed
+    _initializeWeeks();
+
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Folio Settings Updated")));
   }
 
+  /// Phase 4: Save Mapping
+  /// Maps the selected PageEvent and ConWeek into the 'conventions' collection format.
   Future<void> _addEvent() async {
-    if (_nameCtrl.text.isEmpty) return;
+    if (_selectedEvent == null || _selectedWeek == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a week and an event card first.")));
+      return;
+    }
+
+    // Determine the month name from the selected Thursday (the week's start)
+    final monthName = _months[_selectedWeek!.startDate.month - 1];
+    final startDay = _selectedWeek!.startDate.day.toString();
+
+    // Map community PageEvent fields to the internal Convention schema
     await _db.collection('conventions').add({
-      'name': _nameCtrl.text.trim(),
-      'handle': _handleCtrl.text.trim(),
-      'location': _locationCtrl.text.trim(),
-      'month': _selectedMonth,
-      'startDay': _selectedDay,
+      'name': _selectedEvent!.eventName,
+      'handle': '@${_selectedEvent!.username}',
+      'location': '${_selectedEvent!.city}, ${_selectedEvent!.state}',
+      'month': monthName,
+      'startDay': startDay,
       'isHighlighted': _isHighlighted,
       'bqopdAttending': _bqopdAttending,
       'folioId': widget.folioId,
       'timestamp': FieldValue.serverTimestamp(),
+      'originalEventId': _selectedEvent!.id, // Reference to original community event
     });
-    _nameCtrl.clear();
-    _handleCtrl.clear();
-    _locationCtrl.clear();
-    setState(() { _isHighlighted = false; _bqopdAttending = false; });
+
+    if (mounted) {
+      setState(() {
+        // Reset selection state after committing
+        _selectedEvent = null;
+        _isHighlighted = false;
+        _bqopdAttending = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Convention added to Folio!")));
+    }
   }
 
   Future<void> _deleteEvent(String id) async {
@@ -157,27 +197,111 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text("ADD CONVENTION", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                      const Text("SELECT WEEK", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: _selectedMonth,
-                        items: _months.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                        onChanged: (v) => setState(() => _selectedMonth = v!),
-                        decoration: const InputDecoration(labelText: 'Match Month Name', border: OutlineInputBorder(), isDense: true),
+
+                      DropdownButtonFormField<ConWeek>(
+                        decoration: const InputDecoration(
+                            labelText: 'Convention Week (Thu-Sun)',
+                            border: OutlineInputBorder(),
+                            isDense: true
+                        ),
+                        value: _selectedWeek,
+                        items: _availableWeeks.map((week) {
+                          return DropdownMenuItem<ConWeek>(
+                            value: week,
+                            child: Text(week.displayString, style: const TextStyle(fontSize: 13)),
+                          );
+                        }).toList(),
+                        onChanged: (ConWeek? newValue) {
+                          setState(() {
+                            _selectedWeek = newValue;
+                            _selectedEvent = null; // Reset selection on week change
+                          });
+                        },
                       ),
+
+                      const SizedBox(height: 16),
+                      const Text("CONVENTIONS THIS WEEK", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.grey)),
                       const SizedBox(height: 8),
-                      TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Convention Name', border: OutlineInputBorder(), isDense: true)),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(child: TextField(controller: _handleCtrl, decoration: const InputDecoration(labelText: '@handle', border: OutlineInputBorder(), isDense: true))),
-                        const SizedBox(width: 8),
-                        Expanded(child: TextField(controller: _locationCtrl, decoration: const InputDecoration(labelText: 'City, ST', border: OutlineInputBorder(), isDense: true))),
-                      ]),
-                      const SizedBox(height: 8),
-                      TextField(
-                        decoration: const InputDecoration(labelText: 'Match Start Day (e.g. 19)', border: OutlineInputBorder(), isDense: true),
-                        onChanged: (v) => _selectedDay = v,
+
+                      // Database Search Results
+                      SizedBox(
+                        height: 160,
+                        child: _selectedWeek == null
+                            ? const Center(child: Text("Select a week to search", style: TextStyle(fontSize: 11, color: Colors.grey)))
+                            : StreamBuilder<QuerySnapshot>(
+                          stream: _db.collection('page_events')
+                              .where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedWeek!.startDate))
+                              .where('startDate', isLessThanOrEqualTo: Timestamp.fromDate(_selectedWeek!.endDate))
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 10)));
+                            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+                            final docs = snapshot.data!.docs;
+                            if (docs.isEmpty) return const Center(child: Text("No events found in database.", style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic)));
+
+                            return ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: docs.length,
+                              itemBuilder: (context, index) {
+                                final doc = docs[index];
+                                final data = doc.data() as Map<String, dynamic>;
+                                final event = PageEvent.fromMap(data, doc.id);
+                                final bool isSelected = _selectedEvent?.id == event.id;
+
+                                return GestureDetector(
+                                  onTap: () => setState(() => _selectedEvent = event),
+                                  child: Container(
+                                    width: 140,
+                                    margin: const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? Colors.black : Colors.white,
+                                      border: Border.all(color: isSelected ? Colors.black : Colors.grey[300]!),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          event.eventName,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                              color: isSelected ? Colors.white : Colors.black
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          "${event.city}, ${event.state}",
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: isSelected ? Colors.grey[400] : Colors.grey[600]
+                                          ),
+                                        ),
+                                        Text(
+                                          "@${event.username}",
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: isSelected ? Colors.amber : Colors.blue
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
+
+                      const SizedBox(height: 8),
                       CheckboxListTile(
                         title: const Text("Highlight Box", style: TextStyle(fontSize: 12)),
                         value: _isHighlighted,
@@ -192,7 +316,10 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      ElevatedButton(onPressed: _addEvent, child: const Text("Commit to Database")),
+                      ElevatedButton(
+                          onPressed: _selectedEvent == null ? null : _addEvent,
+                          child: const Text("Commit to Database")
+                      ),
                       const Divider(height: 32),
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
