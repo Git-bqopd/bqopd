@@ -15,6 +15,7 @@ import '../youtube_player_widget.dart';
 import '../templates/basic_text_template.dart';
 import '../templates/calendar_template.dart';
 import '../calendar_editor_widget.dart';
+import '../hashtag_bar.dart'; // NEW
 import '../../services/user_bootstrap.dart';
 import '../../services/username_service.dart';
 
@@ -58,6 +59,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   final Map<int, bool> _openEntityRows = {};
   final Map<int, bool> _openPublisherRows = {};
   final Map<int, bool> _openIndiciaRows = {};
+  final Map<int, bool> _openTagRows = {}; // NEW: Track tags bonus row
 
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
@@ -95,6 +97,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     _openEntityRows[index] = false;
     _openPublisherRows[index] = false;
     _openIndiciaRows[index] = false;
+    _openTagRows[index] = false; // NEW
   }
 
   void _handleTextToggle(int index, String text, String imageId) {
@@ -105,6 +108,19 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
         final val = !(_openTextRows[index] ?? false);
         _closeAllBonusRows(index);
         _openTextRows[index] = val;
+      });
+    }
+  }
+
+  // NEW: Handle Hashtag toggle
+  void _handleTagToggle(int index, String imageId) {
+    if (widget.onExternalDrawerRequest != null) {
+      widget.onExternalDrawerRequest!(_buildSidebarTags(imageId));
+    } else {
+      setState(() {
+        final val = !(_openTagRows[index] ?? false);
+        _closeAllBonusRows(index);
+        _openTagRows[index] = val;
       });
     }
   }
@@ -246,6 +262,24 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     );
   }
 
+  // NEW: Sidebar widget for tags
+  Widget _buildSidebarTags(String imageId) {
+    return _SidebarWrapper(
+      title: "HASHTAGS & VOTING",
+      child: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('images').doc(imageId).snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+          final tags = data['tags'] as Map<String, dynamic>? ?? {};
+          return SingleChildScrollView(
+            child: HashtagBar(imageId: imageId, tags: tags),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildSidebarOCR(String imageId, String pageId) {
     return _SidebarWrapper(
       title: "OCR PIPELINE (EGG EDITOR)",
@@ -335,7 +369,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           isEntitiesOpen: _openEntityRows[pageIndex] ?? false,
           isPublisherOpen: _openPublisherRows[pageIndex] ?? false,
           isIndiciaOpen: _openIndiciaRows[pageIndex] ?? false,
+          isTagsOpen: _openTagRows[pageIndex] ?? false, // NEW
           onToggleText: (actualText) => _handleTextToggle(pageIndex, actualText, imageId),
+          onToggleTags: () => _handleTagToggle(pageIndex, imageId), // NEW
           onToggleOCR: () => _handleOCRToggle(pageIndex, imageId, pageId),
           onToggleEntities: (actualText) => _handleEntityToggle(pageIndex, imageId, actualText),
           onTogglePublisher: (actualText) => _handlePublisherToggle(pageIndex, actualText, imageId, templateId),
@@ -373,6 +409,7 @@ class _PageWidget extends StatefulWidget {
   final bool isEntitiesOpen;
   final bool isPublisherOpen;
   final bool isIndiciaOpen;
+  final bool isTagsOpen; // NEW
   final Function(String actualText) onToggleText;
   final VoidCallback onToggleOCR;
   final Function(String actualText) onToggleEntities;
@@ -382,6 +419,7 @@ class _PageWidget extends StatefulWidget {
   final VoidCallback onToggleCredits;
   final VoidCallback onToggleYouTube;
   final VoidCallback onToggleIndicia;
+  final VoidCallback onToggleTags; // NEW
   final Function(int)? onOpenGrid;
   final Function(String) submitComment;
   final TextEditingController commentController;
@@ -406,6 +444,7 @@ class _PageWidget extends StatefulWidget {
     required this.isEntitiesOpen,
     required this.isPublisherOpen,
     required this.isIndiciaOpen,
+    required this.isTagsOpen,
     required this.onToggleText,
     required this.onToggleOCR,
     required this.onToggleEntities,
@@ -415,6 +454,7 @@ class _PageWidget extends StatefulWidget {
     required this.onToggleCredits,
     required this.onToggleYouTube,
     required this.onToggleIndicia,
+    required this.onToggleTags,
     this.onOpenGrid,
     required this.submitComment,
     required this.commentController,
@@ -484,12 +524,14 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                   bool isGame = false;
                   String? youtubeId;
                   String actualText = "";
+                  Map<String, dynamic> tags = {};
 
                   if (snapshot.hasData && snapshot.data?.data() != null) {
                     final data = snapshot.data!.data() as Map<String, dynamic>;
                     isGame = data['isGame'] == true;
                     youtubeId = data['youtubeId'] as String?;
                     actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
+                    tags = data['tags'] as Map<String, dynamic>? ?? {};
                   }
 
                   return Column(
@@ -508,6 +550,7 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                           onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
                           onToggleComments: widget.onToggleComment,
                           onToggleText: () => widget.onToggleText(actualText),
+                          onToggleTags: widget.onToggleTags, // NEW
                           onToggleOCR: widget.onToggleOCR,
                           onToggleEntities: () => widget.onToggleEntities(actualText),
                           onTogglePublisher: () => widget.onTogglePublisher(actualText),
@@ -536,6 +579,13 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                               ),
                             ],
                           ),
+                        ),
+                      ],
+                      if (widget.isTagsOpen) ...[
+                        const SizedBox(height: verticalGap),
+                        _BonusRowWrapper(
+                          color: Colors.white,
+                          child: HashtagBar(imageId: imageId, tags: tags),
                         ),
                       ],
                       if (widget.isOCROpen) ...[

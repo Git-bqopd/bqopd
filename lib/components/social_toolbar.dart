@@ -28,6 +28,7 @@ class SocialToolbar extends StatefulWidget {
   final VoidCallback? onOpenGrid;
   final VoidCallback? onToggleComments;
   final VoidCallback? onToggleText;
+  final VoidCallback? onToggleTags; // NEW: Callback for hashtag drawer
   final VoidCallback? onToggleViews;
   final VoidCallback? onToggleCredits;
   final VoidCallback? onToggleYouTube;
@@ -52,6 +53,7 @@ class SocialToolbar extends StatefulWidget {
     this.onOpenGrid,
     this.onToggleComments,
     this.onToggleText,
+    this.onToggleTags,
     this.onToggleViews,
     this.onToggleCredits,
     this.onToggleYouTube,
@@ -367,6 +369,14 @@ class _SocialToolbarState extends State<SocialToolbar> {
                         const SizedBox(width: 16),
                       ],
 
+                      if (buttonVisibility['Tags'] == true) ...[
+                        SocialActionButton(
+                            icon: Icons.tag,
+                            label: 'Tags',
+                            onTap: widget.onToggleTags),
+                        const SizedBox(width: 16),
+                      ],
+
                       if (buttonVisibility['Indicia'] == true && widget.onToggleIndicia != null) ...[
                         SocialActionButton(
                             icon: Icons.copyright,
@@ -566,6 +576,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
                               icon: Icons.newspaper,
                               isSelected: buttonVisibility['Text'] ?? true,
                               onTap: () => userProvider.toggleSocialButton('Text')),
+                          const SizedBox(width: 10),
+                          _DrawerItem(
+                              label: 'Tags',
+                              icon: Icons.tag,
+                              isSelected: buttonVisibility['Tags'] ?? true,
+                              onTap: () => userProvider.toggleSocialButton('Tags')),
                           const SizedBox(width: 10),
                           _DrawerItem(
                               label: 'Indicia',

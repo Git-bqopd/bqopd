@@ -19,6 +19,7 @@ class UserProvider extends ChangeNotifier {
     'Share': true,
     'Views': true,
     'Text': true,
+    'Tags': true, // NEW: For displaying and voting on hashtags
     'Circulation': true,
     'YouTube': true,
     'Terminal': false,

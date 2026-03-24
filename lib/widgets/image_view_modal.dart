@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../components/social_toolbar.dart';
-import 'youtube_player_widget.dart'; // NEW
+import 'youtube_player_widget.dart';
+import 'hashtag_bar.dart'; // Import the hashtag bar widget
 
 class ImageViewModal extends StatefulWidget {
   final String imageUrl;
@@ -26,6 +27,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
   bool _showText = false;
   bool _showShortCode = false;
   bool _showYouTube = false;
+  bool _showTags = false; // Track visibility for the hashtags section
 
   void _toggleComments() {
     setState(() {
@@ -33,6 +35,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
       _showText = false;
       _showShortCode = false;
       _showYouTube = false;
+      _showTags = false;
     });
   }
 
@@ -42,6 +45,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
       _showComments = false;
       _showShortCode = false;
       _showYouTube = false;
+      _showTags = false;
     });
   }
 
@@ -51,6 +55,17 @@ class _ImageViewModalState extends State<ImageViewModal> {
       _showText = false;
       _showComments = false;
       _showShortCode = false;
+      _showTags = false;
+    });
+  }
+
+  void _toggleTags() {
+    setState(() {
+      _showTags = !_showTags;
+      _showComments = false;
+      _showText = false;
+      _showShortCode = false;
+      _showYouTube = false;
     });
   }
 
@@ -119,6 +134,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
                         youtubeId: youtubeId,
                         onToggleComments: _toggleComments,
                         onToggleText: _toggleText,
+                        onToggleTags: _toggleTags, // Pass the toggle handler
                         onToggleYouTube: _toggleYouTube,
                       );
                     },
@@ -140,7 +156,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
   }
 
   Widget _buildDetailsArea() {
-    final showAnything = _showComments || _showText || _showShortCode || _showYouTube;
+    final showAnything = _showComments || _showText || _showShortCode || _showYouTube || _showTags;
     if (!showAnything) return const SizedBox.shrink();
 
     return SizedBox(
@@ -176,6 +192,21 @@ class _ImageViewModalState extends State<ImageViewModal> {
               Container(
                 color: Colors.black,
                 child: YouTubePlayerWidget(imageId: widget.imageId),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (_showTags) ...[
+              const Text('Hashtags', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              // Stream the latest tags for the image to ensure real-time voting updates
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('images').doc(widget.imageId).snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox();
+                  final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+                  final tags = data['tags'] as Map<String, dynamic>? ?? {};
+                  return HashtagBar(imageId: widget.imageId, tags: tags);
+                },
               ),
               const SizedBox(height: 16),
             ],
