@@ -201,208 +201,203 @@ class _ProfileHeaderState extends State<ProfileHeader> {
         : 'User');
 
     return ClipRect(
-      child: Stack(
-        children: [
-          SingleChildScrollView(
-            child: Column(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: _showImageUpload,
-                      child: Container(
-                        width: 90,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.black12),
-                          image: photoUrl != null && photoUrl.isNotEmpty
-                              ? DecorationImage(
-                              image: NetworkImage(photoUrl),
-                              fit: BoxFit.cover)
-                              : null,
-                        ),
-                        child: photoUrl == null || photoUrl.isEmpty
-                            ? const Icon(Icons.person,
-                            size: 50, color: Colors.grey)
-                            : null,
-                      ),
+                GestureDetector(
+                  onTap: _showImageUpload,
+                  child: Container(
+                    width: 90,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black12),
+                      image: photoUrl != null && photoUrl.isNotEmpty
+                          ? DecorationImage(
+                          image: NetworkImage(photoUrl),
+                          fit: BoxFit.cover)
+                          : null,
                     ),
-                    const SizedBox(width: 24),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (!widget.isMe)
-                          Column(
+                    child: photoUrl == null || photoUrl.isEmpty
+                        ? const Icon(Icons.person,
+                        size: 50, color: Colors.grey)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!widget.isMe)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          StreamBuilder<bool>(
+                            stream: _engagementService
+                                .isFollowingStream(widget.profileUid),
+                            builder: (context, snap) {
+                              final bool isFollowing = snap.data ?? false;
+                              return GestureDetector(
+                                onTap: () => _handleFollow(isFollowing),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isFollowing
+                                        ? Colors.grey[100]
+                                        : Colors.transparent,
+                                    border: Border.all(color: Colors.black),
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  child: Text(
+                                      isFollowing ? "unfollow" : "follow",
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black)),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      )
+                    else
+                      GestureDetector(
+                        onTap: () {
+                          if (widget.profileUid.isNotEmpty) {
+                            context.pushNamed('editInfo',
+                                queryParameters: {
+                                  'userId': widget.profileUid
+                                });
+                          } else {
+                            context.pushNamed('editInfo');
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            border: Border.all(color: Colors.black),
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          child: const Text("edit info",
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black)),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('Users')
+                            .doc(widget.profileUid)
+                            .snapshots(),
+                        builder: (context, snap) {
+                          int followers = 0;
+                          int following = 0;
+                          if (snap.hasData && snap.data!.exists) {
+                            final data =
+                            snap.data!.data() as Map<String, dynamic>;
+                            followers = data['followerCount'] ?? 0;
+                            following = data['followingCount'] ?? 0;
+                          }
+                          return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              StreamBuilder<bool>(
-                                stream: _engagementService
-                                    .isFollowingStream(widget.profileUid),
-                                builder: (context, snap) {
-                                  final bool isFollowing = snap.data ?? false;
-                                  return GestureDetector(
-                                    onTap: () => _handleFollow(isFollowing),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 16, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: isFollowing
-                                            ? Colors.grey[100]
-                                            : Colors.transparent,
-                                        border: Border.all(color: Colors.black),
-                                        borderRadius: BorderRadius.zero,
-                                      ),
-                                      child: Text(
-                                          isFollowing ? "unfollow" : "follow",
-                                          style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black)),
-                                    ),
-                                  );
-                                },
+                              GestureDetector(
+                                onTap: () => _showListModal(
+                                    "Followers", "followers"),
+                                child: Text("$followers followers",
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black,
+                                        decoration:
+                                        TextDecoration.underline)),
+                              ),
+                              GestureDetector(
+                                onTap: () => _showListModal(
+                                    "Following", "following"),
+                                child: Text("$following following",
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black,
+                                        decoration:
+                                        TextDecoration.underline)),
                               ),
                             ],
-                          )
-                        else
-                          GestureDetector(
-                            onTap: () {
-                              if (widget.profileUid.isNotEmpty) {
-                                context.pushNamed('editInfo',
-                                    queryParameters: {
-                                      'userId': widget.profileUid
-                                    });
-                              } else {
-                                context.pushNamed('editInfo');
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                border: Border.all(color: Colors.black),
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              child: const Text("edit info",
-                                  style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black)),
-                            ),
-                          ),
-                        const SizedBox(height: 8),
-                        StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection('Users')
-                                .doc(widget.profileUid)
-                                .snapshots(),
-                            builder: (context, snap) {
-                              int followers = 0;
-                              int following = 0;
-                              if (snap.hasData && snap.data!.exists) {
-                                final data =
-                                snap.data!.data() as Map<String, dynamic>;
-                                followers = data['followerCount'] ?? 0;
-                                following = data['followingCount'] ?? 0;
-                              }
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => _showListModal(
-                                        "Followers", "followers"),
-                                    child: Text("$followers followers",
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.black,
-                                            decoration:
-                                            TextDecoration.underline)),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () => _showListModal(
-                                        "Following", "following"),
-                                    child: Text("$following following",
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.black,
-                                            decoration:
-                                            TextDecoration.underline)),
-                                  ),
-                                ],
-                              );
-                            }),
-                      ],
-                    )
+                          );
+                        }),
                   ],
-                ),
-                const SizedBox(height: 16),
-                Text(displayTitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: Colors.black)),
-                Text('@$username',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14, color: Colors.black54)),
-                if (bio.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Text(bio,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.black),
-                          maxLines: 6,
-                          overflow: TextOverflow.ellipsis)),
-                ],
-                const SizedBox(height: 20),
+                )
               ],
             ),
-          ),
-          if (_isManaged)
-            Positioned(
-              top: 12,
-              left: -35,
-              child: Transform.rotate(
-                angle: -0.785,
-                child: Material(
-                  color: Colors.grey[200],
-                  child: InkWell(
-                    onTap: _canEdit
-                        ? () => context.pushNamed('editInfo',
-                        queryParameters: {'userId': widget.profileUid})
-                        : null,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 4, horizontal: 40),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.black12),
-                      ),
-                      child: Text(
-                        _canEdit ? "edit managed profile" : "managed profile",
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black54,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+            const SizedBox(height: 16),
+            Text(displayTitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: Colors.black)),
+            Text('@$username',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Colors.black54)),
+
+            // --- SIMPLIFIED MANAGED PROFILE BANNER ---
+            if (_isManaged) ...[
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: _canEdit
+                    ? () => context.pushNamed('editInfo',
+                    queryParameters: {'userId': widget.profileUid})
+                    : null,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    border: const Border.symmetric(
+                      horizontal: BorderSide(color: Colors.black12, width: 0.5),
+                    ),
+                  ),
+                  child: Text(
+                    _canEdit ? "EDIT MANAGED PROFILE" : "MANAGED PROFILE",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                      letterSpacing: 2.0,
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+            ],
+
+            if (bio.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text(bio,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.black),
+                      maxLines: 6,
+                      overflow: TextOverflow.ellipsis)),
+            ],
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
