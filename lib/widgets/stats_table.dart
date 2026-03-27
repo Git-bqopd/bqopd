@@ -180,9 +180,17 @@ class _StatRowWrapper extends StatelessWidget {
             final String type = data['viewType'] ?? 'list';
 
             if (isAnon) {
-              if (type == 'list') anonList++; else anonGrid++;
+              if (type == 'list') {
+                anonList++;
+              } else {
+                anonGrid++;
+              }
             } else {
-              if (type == 'list') regList++; else regGrid++;
+              if (type == 'list') {
+                regList++;
+              } else {
+                regGrid++;
+              }
             }
           }
         }

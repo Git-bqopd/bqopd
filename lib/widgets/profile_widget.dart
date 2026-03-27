@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -8,12 +7,134 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/user_provider.dart';
 import '../services/engagement_service.dart';
+import '../services/view_service.dart';
+import '../widgets/stats_table.dart';
 import 'image_upload_modal.dart';
 import 'login_widget.dart';
 import 'follow_list_modal.dart';
 
+/// Main Profile Page Widget
+class ProfileWidget extends StatefulWidget {
+  final String userId;
+
+  const ProfileWidget({super.key, required this.userId});
+
+  @override
+  State<ProfileWidget> createState() => _ProfileWidgetState();
+}
+
+class _ProfileWidgetState extends State<ProfileWidget> {
+  int _currentTabIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final String? currentAuthUid = FirebaseAuth.instance.currentUser?.uid;
+    final bool isMyProfile = currentAuthUid != null && (currentAuthUid == widget.userId);
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('Users')
+          .doc(widget.userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const Center(child: Text('Error loading profile'));
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+
+        // --- DIRECT VISIBILITY LOGIC ---
+
+        // 1. Is the user we are looking at an Editor? (Source: the document in this stream)
+        final bool isThisUserAnEditor = userData['Editor'] == true;
+
+        // 2. Is the person looking at the screen an Editor?
+        // If it's your own profile, we look at the 'Editor' field in your document (userData).
+        // If it's someone else's profile, we look at your global session (userProvider).
+        final bool amIAnEditor = isMyProfile
+            ? isThisUserAnEditor
+            : (userProvider.isEditor == true);
+
+        // 3. Show the tab only if BOTH conditions are met.
+        final bool showEditorTab = isThisUserAnEditor && amIAnEditor;
+
+        // Build the dynamic tab lists
+        List<String> tabTitles = [];
+        List<Widget> tabViews = [];
+
+        if (showEditorTab) {
+          tabTitles.add('editor');
+          tabViews.add(Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: StatsTable(
+              contentId: widget.userId,
+              viewService: ViewService(),
+            ),
+          ));
+        }
+
+        tabTitles.addAll(['pages', 'works', 'comments', 'mentions', 'collection']);
+        tabViews.addAll([
+          const Center(child: Text('Pages View (Coming Soon)')),
+          const Center(child: Text('Works View (Coming Soon)')),
+          const Center(child: Text('Comments View (Coming Soon)')),
+          const Center(child: Text('Mentions View (Coming Soon)')),
+          const Center(child: Text('Collection View (Coming Soon)')),
+        ]);
+
+        return DefaultTabController(
+          // The key ensures that if permissions change or you switch profiles, the tabs refresh.
+          key: ValueKey('profile_tabs_${widget.userId}_${tabTitles.length}'),
+          length: tabTitles.length,
+          initialIndex: _currentTabIndex.clamp(0, tabTitles.length - 1),
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverToBoxAdapter(
+                  child: ProfileHeader(
+                    userData: userData,
+                    profileUid: widget.userId,
+                    isMe: isMyProfile,
+                  ),
+                ),
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _SliverAppBarDelegate(
+                    ProfileNavBar(
+                      tabTitles: tabTitles,
+                      currentIndex: _currentTabIndex,
+                      onTabChanged: (index) {
+                        setState(() => _currentTabIndex = index);
+                        DefaultTabController.of(context).animateTo(index);
+                      },
+                      canEdit: isMyProfile,
+                      onUploadImage: () {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (BuildContext dialogContext) =>
+                              ImageUploadModal(userId: widget.userId),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+              body: TabBarView(
+                children: tabViews,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// The top section of the profile (Avatar, Bio, Follow Buttons, Stats)
-/// This scrolls away with the page.
 class ProfileHeader extends StatefulWidget {
   final Map<String, dynamic> userData;
   final String profileUid;
@@ -32,7 +153,7 @@ class ProfileHeader extends StatefulWidget {
 
 class _ProfileHeaderState extends State<ProfileHeader> {
   final EngagementService _engagementService = EngagementService();
-  int _topTabIndex = 0; // Local state for Socials/Affiliations/Upcoming tabs
+  int _topTabIndex = 0;
 
   final Color _envelopeColor = const Color(0xFFF1B255);
   final BoxDecoration _whiteBoxDecoration = const BoxDecoration(
@@ -129,9 +250,8 @@ class _ProfileHeaderState extends State<ProfileHeader> {
   }
 
   Widget _buildDesktopLayout() {
-    // Fixed aspect ratio container for desktop feel
     return AspectRatio(
-      aspectRatio: 8 / 3.5, // Adjusted to be shorter since Nav is gone
+      aspectRatio: 8 / 3.5,
       child: Container(
         color: _envelopeColor,
         padding: const EdgeInsets.all(16.0),
@@ -156,7 +276,6 @@ class _ProfileHeaderState extends State<ProfileHeader> {
   Widget _buildMobileLayout() {
     return Column(
       children: [
-        // Top Box: Fixed 8:5 Aspect Ratio
         AspectRatio(
           aspectRatio: 8 / 5,
           child: Container(
@@ -170,15 +289,13 @@ class _ProfileHeaderState extends State<ProfileHeader> {
           ),
         ),
         const SizedBox(height: 16),
-        // Bottom Box: Flexible Height (expands to content)
         Container(
           width: double.infinity,
           color: _envelopeColor,
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          padding: const EdgeInsets.all(16),
           child: Container(
             decoration: _whiteBoxDecoration,
             padding: const EdgeInsets.all(16.0),
-            // Let the column define the height
             child: _buildRightSideContent(),
           ),
         ),
@@ -208,7 +325,6 @@ class _ProfileHeaderState extends State<ProfileHeader> {
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 GestureDetector(
                   onTap: _showImageUpload,
@@ -236,57 +352,41 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (!widget.isMe)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          StreamBuilder<bool>(
-                            stream: _engagementService
-                                .isFollowingStream(widget.profileUid),
-                            builder: (context, snap) {
-                              final bool isFollowing = snap.data ?? false;
-                              return GestureDetector(
-                                onTap: () => _handleFollow(isFollowing),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: isFollowing
-                                        ? Colors.grey[100]
-                                        : Colors.transparent,
-                                    border: Border.all(color: Colors.black),
-                                    borderRadius: BorderRadius.zero,
-                                  ),
-                                  child: Text(
-                                      isFollowing ? "unfollow" : "follow",
-                                      style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black)),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
+                      StreamBuilder<bool>(
+                        stream: _engagementService
+                            .isFollowingStream(widget.profileUid),
+                        builder: (context, snap) {
+                          final bool isFollowing = snap.data ?? false;
+                          return GestureDetector(
+                            onTap: () => _handleFollow(isFollowing),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isFollowing
+                                    ? Colors.grey[100]
+                                    : Colors.transparent,
+                                border: Border.all(color: Colors.black),
+                              ),
+                              child: Text(
+                                  isFollowing ? "unfollow" : "follow",
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black)),
+                            ),
+                          );
+                        },
                       )
                     else
                       GestureDetector(
-                        onTap: () {
-                          if (widget.profileUid.isNotEmpty) {
-                            context.pushNamed('editInfo',
-                                queryParameters: {
-                                  'userId': widget.profileUid
-                                });
-                          } else {
-                            context.pushNamed('editInfo');
-                          }
-                        },
+                        onTap: () => context.pushNamed('editInfo',
+                            queryParameters: {'userId': widget.profileUid}),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.transparent,
                             border: Border.all(color: Colors.black),
-                            borderRadius: BorderRadius.zero,
                           ),
                           child: const Text("edit info",
                               style: TextStyle(
@@ -305,8 +405,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                           int followers = 0;
                           int following = 0;
                           if (snap.hasData && snap.data!.exists) {
-                            final data =
-                            snap.data!.data() as Map<String, dynamic>;
+                            final data = snap.data!.data() as Map<String, dynamic>;
                             followers = data['followerCount'] ?? 0;
                             following = data['followingCount'] ?? 0;
                           }
@@ -314,24 +413,18 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               GestureDetector(
-                                onTap: () => _showListModal(
-                                    "Followers", "followers"),
+                                onTap: () => _showListModal("Followers", "followers"),
                                 child: Text("$followers followers",
                                     style: const TextStyle(
                                         fontSize: 12,
-                                        color: Colors.black,
-                                        decoration:
-                                        TextDecoration.underline)),
+                                        decoration: TextDecoration.underline)),
                               ),
                               GestureDetector(
-                                onTap: () => _showListModal(
-                                    "Following", "following"),
+                                onTap: () => _showListModal("Following", "following"),
                                 child: Text("$following following",
                                     style: const TextStyle(
                                         fontSize: 12,
-                                        color: Colors.black,
-                                        decoration:
-                                        TextDecoration.underline)),
+                                        decoration: TextDecoration.underline)),
                               ),
                             ],
                           );
@@ -343,55 +436,35 @@ class _ProfileHeaderState extends State<ProfileHeader> {
             const SizedBox(height: 16),
             Text(displayTitle,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    color: Colors.black)),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
             Text('@$username',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 14, color: Colors.black54)),
-
-            // --- SIMPLIFIED MANAGED PROFILE BANNER ---
             if (_isManaged) ...[
               const SizedBox(height: 16),
-              InkWell(
-                onTap: _canEdit
-                    ? () => context.pushNamed('editInfo',
-                    queryParameters: {'userId': widget.profileUid})
-                    : null,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    border: const Border.symmetric(
-                      horizontal: BorderSide(color: Colors.black12, width: 0.5),
-                    ),
-                  ),
-                  child: Text(
-                    _canEdit ? "EDIT MANAGED PROFILE" : "MANAGED PROFILE",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black54,
-                      letterSpacing: 2.0,
-                    ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                color: Colors.grey[50],
+                child: Text(
+                  _canEdit ? "EDIT MANAGED PROFILE" : "MANAGED PROFILE",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                    letterSpacing: 2.0,
                   ),
                 ),
               ),
             ],
-
             if (bio.isNotEmpty) ...[
               const SizedBox(height: 16),
               Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
                   child: Text(bio,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontStyle: FontStyle.italic,
-                          color: Colors.black),
+                      style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
                       maxLines: 6,
                       overflow: TextOverflow.ellipsis)),
             ],
@@ -422,28 +495,14 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                         const SizedBox(width: 8),
                       ]))),
           const Divider(height: 24, thickness: 1, color: Colors.black12),
-          // In Mobile Layout, we want this list to expand as needed.
-          // In Desktop Layout, it's inside an Expanded column so it fills space.
-          // We'll wrap in a Flexible or just let it flow based on parent constraints.
           Flexible(
               fit: FlexFit.loose,
               child: SingleChildScrollView(
                   child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         if (_topTabIndex == 0) _buildSocialsTab(),
-                        if (_topTabIndex == 1)
-                          const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text("Affiliations List\n(Coming Soon)",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.black))),
-                        if (_topTabIndex == 2)
-                          const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text("Upcoming Cons/Events\n(Coming Soon)",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.black))),
+                        if (_topTabIndex == 1) const Padding(padding: EdgeInsets.all(16), child: Text("Affiliations Coming Soon")),
+                        if (_topTabIndex == 2) const Padding(padding: EdgeInsets.all(16), child: Text("Upcoming Events Coming Soon")),
                       ]))),
           if (!_isManaged && widget.isMe)
             Align(
@@ -460,9 +519,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black,
                           decoration: TextDecoration.underline,
-                          fontFamily: 'Roboto',
                         ))),
               ),
             ),
@@ -475,28 +532,12 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     final instaHandle = widget.userData['instagramHandle'] ?? '';
     final githubHandle = widget.userData['githubHandle'] ?? '';
 
-    if (xHandle.isNotEmpty)
-      links.add(_buildLinkButton(
-          "X (Twitter)", '@$xHandle', 'https://x.com/$xHandle'));
-    if (instaHandle.isNotEmpty)
-      links.add(_buildLinkButton("Instagram", '@$instaHandle',
-          'https://instagram.com/$instaHandle'));
-    if (githubHandle.isNotEmpty)
-      links.add(_buildLinkButton("GitHub", '@$githubHandle',
-          'https://github.com/$githubHandle'));
+    if (xHandle.isNotEmpty) links.add(_buildLinkButton("X", '@$xHandle', 'https://x.com/$xHandle'));
+    if (instaHandle.isNotEmpty) links.add(_buildLinkButton("Instagram", '@$instaHandle', 'https://instagram.com/$instaHandle'));
+    if (githubHandle.isNotEmpty) links.add(_buildLinkButton("GitHub", '@$githubHandle', 'https://github.com/$githubHandle'));
 
-    if (links.isEmpty)
-      return const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text("No socials linked.",
-              style: TextStyle(
-                  color: Colors.black54, fontStyle: FontStyle.italic)));
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: links
-            .map((w) =>
-            Padding(padding: const EdgeInsets.only(bottom: 12), child: w))
-            .toList());
+    if (links.isEmpty) return const Padding(padding: EdgeInsets.all(16.0), child: Text("No socials linked.", style: TextStyle(fontStyle: FontStyle.italic)));
+    return Column(children: links.map((w) => Padding(padding: const EdgeInsets.only(bottom: 12), child: w)).toList());
   }
 
   Widget _buildLinkButton(String platform, String handle, String url) {
@@ -505,17 +546,10 @@ class _ProfileHeaderState extends State<ProfileHeader> {
         child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             margin: const EdgeInsets.symmetric(horizontal: 24),
-            decoration: BoxDecoration(
-                border: Border.all(color: Colors.black12),
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.zero),
+            decoration: BoxDecoration(border: Border.all(color: Colors.black12), color: Colors.grey[50]),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text("$platform: ",
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Colors.black)),
-              Text(handle,
-                  style: const TextStyle(
-                      color: Colors.black, decoration: TextDecoration.underline))
+              Text("$platform: ", style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(handle, style: const TextStyle(decoration: TextDecoration.underline))
             ])));
   }
 
@@ -528,22 +562,18 @@ class _ProfileHeaderState extends State<ProfileHeader> {
             child: Text(title,
                 style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black,
                     fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                    decoration:
-                    isActive ? TextDecoration.underline : null))));
+                    decoration: isActive ? TextDecoration.underline : null))));
   }
 
   Widget _buildSeparator({bool isNav = false}) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Text('|',
-          style: TextStyle(
-              color: isNav ? Colors.black : Colors.grey.shade400)));
+      child: Text('|', style: TextStyle(color: isNav ? Colors.black : Colors.grey.shade400)));
 }
 
 /// The Navigation Bar (Tabs) for the profile.
-/// Typically used inside a SliverPersistentHeader.
 class ProfileNavBar extends StatelessWidget {
+  final List<String> tabTitles;
   final int currentIndex;
   final Function(int) onTabChanged;
   final bool canEdit;
@@ -551,6 +581,7 @@ class ProfileNavBar extends StatelessWidget {
 
   const ProfileNavBar({
     super.key,
+    this.tabTitles = const ['pages', 'works', 'comments', 'mentions', 'collection'],
     required this.currentIndex,
     required this.onTabChanged,
     required this.canEdit,
@@ -565,7 +596,6 @@ class ProfileNavBar extends StatelessWidget {
         border: Border(bottom: BorderSide(color: Colors.black12)),
       ),
       child: Center(
-        // Wrap with a constrained width to match profile/grid content
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 900),
           child: SingleChildScrollView(
@@ -575,21 +605,7 @@ class ProfileNavBar extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (canEdit) ...[
-                    _buildNavTab('editor', 0),
-                    _buildSeparator(),
-                  ],
-                  _buildNavTab('pages', 1),
-                  _buildSeparator(),
-                  _buildNavTab('works', 2),
-                  _buildSeparator(),
-                  _buildNavTab('comments', 3),
-                  _buildSeparator(),
-                  _buildNavTab('mentions', 4),
-                  _buildSeparator(),
-                  _buildNavTab('collection', 5),
-                ],
+                children: _buildTabs(),
               ),
             ),
           ),
@@ -598,25 +614,41 @@ class ProfileNavBar extends StatelessWidget {
     );
   }
 
-  Widget _buildNavTab(String title, int index) {
-    final isActive = currentIndex == index;
-
-    return GestureDetector(
-        onTap: () => onTabChanged(index),
-        child: Center(
-            child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(title,
-                    style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: isActive
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        decoration:
-                        isActive ? TextDecoration.underline : null)))));
+  List<Widget> _buildTabs() {
+    List<Widget> tabs = [];
+    for (int i = 0; i < tabTitles.length; i++) {
+      tabs.add(_buildNavTab(tabTitles[i], i));
+      if (i < tabTitles.length - 1) {
+        tabs.add(const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),
+          child: Text('|', style: TextStyle(color: Colors.black)),
+        ));
+      }
+    }
+    return tabs;
   }
 
-  Widget _buildSeparator() => const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: Text('|', style: TextStyle(color: Colors.black)));
+  Widget _buildNavTab(String title, int index) {
+    final isActive = currentIndex == index;
+    return GestureDetector(
+        onTap: () => onTabChanged(index),
+        child: Text(title,
+            style: TextStyle(
+                color: Colors.black,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                decoration: isActive ? TextDecoration.underline : null)));
+  }
+}
+
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  _SliverAppBarDelegate(this._widget);
+  final Widget _widget;
+  @override
+  double get minExtent => 50;
+  @override
+  double get maxExtent => 50;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => _widget;
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => true;
 }

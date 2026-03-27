@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../utils/link_parser.dart';
-import '../services/user_bootstrap.dart';
 import '../services/username_service.dart';
 
 class CuratorWorkbenchWidget extends StatefulWidget {
@@ -37,8 +36,8 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   bool _hasUnsavedChanges = false;
 
   final TextEditingController _searchController = TextEditingController();
-  List<Map<String, String>> _searchResults = [];
-  bool _isSearching = false;
+  final List<Map<String, String>> _searchResults = [];
+  final bool _isSearching = false;
 
   List<Map<String, dynamic>> _detectedEntities = [];
   bool _isValidatingEntities = false;
@@ -215,7 +214,9 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     for (var doc in _pages) {
       final s = doc.data() as Map<String, dynamic>;
       final status = s['status'];
-      if (status == 'ready') readyCount++; else if (status == 'queued') queuedCount++; else if (status == 'ocr_complete' || status == 'complete') completeCount++; else if (status == 'error') errorCount++;
+      if (status == 'ready') {
+        readyCount++;
+      } else if (status == 'queued') queuedCount++; else if (status == 'ocr_complete' || status == 'complete') completeCount++; else if (status == 'error') errorCount++;
     }
 
     return Scaffold(

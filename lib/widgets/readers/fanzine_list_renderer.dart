@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
@@ -82,7 +81,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
   @override
   void dispose() {
-    for (var c in _commentControllers.values) c.dispose();
+    for (var c in _commentControllers.values) {
+      c.dispose();
+    }
     _fontSizeNotifier.dispose();
     super.dispose();
   }

@@ -89,7 +89,7 @@ class _EventReaderCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (event.username != null && event.username!.isNotEmpty)
+              if (event.username.isNotEmpty)
                 GestureDetector(
                   onTap: () => context.push('/${event.username}'),
                   child: Container(

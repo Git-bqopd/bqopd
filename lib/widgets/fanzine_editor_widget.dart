@@ -406,8 +406,9 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
                                               if (snap.hasData) {
                                                 for (var doc in snap.data!.docs) {
                                                   final s = (doc.data() as Map)['status'];
-                                                  if (s == 'ready') ready++;
-                                                  else if (s == 'queued' || s == 'entity_queued') queued++;
+                                                  if (s == 'ready') {
+                                                    ready++;
+                                                  } else if (s == 'queued' || s == 'entity_queued') queued++;
                                                   else if (s == 'transcribed' || s == 'complete' || s == 'review_needed') done++;
 
                                                   if (s == 'error') err++;

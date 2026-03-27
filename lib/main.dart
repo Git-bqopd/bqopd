@@ -19,7 +19,7 @@ import 'pages/profile_page.dart';
 import 'pages/short_link_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/settings_page.dart';
-import 'pages/fanzine_editor_page.dart'; // Keeping import just in case, but no longer the primary route
+// Keeping import just in case, but no longer the primary route
 import 'pages/curator_dashboard_page.dart';
 import 'pages/curator_workbench_page.dart';
 import 'pages/fanzine_reader_page.dart';

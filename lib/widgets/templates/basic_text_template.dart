@@ -58,7 +58,9 @@ class BasicTextTemplate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final safeCols = List<List<PageBlock>>.from(columns);
-    while (safeCols.length < 3) safeCols.add([]);
+    while (safeCols.length < 3) {
+      safeCols.add([]);
+    }
 
     return Container(
       width: targetWidth,
@@ -246,7 +248,9 @@ class BasicTextTemplate extends StatelessWidget {
     }
 
     if (currentColumns.isNotEmpty) {
-      while (currentColumns.length < 3) currentColumns.add([]);
+      while (currentColumns.length < 3) {
+        currentColumns.add([]);
+      }
       pages.add(currentColumns);
     }
 

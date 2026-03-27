@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../services/user_provider.dart';
@@ -27,7 +26,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   // TABS: 0=Editor, 1=Pages, 2=Works, 3=Comments, 4=Mentions, 5=Collection
   int? _currentIndex;
-  bool _isLoadingDefaults = true;
+  final bool _isLoadingDefaults = true;
 
   // Local state for Pages tab sub-filter
   // false = published (default), true = drafts (pending)
@@ -200,9 +199,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (mounted) context.push('/editor/${fanzineRef.id}');
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoadingData = false);
     }
@@ -266,8 +266,9 @@ class _ProfilePageState extends State<ProfilePage> {
     if (currentUid == null) return false;
     if (profileUid == currentUid) return true;
     final managers = List<String>.from(_userData?['managers'] ?? []);
-    if ((_userData?['isManaged'] == true) && managers.contains(currentUid))
+    if ((_userData?['isManaged'] == true) && managers.contains(currentUid)) {
       return true;
+    }
     return false;
   }
 
@@ -296,6 +297,34 @@ class _ProfilePageState extends State<ProfilePage> {
     final bool isOwner = (currentUid != null && targetUserId == currentUid);
     final bool canEditProfile = _canEdit(targetUserId!);
 
+    // --- SIMPLE VISIBILITY LOGIC ---
+    final bool isThisUserAnEditor = _userData?['Editor'] == true || _userData?['isEditor'] == true;
+    final bool amIAnEditor = (userProvider.isEditor == true) || (isOwner && isThisUserAnEditor);
+    final bool showEditorTab = isThisUserAnEditor && amIAnEditor;
+
+    // --- DYNAMIC TAB MAPPING ---
+    // We map the visible titles to your absolute index numbers (0=Editor, 1=Pages)
+    final List<Map<String, dynamic>> tabs = [];
+    if (showEditorTab) tabs.add({'title': 'editor', 'id': 0});
+    tabs.addAll([
+      {'title': 'pages', 'id': 1},
+      {'title': 'works', 'id': 2},
+      {'title': 'comments', 'id': 3},
+      {'title': 'mentions', 'id': 4},
+      {'title': 'collection', 'id': 5},
+    ]);
+
+    final List<String> tabTitles = tabs.map((t) => t['title'] as String).toList();
+
+    // Find the current array position for the NavBar based on your absolute index
+    int navIndex = tabs.indexWhere((t) => t['id'] == (_currentIndex ?? 5));
+    if (navIndex == -1) {
+      navIndex = tabs.length - 1; // Fallback to collection if the requested tab is hidden
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _currentIndex = tabs[navIndex]['id'] as int);
+      });
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
@@ -322,11 +351,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: SizedBox(
                     height: 50,
                     child: ProfileNavBar(
-                      currentIndex: _currentIndex ?? 5,
+                      tabTitles: tabTitles, // ACTUALLY PASS THE DYNAMIC LIST!
+                      currentIndex: navIndex, // Pass the mapped array index
                       onTabChanged: (idx) => setState(() {
-                        _currentIndex = idx;
-                        if (idx != 1) _showDrafts = false;
-                        if (idx != 0) _editorSubTabIndex = 0;
+                        _currentIndex = tabs[idx]['id'] as int; // Map back to your absolute index
+                        if (_currentIndex != 1) _showDrafts = false;
+                        if (_currentIndex != 0) _editorSubTabIndex = 0;
                       }),
                       canEdit: canEditProfile,
                       onUploadImage: () => _showImageUpload(targetUserId),
@@ -474,7 +504,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-              _buildContentSliver(targetUserId, isOwner, userProvider.isEditor),
+              _buildContentSliver(targetUserId, isOwner, amIAnEditor),
 
               const SliverToBoxAdapter(child: SizedBox(height: 64)),
             ],
@@ -490,8 +520,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
     switch (_currentIndex) {
       case 0: // EDITOR
-        if (!isOwner && !isEditor)
+        if (!isOwner && !isEditor) {
           return const SliverToBoxAdapter(child: SizedBox());
+        }
 
         // Fetch all user zines and filter client-side to avoid index requirements
         stream = FirebaseFirestore.instance
@@ -499,7 +530,7 @@ class _ProfilePageState extends State<ProfilePage> {
             .snapshots()
             .map((snap) {
           final List<QueryDocumentSnapshot> filtered = snap.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
 
             final hasSourceFile = data.containsKey('sourceFile');
             final isLive = data['status'] == 'live';
@@ -540,18 +571,18 @@ class _ProfilePageState extends State<ProfilePage> {
           if (isOwner) {
             if (_showDrafts) {
               return snap.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+                final data = doc.data();
                 return data['status'] == 'pending';
               }).toList();
             } else {
               return snap.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+                final data = doc.data();
                 return data['status'] != 'pending';
               }).toList();
             }
           }
           return snap.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
             return data['status'] != 'pending';
           }).toList();
         });
@@ -679,8 +710,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   );
                 } else {
                   String? imageUrl = data['fileUrl'];
-                  if (imageUrl == null || imageUrl.isEmpty)
+                  if (imageUrl == null || imageUrl.isEmpty) {
                     return const SizedBox();
+                  }
 
                   return GestureDetector(
                     onTap: () {

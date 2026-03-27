@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 
 class ImageUploadModal extends StatefulWidget {
@@ -32,7 +31,7 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
 
   // --- Archival Metadata State ---
   final TextEditingController _indiciaController = TextEditingController();
-  List<Map<String, dynamic>> _creators = [];
+  final List<Map<String, dynamic>> _creators = [];
   final TextEditingController _newCreatorNameController = TextEditingController();
   final TextEditingController _newCreatorRoleController = TextEditingController();
 
