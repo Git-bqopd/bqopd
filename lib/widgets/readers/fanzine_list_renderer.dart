@@ -337,7 +337,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
       separatorBuilder: (_, __) => const SizedBox(height: 48),
       itemBuilder: (context, index) {
         if (index == 0) {
-          // No constraints here so header can be as long as needed
           return widget.headerWidget;
         }
 
@@ -361,7 +360,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           isCommentsOpen: _openCommentRows[pageIndex] ?? false,
           isViewsOpen: _openViewRows[pageIndex] ?? false,
           isCreditsOpen: _openCreditRows[pageIndex] ?? false,
-          isYouTubeOpen: _openYouTubeRows[index] ?? false, // Fixed potential index issue
+          isYouTubeOpen: _openYouTubeRows[pageIndex] ?? false,
           isOCROpen: _openOCRRows[pageIndex] ?? false,
           isEntitiesOpen: _openEntityRows[pageIndex] ?? false,
           isPublisherOpen: _openPublisherRows[pageIndex] ?? false,
@@ -901,6 +900,7 @@ class _CreditsEditorWidgetState extends State<_CreditsEditorWidget> {
         'indicia': _iC.text.trim(),
         'creators': _creators
       });
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!')));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -941,8 +941,13 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
   Future<void> _save() async {
     if (widget.imageId.isEmpty) return;
     setState(() => _s = true);
-    try { await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'text': _c.text, 'text_processed': _c.text}); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!'))); }
-    finally { if (mounted) setState(() => _s = false); }
+    try {
+      await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'text': _c.text, 'text_processed': _c.text});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!')));
+    } finally {
+      if (mounted) setState(() => _s = false);
+    }
   }
   @override
   Widget build(BuildContext context) {
@@ -1017,8 +1022,12 @@ class _EntityRow extends StatelessWidget {
     if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
     try {
       await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
-    } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 
   Future<void> _createAlias(BuildContext context, String name) async {
@@ -1029,8 +1038,12 @@ class _EntityRow extends StatelessWidget {
     if (target == null || target.isEmpty) return;
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
-    } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 }
 

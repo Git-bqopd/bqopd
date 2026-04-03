@@ -159,14 +159,16 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 5 / 8,
-      child: Container(
-        color: kPrimaryColor,
-        padding: const EdgeInsets.all(10.0),
-        child: widget.isStickerOnly
-            ? _buildStickerOnlyView()
-            : _buildFullInteractiveView(),
+    return Scaffold(
+      body: AspectRatio(
+        aspectRatio: 5 / 8,
+        child: Container(
+          color: kPrimaryColor,
+          padding: const EdgeInsets.all(10.0),
+          child: widget.isStickerOnly
+              ? _buildStickerOnlyView()
+              : _buildFullInteractiveView(),
+        ),
       ),
     );
   }
@@ -179,10 +181,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 2,
                 offset: const Offset(0, 1)
             )
@@ -208,9 +210,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(50),
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
               ],
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -237,9 +239,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
               ],
             ),
             clipBehavior: Clip.antiAlias,
@@ -391,9 +393,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             Container(
               width: 28, height: 28,
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.black.withOpacity(0.1)),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
               ),
               child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
             ),
@@ -403,7 +405,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(fallbackName, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text("Guest Contributor", style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4), fontStyle: FontStyle.italic)),
+                  Text("Guest Contributor", style: TextStyle(fontSize: 8, color: Colors.black.withValues(alpha: 0.4), fontStyle: FontStyle.italic)),
                 ],
               ),
             )
@@ -434,9 +436,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                 Container(
                   width: 28, height: 28,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black.withOpacity(0.1)),
+                    border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: photoUrl != null
@@ -463,7 +465,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(handle, style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4))),
+                        Text(handle, style: TextStyle(fontSize: 8, color: Colors.black.withValues(alpha: 0.4))),
                       ],
                     ),
                   ),

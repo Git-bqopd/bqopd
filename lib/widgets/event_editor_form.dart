@@ -109,7 +109,9 @@ class _EventEditorFormState extends State<EventEditorForm> {
       }
       widget.onSaveComplete();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -122,7 +124,9 @@ class _EventEditorFormState extends State<EventEditorForm> {
       await _eventService.deleteEvent(widget.existingEvent!.id);
       widget.onSaveComplete();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

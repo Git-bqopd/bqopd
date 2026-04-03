@@ -392,7 +392,11 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
           children: [
             Container(
               width: 28, height: 28,
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.05), shape: BoxShape.circle, border: Border.all(color: Colors.black.withOpacity(0.1))),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
+              ),
               child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
             ),
             const SizedBox(width: 8),
@@ -401,7 +405,7 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(fallbackName, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text("Guest Contributor", style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4), fontStyle: FontStyle.italic)),
+                  Text("Guest Contributor", style: TextStyle(fontSize: 8, color: Colors.black.withValues(alpha: 0.4), fontStyle: FontStyle.italic)),
                 ],
               ),
             )
@@ -429,7 +433,11 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
               children: [
                 Container(
                   width: 28, height: 28,
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.05), shape: BoxShape.circle, border: Border.all(color: Colors.black.withOpacity(0.1))),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
+                  ),
                   clipBehavior: Clip.antiAlias,
                   child: photoUrl != null
                       ? ColorFiltered(
@@ -448,7 +456,7 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text(handle, style: TextStyle(fontSize: 8, color: Colors.black.withOpacity(0.4))),
+                      Text(handle, style: TextStyle(fontSize: 8, color: Colors.black.withValues(alpha: 0.4))),
                     ],
                   ),
                 ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../utils/shortcode_generator.dart';
+import '../utils/shortcode_generator.dart';
 
 class NewFanzineModal extends StatefulWidget {
   final String userId;
@@ -44,14 +44,17 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
       return;
     }
 
-    setState(() { _isLoading = true; });
+    setState(() {
+      _isLoading = true;
+    });
 
     try {
       final String title = _titleController.text;
       final String editorId = currentUser.uid;
       final bool useVanity = _isVanityEligible(currentUser);
 
-      final newFanzineRef = FirebaseFirestore.instance.collection('fanzines').doc();
+      final newFanzineRef =
+      FirebaseFirestore.instance.collection('fanzines').doc();
 
       final String? shortCode = await assignShortcode(
         FirebaseFirestore.instance,
@@ -85,7 +88,8 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
         throw Exception('Failed to generate a unique shortcode.');
       }
     } catch (e) {
-      print("Error creating fanzine: $e");
+      // Changed print to debugPrint to address lint warning
+      debugPrint("Error creating fanzine: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}')),
@@ -93,7 +97,9 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
       }
     } finally {
       if (mounted) {
-        setState(() { _isLoading = false; });
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -135,10 +141,12 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
                   children: [
                     Checkbox(
                       value: _twoPageView,
-                      onChanged: (val) => setState(() => _twoPageView = val ?? false),
+                      onChanged: (val) =>
+                          setState(() => _twoPageView = val ?? false),
                     ),
                     const Flexible(
-                      child: Text("Enable Two-Page Grid View?\n(Default is Single Column Scroll)"),
+                      child: Text(
+                          "Enable Two-Page Grid View?\n(Default is Single Column Scroll)"),
                     ),
                   ],
                 ),

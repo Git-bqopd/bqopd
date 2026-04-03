@@ -218,10 +218,10 @@ class _ProfileHeaderState extends State<ProfileHeader> {
         await _engagementService.followUser(widget.profileUid);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
+      // Guard BuildContext across async gap with mounted check
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
@@ -512,7 +512,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                 child: GestureDetector(
                     onTap: () async {
                       await FirebaseAuth.instance.signOut();
-                      if (!context.mounted) return;
+                      if (!mounted) return;
                       context.go('/login');
                     },
                     child: const Text('logout',

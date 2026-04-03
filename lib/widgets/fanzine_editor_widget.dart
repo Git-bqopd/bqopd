@@ -44,13 +44,19 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
   }
 
   Future<void> _updateTitle(String newTitle) async {
-    if (newTitle.trim().isEmpty) return;
+    if (newTitle.trim().isEmpty) {
+      return;
+    }
     setState(() => _isProcessing = true);
     try {
       await _db.collection('fanzines').doc(widget.fanzineId).update({'title': newTitle.trim()});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated!')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated!')));
+      }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -63,23 +69,33 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
           'shortCode': code,
           'shortCodeKey': code.toUpperCase()
         });
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Shortcode assigned: $code')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Shortcode assigned: $code')));
+        }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
   Future<void> _addPage() async {
     final shortcode = _shortcodeController.text.trim();
-    if (shortcode.isEmpty) return;
+    if (shortcode.isEmpty) {
+      return;
+    }
     setState(() => _isProcessing = true);
     try {
       final imageQuery = await _db.collection('images').where('shortCode', isEqualTo: shortcode).limit(1).get();
       if (imageQuery.docs.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image not found.')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image not found.')));
+        }
         return;
       }
       final imageDoc = imageQuery.docs.first;
@@ -102,14 +118,18 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
 
       _shortcodeController.clear();
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
   Future<void> _reorderPage(DocumentSnapshot doc, int delta, List<DocumentSnapshot> allPages) async {
     final int currentPos = doc.get('pageNumber');
     final int targetPos = currentPos + delta;
-    if (targetPos < 1 || targetPos > allPages.length) return;
+    if (targetPos < 1 || targetPos > allPages.length) {
+      return;
+    }
     final targetDoc = allPages.firstWhere((p) => p.get('pageNumber') == targetPos);
     final batch = _db.batch();
     batch.update(doc.reference, {'pageNumber': targetPos});
@@ -146,9 +166,13 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
         'publishedAt': FieldValue.serverTimestamp(),
         'isSoftPublished': true,
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Soft Published!')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Soft Published!')));
+      }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -156,11 +180,17 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
     setState(() => _isProcessing = true);
     try {
       await FirebaseFunctions.instance.httpsCallable('trigger_batch_ocr').call({'fanzineId': widget.fanzineId});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transcription Pipeline Started...')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transcription Pipeline Started...')));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -169,11 +199,17 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
     try {
       await FirebaseFunctions.instance.httpsCallable('trigger_batch_entities').call({'fanzineId': widget.fanzineId});
       await FirebaseFunctions.instance.httpsCallable('finalize_fanzine_data').call({'fanzineId': widget.fanzineId});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entity Extraction & Aggregation Triggered.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entity Extraction & Aggregation Triggered.')));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -193,7 +229,9 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true) {
+      return;
+    }
 
     setState(() => _isProcessing = true);
     try {
@@ -202,9 +240,13 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rescan triggered. Images will appear shortly.')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -213,7 +255,9 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
     return StreamBuilder<DocumentSnapshot>(
       stream: _db.collection('fanzines').doc(widget.fanzineId).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final title = data['title'] ?? 'Untitled';
         final shortCode = data['shortCode'];
@@ -336,7 +380,9 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
           StreamBuilder<QuerySnapshot>(
               stream: _db.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber').snapshots(),
               builder: (context, pagesSnap) {
-                if (!pagesSnap.hasData) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator()));
+                if (!pagesSnap.hasData) {
+                  return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator()));
+                }
                 final pages = pagesSnap.data!.docs;
                 List<DropdownMenuItem<String?>> items = [
                   const DropdownMenuItem(value: null, child: Text("None"))
@@ -417,10 +463,15 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTi
                     final s = (doc.data() as Map)['status'];
                     if (s == 'ready') {
                       ready++;
-                    } else if (s == 'queued' || s == 'entity_queued') queued++;
-                    else if (s == 'transcribed' || s == 'complete' || s == 'review_needed') done++;
+                    } else if (s == 'queued' || s == 'entity_queued') {
+                      queued++;
+                    } else if (s == 'transcribed' || s == 'complete' || s == 'review_needed') {
+                      done++;
+                    }
 
-                    if (s == 'error') err++;
+                    if (s == 'error') {
+                      err++;
+                    }
                   }
                 }
                 return Column(
@@ -535,7 +586,9 @@ class _EntityRow extends StatelessWidget {
         } else if (snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           String linkText = '/$handle';
-          if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
+          if (data['isAlias'] == true) {
+            linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
+          }
           statusWidget = Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
         } else {
           statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
@@ -569,9 +622,13 @@ class _EntityRow extends StatelessWidget {
     }
     try {
       await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
+      }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
@@ -593,12 +650,18 @@ class _EntityRow extends StatelessWidget {
           ]
       );
     });
-    if (target == null || target.isEmpty) return;
+    if (target == null || target.isEmpty) {
+      return;
+    }
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
+      }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 }
@@ -614,9 +677,13 @@ class _PageList extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').orderBy('pageNumber').snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
+        if (!snapshot.hasData) {
+          return const SizedBox();
+        }
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return const Text('No pages added.', style: TextStyle(color: Colors.grey, fontSize: 12));
+        if (docs.isEmpty) {
+          return const Text('No pages added.', style: TextStyle(color: Colors.grey, fontSize: 12));
+        }
 
         return ListView.builder(
           shrinkWrap: true,

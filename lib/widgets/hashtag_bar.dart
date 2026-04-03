@@ -92,7 +92,7 @@ class _HashtagBarState extends State<HashtagBar> {
                 ),
               ),
               backgroundColor: bgColor,
-              shape: StadiumBorder(side: BorderSide(color: color!.withOpacity(0.5))),
+              shape: StadiumBorder(side: BorderSide(color: color!.withValues(alpha: 0.5))),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
             ),
