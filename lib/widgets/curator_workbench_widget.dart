@@ -35,10 +35,6 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
 
-  final TextEditingController _searchController = TextEditingController();
-  final List<Map<String, String>> _searchResults = [];
-  final bool _isSearching = false;
-
   List<Map<String, dynamic>> _detectedEntities = [];
   bool _isValidatingEntities = false;
 
@@ -70,7 +66,12 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
   void _onTextChanged() { if (!_hasUnsavedChanges) setState(() => _hasUnsavedChanges = true); }
 
   @override
-  void dispose() { _textController.dispose(); _titleController.dispose(); _searchController.dispose(); _tabController.dispose(); super.dispose(); }
+  void dispose() {
+    _textController.dispose();
+    _titleController.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
 
   void _listenToPages() {
     setState(() => _isLoadingPages = true);
@@ -174,15 +175,6 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     if (mounted) setState(() { _detectedEntities = results; _isValidatingEntities = false; });
   }
 
-  void _insertEntity(Map<String, String> entity) {
-    final text = _textController.text;
-    final selection = _textController.selection;
-    final link = "[[${entity['display']}|user:${entity['id']}]]";
-    String newText = selection.isValid ? text.replaceRange(selection.start, selection.end, link) : text + link;
-    _textController.text = newText;
-    _textController.selection = TextSelection.fromPosition(TextPosition(offset: (selection.isValid ? selection.start : text.length) + link.length));
-  }
-
   Future<void> _softPublish() async {
     if (_hasUnsavedChanges) await _saveCurrentPage();
     setState(() => _isSaving = true);
@@ -240,24 +232,27 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
             Text("$_currentPageComments", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
 
             const Spacer(),
-            IconButton(icon: const Icon(Icons.save), onPressed: _saveCurrentPage)
+            IconButton(icon: const Icon(Icons.save), onPressed: _isSaving ? null : _saveCurrentPage)
           ])),
           TabBar(controller: _tabController, tabs: const [Tab(text: "Pipeline"), Tab(text: "Editor"), Tab(text: "Entities")]),
           Expanded(child: TabBarView(controller: _tabController, children: [
             SingleChildScrollView(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text("Pipeline Status", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text("Status: $_pipelineStatus", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 16),
               Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
                 _Counter(label: "Ready", count: readyCount, color: Colors.blue),
                 _Counter(label: "Queued", count: queuedCount, color: Colors.orange),
                 _Counter(label: "Done", count: completeCount, color: Colors.green),
+                _Counter(label: "Error", count: errorCount, color: Colors.red),
               ]),
               const SizedBox(height: 20),
-              ElevatedButton(onPressed: _runStep2_BatchOCR, child: const Text("Run Step 2: Batch OCR")),
+              ElevatedButton(onPressed: _isSaving ? null : _runStep2_BatchOCR, child: const Text("Run Step 2: Batch OCR")),
               const SizedBox(height: 10),
-              OutlinedButton(onPressed: _runStep3_Finalize, child: const Text("Run Step 3: Finalize")),
+              OutlinedButton(onPressed: _isSaving ? null : _runStep3_Finalize, child: const Text("Run Step 3: Finalize")),
             ])),
             Padding(padding: const EdgeInsets.all(12), child: TextField(controller: _textController, maxLines: null, expands: true, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "Transcribe..."))),
-            ListView.separated(padding: const EdgeInsets.all(16), itemCount: _detectedEntities.length, separatorBuilder: (c,i) => const Divider(), itemBuilder: (c, i) {
+            _isValidatingEntities ? const Center(child: CircularProgressIndicator()) : ListView.separated(padding: const EdgeInsets.all(16), itemCount: _detectedEntities.length, separatorBuilder: (c,i) => const Divider(), itemBuilder: (c, i) {
               final e = _detectedEntities[i];
               return ListTile(title: Text(e['name']), subtitle: Text(e['status']));
             })
@@ -267,9 +262,9 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
         return Column(children: [
           Expanded(child: isWide ? Row(children: [Expanded(child: imagePanel), Expanded(child: rightPanel)]) : Column(children: [Expanded(child: imagePanel), Expanded(child: rightPanel)])),
           Container(height: 50, color: Colors.white, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            ElevatedButton(onPressed: _softPublish, style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white), child: const Text("Soft Publish")),
+            ElevatedButton(onPressed: _isSaving ? null : _softPublish, style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white), child: const Text("Soft Publish")),
             const SizedBox(width: 10),
-            ElevatedButton(onPressed: () => _db.collection('fanzines').doc(widget.fanzineId).update({'status': 'live'}), style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white), child: const Text("Mark Live")),
+            ElevatedButton(onPressed: _isSaving ? null : () => _db.collection('fanzines').doc(widget.fanzineId).update({'status': 'live'}), style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white), child: const Text("Mark Live")),
             const SizedBox(width: 16),
           ]))
         ]);

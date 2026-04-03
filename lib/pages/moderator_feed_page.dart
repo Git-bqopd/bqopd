@@ -17,7 +17,6 @@ class ModeratorFeedPage extends StatefulWidget {
 }
 
 class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
-  final EngagementService _engagementService = EngagementService();
 
   @override
   Widget build(BuildContext context) {

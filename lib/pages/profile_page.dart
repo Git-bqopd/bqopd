@@ -26,7 +26,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   // TABS: 0=Editor, 1=Pages, 2=Works, 3=Comments, 4=Mentions, 5=Collection
   int? _currentIndex;
-  final bool _isLoadingDefaults = true;
 
   // Local state for Pages tab sub-filter
   // false = published (default), true = drafts (pending)
@@ -40,7 +39,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic>? _userData;
   bool _isLoadingData = true;
   bool _isUploadingPdf = false;
-  String? _errorMessage;
 
   @override
   void initState() {
@@ -60,7 +58,6 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!mounted) return;
     setState(() {
       _isLoadingData = true;
-      _errorMessage = null;
     });
 
     final provider = Provider.of<UserProvider>(context, listen: false);
@@ -91,7 +88,6 @@ class _ProfilePageState extends State<ProfilePage> {
         if (doc.exists) {
           _userData = doc.data();
         } else {
-          _errorMessage = "User not found";
         }
       }
 
@@ -99,7 +95,6 @@ class _ProfilePageState extends State<ProfilePage> {
         _syncUrl(_userData!['username']);
       }
     } catch (e) {
-      _errorMessage = "Error loading user: $e";
     }
 
     await _determineInitialTab(targetId);

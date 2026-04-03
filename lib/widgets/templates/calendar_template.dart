@@ -88,7 +88,6 @@ class CalendarDateUtils {
       String monthName = DateFormat('MMMM').format(current);
 
       List<CalWeek> weeks = [];
-      DateTime firstDay = DateTime(year, month, 1);
       DateTime lastDay = DateTime(year, month + 1, 0);
 
       for (int d = 1; d <= lastDay.day; d++) {

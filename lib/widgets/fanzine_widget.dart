@@ -38,7 +38,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   // Design Tokens
   static const Color kPrimaryColor = Color(0xFFF1B255);
-  static const Color kBgLight = Color(0xFFF8F7F6);
   static const double kInternalContentWidth = 200.0; // The "mobile" width constraint
 
   // --- DUMMY DATA FOR UI ITERATION ---
