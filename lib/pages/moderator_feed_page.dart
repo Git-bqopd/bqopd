@@ -162,7 +162,7 @@ class _ModeratorCardState extends State<_ModeratorCard> {
           BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
         ],
         border: isApproved
-            ? Border.all(color: Colors.green.withOpacity(0.5), width: 2)
+            ? Border.all(color: Colors.green.withValues(alpha: 0.5), width: 2)
             : null,
       ),
       child: Column(

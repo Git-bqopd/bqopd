@@ -95,6 +95,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _syncUrl(_userData!['username']);
       }
     } catch (e) {
+      debugPrint("Error loading profile data: $e");
     }
 
     await _determineInitialTab(targetId);
@@ -819,7 +820,7 @@ class _FanzineCoverTile extends StatelessWidget {
               border: Border.all(color: Colors.black12),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 2))
               ],
@@ -866,7 +867,7 @@ class _FanzineCoverTile extends StatelessWidget {
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                         colors: [
-                          Colors.black.withOpacity(0.8),
+                          Colors.black.withValues(alpha: 0.8),
                           Colors.transparent
                         ],
                       ),

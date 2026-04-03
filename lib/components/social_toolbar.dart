@@ -696,7 +696,7 @@ class _DrawerItem extends StatelessWidget {
         Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
                 border: Border.all(color: color, width: 2)),
             child: Icon(icon, color: color, size: 18)),

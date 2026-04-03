@@ -63,7 +63,11 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     });
   }
 
-  void _onTextChanged() { if (!_hasUnsavedChanges) setState(() => _hasUnsavedChanges = true); }
+  void _onTextChanged() {
+    if (!_hasUnsavedChanges) {
+      setState(() => _hasUnsavedChanges = true);
+    }
+  }
 
   @override
   void dispose() {
@@ -78,16 +82,24 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     _db.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber').snapshots().listen((snapshot) {
       if (!mounted) return;
       String? currentId;
-      if (_pages.isNotEmpty && _currentPageIndex < _pages.length) currentId = _pages[_currentPageIndex].id;
+      if (_pages.isNotEmpty && _currentPageIndex < _pages.length) {
+        currentId = _pages[_currentPageIndex].id;
+      }
       setState(() {
         _pages = snapshot.docs;
         _isLoadingPages = false;
         if (currentId != null) {
           final idx = _pages.indexWhere((doc) => doc.id == currentId);
-          if (idx != -1) _currentPageIndex = idx;
+          if (idx != -1) {
+            _currentPageIndex = idx;
+          }
         }
-        if (_currentPageIndex >= _pages.length) _currentPageIndex = _pages.isNotEmpty ? _pages.length - 1 : 0;
-        if (!_hasUnsavedChanges && _pages.isNotEmpty) _loadPageContent(_currentPageIndex);
+        if (_currentPageIndex >= _pages.length) {
+          _currentPageIndex = _pages.isNotEmpty ? _pages.length - 1 : 0;
+        }
+        if (!_hasUnsavedChanges && _pages.isNotEmpty) {
+          _loadPageContent(_currentPageIndex);
+        }
       });
     });
   }
@@ -118,7 +130,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     if (mounted) setState(() { _currentImageUrl = url; _isLoadingImage = false; });
   }
 
-  Future<void> _runStep2_BatchOCR() async {
+  Future<void> _runStep2BatchOcr() async {
     setState(() => _isSaving = true);
     try {
       await FirebaseFunctions.instance.httpsCallable('trigger_batch_ocr').call({'fanzineId': widget.fanzineId});
@@ -127,7 +139,7 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
     finally { if(mounted) setState(() => _isSaving = false); }
   }
 
-  Future<void> _runStep3_Finalize() async {
+  Future<void> _runStep3Finalize() async {
     setState(() => _isSaving = true);
     try {
       final result = await FirebaseFunctions.instance.httpsCallable('finalize_fanzine_data').call({'fanzineId': widget.fanzineId});
@@ -208,7 +220,13 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
       final status = s['status'];
       if (status == 'ready') {
         readyCount++;
-      } else if (status == 'queued') queuedCount++; else if (status == 'ocr_complete' || status == 'complete') completeCount++; else if (status == 'error') errorCount++;
+      } else if (status == 'queued') {
+        queuedCount++;
+      } else if (status == 'ocr_complete' || status == 'complete') {
+        completeCount++;
+      } else if (status == 'error') {
+        errorCount++;
+      }
     }
 
     return Scaffold(
@@ -247,9 +265,9 @@ class _CuratorWorkbenchWidgetState extends State<CuratorWorkbenchWidget> with Si
                 _Counter(label: "Error", count: errorCount, color: Colors.red),
               ]),
               const SizedBox(height: 20),
-              ElevatedButton(onPressed: _isSaving ? null : _runStep2_BatchOCR, child: const Text("Run Step 2: Batch OCR")),
+              ElevatedButton(onPressed: _isSaving ? null : _runStep2BatchOcr, child: const Text("Run Step 2: Batch OCR")),
               const SizedBox(height: 10),
-              OutlinedButton(onPressed: _isSaving ? null : _runStep3_Finalize, child: const Text("Run Step 3: Finalize")),
+              OutlinedButton(onPressed: _isSaving ? null : _runStep3Finalize, child: const Text("Run Step 3: Finalize")),
             ])),
             Padding(padding: const EdgeInsets.all(12), child: TextField(controller: _textController, maxLines: null, expands: true, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "Transcribe..."))),
             _isValidatingEntities ? const Center(child: CircularProgressIndicator()) : ListView.separated(padding: const EdgeInsets.all(16), itemCount: _detectedEntities.length, separatorBuilder: (c,i) => const Divider(), itemBuilder: (c, i) {
