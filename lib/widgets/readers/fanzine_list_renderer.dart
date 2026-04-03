@@ -14,7 +14,7 @@ import '../youtube_player_widget.dart';
 import '../templates/basic_text_template.dart';
 import '../templates/calendar_template.dart';
 import '../calendar_editor_widget.dart';
-import '../hashtag_bar.dart'; // NEW
+import '../hashtag_bar.dart';
 import '../../services/user_bootstrap.dart';
 import '../../services/username_service.dart';
 
@@ -58,7 +58,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   final Map<int, bool> _openEntityRows = {};
   final Map<int, bool> _openPublisherRows = {};
   final Map<int, bool> _openIndiciaRows = {};
-  final Map<int, bool> _openTagRows = {}; // NEW: Track tags bonus row
+  final Map<int, bool> _openTagRows = {};
 
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
@@ -98,7 +98,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     _openEntityRows[index] = false;
     _openPublisherRows[index] = false;
     _openIndiciaRows[index] = false;
-    _openTagRows[index] = false; // NEW
+    _openTagRows[index] = false;
   }
 
   void _handleTextToggle(int index, String text, String imageId) {
@@ -113,7 +113,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     }
   }
 
-  // NEW: Handle Hashtag toggle
   void _handleTagToggle(int index, String imageId) {
     if (widget.onExternalDrawerRequest != null) {
       widget.onExternalDrawerRequest!(_buildSidebarTags(imageId));
@@ -263,7 +262,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     );
   }
 
-  // NEW: Sidebar widget for tags
   Widget _buildSidebarTags(String imageId) {
     return _SidebarWrapper(
       title: "HASHTAGS & VOTING",
@@ -339,10 +337,8 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
       separatorBuilder: (_, __) => const SizedBox(height: 48),
       itemBuilder: (context, index) {
         if (index == 0) {
-          return ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 600),
-            child: widget.headerWidget,
-          );
+          // No constraints here so header can be as long as needed
+          return widget.headerWidget;
         }
 
         final pageIndex = index - 1;
@@ -365,14 +361,14 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           isCommentsOpen: _openCommentRows[pageIndex] ?? false,
           isViewsOpen: _openViewRows[pageIndex] ?? false,
           isCreditsOpen: _openCreditRows[pageIndex] ?? false,
-          isYouTubeOpen: _openYouTubeRows[pageIndex] ?? false,
+          isYouTubeOpen: _openYouTubeRows[index] ?? false, // Fixed potential index issue
           isOCROpen: _openOCRRows[pageIndex] ?? false,
           isEntitiesOpen: _openEntityRows[pageIndex] ?? false,
           isPublisherOpen: _openPublisherRows[pageIndex] ?? false,
           isIndiciaOpen: _openIndiciaRows[pageIndex] ?? false,
-          isTagsOpen: _openTagRows[pageIndex] ?? false, // NEW
+          isTagsOpen: _openTagRows[pageIndex] ?? false,
           onToggleText: (actualText) => _handleTextToggle(pageIndex, actualText, imageId),
-          onToggleTags: () => _handleTagToggle(pageIndex, imageId), // NEW
+          onToggleTags: () => _handleTagToggle(pageIndex, imageId),
           onToggleOCR: () => _handleOCRToggle(pageIndex, imageId, pageId),
           onToggleEntities: (actualText) => _handleEntityToggle(pageIndex, imageId, actualText),
           onTogglePublisher: (actualText) => _handlePublisherToggle(pageIndex, actualText, imageId, templateId),
@@ -410,7 +406,7 @@ class _PageWidget extends StatefulWidget {
   final bool isEntitiesOpen;
   final bool isPublisherOpen;
   final bool isIndiciaOpen;
-  final bool isTagsOpen; // NEW
+  final bool isTagsOpen;
   final Function(String actualText) onToggleText;
   final VoidCallback onToggleOCR;
   final Function(String actualText) onToggleEntities;
@@ -420,7 +416,7 @@ class _PageWidget extends StatefulWidget {
   final VoidCallback onToggleCredits;
   final VoidCallback onToggleYouTube;
   final VoidCallback onToggleIndicia;
-  final VoidCallback onToggleTags; // NEW
+  final VoidCallback onToggleTags;
   final Function(int)? onOpenGrid;
   final Function(String) submitComment;
   final TextEditingController commentController;
@@ -551,14 +547,14 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                           onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
                           onToggleComments: widget.onToggleComment,
                           onToggleText: () => widget.onToggleText(actualText),
-                          onToggleTags: widget.onToggleTags, // NEW
+                          onToggleTags: widget.onToggleTags,
                           onToggleOCR: widget.onToggleOCR,
                           onToggleEntities: () => widget.onToggleEntities(actualText),
                           onTogglePublisher: () => widget.onTogglePublisher(actualText),
                           onToggleViews: widget.onToggleViews,
                           onToggleCredits: widget.onToggleCredits,
                           onToggleYouTube: widget.onToggleYouTube,
-                          onToggleIndicia: isIndiciaPage ? widget.onToggleIndicia : null, // Restricted
+                          onToggleIndicia: isIndiciaPage ? widget.onToggleIndicia : null,
                         ),
                       ),
                       if (widget.isTextOpen) ...[
@@ -900,8 +896,15 @@ class _CreditsEditorWidgetState extends State<_CreditsEditorWidget> {
   Future<void> _save() async {
     if (widget.imageId.isEmpty) return;
     setState(() => _saving = true);
-    try { await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'indicia': _iC.text.trim(), 'creators': _creators}); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!'))); }
-    finally { if (mounted) setState(() => _saving = false); }
+    try {
+      await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({
+        'indicia': _iC.text.trim(),
+        'creators': _creators
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
   @override
   Widget build(BuildContext context) {
@@ -1092,7 +1095,6 @@ class _MasterIndiciaWidgetState extends State<_MasterIndiciaWidget> {
           if (imgDoc.exists) {
             final imgData = imgDoc.data() as Map<String, dynamic>;
 
-            // Collect Unique Creators
             final creators = imgData['creators'] as List? ?? [];
             for (var c in creators) {
               final cMap = Map<String, dynamic>.from(c as Map);
@@ -1103,7 +1105,6 @@ class _MasterIndiciaWidgetState extends State<_MasterIndiciaWidget> {
               }
             }
 
-            // Collect Indicia text only
             final imgIndicia = imgData['indicia'] as String?;
             if (imgIndicia != null && imgIndicia.trim().isNotEmpty) {
               assembledIndicia.add(imgIndicia.trim());

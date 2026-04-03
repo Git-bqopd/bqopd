@@ -14,18 +14,32 @@ class FanzineEditorWidget extends StatefulWidget {
   State<FanzineEditorWidget> createState() => _FanzineEditorWidgetState();
 }
 
-class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
+class _FanzineEditorWidgetState extends State<FanzineEditorWidget> with SingleTickerProviderStateMixin {
   final TextEditingController _shortcodeController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  late TabController _tabController;
   bool _isProcessing = false;
   String? _lastSyncedTitle;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    // Listener to update UI when tab selection changes
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+  }
 
   @override
   void dispose() {
     _shortcodeController.dispose();
     _titleController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -153,9 +167,7 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
   Future<void> _runEntityRecognition() async {
     setState(() => _isProcessing = true);
     try {
-      // Step A: Trigger Entity matching for transcribed pages
       await FirebaseFunctions.instance.httpsCallable('trigger_batch_entities').call({'fanzineId': widget.fanzineId});
-      // Step B: Finalize aggregation
       await FirebaseFunctions.instance.httpsCallable('finalize_fanzine_data').call({'fanzineId': widget.fanzineId});
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entity Extraction & Aggregation Triggered.')));
     } catch (e) {
@@ -198,300 +210,278 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: StreamBuilder<DocumentSnapshot>(
-        stream: _db.collection('fanzines').doc(widget.fanzineId).snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          final title = data['title'] ?? 'Untitled';
-          final shortCode = data['shortCode'];
-          final status = data['status'] ?? 'draft';
-          final twoPage = data['twoPage'] ?? false;
-          final hasSourceFile = data.containsKey('sourceFile');
-          final List<String> entities = List<String>.from(data['draftEntities'] ?? []);
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _db.collection('fanzines').doc(widget.fanzineId).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final title = data['title'] ?? 'Untitled';
+        final shortCode = data['shortCode'];
+        final status = data['status'] ?? 'draft';
+        final twoPage = data['twoPage'] ?? false;
+        final hasSourceFile = data.containsKey('sourceFile');
+        final List<String> entities = List<String>.from(data['draftEntities'] ?? []);
 
-          if (_lastSyncedTitle != title) {
-            _titleController.text = title;
-            _lastSyncedTitle = title;
-          }
+        if (_lastSyncedTitle != title) {
+          _titleController.text = title;
+          _lastSyncedTitle = title;
+        }
 
-          // REMOVED: Fixed height: 480 to allow content expansion
-          return Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black12),
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // Shrink-wrap content
-              children: [
-                TabBar(
-                  labelColor: Theme.of(context).primaryColor,
-                  unselectedLabelColor: Colors.grey,
-                  indicatorSize: TabBarIndicatorSize.label,
-                  tabs: const [
-                    Tab(text: "Settings", icon: Icon(Icons.settings, size: 20)),
-                    Tab(text: "Order", icon: Icon(Icons.format_list_numbered, size: 20)),
-                    Tab(text: "OCR / Ent", icon: Icon(Icons.auto_awesome, size: 20)),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black12),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // ALLOW GROWING
+            children: [
+              TabBar(
+                controller: _tabController,
+                labelColor: Theme.of(context).primaryColor,
+                unselectedLabelColor: Colors.grey,
+                indicatorSize: TabBarIndicatorSize.label,
+                tabs: const [
+                  Tab(text: "Settings", icon: Icon(Icons.settings, size: 20)),
+                  Tab(text: "Order", icon: Icon(Icons.format_list_numbered, size: 20)),
+                  Tab(text: "OCR / Ent", icon: Icon(Icons.auto_awesome, size: 20)),
+                ],
+              ),
+              // REPLACE TabBarView with dynamic content to allow Column expansion
+              _buildTabContent(data, entities, hasSourceFile, shortCode, twoPage, status),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTabContent(Map<String, dynamic> data, List<String> entities, bool hasSourceFile, String? shortCode, bool twoPage, String status) {
+    switch (_tabController.index) {
+      case 0:
+        return _buildSettingsTab(data, hasSourceFile, shortCode, twoPage, status);
+      case 1:
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('PAGE ORDER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              _PageList(fanzineId: widget.fanzineId, onReorder: _reorderPage),
+            ],
+          ),
+        );
+      case 2:
+        return _buildOCREntitiesTab(entities);
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildSettingsTab(Map<String, dynamic> data, bool hasSourceFile, String? shortCode, bool twoPage, String status) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _titleController,
+            onSubmitted: _updateTitle,
+            decoration: const InputDecoration(labelText: 'Fanzine Name', isDense: true, border: OutlineInputBorder(), helperText: "Press enter or click SAVE below"),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: TextField(controller: _shortcodeController, decoration: const InputDecoration(hintText: 'Paste image shortcode', isDense: true, border: OutlineInputBorder()))),
+            const SizedBox(width: 8),
+            ElevatedButton(onPressed: _isProcessing ? null : _addPage, child: const Text('Add Page')),
+          ]),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Shortcode: ${shortCode ?? 'None'}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              if (shortCode == null)
+                TextButton(
+                  onPressed: _isProcessing ? null : _assignMissingShortcode,
+                  child: const Text("GENERATE SHORTCODE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                )
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('Has two page spread view', style: TextStyle(fontSize: 12)),
+            Switch(value: twoPage, onChanged: (val) => _updateTwoPage(val)),
+          ]),
+          const Divider(height: 24),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+              Text(status.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, color: status == 'live' ? Colors.green : Colors.orange)),
+            ]),
+            Row(children: [
+              TextButton(onPressed: _softPublish, child: const Text('Soft Publish')),
+              Switch(value: status == 'live', onChanged: (_) => _toggleStatus(status)),
+              const Text('Live', style: TextStyle(fontSize: 12)),
+            ])
+          ]),
+
+          const Divider(height: 24),
+          const Text('SPECIAL PAGES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+          StreamBuilder<QuerySnapshot>(
+              stream: _db.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber').snapshots(),
+              builder: (context, pagesSnap) {
+                if (!pagesSnap.hasData) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator()));
+                final pages = pagesSnap.data!.docs;
+                List<DropdownMenuItem<String?>> items = [
+                  const DropdownMenuItem(value: null, child: Text("None"))
+                ];
+                for (var p in pages) {
+                  final pData = p.data() as Map<String, dynamic>;
+                  items.add(DropdownMenuItem(
+                    value: p.id,
+                    child: Text("Page ${pData['pageNumber']}"),
+                  ));
+                }
+
+                Widget buildDropdown(String label, String field, String? currentValue) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 2, child: Text(label, style: const TextStyle(fontSize: 12))),
+                        Expanded(
+                          flex: 3,
+                          child: DropdownButtonFormField<String?>(
+                            value: items.any((i) => i.value == currentValue) ? currentValue : null,
+                            items: items,
+                            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                            onChanged: (val) {
+                              _db.collection('fanzines').doc(widget.fanzineId).update({field: val});
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: [
+                    buildDropdown("Indicia", "indiciaPageId", data['indiciaPageId']),
+                    buildDropdown("Credits", "creditsPageId", data['creditsPageId']),
+                    buildDropdown("Table of Contents", "tocPageId", data['tocPageId']),
+                    buildDropdown("Advertiser Index", "adIndexPageId", data['adIndexPageId']),
                   ],
-                ),
-                // Since fixed height was removed, TabBarView needs a calculated height or wrapping.
-                // Using IntrinsicHeight doesn't work well with TabBarView.
-                // We'll give it a reasonable height but allow internal scrolling if needed,
-                // though the goal is visibility without heavy scrolling.
-                SizedBox(
-                  height: 600, // Adjusted to fit the new "Special Pages" fields comfortably
-                  child: TabBarView(
-                    children: [
-                      // --- SETTINGS TAB ---
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            TextField(
-                              controller: _titleController,
-                              onSubmitted: _updateTitle,
-                              decoration: const InputDecoration(labelText: 'Fanzine Name', isDense: true, border: OutlineInputBorder(), helperText: "Press enter or click SAVE below"),
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(children: [
-                              Expanded(child: TextField(controller: _shortcodeController, decoration: const InputDecoration(hintText: 'Paste image shortcode', isDense: true, border: OutlineInputBorder()))),
-                              const SizedBox(width: 8),
-                              ElevatedButton(onPressed: _isProcessing ? null : _addPage, child: const Text('Add Page')),
-                            ]),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('Shortcode: ${shortCode ?? 'None'}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                if (shortCode == null)
-                                  TextButton(
-                                    onPressed: _isProcessing ? null : _assignMissingShortcode,
-                                    child: const Text("GENERATE SHORTCODE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                                  )
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              const Text('Has two page spread view', style: TextStyle(fontSize: 12)),
-                              Switch(value: twoPage, onChanged: (val) => _updateTwoPage(val)),
-                            ]),
-                            const Divider(height: 24),
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                                Text(status.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, color: status == 'live' ? Colors.green : Colors.orange)),
-                              ]),
-                              Row(children: [
-                                TextButton(onPressed: _softPublish, child: const Text('Soft Publish')),
-                                Switch(value: status == 'live', onChanged: (_) => _toggleStatus(status)),
-                                const Text('Live', style: TextStyle(fontSize: 12)),
-                              ])
-                            ]),
+                );
+              }
+          ),
 
-                            const Divider(height: 24),
-                            const Text('SPECIAL PAGES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                            const SizedBox(height: 8),
-                            StreamBuilder<QuerySnapshot>(
-                                stream: _db.collection('fanzines').doc(widget.fanzineId).collection('pages').orderBy('pageNumber').snapshots(),
-                                builder: (context, pagesSnap) {
-                                  if (!pagesSnap.hasData) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator()));
-                                  final pages = pagesSnap.data!.docs;
-                                  List<DropdownMenuItem<String?>> items = [
-                                    const DropdownMenuItem(value: null, child: Text("None"))
-                                  ];
-                                  for (var p in pages) {
-                                    final pData = p.data() as Map<String, dynamic>;
-                                    items.add(DropdownMenuItem(
-                                      value: p.id,
-                                      child: Text("Page ${pData['pageNumber']}"),
-                                    ));
-                                  }
-
-                                  Widget buildDropdown(String label, String field, String? currentValue) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 8.0),
-                                      child: Row(
-                                        children: [
-                                          Expanded(flex: 2, child: Text(label, style: const TextStyle(fontSize: 12))),
-                                          Expanded(
-                                            flex: 3,
-                                            child: DropdownButtonFormField<String?>(
-                                              value: items.any((i) => i.value == currentValue) ? currentValue : null,
-                                              items: items,
-                                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
-                                              onChanged: (val) {
-                                                _db.collection('fanzines').doc(widget.fanzineId).update({field: val});
-                                              },
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }
-
-                                  return Column(
-                                    children: [
-                                      buildDropdown("Indicia", "indiciaPageId", data['indiciaPageId']),
-                                      buildDropdown("Credits", "creditsPageId", data['creditsPageId']),
-                                      buildDropdown("Table of Contents", "tocPageId", data['tocPageId']),
-                                      buildDropdown("Advertiser Index", "adIndexPageId", data['adIndexPageId']),
-                                    ],
-                                  );
-                                }
-                            ),
-
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _isProcessing ? null : () => _updateTitle(_titleController.text),
-                              style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Colors.white),
-                              child: _isProcessing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text("SAVE SETTINGS"),
-                            ),
-                            if (hasSourceFile) ...[
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                onPressed: _isProcessing ? null : _rescanPdf,
-                                icon: const Icon(Icons.refresh, size: 16),
-                                label: const Text("RESCAN PDF (RESET)"),
-                                style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      // --- PAGINATION TAB ---
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('PAGE ORDER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                            const SizedBox(height: 8),
-                            Expanded(child: _PageList(fanzineId: widget.fanzineId, onReorder: _reorderPage)),
-                          ],
-                        ),
-                      ),
-                      // --- OCR & ENTITIES NESTED TABS ---
-                      DefaultTabController(
-                        length: 2,
-                        child: Column(
-                          children: [
-                            const TabBar(
-                              labelColor: Colors.black,
-                              unselectedLabelColor: Colors.grey,
-                              indicatorColor: Colors.black54,
-                              tabs: [
-                                Tab(text: "Transcription"),
-                                Tab(text: "Entities"),
-                              ],
-                            ),
-                            Expanded(
-                              child: TabBarView(
-                                children: [
-                                  // SUB-TAB 1: BATCH TRANSCRIPTION
-                                  SingleChildScrollView(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        StreamBuilder<QuerySnapshot>(
-                                            stream: _db.collection('fanzines').doc(widget.fanzineId).collection('pages').snapshots(),
-                                            builder: (context, snap) {
-                                              int ready = 0; int queued = 0; int done = 0; int err = 0;
-                                              if (snap.hasData) {
-                                                for (var doc in snap.data!.docs) {
-                                                  final s = (doc.data() as Map)['status'];
-                                                  if (s == 'ready') {
-                                                    ready++;
-                                                  } else if (s == 'queued' || s == 'entity_queued') queued++;
-                                                  else if (s == 'transcribed' || s == 'complete' || s == 'review_needed') done++;
-
-                                                  if (s == 'error') err++;
-                                                }
-                                              }
-                                              return Column(
-                                                children: [
-                                                  Row(
-                                                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                                      children: [
-                                                        _Counter(label: "Ready", count: ready, color: Colors.blue),
-                                                        _Counter(label: "Queued", count: queued, color: Colors.orange),
-                                                        _Counter(label: "Done", count: done, color: Colors.green),
-                                                      ]
-                                                  ),
-                                                  if (err > 0) ...[
-                                                    const SizedBox(height: 16),
-                                                    _ErrorBadge(label: "Errors Detected", count: err),
-                                                  ],
-                                                ],
-                                              );
-                                            }
-                                        ),
-                                        const SizedBox(height: 24),
-                                        ElevatedButton.icon(
-                                            onPressed: _isProcessing ? null : _runBatchOCR,
-                                            icon: const Icon(Icons.bolt),
-                                            label: const Text("Batch Transcription")
-                                        ),
-                                        const SizedBox(height: 16),
-                                        const Text(
-                                            "Note: Extracted text is editable directly on pages via the 'Text' social button.",
-                                            style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
-                                            textAlign: TextAlign.center
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // SUB-TAB 2: BATCH ENTITY RECOGNITION
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.all(12.0),
-                                        child: ElevatedButton.icon(
-                                            onPressed: _isProcessing ? null : _runEntityRecognition,
-                                            icon: const Icon(Icons.person_search),
-                                            label: const Text("Run Entity Recognition")
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: entities.isEmpty
-                                            ? const Center(child: Text("No entities detected yet.", style: TextStyle(color: Colors.grey, fontSize: 12)))
-                                            : ListView.separated(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                                          itemCount: entities.length,
-                                          separatorBuilder: (c, i) => const Divider(height: 1),
-                                          itemBuilder: (context, index) => _EntityRow(name: entities[index]),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _isProcessing ? null : () => _updateTitle(_titleController.text),
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Colors.white),
+            child: _isProcessing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text("SAVE SETTINGS"),
+          ),
+          if (hasSourceFile) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isProcessing ? null : _rescanPdf,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text("RESCAN PDF (RESET)"),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
             ),
-          );
-        },
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOCREntitiesTab(List<String> entities) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          StreamBuilder<QuerySnapshot>(
+              stream: _db.collection('fanzines').doc(widget.fanzineId).collection('pages').snapshots(),
+              builder: (context, snap) {
+                int ready = 0; int queued = 0; int done = 0; int err = 0;
+                if (snap.hasData) {
+                  for (var doc in snap.data!.docs) {
+                    final s = (doc.data() as Map)['status'];
+                    if (s == 'ready') {
+                      ready++;
+                    } else if (s == 'queued' || s == 'entity_queued') queued++;
+                    else if (s == 'transcribed' || s == 'complete' || s == 'review_needed') done++;
+
+                    if (s == 'error') err++;
+                  }
+                }
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _Counter(label: "Ready", count: ready, color: Colors.blue),
+                          _Counter(label: "Queued", count: queued, color: Colors.orange),
+                          _Counter(label: "Done", count: done, color: Colors.green),
+                        ]
+                    ),
+                    if (err > 0) ...[
+                      const SizedBox(height: 16),
+                      _ErrorBadge(label: "Errors Detected", count: err),
+                    ],
+                  ],
+                );
+              }
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+              onPressed: _isProcessing ? null : _runBatchOCR,
+              icon: const Icon(Icons.bolt),
+              label: const Text("Batch Transcription")
+          ),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+              onPressed: _isProcessing ? null : _runEntityRecognition,
+              icon: const Icon(Icons.person_search),
+              label: const Text("Run Entity Recognition")
+          ),
+          const SizedBox(height: 12),
+          if (entities.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24.0),
+              child: Text("No entities detected yet.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemCount: entities.length,
+              separatorBuilder: (c, i) => const Divider(height: 1),
+              itemBuilder: (context, index) => _EntityRow(name: entities[index]),
+            ),
+          const SizedBox(height: 16),
+          const Text(
+              "Note: Extracted text is editable directly on pages via the 'Text' social button.",
+              style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
+              textAlign: TextAlign.center
+          ),
+        ],
       ),
     );
   }
 }
-
-// -----------------------------------------------------------------------------
-// HELPER CLASSES (Previously omitted with // ...)
-// -----------------------------------------------------------------------------
 
 class _Counter extends StatelessWidget {
   final String label;
