@@ -7,7 +7,7 @@ class UserProvider with ChangeNotifier {
   User? _user;
   Map<String, dynamic>? _userProfile;
   Map<String, bool> _socialButtonVisibility = {};
-  bool _isLoading = true; // Restored loading state
+  bool _isLoading = true;
 
   UserProvider() {
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
@@ -23,7 +23,7 @@ class UserProvider with ChangeNotifier {
     });
   }
 
-  // --- RESTORED CORE GETTERS ---
+  // --- CORE GETTERS ---
   User? get user => _user;
   Map<String, dynamic>? get userProfile => _userProfile;
   Map<String, bool> get socialButtonVisibility => _socialButtonVisibility;
@@ -44,7 +44,8 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      // FIXED: Capital 'U' in 'Users' to match your Firestore database!
+      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
       if (doc.exists) {
         _userProfile = doc.data() as Map<String, dynamic>;
 
@@ -64,13 +65,12 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  // --- METHODS ADDED FOR SETTINGS PANEL ---
+  // --- METHODS FOR SETTINGS PANEL ---
 
   void toggleSocialButtonVisibility(String toolId) {
     toggleSocialButton(toolId);
   }
 
-  // Restored this exact method name in case old files still reference it
   void toggleSocialButton(String toolId) {
     // Default is true if not explicitly set
     final currentVal = _socialButtonVisibility[toolId] ?? true;
@@ -87,7 +87,8 @@ class UserProvider with ChangeNotifier {
     if (_user == null) return;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(_user!.uid).set({
+      // FIXED: Capital 'U' in 'Users' to match your Firestore database!
+      await FirebaseFirestore.instance.collection('Users').doc(_user!.uid).set({
         'preferences': {
           'socialButtons': _socialButtonVisibility,
         }

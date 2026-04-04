@@ -5,7 +5,6 @@ class DynamicToolbarButton extends StatelessWidget {
   final ReaderTool tool;
   final VoidCallback onPressed;
   final bool isActive;
-  final bool hasInteracted; // NEW: Indicates if the user left a comment, etc.
   final bool isDarkMode;
   final int? count;
 
@@ -14,55 +13,33 @@ class DynamicToolbarButton extends StatelessWidget {
     required this.tool,
     required this.onPressed,
     this.isActive = false,
-    this.hasInteracted = false,
     this.isDarkMode = false,
     this.count,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Determine if the icon should be bold/filled based on engagement
-    bool showAsEngaged = (tool.id == 'Like' && isActive) || hasInteracted;
-
     IconData currentIcon = tool.defaultIcon;
-    if (showAsEngaged && tool.activeIcon != null) {
+
+    if (isActive && tool.activeIcon != null) {
       currentIcon = tool.activeIcon!;
     } else if (isDarkMode && tool.darkIcon != null) {
       currentIcon = tool.darkIcon!;
     }
 
-    // 1. Determine the line/icon color (Grey by default, bold if active/engaged)
-    Color iconAndBorderColor = (isActive || showAsEngaged) ? Colors.black : Colors.grey.shade600;
+    // Match the _DrawerItem style from the old SocialToolbar
+    Color color = Colors.black;
     if (isDarkMode) {
-      iconAndBorderColor = (isActive || showAsEngaged) ? Colors.white : Colors.grey.shade400;
+      color = Colors.white;
     }
 
-    // Override for Like
-    if (showAsEngaged && tool.id == 'Like') {
-      iconAndBorderColor = Colors.redAccent;
+    // Special override for the "Like" button to be red when active
+    if (isActive && tool.id == 'Like') {
+      color = Colors.redAccent;
     }
 
-    // 2. Determine the background color (Fills in when the drawer is open)
-    Color bgColor = Colors.transparent;
-    if (isActive && tool.action == ToolAction.openBonusRow) {
-      bgColor = isDarkMode ? Colors.white24 : Colors.black12; // Darkens background when open!
-    } else if (showAsEngaged && tool.id == 'Like') {
-      bgColor = Colors.redAccent.withValues(alpha: 0.1);
-    }
-
-    // 3. Determine the notification badge color
-    Color badgeColor = Colors.grey.shade500;
-    if (showAsEngaged && tool.id == 'Like') {
-      badgeColor = Colors.redAccent;
-    } else if (showAsEngaged) {
-      badgeColor = isDarkMode ? Colors.white : Colors.black; // Bold badge for user comments
-    } else if (count != null && count! > 0) {
-      badgeColor = isDarkMode ? Colors.grey.shade400 : Colors.grey.shade700; // Standard badge
-    }
-
-    Color badgeTextColor = (badgeColor == Colors.white || badgeColor == Colors.grey.shade400)
-        ? Colors.black
-        : Colors.white;
+    // ONLY apply the background tint if the button is active/selected!
+    Color bgColor = isActive ? color.withValues(alpha: 0.1) : Colors.transparent;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6.0),
@@ -78,13 +55,13 @@ class DynamicToolbarButton extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10), // Padding inside circle
                   decoration: BoxDecoration(
-                    color: bgColor, // Dynamic filled background
+                    color: bgColor,
                     shape: BoxShape.circle,
-                    border: Border.all(color: iconAndBorderColor, width: 1.5),
+                    border: Border.all(color: color, width: 2), // Outlined circle
                   ),
                   child: Icon(
                     currentIcon,
-                    color: iconAndBorderColor,
+                    color: color,
                     size: 20,
                   ),
                 ),
@@ -94,16 +71,16 @@ class DynamicToolbarButton extends StatelessWidget {
                     right: -4,
                     top: -4,
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(5),
                       decoration: BoxDecoration(
-                        color: badgeColor,
+                        color: isActive ? color : Colors.grey.shade600,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 1.5),
+                        border: Border.all(color: Colors.white, width: 1.5),
                       ),
                       child: Text(
                         '$count',
-                        style: TextStyle(
-                          color: badgeTextColor,
+                        style: const TextStyle(
+                          color: Colors.white,
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
                           height: 1.0,
@@ -118,8 +95,8 @@ class DynamicToolbarButton extends StatelessWidget {
               tool.label,
               style: TextStyle(
                 fontSize: 10,
-                fontWeight: (isActive || showAsEngaged) ? FontWeight.bold : FontWeight.normal,
-                color: iconAndBorderColor,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                color: color,
               ),
             ),
           ],
