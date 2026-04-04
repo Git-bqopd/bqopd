@@ -1,8 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../components/social_toolbar.dart';
-import 'youtube_player_widget.dart';
-import 'hashtag_bar.dart'; // Import the hashtag bar widget
+import '../components/dynamic_social_toolbar.dart';
+import '../models/reader_tool.dart';
+import '../models/panel_context.dart';
+import '../widgets/reader_panels/panel_factory.dart';
+import '../widgets/reader_panels/panel_container.dart';
+import '../services/engagement_service.dart';
+import '../services/view_service.dart';
 
 class ImageViewModal extends StatefulWidget {
   final String imageUrl;
@@ -23,50 +27,17 @@ class ImageViewModal extends StatefulWidget {
 }
 
 class _ImageViewModalState extends State<ImageViewModal> {
-  bool _showComments = false;
-  bool _showText = false;
-  bool _showShortCode = false;
-  bool _showYouTube = false;
-  bool _showTags = false; // Track visibility for the hashtags section
+  final EngagementService _engagementService = EngagementService();
+  final ViewService _viewService = ViewService();
+  final TextEditingController _commentController = TextEditingController();
+  final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
+  BonusRowType? _activePanel;
 
-  void _toggleComments() {
-    setState(() {
-      _showComments = !_showComments;
-      _showText = false;
-      _showShortCode = false;
-      _showYouTube = false;
-      _showTags = false;
-    });
-  }
-
-  void _toggleText() {
-    setState(() {
-      _showText = !_showText;
-      _showComments = false;
-      _showShortCode = false;
-      _showYouTube = false;
-      _showTags = false;
-    });
-  }
-
-  void _toggleYouTube() {
-    setState(() {
-      _showYouTube = !_showYouTube;
-      _showText = false;
-      _showComments = false;
-      _showShortCode = false;
-      _showTags = false;
-    });
-  }
-
-  void _toggleTags() {
-    setState(() {
-      _showTags = !_showTags;
-      _showComments = false;
-      _showText = false;
-      _showShortCode = false;
-      _showYouTube = false;
-    });
+  @override
+  void dispose() {
+    _commentController.dispose();
+    _fontSizeNotifier.dispose();
+    super.dispose();
   }
 
   @override
@@ -110,7 +81,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
                 ),
               ),
 
-              // ACTION BAR (Using SocialToolbar)
+              // ACTION BAR (Using DynamicSocialToolbar)
               Material(
                 elevation: 1,
                 color: Colors.white,
@@ -128,14 +99,17 @@ class _ImageViewModalState extends State<ImageViewModal> {
                         youtubeId = data['youtubeId'] as String?;
                       }
 
-                      return SocialToolbar(
+                      return DynamicSocialToolbar(
                         imageId: widget.imageId,
                         isGame: isGame,
                         youtubeId: youtubeId,
-                        onToggleComments: _toggleComments,
-                        onToggleText: _toggleText,
-                        onToggleTags: _toggleTags, // Pass the toggle handler
-                        onToggleYouTube: _toggleYouTube,
+                        isEditingMode: false,
+                        activeBonusRow: _activePanel,
+                        onToggleBonusRow: (rowType) {
+                          setState(() {
+                            _activePanel = _activePanel == rowType ? null : rowType;
+                          });
+                        },
                       );
                     },
                   ),
@@ -156,71 +130,39 @@ class _ImageViewModalState extends State<ImageViewModal> {
   }
 
   Widget _buildDetailsArea() {
-    final showAnything = _showComments || _showText || _showShortCode || _showYouTube || _showTags;
-    if (!showAnything) return const SizedBox.shrink();
+    if (_activePanel == null) return const SizedBox.shrink();
 
     return SizedBox(
       height: 240,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_showComments) ...[
-              const Text('Comments',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              const TextField(
-                maxLines: null,
-                decoration: InputDecoration(
-                  hintText: 'leave a comment...',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (_showText) ...[
-              const Text('Text', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Text(widget.imageText ?? 'no text available.'),
-              const SizedBox(height: 16),
-            ],
-            if (_showYouTube) ...[
-              const Text('Video', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Container(
-                color: Colors.black,
-                child: YouTubePlayerWidget(imageId: widget.imageId),
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (_showTags) ...[
-              const Text('Hashtags', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              // Stream the latest tags for the image to ensure real-time voting updates
-              StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance.collection('images').doc(widget.imageId).snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SizedBox();
-                  final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-                  final tags = data['tags'] as Map<String, dynamic>? ?? {};
-                  return HashtagBar(imageId: widget.imageId, tags: tags);
+        child: PanelContainer(
+          title: '',
+          isInline: true,
+          inlineColor: PanelFactory.getInlineColor(_activePanel!),
+          child: PanelFactory.buildPanelContent(
+              PanelContext(
+                type: _activePanel!,
+                imageId: widget.imageId,
+                actualText: widget.imageText ?? '',
+                isEditingMode: false,
+                viewService: _viewService,
+                engagementService: _engagementService,
+                commentController: _commentController,
+                onSubmitComment: () async {
+                  if (_commentController.text.trim().isEmpty) return;
+                  await _engagementService.addComment(
+                    imageId: widget.imageId,
+                    fanzineId: 'image_modal',
+                    fanzineTitle: 'Image View',
+                    text: _commentController.text.trim(),
+                    displayName: null,
+                    username: null,
+                  );
+                  _commentController.clear();
                 },
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (_showShortCode) ...[
-              const Text('Short Code',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              SelectableText(
-                widget.shortCode != null
-                    ? 'the short code is: ${widget.shortCode}'
-                    : 'no shortcode available.',
-              ),
-            ],
-          ],
+                fontSizeNotifier: _fontSizeNotifier,
+              )
+          ),
         ),
       ),
     );

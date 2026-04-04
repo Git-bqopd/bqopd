@@ -8,6 +8,7 @@ class CommentsPanel extends StatelessWidget {
   final EngagementService engagementService;
   final TextEditingController controller;
   final VoidCallback onSend;
+  final bool isInline;
 
   const CommentsPanel({
     super.key,
@@ -15,16 +16,22 @@ class CommentsPanel extends StatelessWidget {
     required this.engagementService,
     required this.controller,
     required this.onSend,
+    this.isInline = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 300),
-          child: _CommentList(imageId: imageId, service: engagementService),
-        ),
+        if (isInline)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 300),
+            child: _CommentList(imageId: imageId, service: engagementService),
+          )
+        else
+          Expanded(
+            child: _CommentList(imageId: imageId, service: engagementService),
+          ),
         _CommentInput(controller: controller, onSend: onSend),
       ],
     );
@@ -99,6 +106,7 @@ class _CommentInput extends StatelessWidget {
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
+              onSubmitted: (_) => onSend(),
             ),
           ),
           IconButton(icon: const Icon(Icons.send), onPressed: onSend)

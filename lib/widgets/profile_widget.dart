@@ -47,18 +47,10 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
         // --- DIRECT VISIBILITY LOGIC ---
 
-        // 1. Is the user we are looking at an Editor? (Source: the document in this stream)
-        final bool isThisUserAnEditor = userData['Editor'] == true;
+        final bool isThisUserAnEditor = userData['Editor'] == true || userData['isEditor'] == true;
 
-        // 2. Is the person looking at the screen an Editor?
-        // If it's your own profile, we look at the 'Editor' field in your document (userData).
-        // If it's someone else's profile, we look at your global session (userProvider).
-        final bool amIAnEditor = isMyProfile
-            ? isThisUserAnEditor
-            : (userProvider.isEditor == true);
-
-        // 3. Show the tab only if BOTH conditions are met.
-        final bool showEditorTab = isThisUserAnEditor && amIAnEditor;
+        // Show the editor tab if I'm looking at my own profile, OR if I'm a global editor looking at another editor's profile
+        final bool showEditorTab = isMyProfile || (isThisUserAnEditor && userProvider.isEditor);
 
         // Build the dynamic tab lists
         List<String> tabTitles = [];

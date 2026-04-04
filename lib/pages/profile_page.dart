@@ -293,10 +293,10 @@ class _ProfilePageState extends State<ProfilePage> {
     final bool isOwner = (currentUid != null && targetUserId == currentUid);
     final bool canEditProfile = _canEdit(targetUserId!);
 
-    // --- SIMPLE VISIBILITY LOGIC ---
+    // --- VISIBILITY LOGIC (Updated to show Studio tab for owners) ---
     final bool isThisUserAnEditor = _userData?['Editor'] == true || _userData?['isEditor'] == true;
-    final bool amIAnEditor = (userProvider.isEditor == true) || (isOwner && isThisUserAnEditor);
-    final bool showEditorTab = isThisUserAnEditor && amIAnEditor;
+    // Any owner should see the 'editor/studio' tab for their own profile.
+    final bool showEditorTab = isOwner || (isThisUserAnEditor && userProvider.isEditor);
 
     // --- DYNAMIC TAB MAPPING ---
     // We map the visible titles to your absolute index numbers (0=Editor, 1=Pages)
@@ -347,10 +347,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: SizedBox(
                     height: 50,
                     child: ProfileNavBar(
-                      tabTitles: tabTitles, // ACTUALLY PASS THE DYNAMIC LIST!
-                      currentIndex: navIndex, // Pass the mapped array index
+                      tabTitles: tabTitles,
+                      currentIndex: navIndex,
                       onTabChanged: (idx) => setState(() {
-                        _currentIndex = tabs[idx]['id'] as int; // Map back to your absolute index
+                        _currentIndex = tabs[idx]['id'] as int;
                         if (_currentIndex != 1) _showDrafts = false;
                         if (_currentIndex != 0) _editorSubTabIndex = 0;
                       }),
@@ -500,7 +500,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-              _buildContentSliver(targetUserId, isOwner, amIAnEditor),
+              _buildContentSliver(targetUserId, isOwner),
 
               const SliverToBoxAdapter(child: SizedBox(height: 64)),
             ],
@@ -510,17 +510,13 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildContentSliver(String targetUserId, bool isOwner, bool isEditor) {
+  Widget _buildContentSliver(String targetUserId, bool isOwner) {
     Stream<List<QueryDocumentSnapshot>>? stream;
     Widget? placeholder;
 
     switch (_currentIndex) {
       case 0: // EDITOR
-        if (!isOwner && !isEditor) {
-          return const SliverToBoxAdapter(child: SizedBox());
-        }
-
-        // Fetch all user zines and filter client-side to avoid index requirements
+      // Both Owners and Global Editors can see this if the tab is visible
         stream = FirebaseFirestore.instance
             .collection('fanzines')
             .snapshots()
@@ -533,7 +529,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
             if (_editorSubTabIndex == 0) {
               // CURATOR: Show all in-process PDF zines that haven't gone live.
-              // Mirroring the Dashboard logic: any zine not live that has a source file.
               return hasSourceFile && !isLive;
             } else {
               // PUBLISHER: Show zines that were manually created OR are now live.
@@ -620,27 +615,27 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (context, snapshot) {
         final buttons = <Widget>[];
         if (_currentIndex == 0 && isOwner && _editorSubTabIndex == 1) {
-          if (isEditor) {
-            buttons.add(TextButton(
-                style: TextButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero)),
-                onPressed: () => _showNewFanzineModal(targetUserId),
-                child: const Text("make new fanzine",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white))));
+          // ANY owner can now make fanzines
+          buttons.add(TextButton(
+              style: TextButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero)),
+              onPressed: () => _showNewFanzineModal(targetUserId),
+              child: const Text("make new fanzine",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white))));
 
-            buttons.add(TextButton(
-                style: TextButton.styleFrom(
-                    backgroundColor: Colors.purple,
-                    shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero)),
-                onPressed: () => _createCalendarFanzine(targetUserId),
-                child: const Text("con calendar",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white))));
-          }
+          buttons.add(TextButton(
+              style: TextButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero)),
+              onPressed: () => _createCalendarFanzine(targetUserId),
+              child: const Text("con calendar",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white))));
+
           buttons.add(TextButton(
               style: TextButton.styleFrom(
                   backgroundColor: Colors.grey,

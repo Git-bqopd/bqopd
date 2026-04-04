@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/reader_tool.dart';
+import '../../models/panel_context.dart';
 import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
 
@@ -46,56 +47,51 @@ class PanelFactory {
   }
 
   /// Acts as the routing switchboard to build the requested panel content
-  static Widget buildPanelContent({
-    required BonusRowType type,
-    required String imageId,
-    required String fanzineId,
-    required String pageId,
-    required String actualText,
-    String? templateId,
-    required bool isEditingMode,
-    required ViewService viewService,
-    required EngagementService engagementService,
-    required TextEditingController commentController,
-    required VoidCallback onSubmitComment,
-    required ValueNotifier<double> fontSizeNotifier,
-  }) {
-    switch (type) {
+  static Widget buildPanelContent(PanelContext context) {
+    switch (context.type) {
       case BonusRowType.textReader:
         return TextReaderPanel(
-          text: actualText,
-          fontSizeNotifier: fontSizeNotifier,
-          isEditingMode: isEditingMode,
-          imageId: imageId,
+          text: context.actualText,
+          fontSizeNotifier: context.fontSizeNotifier,
+          isEditingMode: context.isEditingMode,
+          imageId: context.imageId,
         );
       case BonusRowType.tags:
-        return HashtagPanel(imageId: imageId);
+        return HashtagPanel(imageId: context.imageId);
       case BonusRowType.ocr:
-        return OcrStatusPanel(fanzineId: fanzineId, pageId: pageId, imageId: imageId);
+        return OcrStatusPanel(
+            fanzineId: context.fanzineId ?? '',
+            pageId: context.pageId ?? '',
+            imageId: context.imageId);
       case BonusRowType.entities:
-        return EntitiesPanel(text: actualText);
+        return EntitiesPanel(text: context.actualText);
       case BonusRowType.publisher:
         return PublisherPanel(
-          imageId: imageId,
-          initialText: actualText,
-          fanzineId: fanzineId,
-          templateId: templateId,
+          imageId: context.imageId,
+          initialText: context.actualText,
+          fanzineId: context.fanzineId ?? '',
+          templateId: context.templateId,
         );
       case BonusRowType.comments:
         return CommentsPanel(
-          imageId: imageId,
-          engagementService: engagementService,
-          controller: commentController,
-          onSend: onSubmitComment,
+          imageId: context.imageId,
+          engagementService: context.engagementService,
+          controller: context.commentController,
+          onSend: context.onSubmitComment,
+          isInline: context.isInline,
         );
       case BonusRowType.views:
-        return ViewsPanel(imageId: imageId, viewService: viewService);
+        return ViewsPanel(
+            imageId: context.imageId,
+            viewService: context.viewService);
       case BonusRowType.credits:
-        return CreditsPanel(imageId: imageId);
+        return CreditsPanel(imageId: context.imageId);
       case BonusRowType.youtube:
-        return YoutubePanel(imageId: imageId);
+        return YoutubePanel(imageId: context.imageId);
       case BonusRowType.indicia:
-        return IndiciaPanel(fanzineId: fanzineId, isEditingMode: isEditingMode);
+        return IndiciaPanel(
+            fanzineId: context.fanzineId ?? '',
+            isEditingMode: context.isEditingMode);
       case BonusRowType.settings:
         return const SettingsPanel();
       case BonusRowType.editDetails:

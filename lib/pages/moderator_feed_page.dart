@@ -5,9 +5,13 @@ import 'package:url_launcher/url_launcher.dart'; // Import for launching URL
 import '../services/user_provider.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/hashtag_bar.dart';
-import '../components/social_toolbar.dart';
+import '../components/dynamic_social_toolbar.dart';
+import '../models/reader_tool.dart';
+import '../models/panel_context.dart';
+import '../widgets/reader_panels/panel_factory.dart';
+import '../widgets/reader_panels/panel_container.dart';
 import '../services/engagement_service.dart';
-import '../widgets/comment_item.dart';
+import '../services/view_service.dart';
 
 class ModeratorFeedPage extends StatefulWidget {
   const ModeratorFeedPage({super.key});
@@ -126,7 +130,9 @@ class _ModeratorCard extends StatefulWidget {
 class _ModeratorCardState extends State<_ModeratorCard> {
   final TextEditingController _commentController = TextEditingController();
   final EngagementService _engagementService = EngagementService();
-  bool _showComments = false;
+  final ViewService _viewService = ViewService();
+  final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
+  BonusRowType? _activePanel;
 
   void _submitComment() async {
     final text = _commentController.text.trim();
@@ -143,6 +149,13 @@ class _ModeratorCardState extends State<_ModeratorCard> {
       displayName: userProvider.userProfile?['displayName'],
       username: userProvider.userProfile?['username'],
     );
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    _fontSizeNotifier.dispose();
+    super.dispose();
   }
 
   @override
@@ -215,52 +228,38 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                 const Divider(height: 1),
 
                 // Social Toolbar (for Like/Comment toggling)
-                SocialToolbar(
+                DynamicSocialToolbar(
                   imageId: widget.docId,
-                  onToggleComments: () => setState(() => _showComments = !_showComments),
                   isGame: false,
+                  isEditingMode: false,
+                  activeBonusRow: _activePanel,
+                  onToggleBonusRow: (rowType) {
+                    setState(() {
+                      _activePanel = _activePanel == rowType ? null : rowType;
+                    });
+                  },
                 ),
 
-                // Inline Comments Section
-                if (_showComments) ...[
+                // Inline Bonus Row Section
+                if (_activePanel != null) ...[
                   const Divider(height: 1),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: _engagementService.getCommentsStream(widget.docId),
-                      builder: (context, snap) {
-                        if (!snap.hasData) return const SizedBox();
-                        final comments = snap.data!.docs.map((d) {
-                          final m = d.data() as Map<String, dynamic>;
-                          m['_id'] = d.id;
-                          return m;
-                        }).toList();
-
-                        if (comments.isEmpty) return const Padding(padding: EdgeInsets.all(16), child: Text("No comments yet.", style: TextStyle(color: Colors.grey)));
-
-                        return ListView.separated(
-                          itemCount: comments.length,
-                          separatorBuilder: (c,i) => const Divider(height: 1),
-                          itemBuilder: (c,i) => CommentItem(data: comments[i]),
-                        );
-                      },
+                  PanelContainer(
+                    title: '',
+                    isInline: true,
+                    inlineColor: PanelFactory.getInlineColor(_activePanel!),
+                    child: PanelFactory.buildPanelContent(
+                        PanelContext(
+                          type: _activePanel!,
+                          imageId: widget.docId,
+                          actualText: widget.data['text'] ?? widget.data['text_raw'] ?? '',
+                          isEditingMode: false,
+                          viewService: _viewService,
+                          engagementService: _engagementService,
+                          commentController: _commentController,
+                          onSubmitComment: _submitComment,
+                          fontSizeNotifier: _fontSizeNotifier,
+                        )
                     ),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _commentController,
-                          decoration: const InputDecoration(
-                            hintText: "Add moderator note...",
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                          ),
-                          onSubmitted: (_) => _submitComment(),
-                        ),
-                      ),
-                      IconButton(icon: const Icon(Icons.send, size: 16), onPressed: _submitComment)
-                    ],
                   ),
                 ],
               ],

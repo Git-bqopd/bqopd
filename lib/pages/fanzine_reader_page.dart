@@ -61,6 +61,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   ScrollController? _desktopGridScrollController;
   final ItemScrollController _desktopListScrollController = ItemScrollController();
 
+  // Keys to prevent the List and Grid components from unmounting during layout reparenting
+  final GlobalKey _gridComponentKey = GlobalKey();
+  final GlobalKey _listComponentKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -361,6 +365,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             final bool isSingleGrid = _showGrid && !_showList;
 
             Widget gridComponent = Container(
+              key: _gridComponentKey,
               color: Colors.grey[200],
               child: FanzineGridRenderer(
                 pages: _pages,
@@ -372,6 +377,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             );
 
             Widget listComponent = Container(
+              key: _listComponentKey,
               color: Colors.white,
               child: Stack(
                 children: [
@@ -429,35 +435,42 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (!drawerOpen) const Expanded(child: SizedBox()),
+                drawerOpen ? const SizedBox.shrink() : const Expanded(child: SizedBox()),
                 readerBlock,
-                if (!drawerOpen) const Expanded(child: SizedBox())
-                else ...[
-                  MouseRegion(
-                    cursor: SystemMouseCursors.resizeColumn,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragUpdate: (details) {
-                        setState(() { if (isSplitView && _desktopListWidth + details.delta.dx > 300) _desktopListWidth += details.delta.dx; });
-                      },
-                      child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
-                    ),
-                  ),
+                if (!drawerOpen)
+                  const Expanded(child: SizedBox())
+                else
                   Expanded(
-                    child: Material(
-                      elevation: 4, color: Colors.white,
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), color: Colors.grey[100],
-                            child: Row(children: [const Spacer(), IconButton(icon: const Icon(Icons.close), onPressed: _closeDesktopDrawer)]),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        MouseRegion(
+                          cursor: SystemMouseCursors.resizeColumn,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onHorizontalDragUpdate: (details) {
+                              setState(() { if (isSplitView && _desktopListWidth + details.delta.dx > 300) _desktopListWidth += details.delta.dx; });
+                            },
+                            child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
                           ),
-                          Expanded(child: _activeDrawerContent!),
-                        ],
-                      ),
+                        ),
+                        Expanded(
+                          child: Material(
+                            elevation: 4, color: Colors.white,
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), color: Colors.grey[100],
+                                  child: Row(children: [const Spacer(), IconButton(icon: const Icon(Icons.close), onPressed: _closeDesktopDrawer)]),
+                                ),
+                                Expanded(child: _activeDrawerContent!),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
               ],
             );
           },

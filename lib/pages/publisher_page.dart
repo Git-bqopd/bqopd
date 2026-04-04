@@ -1,10 +1,11 @@
-import 'package:bqopd/components/social_toolbar.dart';
-import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../components/dynamic_social_toolbar.dart';
+import '../widgets/page_wrapper.dart';
 import '../widgets/templates/basic_text_template.dart';
 import '../widgets/templates/calendar_template.dart';
+import '../models/reader_tool.dart';
 
 class PublisherPage extends StatefulWidget {
   const PublisherPage({super.key});
@@ -173,10 +174,18 @@ If you can read this, the system is working.
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: SocialToolbar(
-                    pageId: 'publisher_preview',
-                    fanzineId: 'publisher_preview',
-                    onToggleText: _toggleTextDrawer,
+                  child: DynamicSocialToolbar(
+                      imageId: 'publisher_preview',
+                      pageId: null,
+                      fanzineId: null,
+                      pageNumber: null,
+                      isEditingMode: true,
+                      activeBonusRow: _isTextDrawerOpen ? BonusRowType.textReader : null,
+                      onToggleBonusRow: (type) {
+                        if (type == BonusRowType.textReader) {
+                          _toggleTextDrawer();
+                        }
+                      }
                   ),
                 ),
               ],

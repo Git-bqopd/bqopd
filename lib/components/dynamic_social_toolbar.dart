@@ -12,9 +12,9 @@ import 'dynamic_toolbar_button.dart';
 
 class DynamicSocialToolbar extends StatefulWidget {
   final String imageId;
-  final String pageId;
-  final String fanzineId;
-  final int pageNumber;
+  final String? pageId;
+  final String? fanzineId;
+  final int? pageNumber;
   final bool isGame;
   final String? youtubeId;
   final bool isEditingMode;
@@ -26,9 +26,9 @@ class DynamicSocialToolbar extends StatefulWidget {
   const DynamicSocialToolbar({
     super.key,
     required this.imageId,
-    required this.pageId,
-    required this.fanzineId,
-    required this.pageNumber,
+    this.pageId,
+    this.fanzineId,
+    this.pageNumber,
     this.isGame = false,
     this.youtubeId,
     required this.isEditingMode,
@@ -62,8 +62,8 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
 
   void _listenToStats() {
     // 1. Listen for Likes on the Page Document
-    if (widget.pageId.isNotEmpty && widget.fanzineId.isNotEmpty) {
-      _likeSub = _engagementService.isLikedStream(widget.pageId).listen((liked) {
+    if (widget.pageId != null && widget.pageId!.isNotEmpty && widget.fanzineId != null && widget.fanzineId!.isNotEmpty) {
+      _likeSub = _engagementService.isLikedStream(widget.pageId!).listen((liked) {
         if (mounted) setState(() => _isLiked = liked);
       });
 
@@ -116,15 +116,18 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         break;
 
       case ToolAction.toggleLike:
-        await _engagementService.toggleLike(
-          fanzineId: widget.fanzineId,
-          pageId: widget.pageId,
-          isCurrentlyLiked: _isLiked,
-        );
+        if (widget.fanzineId != null && widget.pageId != null) {
+          await _engagementService.toggleLike(
+            fanzineId: widget.fanzineId!,
+            pageId: widget.pageId!,
+            isCurrentlyLiked: _isLiked,
+          );
+        }
         break;
 
       case ToolAction.copyShareLink:
-        final link = 'https://bqopd.com/fanzine/${widget.fanzineId}?page=${widget.pageNumber}';
+        if (widget.fanzineId == null) return;
+        final link = 'https://bqopd.com/fanzine/${widget.fanzineId}?page=${widget.pageNumber ?? 1}';
         await Clipboard.setData(ClipboardData(text: link));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -154,15 +157,21 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         if (!widget.isGame) return false;
         break;
       case ToolCondition.requiresIndicia:
-        if (!widget.isIndiciaPage) return false;
+        if (!widget.isIndiciaPage || widget.fanzineId == null) return false;
         break;
       case ToolCondition.hideOnDesktopSplit:
         if (widget.onOpenGrid == null) return false;
         break;
       case ToolCondition.requiresTwoPage:
+        if (widget.fanzineId == null) return false;
         break;
       case ToolCondition.always:
         break;
+    }
+
+    // If it's a fanzine-specific tool (like Grid or Fanzine reading tools) and there is no fanzine context, hide it.
+    if (widget.fanzineId == null && (tool.id == 'Grid' || tool.id == 'Fanzine' || tool.id == 'Indicia' || tool.id == 'OCR' || tool.id == 'Publisher' || tool.id == 'Entities')) {
+      return false;
     }
 
     // 3. User Preference Check

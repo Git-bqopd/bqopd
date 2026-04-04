@@ -8,6 +8,7 @@ import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/reader_tool.dart';
+import '../../models/panel_context.dart';
 
 import '../../components/dynamic_social_toolbar.dart';
 import '../templates/calendar_template.dart';
@@ -77,7 +78,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   void _handleBonusRowToggle(int pageIndex, BonusRowType rowType, String imageId, String pageId, String actualText, String? templateId) {
     if (widget.onExternalDrawerRequest != null) {
       // Desktop Sidebar Mode
-      Widget drawerContent = PanelFactory.buildPanelContent(
+      final panelContext = PanelContext(
         type: rowType,
         imageId: imageId,
         fanzineId: widget.fanzineId,
@@ -90,7 +91,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
         commentController: _commentControllers.putIfAbsent(pageIndex, () => TextEditingController()),
         onSubmitComment: () => _submitComment(pageIndex, imageId),
         fontSizeNotifier: _fontSizeNotifier,
+        isInline: false,
       );
+
+      Widget drawerContent = PanelFactory.buildPanelContent(panelContext);
 
       widget.onExternalDrawerRequest!(
         PanelContainer(
@@ -294,7 +298,6 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                         ),
                       ),
 
-                      // MAGIC HAPPENS HERE: We replaced 500 lines of switch statements with 20 lines of Factory injection!
                       if (widget.activeBonusRow != null) ...[
                         const SizedBox(height: verticalGap),
                         PanelContainer(
@@ -302,18 +305,21 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                           isInline: true,
                           inlineColor: PanelFactory.getInlineColor(widget.activeBonusRow!),
                           child: PanelFactory.buildPanelContent(
-                            type: widget.activeBonusRow!,
-                            imageId: imageId,
-                            fanzineId: widget.fanzineId,
-                            pageId: pageId,
-                            actualText: actualText,
-                            templateId: templateId,
-                            isEditingMode: widget.isEditingMode,
-                            viewService: widget.viewService,
-                            engagementService: EngagementService(),
-                            commentController: widget.commentController,
-                            onSubmitComment: () => widget.submitComment(imageId),
-                            fontSizeNotifier: widget.fontSizeNotifier,
+                              PanelContext(
+                                type: widget.activeBonusRow!,
+                                imageId: imageId,
+                                fanzineId: widget.fanzineId,
+                                pageId: pageId,
+                                actualText: actualText,
+                                templateId: templateId,
+                                isEditingMode: widget.isEditingMode,
+                                viewService: widget.viewService,
+                                engagementService: EngagementService(),
+                                commentController: widget.commentController,
+                                onSubmitComment: () => widget.submitComment(imageId),
+                                fontSizeNotifier: widget.fontSizeNotifier,
+                                isInline: true,
+                              )
                           ),
                         ),
                       ],
