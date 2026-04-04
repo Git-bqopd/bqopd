@@ -7,7 +7,7 @@ class ReaderToolsConfig {
     // --- PUBLIC TOOLS ---
     ReaderTool(
       id: 'Text',
-      label: 'Read Text',
+      label: 'text',
       defaultIcon: Icons.article_outlined,
       activeIcon: Icons.article,
       action: ToolAction.openBonusRow,
@@ -15,7 +15,7 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'Comment',
-      label: 'Comments',
+      label: 'comments',
       defaultIcon: Icons.chat_bubble_outline,
       activeIcon: Icons.chat_bubble,
       action: ToolAction.openBonusRow,
@@ -23,27 +23,27 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'Like',
-      label: 'Like Page',
+      label: 'like',
       defaultIcon: Icons.favorite_border,
       activeIcon: Icons.favorite,
       action: ToolAction.toggleLike,
     ),
     ReaderTool(
       id: 'Share',
-      label: 'Share Link',
+      label: 'share',
       defaultIcon: Icons.share_outlined,
       action: ToolAction.copyShareLink,
     ),
     ReaderTool(
       id: 'Grid',
-      label: 'View Pages',
+      label: 'open',
       defaultIcon: Icons.grid_view,
       action: ToolAction.switchToGridView,
       condition: ToolCondition.hideOnDesktopSplit,
     ),
     ReaderTool(
       id: 'Settings',
-      label: 'Customize Buttons',
+      label: 'buttons',
       defaultIcon: Icons.settings_outlined,
       activeIcon: Icons.settings,
       action: ToolAction.openBonusRow,
@@ -53,7 +53,7 @@ class ReaderToolsConfig {
     // --- CONDITIONAL PUBLIC TOOLS ---
     ReaderTool(
       id: 'YouTube',
-      label: 'Watch Video',
+      label: 'YouTube',
       defaultIcon: Icons.play_circle_outline,
       activeIcon: Icons.play_circle_filled,
       action: ToolAction.openBonusRow,
@@ -62,14 +62,14 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'Tags',
-      label: 'Hashtags',
+      label: 'tags',
       defaultIcon: Icons.tag,
       action: ToolAction.openBonusRow,
       bonusRow: BonusRowType.tags,
     ),
     ReaderTool(
       id: 'Indicia',
-      label: 'Issue Indicia',
+      label: 'indicia',
       defaultIcon: Icons.info_outline,
       activeIcon: Icons.info,
       action: ToolAction.openBonusRow,
@@ -80,7 +80,7 @@ class ReaderToolsConfig {
     // --- RESTRICTED EDITOR TOOLS ---
     ReaderTool(
       id: 'Edit',
-      label: 'Edit Page Info',
+      label: 'edit',
       defaultIcon: Icons.edit_outlined,
       activeIcon: Icons.edit,
       role: ToolRole.editor,
@@ -89,7 +89,7 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'OCR',
-      label: 'OCR Pipeline',
+      label: 'ocr',
       defaultIcon: Icons.document_scanner_outlined,
       activeIcon: Icons.document_scanner,
       role: ToolRole.editor,
@@ -98,7 +98,7 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'Entities',
-      label: 'Page Entities',
+      label: 'entities',
       defaultIcon: Icons.link_outlined,
       activeIcon: Icons.link,
       role: ToolRole.editor,
@@ -107,7 +107,7 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'Publisher',
-      label: 'Publisher Editor',
+      label: 'publisher',
       defaultIcon: Icons.publish_outlined,
       activeIcon: Icons.publish,
       role: ToolRole.editor,
@@ -116,7 +116,7 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'Views',
-      label: 'Analytics',
+      label: 'views',
       defaultIcon: Icons.bar_chart_outlined,
       activeIcon: Icons.bar_chart,
       role: ToolRole.editor,
@@ -125,7 +125,7 @@ class ReaderToolsConfig {
     ),
     ReaderTool(
       id: 'Credits',
-      label: 'Archival Metadata',
+      label: 'credits',
       defaultIcon: Icons.manage_accounts_outlined,
       activeIcon: Icons.manage_accounts,
       role: ToolRole.editor,

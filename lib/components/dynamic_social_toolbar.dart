@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -43,35 +44,67 @@ class DynamicSocialToolbar extends StatefulWidget {
 
 class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   final EngagementService _engagementService = EngagementService();
+
   bool _isLiked = false;
   int _likeCount = 0;
+  int _commentCount = 0;
+  int _viewCount = 0;
+
+  StreamSubscription? _likeSub;
+  StreamSubscription? _pageSub;
+  StreamSubscription? _imageSub;
 
   @override
   void initState() {
     super.initState();
-    _listenToLikes();
+    _listenToStats();
   }
 
-  void _listenToLikes() {
-    if (widget.imageId.isEmpty) return;
+  void _listenToStats() {
+    // 1. Listen for Likes on the Page Document
+    if (widget.pageId.isNotEmpty && widget.fanzineId.isNotEmpty) {
+      _likeSub = _engagementService.isLikedStream(widget.pageId).listen((liked) {
+        if (mounted) setState(() => _isLiked = liked);
+      });
 
-    FirebaseFirestore.instance
-        .collection('images')
-        .doc(widget.imageId)
-        .snapshots()
-        .listen((doc) {
-      if (doc.exists && mounted) {
-        final data = doc.data() as Map<String, dynamic>;
-        final userProvider = Provider.of<UserProvider>(context, listen: false);
-        final currentUserId = userProvider.userProfile?['uid'];
-        final likedBy = List<String>.from(data['likedBy'] ?? []);
+      _pageSub = FirebaseFirestore.instance
+          .collection('fanzines')
+          .doc(widget.fanzineId)
+          .collection('pages')
+          .doc(widget.pageId)
+          .snapshots()
+          .listen((doc) {
+        if (doc.exists && mounted) {
+          setState(() => _likeCount = doc.data()?['likeCount'] ?? 0);
+        }
+      });
+    }
 
-        setState(() {
-          _likeCount = data['likes'] ?? 0;
-          _isLiked = currentUserId != null && likedBy.contains(currentUserId);
-        });
-      }
-    });
+    // 2. Listen for Views and Comments on the Image Document
+    if (widget.imageId.isNotEmpty) {
+      _imageSub = FirebaseFirestore.instance
+          .collection('images')
+          .doc(widget.imageId)
+          .snapshots()
+          .listen((doc) {
+        if (doc.exists && mounted) {
+          final data = doc.data() as Map<String, dynamic>;
+          setState(() {
+            _commentCount = data['commentCount'] ?? 0;
+            // Sum all view variants
+            _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) + (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _likeSub?.cancel();
+    _pageSub?.cancel();
+    _imageSub?.cancel();
+    super.dispose();
   }
 
   void _handleToolAction(ReaderTool tool) async {
@@ -83,7 +116,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         break;
 
       case ToolAction.toggleLike:
-      // FIXED: Using the parameters your EngagementService actually expects
         await _engagementService.toggleLike(
           fanzineId: widget.fanzineId,
           pageId: widget.pageId,
@@ -128,12 +160,10 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         if (widget.onOpenGrid == null) return false;
         break;
       case ToolCondition.requiresTwoPage:
-      // Additional implementation if needed
         break;
       case ToolCondition.always:
-      // No action needed, perfectly fine
         break;
-    } // Removed default clause to fix the exhaustive switch warning
+    }
 
     // 3. User Preference Check
     final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
@@ -152,43 +182,35 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
     }).toList();
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
       child: Wrap(
-        spacing: 4.0,
-        runSpacing: 4.0,
+        spacing: 8.0,
+        runSpacing: 12.0,
         alignment: WrapAlignment.center,
         crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          ...visibleTools.map((tool) {
-            bool isActive = false;
+        children: visibleTools.map((tool) {
+          bool isActive = false;
 
-            if (tool.action == ToolAction.openBonusRow) {
-              isActive = widget.activeBonusRow == tool.bonusRow;
-            } else if (tool.action == ToolAction.toggleLike) {
-              isActive = _isLiked;
-            }
+          if (tool.action == ToolAction.openBonusRow) {
+            isActive = widget.activeBonusRow == tool.bonusRow;
+          } else if (tool.action == ToolAction.toggleLike) {
+            isActive = _isLiked;
+          }
 
-            return DynamicToolbarButton(
-              tool: tool,
-              isActive: isActive,
-              isDarkMode: isDarkMode,
-              onPressed: () => _handleToolAction(tool),
-            );
-          }),
+          // Pass the appropriate stat count to the button
+          int? count;
+          if (tool.id == 'Like') count = _likeCount;
+          if (tool.id == 'Comment') count = _commentCount;
+          if (tool.id == 'Views') count = _viewCount;
 
-          if (_likeCount > 0 && visibleTools.any((t) => t.id == 'Like'))
-            Padding(
-              padding: const EdgeInsets.only(left: 4.0),
-              child: Text(
-                '$_likeCount',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
-                ),
-              ),
-            ),
-        ],
+          return DynamicToolbarButton(
+            tool: tool,
+            isActive: isActive,
+            isDarkMode: isDarkMode,
+            count: count,
+            onPressed: () => _handleToolAction(tool),
+          );
+        }).toList(),
       ),
     );
   }
