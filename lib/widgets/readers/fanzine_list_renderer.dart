@@ -3,11 +3,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+
 import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
 import '../../services/user_provider.dart';
-import '../../components/social_toolbar.dart';
 import '../../utils/link_parser.dart';
+import '../../services/user_bootstrap.dart';
+import '../../services/username_service.dart';
+import '../../models/reader_tool.dart';
+
 import '../comment_item.dart';
 import '../stats_table.dart';
 import '../youtube_player_widget.dart';
@@ -15,8 +19,7 @@ import '../templates/basic_text_template.dart';
 import '../templates/calendar_template.dart';
 import '../calendar_editor_widget.dart';
 import '../hashtag_bar.dart';
-import '../../services/user_bootstrap.dart';
-import '../../services/username_service.dart';
+import '../../components/dynamic_social_toolbar.dart';
 
 class FanzineListRenderer extends StatefulWidget {
   final String fanzineId;
@@ -49,17 +52,7 @@ class FanzineListRenderer extends StatefulWidget {
 }
 
 class _FanzineListRendererState extends State<FanzineListRenderer> {
-  final Map<int, bool> _openTextRows = {};
-  final Map<int, bool> _openCommentRows = {};
-  final Map<int, bool> _openViewRows = {};
-  final Map<int, bool> _openCreditRows = {};
-  final Map<int, bool> _openYouTubeRows = {};
-  final Map<int, bool> _openOCRRows = {};
-  final Map<int, bool> _openEntityRows = {};
-  final Map<int, bool> _openPublisherRows = {};
-  final Map<int, bool> _openIndiciaRows = {};
-  final Map<int, bool> _openTagRows = {};
-
+  final Map<int, BonusRowType?> _activeBonusRows = {};
   final EngagementService _engagementService = EngagementService();
   final Map<int, TextEditingController> _commentControllers = {};
   final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
@@ -88,151 +81,36 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     super.dispose();
   }
 
-  void _closeAllBonusRows(int index) {
-    _openTextRows[index] = false;
-    _openCommentRows[index] = false;
-    _openViewRows[index] = false;
-    _openCreditRows[index] = false;
-    _openYouTubeRows[index] = false;
-    _openOCRRows[index] = false;
-    _openEntityRows[index] = false;
-    _openPublisherRows[index] = false;
-    _openIndiciaRows[index] = false;
-    _openTagRows[index] = false;
-  }
-
-  void _handleTextToggle(int index, String text, String imageId) {
+  void _handleBonusRowToggle(int pageIndex, BonusRowType rowType, String imageId, String pageId, String actualText, String? templateId) {
     if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarText(text, imageId));
-    } else {
-      setState(() {
-        final val = !(_openTextRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openTextRows[index] = val;
-      });
-    }
-  }
-
-  void _handleTagToggle(int index, String imageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarTags(imageId));
-    } else {
-      setState(() {
-        final val = !(_openTagRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openTagRows[index] = val;
-      });
-    }
-  }
-
-  void _handleOCRToggle(int index, String imageId, String pageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarOCR(imageId, pageId));
-    } else {
-      setState(() {
-        final val = !(_openOCRRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openOCRRows[index] = val;
-      });
-    }
-  }
-
-  void _handleEntityToggle(int index, String imageId, String text) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarEntities(imageId, text));
-    } else {
-      setState(() {
-        final val = !(_openEntityRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openEntityRows[index] = val;
-      });
-    }
-  }
-
-  void _handlePublisherToggle(int index, String text, String imageId, String? templateId) {
-    if (templateId != null && templateId.startsWith('calendar')) {
-      if (widget.onExternalDrawerRequest != null) {
-        widget.onExternalDrawerRequest!(CalendarEditorWidget(folioId: widget.fanzineId));
-      } else {
-        setState(() {
-          final val = !(_openPublisherRows[index] ?? false);
-          _closeAllBonusRows(index);
-          _openPublisherRows[index] = val;
-        });
+      Widget drawerContent = const SizedBox();
+      switch (rowType) {
+        case BonusRowType.textReader: drawerContent = _buildSidebarText(actualText, imageId); break;
+        case BonusRowType.tags: drawerContent = _buildSidebarTags(imageId); break;
+        case BonusRowType.ocr: drawerContent = _buildSidebarOCR(imageId, pageId); break;
+        case BonusRowType.entities: drawerContent = _buildSidebarEntities(imageId, actualText); break;
+        case BonusRowType.publisher:
+          if (templateId != null && templateId.startsWith('calendar')) {
+            drawerContent = CalendarEditorWidget(folioId: widget.fanzineId);
+          } else {
+            drawerContent = _buildSidebarPublisher(actualText, imageId);
+          }
+          break;
+        case BonusRowType.comments: drawerContent = _buildSidebarComments(pageIndex, imageId); break;
+        case BonusRowType.views: drawerContent = _buildSidebarViews(imageId); break;
+        case BonusRowType.credits: drawerContent = _buildSidebarCredits(pageIndex, imageId); break;
+        case BonusRowType.youtube: drawerContent = _buildSidebarYouTube(imageId); break;
+        case BonusRowType.indicia: drawerContent = _buildSidebarIndicia(imageId); break;
+        case BonusRowType.editDetails: drawerContent = const Text("Edit Details not implemented yet"); break;
       }
-    } else {
-      if (widget.onExternalDrawerRequest != null) {
-        widget.onExternalDrawerRequest!(_buildSidebarPublisher(text, imageId));
-      } else {
-        setState(() {
-          final val = !(_openPublisherRows[index] ?? false);
-          _closeAllBonusRows(index);
-          _openPublisherRows[index] = val;
-        });
-      }
-    }
-  }
-
-  void _handleCommentToggle(int index, String imageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarComments(index, imageId));
+      widget.onExternalDrawerRequest!(drawerContent);
     } else {
       setState(() {
-        final val = !(_openCommentRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openCommentRows[index] = val;
-      });
-    }
-  }
-
-  void _handleViewToggle(int index, String imageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarViews(imageId));
-    } else {
-      setState(() {
-        final val = !(_openViewRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openViewRows[index] = val;
-      });
-    }
-  }
-
-  void _handleCreditToggle(int index, String imageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarCredits(index, imageId));
-    } else {
-      setState(() {
-        final val = !(_openCreditRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openCreditRows[index] = val;
-      });
-    }
-  }
-
-  Widget _buildSidebarCredits(int index, String imageId) {
-    return _SidebarWrapper(title: "ARCHIVAL METADATA & CREDITS", child: _CreditsEditorWidget(imageId: imageId));
-  }
-
-  void _handleYouTubeToggle(int index, String imageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarYouTube(imageId));
-    } else {
-      setState(() {
-        final val = !(_openYouTubeRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openYouTubeRows[index] = val;
-      });
-    }
-  }
-
-  void _handleIndiciaToggle(int index, String imageId) {
-    if (widget.onExternalDrawerRequest != null) {
-      widget.onExternalDrawerRequest!(_buildSidebarIndicia(imageId));
-    } else {
-      setState(() {
-        final val = !(_openIndiciaRows[index] ?? false);
-        _closeAllBonusRows(index);
-        _openIndiciaRows[index] = val;
+        if (_activeBonusRows[pageIndex] == rowType) {
+          _activeBonusRows[pageIndex] = null;
+        } else {
+          _activeBonusRows[pageIndex] = rowType;
+        }
       });
     }
   }
@@ -309,6 +187,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
     return _SidebarWrapper(title: "ANALYTICS", child: StatsTable(contentId: imageId, viewService: widget.viewService));
   }
 
+  Widget _buildSidebarCredits(int index, String imageId) {
+    return _SidebarWrapper(title: "ARCHIVAL METADATA & CREDITS", child: _CreditsEditorWidget(imageId: imageId));
+  }
+
   Widget _buildSidebarYouTube(String imageId) {
     return _SidebarWrapper(title: "VIDEO", child: YouTubePlayerWidget(imageId: imageId));
   }
@@ -343,8 +225,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
 
-        final String pageId = pageData['id'] ?? pageData['__id'] ?? '';
-        final String imageId = pageData['imageId'] ?? '';
+        // FIXED: Removed the unused imageId and pageId variables here to clear warnings
         final String? templateId = pageData['templateId'];
 
         return _PageWidget(
@@ -356,26 +237,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           fanzineTitle: _fanzineTitle,
           isEditingMode: widget.isEditingMode,
           onToggleEditMode: widget.onToggleEditMode,
-          isTextOpen: _openTextRows[pageIndex] ?? false,
-          isCommentsOpen: _openCommentRows[pageIndex] ?? false,
-          isViewsOpen: _openViewRows[pageIndex] ?? false,
-          isCreditsOpen: _openCreditRows[pageIndex] ?? false,
-          isYouTubeOpen: _openYouTubeRows[pageIndex] ?? false,
-          isOCROpen: _openOCRRows[pageIndex] ?? false,
-          isEntitiesOpen: _openEntityRows[pageIndex] ?? false,
-          isPublisherOpen: _openPublisherRows[pageIndex] ?? false,
-          isIndiciaOpen: _openIndiciaRows[pageIndex] ?? false,
-          isTagsOpen: _openTagRows[pageIndex] ?? false,
-          onToggleText: (actualText) => _handleTextToggle(pageIndex, actualText, imageId),
-          onToggleTags: () => _handleTagToggle(pageIndex, imageId),
-          onToggleOCR: () => _handleOCRToggle(pageIndex, imageId, pageId),
-          onToggleEntities: (actualText) => _handleEntityToggle(pageIndex, imageId, actualText),
-          onTogglePublisher: (actualText) => _handlePublisherToggle(pageIndex, actualText, imageId, templateId),
-          onToggleComment: () => _handleCommentToggle(pageIndex, imageId),
-          onToggleViews: () => _handleViewToggle(pageIndex, imageId),
-          onToggleCredits: () => _handleCreditToggle(pageIndex, imageId),
-          onToggleYouTube: () => _handleYouTubeToggle(pageIndex, imageId),
-          onToggleIndicia: () => _handleIndiciaToggle(pageIndex, imageId),
+          activeBonusRow: _activeBonusRows[pageIndex],
+          onToggleBonusRow: (rowType, actualText, currentImgId, currentPgId, currentTplId) {
+            _handleBonusRowToggle(pageIndex, rowType, currentImgId, currentPgId, actualText, currentTplId);
+          },
           onOpenGrid: widget.onOpenGrid,
           submitComment: (imgId) => _submitComment(pageIndex, imgId),
           commentController: _commentControllers.putIfAbsent(pageIndex, () => TextEditingController()),
@@ -396,26 +261,8 @@ class _PageWidget extends StatefulWidget {
   final String fanzineTitle;
   final bool isEditingMode;
   final VoidCallback onToggleEditMode;
-  final bool isTextOpen;
-  final bool isCommentsOpen;
-  final bool isViewsOpen;
-  final bool isCreditsOpen;
-  final bool isYouTubeOpen;
-  final bool isOCROpen;
-  final bool isEntitiesOpen;
-  final bool isPublisherOpen;
-  final bool isIndiciaOpen;
-  final bool isTagsOpen;
-  final Function(String actualText) onToggleText;
-  final VoidCallback onToggleOCR;
-  final Function(String actualText) onToggleEntities;
-  final Function(String actualText) onTogglePublisher;
-  final VoidCallback onToggleComment;
-  final VoidCallback onToggleViews;
-  final VoidCallback onToggleCredits;
-  final VoidCallback onToggleYouTube;
-  final VoidCallback onToggleIndicia;
-  final VoidCallback onToggleTags;
+  final BonusRowType? activeBonusRow;
+  final Function(BonusRowType rowType, String actualText, String imageId, String pageId, String? templateId) onToggleBonusRow;
   final Function(int)? onOpenGrid;
   final Function(String) submitComment;
   final TextEditingController commentController;
@@ -431,26 +278,8 @@ class _PageWidget extends StatefulWidget {
     required this.fanzineTitle,
     required this.isEditingMode,
     required this.onToggleEditMode,
-    required this.isTextOpen,
-    required this.isCommentsOpen,
-    required this.isViewsOpen,
-    required this.isCreditsOpen,
-    required this.isYouTubeOpen,
-    required this.isOCROpen,
-    required this.isEntitiesOpen,
-    required this.isPublisherOpen,
-    required this.isIndiciaOpen,
-    required this.isTagsOpen,
-    required this.onToggleText,
-    required this.onToggleOCR,
-    required this.onToggleEntities,
-    required this.onTogglePublisher,
-    required this.onToggleComment,
-    required this.onToggleViews,
-    required this.onToggleCredits,
-    required this.onToggleYouTube,
-    required this.onToggleIndicia,
-    required this.onToggleTags,
+    required this.activeBonusRow,
+    required this.onToggleBonusRow,
     this.onOpenGrid,
     required this.submitComment,
     required this.commentController,
@@ -534,7 +363,7 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                     children: [
                       Container(
                         color: Colors.white,
-                        child: SocialToolbar(
+                        child: DynamicSocialToolbar(
                           imageId: imageId,
                           pageId: pageId,
                           fanzineId: widget.fanzineId,
@@ -542,21 +371,14 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                           isGame: isGame,
                           youtubeId: youtubeId,
                           isEditingMode: widget.isEditingMode,
-                          onToggleEditMode: widget.onToggleEditMode,
+                          isIndiciaPage: isIndiciaPage,
                           onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(widget.index) : null,
-                          onToggleComments: widget.onToggleComment,
-                          onToggleText: () => widget.onToggleText(actualText),
-                          onToggleTags: widget.onToggleTags,
-                          onToggleOCR: widget.onToggleOCR,
-                          onToggleEntities: () => widget.onToggleEntities(actualText),
-                          onTogglePublisher: () => widget.onTogglePublisher(actualText),
-                          onToggleViews: widget.onToggleViews,
-                          onToggleCredits: widget.onToggleCredits,
-                          onToggleYouTube: widget.onToggleYouTube,
-                          onToggleIndicia: isIndiciaPage ? widget.onToggleIndicia : null,
+                          activeBonusRow: widget.activeBonusRow,
+                          onToggleBonusRow: (rowType) => widget.onToggleBonusRow(rowType, actualText, imageId, pageId, templateId),
                         ),
                       ),
-                      if (widget.isTextOpen) ...[
+
+                      if (widget.activeBonusRow == BonusRowType.textReader) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(
                           color: const Color(0xFFFDFBF7),
@@ -577,28 +399,28 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                           ),
                         ),
                       ],
-                      if (widget.isTagsOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.tags) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(
                           color: Colors.white,
                           child: HashtagBar(imageId: imageId, tags: tags),
                         ),
                       ],
-                      if (widget.isOCROpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.ocr) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(
                             color: Colors.grey[50]!,
                             child: _OCRStatusView(fanzineId: widget.fanzineId, pageId: pageId, imageId: imageId)
                         ),
                       ],
-                      if (widget.isEntitiesOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.entities) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(
                             color: Colors.white,
                             child: _PageEntitiesView(text: actualText)
                         ),
                       ],
-                      if (widget.isPublisherOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.publisher) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(
                             color: Colors.white,
@@ -607,23 +429,23 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                                 : _InlineTextEditor(imageId: imageId, initialText: actualText, showPublisherPreview: true)
                         ),
                       ],
-                      if (widget.isYouTubeOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.youtube) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(color: Colors.black, child: YouTubePlayerWidget(imageId: imageId)),
                       ],
-                      if (widget.isCommentsOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.comments) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(color: Colors.white, child: Column(children: [ConstrainedBox(constraints: const BoxConstraints(maxHeight: 300), child: _CommentList(imageId: imageId, service: EngagementService())), _CommentInput(controller: widget.commentController, onSend: () => widget.submitComment(imageId))])),
                       ],
-                      if (widget.isViewsOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.views) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(color: Colors.grey[50]!, child: imageId.isNotEmpty ? StatsTable(contentId: imageId, viewService: widget.viewService) : const Text("Image not yet registered. Wait for OCR.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))),
                       ],
-                      if (widget.isCreditsOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.credits) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(color: Colors.white, child: _CreditsEditorWidget(imageId: imageId)),
                       ],
-                      if (widget.isIndiciaOpen) ...[
+                      if (widget.activeBonusRow == BonusRowType.indicia) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(color: Colors.white, child: _MasterIndiciaWidget(fanzineId: widget.fanzineId, isEditingMode: widget.isEditingMode)),
                       ],
