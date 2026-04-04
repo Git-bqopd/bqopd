@@ -226,8 +226,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
         final pageIndex = index - 1;
         final pageData = widget.pages[pageIndex];
-
-        // FIXED: Removed the unused imageId and pageId variables here to clear warnings
         final String? templateId = pageData['templateId'];
 
         return _PageWidget(
@@ -1036,10 +1034,21 @@ class _SettingsWidget extends StatelessWidget {
         const SizedBox(height: 16),
         ...togglableTools.map((tool) {
           final isVisible = userProvider.socialButtonVisibility[tool.id] ?? true;
+
+          final WidgetStateProperty<Icon?> thumbIcon =
+          WidgetStateProperty.resolveWith<Icon?>(
+                (Set<WidgetState> states) {
+              if (states.contains(WidgetState.selected)) {
+                return Icon(tool.activeIcon ?? tool.defaultIcon);
+              }
+              return Icon(tool.defaultIcon);
+            },
+          );
+
           return SwitchListTile(
             title: Text(tool.label, style: const TextStyle(fontSize: 14)),
-            secondary: Icon(tool.defaultIcon),
             value: isVisible,
+            thumbIcon: thumbIcon,
             onChanged: (val) {
               userProvider.toggleSocialButtonVisibility(tool.id);
             },
