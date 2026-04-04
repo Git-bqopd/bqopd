@@ -41,6 +41,14 @@ class ReaderToolsConfig {
       action: ToolAction.switchToGridView,
       condition: ToolCondition.hideOnDesktopSplit,
     ),
+    ReaderTool(
+      id: 'Settings',
+      label: 'Customize Buttons',
+      defaultIcon: Icons.settings_outlined,
+      activeIcon: Icons.settings,
+      action: ToolAction.openBonusRow,
+      bonusRow: BonusRowType.settings,
+    ),
 
     // --- CONDITIONAL PUBLIC TOOLS ---
     ReaderTool(

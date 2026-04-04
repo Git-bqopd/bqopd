@@ -37,6 +37,7 @@ enum BonusRowType {
   credits,
   youtube,
   indicia,
+  settings,
 }
 
 /// The core data model for a dynamic toolbar button

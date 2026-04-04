@@ -11,6 +11,7 @@ import '../../utils/link_parser.dart';
 import '../../services/user_bootstrap.dart';
 import '../../services/username_service.dart';
 import '../../models/reader_tool.dart';
+import '../../config/reader_tools_config.dart';
 
 import '../comment_item.dart';
 import '../stats_table.dart';
@@ -101,6 +102,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
         case BonusRowType.credits: drawerContent = _buildSidebarCredits(pageIndex, imageId); break;
         case BonusRowType.youtube: drawerContent = _buildSidebarYouTube(imageId); break;
         case BonusRowType.indicia: drawerContent = _buildSidebarIndicia(imageId); break;
+        case BonusRowType.settings: drawerContent = const _SettingsWidget(); break;
         case BonusRowType.editDetails: drawerContent = const Text("Edit Details not implemented yet"); break;
       }
       widget.onExternalDrawerRequest!(drawerContent);
@@ -448,6 +450,10 @@ class _PageWidgetState extends State<_PageWidget> with AutomaticKeepAliveClientM
                       if (widget.activeBonusRow == BonusRowType.indicia) ...[
                         const SizedBox(height: verticalGap),
                         _BonusRowWrapper(color: Colors.white, child: _MasterIndiciaWidget(fanzineId: widget.fanzineId, isEditingMode: widget.isEditingMode)),
+                      ],
+                      if (widget.activeBonusRow == BonusRowType.settings) ...[
+                        const SizedBox(height: verticalGap),
+                        const _BonusRowWrapper(color: Colors.white, child: _SettingsWidget()),
                       ],
                     ],
                   );
@@ -1006,6 +1012,40 @@ class _MasterIndiciaWidgetState extends State<_MasterIndiciaWidget> {
             child: Text(_saving ? "Saving..." : "Save Master Meta"),
           ),
         )
+      ],
+    );
+  }
+}
+
+class _SettingsWidget extends StatelessWidget {
+  const _SettingsWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+
+    // Grab all public tools so the user can toggle them on/off, excluding the Settings button itself
+    final togglableTools = ReaderToolsConfig.tools
+        .where((t) => t.id != 'Settings' && t.role == ToolRole.public)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text("CUSTOMIZE TOOLBAR", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 16),
+        ...togglableTools.map((tool) {
+          final isVisible = userProvider.socialButtonVisibility[tool.id] ?? true;
+          return SwitchListTile(
+            title: Text(tool.label, style: const TextStyle(fontSize: 14)),
+            secondary: Icon(tool.defaultIcon),
+            value: isVisible,
+            onChanged: (val) {
+              userProvider.toggleSocialButtonVisibility(tool.id);
+            },
+            dense: true,
+          );
+        }),
       ],
     );
   }
