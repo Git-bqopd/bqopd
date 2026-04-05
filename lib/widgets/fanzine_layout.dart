@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../services/view_service.dart';
+import '../models/reader_tool.dart'; // Added
 import 'readers/fanzine_grid_renderer.dart';
 import 'readers/fanzine_list_renderer.dart';
 
@@ -16,9 +17,11 @@ class FanzineLayout extends StatelessWidget {
   final ItemScrollController listScrollController;
   final int initialIndex;
 
-  // New fields for Inline Editor Migration
   final bool isEditingMode;
-  final VoidCallback onToggleEditMode;
+
+  // NEW: Added to support unified panel state
+  final BonusRowType? activeGlobalPanel;
+  final Function(BonusRowType) onTogglePanel;
 
   final ViewService viewService;
   final Function(int pageIndex) onSwitchToSingle;
@@ -34,7 +37,8 @@ class FanzineLayout extends StatelessWidget {
     required this.listScrollController,
     required this.initialIndex,
     required this.isEditingMode,
-    required this.onToggleEditMode,
+    this.activeGlobalPanel,
+    required this.onTogglePanel,
     required this.viewService,
     required this.onSwitchToSingle,
     this.onSwitchToGrid,
@@ -59,7 +63,9 @@ class FanzineLayout extends StatelessWidget {
         initialIndex: initialIndex,
         viewService: viewService,
         isEditingMode: isEditingMode,
-        onToggleEditMode: onToggleEditMode,
+        isDesktopLayout: false, // Layout wrapper is only used for Mobile/Single Col
+        activeGlobalPanel: activeGlobalPanel,
+        onTogglePanel: onTogglePanel,
         onOpenGrid: onSwitchToGrid,
       );
     }

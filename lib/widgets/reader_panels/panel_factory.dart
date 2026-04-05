@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/reader_tool.dart';
 import '../../models/panel_context.dart';
-import '../../services/view_service.dart';
-import '../../services/engagement_service.dart';
 
 import 'text_reader_panel.dart';
 import 'hashtag_panel.dart';

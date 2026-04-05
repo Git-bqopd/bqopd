@@ -13,6 +13,7 @@ import '../widgets/fanzine_editor_widget.dart';
 import '../widgets/calendar_editor_widget.dart';
 import '../widgets/login_widget.dart';
 import '../widgets/register_widget.dart';
+import '../models/reader_tool.dart';
 
 enum HeaderMode { fanzine, login, register }
 
@@ -43,25 +44,22 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   bool _twoPagePreference = true;
   bool _isEditingMode = false;
-
   HeaderMode _headerMode = HeaderMode.fanzine;
-
   int _targetIndex = 0;
 
   bool _showGrid = true;
   bool _showList = false;
-  Widget? _activeDrawerContent;
+
+  BonusRowType? _activeGlobalPanel;
 
   double _desktopGridWidth = 300.0;
   double _desktopListWidth = 600.0;
   final double _singleViewFixedWidth = 900.0;
 
-  ScrollController? _mobileGridScrollController;
   final ItemScrollController _mobileListScrollController = ItemScrollController();
   ScrollController? _desktopGridScrollController;
   final ItemScrollController _desktopListScrollController = ItemScrollController();
 
-  // Keys to prevent the List and Grid components from unmounting during layout reparenting
   final GlobalKey _gridComponentKey = GlobalKey();
   final GlobalKey _listComponentKey = GlobalKey();
 
@@ -74,7 +72,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   void dispose() {
-    _mobileGridScrollController?.dispose();
     _desktopGridScrollController?.dispose();
     super.dispose();
   }
@@ -183,14 +180,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     }
   }
 
-  ScrollController _getMobileGridScrollController(double maxWidth) {
-    if (_mobileGridScrollController != null) return _mobileGridScrollController!;
-    double itemHeight = (maxWidth / 2) / 0.625;
-    double offset = (_targetIndex / 2) * (itemHeight + 30);
-    _mobileGridScrollController = ScrollController(initialScrollOffset: offset);
-    return _mobileGridScrollController!;
-  }
-
   void _onDesktopGridTap(int index) {
     bool listWasNotShowing = !_showList;
     setState(() {
@@ -208,36 +197,23 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     }
   }
 
-  void _handleDesktopDrawerRequest(Widget content) {
-    setState(() { _activeDrawerContent = content; });
-  }
-
-  void _closeDesktopDrawer() {
-    setState(() { _activeDrawerContent = null; });
-  }
-
-  void _toggleEditMode() {
+  void _handlePanelToggle(BonusRowType type) {
     setState(() {
-      _isEditingMode = !_isEditingMode;
-      _activeDrawerContent = null;
+      if (_activeGlobalPanel == type) {
+        _activeGlobalPanel = null;
+      } else {
+        _activeGlobalPanel = type;
+      }
     });
   }
 
   void _scrollToTop() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_mobileListScrollController.isAttached) {
-        _mobileListScrollController.scrollTo(
-          index: 0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        _mobileListScrollController.scrollTo(index: 0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
       if (_desktopListScrollController.isAttached) {
-        _desktopListScrollController.scrollTo(
-          index: 0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        _desktopListScrollController.scrollTo(index: 0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
     });
   }
@@ -246,7 +222,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     setState(() {
       _headerMode = HeaderMode.login;
       _twoPagePreference = false;
-
       if (!_showList) {
         _showList = true;
         if (_desktopGridWidth == 900.0) _desktopGridWidth = 300.0;
@@ -258,9 +233,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   }
 
   void _onAuthSuccess() {
-    setState(() {
-      _headerMode = HeaderMode.fanzine;
-    });
+    setState(() => _headerMode = HeaderMode.fanzine);
     _initData();
   }
 
@@ -340,6 +313,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final bool isDesktop = constraints.maxWidth > 900;
+
             if (!isDesktop) {
               return _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -348,19 +322,19 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 pages: _pages,
                 fanzineId: _resolvedFanzineId ?? '',
                 headerWidget: _buildHeader(),
-                gridScrollController: _getMobileGridScrollController(constraints.maxWidth),
+                gridScrollController: ScrollController(),
                 listScrollController: _mobileListScrollController,
                 initialIndex: _targetIndex,
                 viewService: _viewService,
                 isEditingMode: _isEditingMode,
-                onToggleEditMode: _toggleEditMode,
+                activeGlobalPanel: _activeGlobalPanel,
+                onTogglePanel: _handlePanelToggle,
                 onSwitchToSingle: (idx) { setState(() { _targetIndex = idx; _twoPagePreference = false; }); },
                 onSwitchToGrid: (idx) { setState(() { _targetIndex = idx; _twoPagePreference = true; }); },
               );
             }
 
             if (_isLoading) return const Center(child: CircularProgressIndicator());
-            final bool drawerOpen = _activeDrawerContent != null;
             final bool isSplitView = _showGrid && _showList;
             final bool isSingleGrid = _showGrid && !_showList;
 
@@ -390,9 +364,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                       initialIndex: _targetIndex,
                       viewService: _viewService,
                       isEditingMode: _isEditingMode,
-                      onToggleEditMode: _toggleEditMode,
+                      isDesktopLayout: true,
+                      activeGlobalPanel: _activeGlobalPanel,
+                      onTogglePanel: _handlePanelToggle,
                       onOpenGrid: null,
-                      onExternalDrawerRequest: _handleDesktopDrawerRequest,
                     ),
                   ),
                   if (isSplitView)
@@ -401,7 +376,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                       child: FloatingActionButton.small(
                         backgroundColor: Colors.white, foregroundColor: Colors.black, elevation: 4,
                         child: const Icon(Icons.close),
-                        onPressed: () { setState(() { _showList = false; _activeDrawerContent = null; }); },
+                        onPressed: () { setState(() { _showList = false; _activeGlobalPanel = null; }); },
                       ),
                     ),
                 ],
@@ -413,21 +388,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(width: _desktopGridWidth, child: gridComponent),
-                  MouseRegion(
-                    cursor: SystemMouseCursors.resizeColumn,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragUpdate: (details) {
-                        setState(() {
-                          final double delta = details.delta.dx;
-                          if (_desktopGridWidth + delta > 100 && _desktopListWidth - delta > 300) {
-                            _desktopGridWidth += delta; _desktopListWidth -= delta;
-                          }
-                        });
-                      },
-                      child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
-                    ),
-                  ),
+                  _buildDivider((d) {
+                    setState(() {
+                      if (_desktopGridWidth + d > 100 && _desktopListWidth - d > 300) {
+                        _desktopGridWidth += d; _desktopListWidth -= d;
+                      }
+                    });
+                  }),
                   SizedBox(width: _desktopListWidth, child: listComponent),
                 ])
                 : SizedBox(width: _singleViewFixedWidth, child: isSingleGrid ? gridComponent : listComponent);
@@ -435,46 +402,52 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                drawerOpen ? const SizedBox.shrink() : const Expanded(child: SizedBox()),
+                const Expanded(child: SizedBox()),
                 readerBlock,
-                if (!drawerOpen)
-                  const Expanded(child: SizedBox())
-                else
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+
+                if (_activeGlobalPanel != null)
+                  Container(
+                    width: 400,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(left: BorderSide(color: Colors.black12)),
+                    ),
+                    child: Column(
                       children: [
-                        MouseRegion(
-                          cursor: SystemMouseCursors.resizeColumn,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onHorizontalDragUpdate: (details) {
-                              setState(() { if (isSplitView && _desktopListWidth + details.delta.dx > 300) _desktopListWidth += details.delta.dx; });
-                            },
-                            child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          color: Colors.grey[100],
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_activeGlobalPanel!.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                              IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _activeGlobalPanel = null)),
+                            ],
                           ),
                         ),
-                        Expanded(
-                          child: Material(
-                            elevation: 4, color: Colors.white,
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), color: Colors.grey[100],
-                                  child: Row(children: [const Spacer(), IconButton(icon: const Icon(Icons.close), onPressed: _closeDesktopDrawer)]),
-                                ),
-                                Expanded(child: _activeDrawerContent!),
-                              ],
-                            ),
-                          ),
+                        const Expanded(
+                          child: Center(child: Text("3rd Column: All panels of this type will list here.")),
                         ),
                       ],
                     ),
                   ),
+
+                const Expanded(child: SizedBox()),
               ],
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildDivider(Function(double) onDrag) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
+        child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
       ),
     );
   }
