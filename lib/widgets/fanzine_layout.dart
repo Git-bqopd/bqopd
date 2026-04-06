@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../services/view_service.dart';
-import '../models/reader_tool.dart'; // Added
+import '../models/reader_tool.dart';
 import 'readers/fanzine_grid_renderer.dart';
 import 'readers/fanzine_list_renderer.dart';
 
@@ -19,13 +19,14 @@ class FanzineLayout extends StatelessWidget {
 
   final bool isEditingMode;
 
-  // NEW: Added to support unified panel state
   final BonusRowType? activeGlobalPanel;
   final Function(BonusRowType) onTogglePanel;
 
   final ViewService viewService;
   final Function(int pageIndex) onSwitchToSingle;
-  final Function(int pageIndex)? onSwitchToGrid;
+
+  // FIXED: Changed type to VoidCallback to match new unified architecture
+  final VoidCallback? onOpenGrid;
 
   const FanzineLayout({
     super.key,
@@ -41,7 +42,7 @@ class FanzineLayout extends StatelessWidget {
     required this.onTogglePanel,
     required this.viewService,
     required this.onSwitchToSingle,
-    this.onSwitchToGrid,
+    this.onOpenGrid,
   });
 
   @override
@@ -63,10 +64,10 @@ class FanzineLayout extends StatelessWidget {
         initialIndex: initialIndex,
         viewService: viewService,
         isEditingMode: isEditingMode,
-        isDesktopLayout: false, // Layout wrapper is only used for Mobile/Single Col
+        isDesktopLayout: false,
         activeGlobalPanel: activeGlobalPanel,
         onTogglePanel: onTogglePanel,
-        onOpenGrid: onSwitchToGrid,
+        onOpenGrid: onOpenGrid,
       );
     }
   }

@@ -35,8 +35,10 @@ class PanelContainer extends StatelessWidget {
     }
 
     // Desktop Sidebar Layout
+    // Important: mainAxisSize must be min so it doesn't cause infinite height errors in ListViews
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (title.isNotEmpty)
           Container(
@@ -50,11 +52,9 @@ class PanelContainer extends StatelessWidget {
               ),
             ),
           ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: child,
-          ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: child,
         ),
       ],
     );

@@ -28,22 +28,21 @@ class TextReaderPanel extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min, // Avoid infinite height crash in ScrollablePositionedList
       children: [
         _FontSizeSlider(fontSizeNotifier: fontSizeNotifier),
-        Expanded(
-          child: ValueListenableBuilder<double>(
-            valueListenable: fontSizeNotifier,
-            builder: (context, size, _) {
-              return SelectableText.rich(
-                LinkParser.renderLinks(
-                  context,
-                  text,
-                  baseStyle: TextStyle(fontSize: size, fontFamily: 'Georgia'),
-                ),
-                textAlign: TextAlign.justify,
-              );
-            },
-          ),
+        ValueListenableBuilder<double>(
+          valueListenable: fontSizeNotifier,
+          builder: (context, size, _) {
+            return SelectableText.rich(
+              LinkParser.renderLinks(
+                context,
+                text,
+                baseStyle: TextStyle(fontSize: size, fontFamily: 'Georgia'),
+              ),
+              textAlign: TextAlign.justify,
+            );
+          },
         ),
       ],
     );

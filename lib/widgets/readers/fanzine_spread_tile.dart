@@ -135,8 +135,9 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
   }
 
   Future<void> _resolveUrl() async {
-    final storagePath = widget.pageData['storagePath'];
-    final imageUrl = widget.pageData['imageUrl'];
+    // Utilize the Thumbnail URL as a priority to save bandwidth
+    final storagePath = widget.pageData['thumbnailStoragePath'] ?? widget.pageData['storagePath'];
+    final imageUrl = widget.pageData['thumbnailUrl'] ?? widget.pageData['imageUrl'];
 
     if (storagePath != null && storagePath.toString().isNotEmpty) {
       try {

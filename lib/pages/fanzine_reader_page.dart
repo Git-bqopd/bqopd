@@ -9,6 +9,7 @@ import '../widgets/fanzine_widget.dart';
 import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
+import '../widgets/readers/panel_column_renderer.dart';
 import '../widgets/fanzine_editor_widget.dart';
 import '../widgets/calendar_editor_widget.dart';
 import '../widgets/login_widget.dart';
@@ -40,6 +41,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   String? _resolvedFanzineId;
   String? _resolvedShortCode;
   String? _resolvedType;
+  String _fanzineTitle = 'Untitled';
   List<Map<String, dynamic>> _pages = [];
 
   bool _twoPagePreference = true;
@@ -52,16 +54,15 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   BonusRowType? _activeGlobalPanel;
 
-  double _desktopGridWidth = 300.0;
-  double _desktopListWidth = 600.0;
-  final double _singleViewFixedWidth = 900.0;
-
   final ItemScrollController _mobileListScrollController = ItemScrollController();
   ScrollController? _desktopGridScrollController;
   final ItemScrollController _desktopListScrollController = ItemScrollController();
+  final ItemScrollController _desktopPanelScrollController = ItemScrollController();
 
-  final GlobalKey _gridComponentKey = GlobalKey();
-  final GlobalKey _listComponentKey = GlobalKey();
+  // Layout Constants
+  static const double kGridAloneWidth = 800.0;
+  static const double kGridTogetherWidth = 400.0;
+  static const double kReaderWidth = 800.0;
 
   @override
   void initState() {
@@ -129,6 +130,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       final fanzineData = fanzineDoc.data() ?? {};
 
       _resolvedType = fanzineData['type'] ?? 'fanzine';
+      _fanzineTitle = fanzineData['title'] ?? 'Untitled';
 
       final bool twoPage = fanzineData['twoPage'] ?? true;
       final snapshot = await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').get();
@@ -145,7 +147,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           if (_targetIndex > _pages.length) _targetIndex = _pages.length;
           if (_targetIndex == 0) {
             _twoPagePreference = twoPage;
-            if (_twoPagePreference) { _showGrid = true; _showList = false; } else { _showGrid = false; _showList = true; }
+            if (_twoPagePreference) {
+              _showGrid = true;
+              _showList = false;
+            } else {
+              _showGrid = false;
+              _showList = true;
+            }
           }
           _isLoading = false;
         });
@@ -180,21 +188,26 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     }
   }
 
-  void _onDesktopGridTap(int index) {
-    bool listWasNotShowing = !_showList;
+  void _handlePageTap(int index) {
     setState(() {
       _targetIndex = index;
       _showList = true;
-      if (_desktopGridWidth == 900.0) _desktopGridWidth = 300.0;
-      if (_desktopListWidth < 300.0) _desktopListWidth = 900.0;
     });
-    if (!listWasNotShowing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_desktopListScrollController.isAttached) {
-          _desktopListScrollController.scrollTo(index: _targetIndex, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-        }
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_desktopListScrollController.isAttached) {
+        _desktopListScrollController.scrollTo(index: index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      }
+      if (_desktopPanelScrollController.isAttached) {
+        _desktopPanelScrollController.scrollTo(index: index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      }
+    });
+  }
+
+  void _handleCloseList() {
+    setState(() {
+      _showList = false;
+      _activeGlobalPanel = null;
+    });
   }
 
   void _handlePanelToggle(BonusRowType type) {
@@ -215,6 +228,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       if (_desktopListScrollController.isAttached) {
         _desktopListScrollController.scrollTo(index: 0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
+      if (_desktopPanelScrollController.isAttached) {
+        _desktopPanelScrollController.scrollTo(index: 0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      }
     });
   }
 
@@ -224,8 +240,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       _twoPagePreference = false;
       if (!_showList) {
         _showList = true;
-        if (_desktopGridWidth == 900.0) _desktopGridWidth = 300.0;
-        if (_desktopListWidth < 300.0) _desktopListWidth = 900.0;
       }
       _targetIndex = 0;
     });
@@ -314,44 +328,54 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           builder: (context, constraints) {
             final bool isDesktop = constraints.maxWidth > 900;
 
-            if (!isDesktop) {
-              return _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : FanzineLayout(
-                viewMode: _twoPagePreference ? FanzineViewMode.grid : FanzineViewMode.single,
-                pages: _pages,
-                fanzineId: _resolvedFanzineId ?? '',
-                headerWidget: _buildHeader(),
-                gridScrollController: ScrollController(),
-                listScrollController: _mobileListScrollController,
-                initialIndex: _targetIndex,
-                viewService: _viewService,
-                isEditingMode: _isEditingMode,
-                activeGlobalPanel: _activeGlobalPanel,
-                onTogglePanel: _handlePanelToggle,
-                onSwitchToSingle: (idx) { setState(() { _targetIndex = idx; _twoPagePreference = false; }); },
-                onSwitchToGrid: (idx) { setState(() { _targetIndex = idx; _twoPagePreference = true; }); },
-              );
+            if (_isLoading) {
+              return const Center(child: CircularProgressIndicator());
             }
 
-            if (_isLoading) return const Center(child: CircularProgressIndicator());
-            final bool isSplitView = _showGrid && _showList;
-            final bool isSingleGrid = _showGrid && !_showList;
+            // --- MOBILE LAYOUT ---
+            if (!isDesktop) {
+              if (!_showList) {
+                return FanzineGridRenderer(
+                  pages: _pages,
+                  headerWidget: _buildHeader(isStickerOnly: false),
+                  scrollController: ScrollController(),
+                  viewService: _viewService,
+                  onPageTap: _handlePageTap,
+                );
+              } else {
+                return FanzineLayout(
+                  viewMode: FanzineViewMode.single,
+                  pages: _pages,
+                  fanzineId: _resolvedFanzineId ?? '',
+                  headerWidget: _buildHeader(),
+                  gridScrollController: ScrollController(),
+                  listScrollController: _mobileListScrollController,
+                  initialIndex: _targetIndex,
+                  viewService: _viewService,
+                  isEditingMode: _isEditingMode,
+                  activeGlobalPanel: _activeGlobalPanel,
+                  onTogglePanel: _handlePanelToggle,
+                  onSwitchToSingle: (idx) { setState(() => _targetIndex = idx); },
+                  onOpenGrid: _handleCloseList,
+                );
+              }
+            }
+
+            // --- DESKTOP LAYOUT ---
+            final bool isPanelOpen = _showList && _activeGlobalPanel != null;
 
             Widget gridComponent = Container(
-              key: _gridComponentKey,
               color: Colors.grey[200],
               child: FanzineGridRenderer(
                 pages: _pages,
-                headerWidget: _buildHeader(isStickerOnly: isSplitView),
+                headerWidget: _buildHeader(isStickerOnly: _showList),
                 scrollController: _desktopGridScrollController ??= ScrollController(),
                 viewService: _viewService,
-                onPageTap: _onDesktopGridTap,
+                onPageTap: _handlePageTap,
               ),
             );
 
             Widget listComponent = Container(
-              key: _listComponentKey,
               color: Colors.white,
               child: Stack(
                 children: [
@@ -367,87 +391,72 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                       isDesktopLayout: true,
                       activeGlobalPanel: _activeGlobalPanel,
                       onTogglePanel: _handlePanelToggle,
-                      onOpenGrid: null,
+                      onOpenGrid: _handleCloseList,
                     ),
                   ),
-                  if (isSplitView)
+                  if (_showList && _showGrid)
                     Positioned(
                       top: 8, right: 8,
                       child: FloatingActionButton.small(
-                        backgroundColor: Colors.white, foregroundColor: Colors.black, elevation: 4,
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        elevation: 4,
+                        onPressed: _handleCloseList,
                         child: const Icon(Icons.close),
-                        onPressed: () { setState(() { _showList = false; _activeGlobalPanel = null; }); },
                       ),
                     ),
                 ],
               ),
             );
 
-            Widget readerBlock = isSplitView
-                ? Row(
+            Widget panelComponent = isPanelOpen
+                ? Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(left: BorderSide(color: Colors.black12)),
+              ),
+              child: PanelColumnRenderer(
+                fanzineId: _resolvedFanzineId ?? '',
+                fanzineTitle: _fanzineTitle,
+                pages: _pages,
+                activePanel: _activeGlobalPanel!,
+                viewService: _viewService,
+                isEditingMode: _isEditingMode,
+                itemScrollController: _desktopPanelScrollController,
+                onClose: () => setState(() => _activeGlobalPanel = null),
+              ),
+            )
+                : const SizedBox.shrink();
+
+            return Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(width: _desktopGridWidth, child: gridComponent),
-                  _buildDivider((d) {
-                    setState(() {
-                      if (_desktopGridWidth + d > 100 && _desktopListWidth - d > 300) {
-                        _desktopGridWidth += d; _desktopListWidth -= d;
-                      }
-                    });
-                  }),
-                  SizedBox(width: _desktopListWidth, child: listComponent),
-                ])
-                : SizedBox(width: _singleViewFixedWidth, child: isSingleGrid ? gridComponent : listComponent);
-
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Expanded(child: SizedBox()),
-                readerBlock,
-
-                if (_activeGlobalPanel != null)
-                  Container(
-                    width: 400,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(left: BorderSide(color: Colors.black12)),
+                  // Column 1: Nav Grid (Spread Column)
+                  if (_showGrid)
+                    SizedBox(
+                      width: _showList ? kGridTogetherWidth : kGridAloneWidth,
+                      child: gridComponent,
                     ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          color: Colors.grey[100],
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(_activeGlobalPanel!.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _activeGlobalPanel = null)),
-                            ],
-                          ),
-                        ),
-                        const Expanded(
-                          child: Center(child: Text("3rd Column: All panels of this type will list here.")),
-                        ),
-                      ],
-                    ),
-                  ),
 
-                const Expanded(child: SizedBox()),
-              ],
+                  // Column 2: Main Reader List
+                  if (_showList)
+                    SizedBox(
+                      width: kReaderWidth,
+                      child: listComponent,
+                    ),
+
+                  // Column 3: The Panel Column (Takes remaining width)
+                  if (isPanelOpen)
+                    Expanded(
+                      child: panelComponent,
+                    ),
+                ],
+              ),
             );
           },
         ),
-      ),
-    );
-  }
-
-  Widget _buildDivider(Function(double) onDrag) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
-        child: Container(width: 16, color: Colors.grey[300], child: const Center(child: VerticalDivider(thickness: 1, width: 1, color: Colors.grey))),
       ),
     );
   }

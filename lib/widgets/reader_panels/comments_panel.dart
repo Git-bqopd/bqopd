@@ -22,6 +22,7 @@ class CommentsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min, // Avoid infinite height in lists
       children: [
         if (isInline)
           ConstrainedBox(
@@ -29,9 +30,7 @@ class CommentsPanel extends StatelessWidget {
             child: _CommentList(imageId: imageId, service: engagementService),
           )
         else
-          Expanded(
-            child: _CommentList(imageId: imageId, service: engagementService),
-          ),
+          _CommentList(imageId: imageId, service: engagementService),
         _CommentInput(controller: controller, onSend: onSend),
       ],
     );
@@ -76,7 +75,7 @@ class _CommentList extends StatelessWidget {
 
         return ListView.separated(
           shrinkWrap: true,
-          physics: const ClampingScrollPhysics(),
+          physics: const ClampingScrollPhysics(), // Ensures it plays nice with parent scrolling
           itemCount: sortedDocs.length,
           separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12),
           itemBuilder: (c, i) => CommentItem(data: sortedDocs[i]),

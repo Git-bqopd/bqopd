@@ -19,7 +19,8 @@ class FanzineListRenderer extends StatefulWidget {
   final BonusRowType? activeGlobalPanel;
   final Function(BonusRowType) onTogglePanel;
 
-  final Function(int)? onOpenGrid;
+  // FIXED: Changed from Function(int)? to VoidCallback?
+  final VoidCallback? onOpenGrid;
   final int initialIndex;
 
   const FanzineListRenderer({
@@ -82,8 +83,8 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           isDesktopLayout: widget.isDesktopLayout,
           activeGlobalPanel: widget.activeGlobalPanel,
           onTogglePanel: widget.onTogglePanel,
-          // Bind the index correctly to satisfy dynamic function vs callback error
-          onOpenGrid: widget.onOpenGrid != null ? () => widget.onOpenGrid!(index) : null,
+          // FIXED: Pass directly instead of wrapping in a function
+          onOpenGrid: widget.onOpenGrid,
         );
       },
     );
