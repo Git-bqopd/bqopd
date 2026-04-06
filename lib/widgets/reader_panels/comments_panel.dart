@@ -1,85 +1,113 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../services/engagement_service.dart';
+import '../../blocs/interaction/interaction_bloc.dart';
+import '../../services/user_provider.dart';
 import '../comment_item.dart';
 
-class CommentsPanel extends StatelessWidget {
+class CommentsPanel extends StatefulWidget {
   final String imageId;
-  final EngagementService engagementService;
-  final TextEditingController controller;
-  final VoidCallback onSend;
+  final String? fanzineId;
+  final String? fanzineTitle;
   final bool isInline;
 
   const CommentsPanel({
     super.key,
     required this.imageId,
-    required this.engagementService,
-    required this.controller,
-    required this.onSend,
+    this.fanzineId,
+    this.fanzineTitle,
     this.isInline = true,
   });
 
   @override
+  State<CommentsPanel> createState() => _CommentsPanelState();
+}
+
+class _CommentsPanelState extends State<CommentsPanel> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<InteractionBloc>().add(LoadCommentsRequested(widget.imageId));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onSend() {
+    if (_controller.text.trim().isEmpty) return;
+    final userProvider = context.read<UserProvider>();
+
+    context.read<InteractionBloc>().add(AddCommentRequested(
+      imageId: widget.imageId,
+      text: _controller.text.trim(),
+      fanzineId: widget.fanzineId,
+      fanzineTitle: widget.fanzineTitle,
+      displayName: userProvider.userProfile?['displayName'],
+      username: userProvider.userProfile?['username'],
+    ));
+
+    _controller.clear();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min, // Avoid infinite height in lists
-      children: [
-        if (isInline)
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 300),
-            child: _CommentList(imageId: imageId, service: engagementService),
-          )
-        else
-          _CommentList(imageId: imageId, service: engagementService),
-        _CommentInput(controller: controller, onSend: onSend),
-      ],
+    return BlocBuilder<InteractionBloc, InteractionState>(
+      builder: (context, state) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (state.isLoadingComments)
+              const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())
+            else
+              _CommentList(comments: state.comments, imageId: widget.imageId),
+            _CommentInput(controller: _controller, onSend: _onSend),
+          ],
+        );
+      },
     );
   }
 }
 
 class _CommentList extends StatelessWidget {
+  final List<DocumentSnapshot> comments;
   final String imageId;
-  final EngagementService service;
 
-  const _CommentList({required this.imageId, required this.service});
+  const _CommentList({required this.comments, required this.imageId});
 
   @override
   Widget build(BuildContext context) {
-    if (imageId.isEmpty) return const SizedBox();
+    if (comments.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Text("No comments yet."),
+        ),
+      );
+    }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: service.getCommentsStream(imageId),
-      builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox();
+    final sorted = List<DocumentSnapshot>.from(comments);
+    sorted.sort((a, b) {
+      final aT = (a.data() as Map)['createdAt'] as Timestamp?;
+      final bT = (b.data() as Map)['createdAt'] as Timestamp?;
+      if (aT == null) return 1;
+      if (bT == null) return -1;
+      return aT.compareTo(bT);
+    });
 
-        final sortedDocs = snap.data!.docs.map((d) {
-          final m = d.data() as Map<String, dynamic>;
-          m['_id'] = d.id;
-          return m;
-        }).toList();
-
-        sortedDocs.sort((a, b) {
-          final aT = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-          final bT = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-          return aT.compareTo(bT);
-        });
-
-        if (sortedDocs.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Text("No comments yet."),
-            ),
-          );
-        }
-
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const ClampingScrollPhysics(), // Ensures it plays nice with parent scrolling
-          itemCount: sortedDocs.length,
-          separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12),
-          itemBuilder: (c, i) => CommentItem(data: sortedDocs[i]),
-        );
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: sorted.length,
+      separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12),
+      itemBuilder: (c, i) {
+        final data = sorted[i].data() as Map<String, dynamic>;
+        data['_id'] = sorted[i].id;
+        return CommentItem(data: data);
       },
     );
   }
@@ -88,7 +116,6 @@ class _CommentList extends StatelessWidget {
 class _CommentInput extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
-
   const _CommentInput({required this.controller, required this.onSend});
 
   @override
@@ -100,11 +127,7 @@ class _CommentInput extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
-              decoration: const InputDecoration(
-                hintText: "Add a comment...",
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(hintText: "Add a comment...", isDense: true, border: OutlineInputBorder()),
               onSubmitted: (_) => onSend(),
             ),
           ),

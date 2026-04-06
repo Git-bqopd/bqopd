@@ -15,7 +15,6 @@ import 'indicia_panel.dart';
 import 'settings_panel.dart';
 
 class PanelFactory {
-  /// Returns the standardized header title for the Desktop Sidebar view
   static String getTitle(BonusRowType type) {
     switch (type) {
       case BonusRowType.textReader: return "TEXT READER";
@@ -33,7 +32,6 @@ class PanelFactory {
     }
   }
 
-  /// Returns the specific background color for the inline mobile view
   static Color getInlineColor(BonusRowType type) {
     switch (type) {
       case BonusRowType.textReader: return const Color(0xFFFDFBF7);
@@ -44,7 +42,6 @@ class PanelFactory {
     }
   }
 
-  /// Acts as the routing switchboard to build the requested panel content
   static Widget buildPanelContent(PanelContext context) {
     switch (context.type) {
       case BonusRowType.textReader:
@@ -73,9 +70,7 @@ class PanelFactory {
       case BonusRowType.comments:
         return CommentsPanel(
           imageId: context.imageId,
-          engagementService: context.engagementService,
-          controller: context.commentController,
-          onSend: context.onSubmitComment,
+          fanzineId: context.fanzineId,
           isInline: context.isInline,
         );
       case BonusRowType.views:

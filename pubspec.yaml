@@ -33,6 +33,10 @@ dependencies:
   scrollable_positioned_list: ^0.3.8
   youtube_player_iframe: ^5.1.2
 
+  # --- State Management ---
+  flutter_bloc: ^8.1.5
+  equatable: ^2.0.5
+
   flutter_web_plugins:
     sdk: flutter
 

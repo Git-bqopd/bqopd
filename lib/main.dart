@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -9,8 +10,19 @@ import 'firebase_options.dart';
 import 'utils/script_loader.dart';
 import 'env.dart';
 
-// Services
+// Services & Repositories
 import 'services/user_provider.dart';
+import 'repositories/user_repository.dart';
+import 'repositories/fanzine_repository.dart';
+import 'repositories/pipeline_repository.dart';
+import 'repositories/engagement_repository.dart';
+import 'repositories/auth_repository.dart';
+import 'repositories/upload_repository.dart';
+
+// BLoCs
+import 'blocs/auth/auth_bloc.dart';
+import 'blocs/upload/upload_bloc.dart';
+import 'blocs/interaction/interaction_bloc.dart';
 
 // Pages
 import 'pages/login_page.dart';
@@ -19,24 +31,11 @@ import 'pages/profile_page.dart';
 import 'pages/short_link_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/settings_page.dart';
-// Keeping import just in case, but no longer the primary route
 import 'pages/curator_dashboard_page.dart';
 import 'pages/curator_workbench_page.dart';
 import 'pages/fanzine_reader_page.dart';
 import 'pages/publisher_page.dart';
 import 'pages/moderator_feed_page.dart';
-
-class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(Stream<dynamic> stream) {
-    _sub = stream.asBroadcastStream().listen((_) => notifyListeners());
-  }
-  late final StreamSubscription<dynamic> _sub;
-  @override
-  void dispose() {
-    _sub.cancel();
-    super.dispose();
-  }
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,10 +44,38 @@ Future<void> main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   usePathUrlStrategy();
 
+  // Initialize Repositories
+  final authRepository = AuthRepository();
+  final uploadRepository = UploadRepository();
+  final engagementRepository = EngagementRepository();
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => UserProvider(),
-      child: const MyApp(),
+    MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider.value(value: authRepository),
+        RepositoryProvider.value(value: uploadRepository),
+        RepositoryProvider.value(value: engagementRepository),
+        RepositoryProvider(create: (_) => UserRepository()),
+        RepositoryProvider(create: (_) => FanzineRepository()),
+        RepositoryProvider(create: (_) => PipelineRepository()),
+      ],
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(
+            create: (context) => AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested()),
+          ),
+          BlocProvider(
+            create: (context) => UploadBloc(repository: uploadRepository),
+          ),
+          BlocProvider(
+            create: (context) => InteractionBloc(repository: engagementRepository),
+          ),
+        ],
+        child: ChangeNotifierProvider(
+          create: (_) => UserProvider(),
+          child: const MyApp(),
+        ),
+      ),
     ),
   );
 }
@@ -112,19 +139,16 @@ class _MyAppState extends State<MyApp> {
             path: '/profile',
             name: 'profile',
             builder: (context, state) => const ProfilePage()),
-
         GoRoute(
           path: '/dashboard',
           name: 'curatorDashboard',
           builder: (context, state) => const CuratorDashboardPage(),
         ),
-
         GoRoute(
           path: '/moderator',
           name: 'moderatorFeed',
           builder: (context, state) => const ModeratorFeedPage(),
         ),
-
         GoRoute(
           path: '/workbench/:fanzineId',
           name: 'curatorWorkbench',
@@ -133,7 +157,6 @@ class _MyAppState extends State<MyApp> {
             return CuratorWorkbenchPage(fanzineId: fanzineId);
           },
         ),
-
         GoRoute(
           path: '/reader/:fanzineId',
           name: 'reader',
@@ -142,13 +165,11 @@ class _MyAppState extends State<MyApp> {
             return FanzineReaderPage(fanzineId: fanzineId);
           },
         ),
-
         GoRoute(
           path: '/publisher',
           name: 'publisher',
           builder: (context, state) => const PublisherPage(),
         ),
-
         GoRoute(
           path: '/edit-info',
           name: 'editInfo',
@@ -157,13 +178,10 @@ class _MyAppState extends State<MyApp> {
             return EditInfoPage(targetUserId: userId);
           },
         ),
-
         GoRoute(
             path: '/settings',
             name: 'settings',
             builder: (context, state) => const SettingsPage()),
-
-        // UPDATED: Now maps to FanzineReaderPage in editing mode!
         GoRoute(
           path: '/editor/:fanzineId',
           name: 'fanzineEditor',
