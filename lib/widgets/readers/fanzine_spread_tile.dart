@@ -3,7 +3,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/view_service.dart';
 
 /// A single row in the Fanzine Grid (Gallery) view representing a two-page spread.
-/// Designed to look like an 11 x 8.5 sheet of paper.
+/// Uses a Stack for the header row to layer a larger Manila Envelope over standard paper.
 class FanzineSpreadTile extends StatelessWidget {
   final Widget? leftWidget;
   final Map<String, dynamic>? leftPageData;
@@ -32,71 +32,138 @@ class FanzineSpreadTile extends StatelessWidget {
   Widget build(BuildContext context) {
     // Standard US Letter Landscape ratio
     const double paperRatio = 11 / 8.5;
+    final bool isHeaderRow = leftWidget != null;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: paperRatio,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(2), // Very slight rounding like paper
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                )
-              ],
-            ),
-            // The "Sheet" Padding
-            padding: const EdgeInsets.all(24.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // LEFT PAGE
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 12.0), // Padding between images
-                    child: Center(
-                      child: leftWidget ??
-                          (leftPageData != null
-                              ? _SpreadPageItem(
-                            index: leftIndex!,
-                            pageData: leftPageData!,
-                            onTap: () => onPageTap(leftIndex!),
-                            viewService: viewService,
-                            fanzineId: fanzineId,
-                            fanzineTitle: fanzineTitle,
-                          )
-                              : const SizedBox.shrink()),
-                    ),
-                  ),
+    // --- BASE LAYER: Standard White Paper Spread ---
+    // This defines the "physical" grid line that all pages follow.
+    Widget baseSpread = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: AspectRatio(
+        aspectRatio: paperRatio,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          padding: const EdgeInsets.all(24.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Left Page (Hidden by Envelope in header row)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 12.0),
+                  child: leftPageData != null
+                      ? _SpreadPageItem(
+                    index: leftIndex!,
+                    pageData: leftPageData!,
+                    onTap: () => onPageTap(leftIndex!),
+                    viewService: viewService,
+                    fanzineId: fanzineId,
+                    fanzineTitle: fanzineTitle,
+                  )
+                      : const SizedBox.shrink(),
                 ),
-
-                // RIGHT PAGE
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12.0), // Padding between images
-                    child: Center(
-                      child: rightPageData != null
-                          ? _SpreadPageItem(
-                        index: rightIndex!,
-                        pageData: rightPageData!,
-                        onTap: () => onPageTap(rightIndex!),
-                        viewService: viewService,
-                        fanzineId: fanzineId,
-                        fanzineTitle: fanzineTitle,
-                      )
-                          : const SizedBox.shrink(),
-                    ),
-                  ),
+              ),
+              // Right Page
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12.0),
+                  child: rightPageData != null
+                      ? _SpreadPageItem(
+                    index: rightIndex!,
+                    pageData: rightPageData!,
+                    onTap: () => onPageTap(rightIndex!),
+                    viewService: viewService,
+                    fanzineId: fanzineId,
+                    fanzineTitle: fanzineTitle,
+                  )
+                      : const SizedBox.shrink(),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+
+    if (!isHeaderRow) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 24.0),
+        child: Center(child: baseSpread),
+      );
+    }
+
+    // --- OVERLAY LAYER: The Manila Envelope ---
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 24.0),
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none, // Allow envelope to bleed
+        children: [
+          // 1. The standard paper spread (centered)
+          baseSpread,
+
+          // 2. The Manila Envelope sitting on top
+          Positioned(
+            left: 0, // PINNED TO ABSOLUTE LEFT OF THE SCREEN
+            top: 0,
+            bottom: 0,
+            child: LayoutBuilder(builder: (context, constraints) {
+              // We use a Row with a Spacer to maintain alignment relative to the spread center
+              return Center(
+                child: AspectRatio(
+                  aspectRatio: paperRatio,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: LayoutBuilder(builder: (context, innerConstraints) {
+                          // The envelope is positioned to overflow exactly to the left edge
+                          // while covering the left half of the spread.
+                          return OverflowBox(
+                            maxWidth: innerConstraints.maxWidth + 16, // Bleed to absolute screen edge
+                            maxHeight: innerConstraints.maxHeight + 32, // Physical scale increase (top/bottom)
+                            alignment: Alignment.centerLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 16), // Create space to show center paper fold
+                              child: AspectRatio(
+                                aspectRatio: 0.625, // Fixed 5:8 ratio (The correct "Size")
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFF1B255), // Manila
+                                    borderRadius: BorderRadius.horizontal(
+                                      right: Radius.circular(12),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 15,
+                                        offset: Offset(4, 8),
+                                      )
+                                    ],
+                                  ),
+                                  child: leftWidget,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                      const Spacer(), // Right half is clear so paper peeks through
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -135,19 +202,29 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
   }
 
   Future<void> _resolveUrl() async {
-    // Utilize the Thumbnail URL as a priority to save bandwidth
-    final storagePath = widget.pageData['thumbnailStoragePath'] ?? widget.pageData['storagePath'];
-    final imageUrl = widget.pageData['thumbnailUrl'] ?? widget.pageData['imageUrl'];
+    final storagePath =
+        widget.pageData['thumbnailStoragePath'] ?? widget.pageData['storagePath'];
+    final imageUrl =
+        widget.pageData['thumbnailUrl'] ?? widget.pageData['imageUrl'];
 
     if (storagePath != null && storagePath.toString().isNotEmpty) {
       try {
-        final url = await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
-        if (mounted) setState(() { _resolvedImageUrl = url; _isLoading = false; });
+        final url =
+        await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
+        if (mounted)
+          setState(() {
+            _resolvedImageUrl = url;
+            _isLoading = false;
+          });
         return;
       } catch (_) {}
     }
 
-    if (mounted) setState(() { _resolvedImageUrl = imageUrl; _isLoading = false; });
+    if (mounted)
+      setState(() {
+        _resolvedImageUrl = imageUrl;
+        _isLoading = false;
+      });
   }
 
   void _recordView() {
@@ -172,11 +249,13 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
     return GestureDetector(
       onTap: widget.onTap,
       child: AspectRatio(
-        aspectRatio: 0.625, // Forces the 5:8 ratio for the image itself
+        aspectRatio: 0.625,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.grey[50], // Very subtle background for image area
-            border: Border.all(color: Colors.black.withValues(alpha: 0.05), width: 0.5),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(1),
+            border:
+            Border.all(color: Colors.black.withValues(alpha: 0.05), width: 0.5),
           ),
           child: _isLoading
               ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
@@ -185,7 +264,8 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
             _resolvedImageUrl!,
             fit: BoxFit.contain,
             errorBuilder: (c, e, s) => Center(
-              child: Text("Page $pageNum", style: const TextStyle(color: Colors.grey)),
+              child: Text("Page $pageNum",
+                  style: const TextStyle(color: Colors.grey)),
             ),
           )
               : Center(child: Text("Page $pageNum")),
