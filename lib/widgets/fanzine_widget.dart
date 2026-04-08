@@ -9,13 +9,13 @@ import 'login_widget.dart';
 
 class FanzineWidget extends StatefulWidget {
   final String? fanzineShortCode;
-  final bool isStickerOnly; // Flag to render a simplified view
-  final VoidCallback? onLoginRequested; // Callback for inline login
+  final bool isStickerOnly;
+  final VoidCallback? onLoginRequested;
 
   const FanzineWidget({
     super.key,
     this.fanzineShortCode,
-    this.isStickerOnly = false, // Default to false for backwards compatibility
+    this.isStickerOnly = false,
     this.onLoginRequested,
   });
 
@@ -27,7 +27,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   User? get currentUser => FirebaseAuth.instance.currentUser;
   final ViewService _viewService = ViewService();
   final PageController _pageController = PageController();
-  int _currentPage = 0; // 0=Indicia, 1=Creators, 2=Stats
+  int _currentPage = 0;
 
   String _displayUrl = 'bqopd.com/...';
   String? _targetShortCode;
@@ -36,32 +36,19 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   Map<String, dynamic>? _fanzineData;
   String? _fanzineId;
 
-  // Design Tokens
   static const Color kPrimaryColor = Color(0xFFF1B255);
-  static const double kInternalContentWidth = 200.0; // The "mobile" width constraint
-
-  // --- DUMMY DATA FOR UI ITERATION ---
-  final String _dummyIndicia =
-      "© 2026 BQOPD Collective. All rights reserved.\n\n"
-      "Published digitally on the bqopd platform. No part of this publication "
-      "may be reproduced, distributed, or transmitted in any form or by any means, "
-      "including photocopying, recording, or other electronic or mechanical methods, "
-      "without the prior written permission of the publisher, except in the case of "
-      "brief quotations embodied in critical reviews and certain other noncommercial "
-      "uses permitted by copyright law.\n\n"
-      "Characters and likenesses remain the property of their respective trademark holders.";
-
-  final List<Map<String, dynamic>> _dummyCreators = [
-    {"name": "Jack Kirby", "uid": "dummy_1", "role": "Penciller"},
-    {"name": "Stan Lee", "uid": "dummy_2", "role": "Writer / Editor"},
-    {"name": "Artie Simek", "uid": null, "role": "Letterer"}, // Example of non-platform user
-    {"name": "Marie Severin", "uid": null, "role": "Colorist"},
-  ];
+  static const double kInternalContentWidth = 200.0;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Listen for auth changes to update the "Login" string immediately
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted) {
+        _loadData();
+      }
+    });
   }
 
   @override
@@ -88,40 +75,55 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           .where('shortCode', isEqualTo: shortCode)
           .limit(1)
           .get();
+
       if (query.docs.isEmpty) {
-        _displayUrl = 'bqopd.com/404';
+        setState(() {
+          _displayUrl = 'bqopd.com/404';
+          _showLoginLink = false;
+        });
         return;
       }
+
       _fanzineId = query.docs.first.id;
       _fanzineData = query.docs.first.data();
+
       if (currentUser == null || currentUser!.isAnonymous) {
-        _displayUrl = 'Login / Register';
-        _showLoginLink = true;
-        _targetShortCode = null;
+        setState(() {
+          _displayUrl = 'Login / Register';
+          _showLoginLink = true;
+          _targetShortCode = null;
+        });
       } else {
-        _showLoginLink = false;
         final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
         final myUsername = userDoc.data()?['username'] ?? 'user';
-        _displayUrl = 'bqopd.com/$myUsername';
-        _targetShortCode = myUsername;
+        setState(() {
+          _showLoginLink = false;
+          _displayUrl = 'bqopd.com/$myUsername';
+          _targetShortCode = myUsername;
+        });
       }
     } catch (e) {
-      _displayUrl = 'bqopd.com/error';
+      setState(() => _displayUrl = 'bqopd.com/error');
     }
   }
 
   Future<void> _loadDashboard() async {
     if (currentUser == null || currentUser!.isAnonymous) {
-      _displayUrl = 'Login / Register';
-      _showLoginLink = true;
+      setState(() {
+        _displayUrl = 'Login / Register';
+        _showLoginLink = true;
+      });
       return;
     }
     try {
       final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
       if (userDoc.exists) {
         final username = userDoc.data()?['username'] as String?;
-        _displayUrl = 'bqopd.com/$username';
-        _targetShortCode = username;
+        setState(() {
+          _displayUrl = 'bqopd.com/$username';
+          _targetShortCode = username;
+          _showLoginLink = false;
+        });
       }
     } catch (e) {
       debugPrint("Error loading dashboard: $e");
@@ -129,10 +131,14 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   }
 
   void _handleLinkTap() {
+    debugPrint("FanzineWidget: URL Pill Tapped. _showLoginLink: $_showLoginLink");
+
     if (_showLoginLink) {
       if (widget.onLoginRequested != null) {
+        debugPrint("FanzineWidget: Calling onLoginRequested callback...");
         widget.onLoginRequested!();
       } else {
+        debugPrint("FanzineWidget: No callback found, showing default dialog.");
         showDialog(
           context: context,
           builder: (context) => Dialog(
@@ -159,21 +165,18 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: AspectRatio(
-        aspectRatio: 5 / 8,
-        child: Container(
-          color: kPrimaryColor,
-          padding: const EdgeInsets.all(10.0),
-          child: widget.isStickerOnly
-              ? _buildStickerOnlyView()
-              : _buildFullInteractiveView(),
-        ),
+    return AspectRatio(
+      aspectRatio: 5 / 8,
+      child: Container(
+        color: kPrimaryColor,
+        padding: const EdgeInsets.all(10.0),
+        child: widget.isStickerOnly
+            ? _buildStickerOnlyView()
+            : _buildFullInteractiveView(),
       ),
     );
   }
 
-  // --- SIMPLIFIED VIEW FOR SPLIT SCREEN ---
   Widget _buildStickerOnlyView() {
     return Center(
       child: Container(
@@ -183,51 +186,44 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 2,
-                offset: const Offset(0, 1)
-            )
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
           ],
         ),
-        child: Image.asset(
-          'assets/logo200.gif',
-          width: 100, // Slightly smaller width for the sticker
-          fit: BoxFit.contain,
-        ),
+        child: Image.asset('assets/logo200.gif', width: 100, fit: BoxFit.contain),
       ),
     );
   }
 
-  // --- FULL INTERACTIVE VIEW ---
   Widget _buildFullInteractiveView() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // --- TOP PILL (URL) ---
         Center(
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(50),
-              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
-              ],
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            margin: const EdgeInsets.only(bottom: 10),
-            child: RichText(
-              text: TextSpan(
-                text: _displayUrl.toLowerCase(),
-                style: const TextStyle(
-                  fontFamily: 'Impact', // Or fallback to heavyweight
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.black,
-                  letterSpacing: 0.5,
+          child: GestureDetector(
+            onTap: _handleLinkTap,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(50),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
+                  ],
                 ),
-                recognizer: TapGestureRecognizer()..onTap = _handleLinkTap,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  _displayUrl.toLowerCase(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
             ),
           ),
@@ -247,13 +243,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
-                // --- NAVIGATION ROW ---
                 Container(
                   padding: const EdgeInsets.only(top: 12, bottom: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
                     children: [
                       _buildNavText("indicia", 0),
                       _buildNavDivider(),
@@ -263,14 +256,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                     ],
                   ),
                 ),
-
-                // --- PERFORATED LINE ---
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8.0),
                   child: _DashedSeparator(height: 1, color: Color(0xFFD1D1D1)),
                 ),
-
-                // --- CONTENT AREA ---
                 Expanded(
                   child: _isLoadingData
                       ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
@@ -278,32 +267,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                     controller: _pageController,
                     onPageChanged: (index) => setState(() => _currentPage = index),
                     children: [
-                      // Tab 0: Indicia (Constrained to 200px)
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
-                          child: _buildIndiciaTab(),
-                        ),
-                      ),
-                      // Tab 1: Creators (Constrained to 200px)
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: kInternalContentWidth),
-                          child: _buildCreatorsTab(),
-                        ),
-                      ),
-                      // Tab 2: Stats (Unconstrained width, centered, scrolls if needed)
-                      Center(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SingleChildScrollView(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                              child: _buildStatsTab(),
-                            ),
-                          ),
-                        ),
-                      ),
+                      Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: kInternalContentWidth), child: _buildIndiciaTab())),
+                      Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: kInternalContentWidth), child: _buildCreatorsTab())),
+                      Center(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8.0), child: _buildStatsTab())))),
                     ],
                   ),
                 ),
@@ -315,71 +281,25 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     );
   }
 
-  // --- SUB-WIDGETS FOR TABS ---
-
   Widget _buildIndiciaTab() {
-    if (_fanzineData == null && _isLoadingData) return const Center(child: Text("Pending...", style: TextStyle(fontSize: 10)));
-
-    final indiciaText = _fanzineData?['masterIndicia'] as String? ?? _dummyIndicia;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            indiciaText,
-            style: const TextStyle(fontSize: 10, height: 1.5, color: Colors.black87, fontFamily: 'Georgia'),
-            textAlign: TextAlign.justify,
-          ),
-        ],
-      ),
-    );
+    final indiciaText = _fanzineData?['masterIndicia'] as String? ?? "© 2026 BQOPD Collective.";
+    return SingleChildScrollView(padding: const EdgeInsets.all(12.0), child: Text(indiciaText, style: const TextStyle(fontSize: 10, height: 1.5, color: Colors.black87, fontFamily: 'Georgia'), textAlign: TextAlign.justify));
   }
 
   Widget _buildCreatorsTab() {
-    final rawCreators = _fanzineData?['masterCreators'] as List<dynamic>?;
-    final creators = rawCreators != null
-        ? rawCreators.map((e) => e as Map<String, dynamic>).toList()
-        : _dummyCreators;
-
-    if (creators.isEmpty) {
-      return const Center(child: Text("No creators listed.", style: TextStyle(fontSize: 10, color: Colors.grey)));
-    }
-
+    final creators = (_fanzineData?['masterCreators'] as List?)?.map((e) => e as Map<String, dynamic>).toList() ?? [];
+    if (creators.isEmpty) return const Center(child: Text("No creators listed.", style: TextStyle(fontSize: 10, color: Colors.grey)));
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       itemCount: creators.length,
       separatorBuilder: (c, i) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final creator = creators[index];
-        final String role = (creator['role'] ?? 'Creator').toString().toUpperCase();
-        final String fallbackName = (creator['name'] ?? 'Unknown').toString().toUpperCase();
-        final String? uid = creator['uid'];
-
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Role Column
-            SizedBox(
-                width: 45,
-                child: Text(
-                  role,
-                  style: const TextStyle(fontSize: 8, color: Colors.black54, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.right,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                )
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6.0),
-              child: Text("|", style: TextStyle(fontSize: 10, color: Colors.black12)),
-            ),
-
-            // User Info Column
-            Expanded(
-              child: _buildCreatorInfo(uid, fallbackName),
-            ),
+            SizedBox(width: 45, child: Text((creator['role'] ?? 'Creator').toString().toUpperCase(), style: const TextStyle(fontSize: 8, color: Colors.black54, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 6.0), child: Text("|", style: TextStyle(fontSize: 10, color: Colors.black12))),
+            Expanded(child: _buildCreatorInfo(creator['uid'], (creator['name'] ?? 'Unknown'))),
           ],
         );
       },
@@ -388,173 +308,52 @@ class _FanzineWidgetState extends State<FanzineWidget> {
 
   Widget _buildCreatorInfo(String? uid, String fallbackName) {
     if (uid == null || uid.isEmpty) {
-      return Row(
-          children: [
-            Container(
-              width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.05),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
-              ),
-              child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(fallbackName, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text("Guest Contributor", style: TextStyle(fontSize: 8, color: Colors.black.withValues(alpha: 0.4), fontStyle: FontStyle.italic)),
-                ],
-              ),
-            )
-          ]
-      );
+      return Row(children: [
+        Container(width: 28, height: 28, decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.05), shape: BoxShape.circle), child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10, color: Colors.black54)))),
+        const SizedBox(width: 8),
+        Text(fallbackName.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+      ]);
     }
-
     return FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
         builder: (context, snap) {
-          String name = fallbackName;
-          String handle = "fetching...";
-          String? photoUrl;
-          bool userExists = false;
-
-          if (snap.hasData && snap.data!.exists) {
-            userExists = true;
-            final data = snap.data!.data() as Map<String, dynamic>;
-            name = (data['displayName'] ?? data['username'] ?? fallbackName).toString().toUpperCase();
-            handle = "@${data['username'] ?? 'user'}".toLowerCase();
-            photoUrl = data['photoUrl'];
-          } else if (snap.connectionState == ConnectionState.done) {
-            handle = "@unknown";
-          }
-
-          return Row(
-              children: [
-                Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.1)),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: photoUrl != null
-                      ? ColorFiltered(
-                      colorFilter: const ColorFilter.matrix(<double>[
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0,      0,      0,      1, 0,
-                      ]),
-                      child: Image.network(photoUrl, fit: BoxFit.cover)
-                  )
-                      : Center(child: Text(name.isNotEmpty ? name[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.bold))),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      if (userExists && handle != "@unknown") {
-                        context.goNamed('shortlink', pathParameters: {'code': handle.substring(1)});
-                      }
-                    },
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(handle, style: TextStyle(fontSize: 8, color: Colors.black.withValues(alpha: 0.4))),
-                      ],
-                    ),
-                  ),
-                ),
-              ]
-          );
+          final data = snap.data?.data() as Map<String, dynamic>?;
+          final name = (data?['displayName'] ?? data?['username'] ?? fallbackName).toString().toUpperCase();
+          final photoUrl = data?['photoUrl'];
+          return Row(children: [
+            CircleAvatar(radius: 14, backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null, child: photoUrl == null ? Text(name[0]) : null),
+            const SizedBox(width: 8),
+            Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+          ]);
         }
     );
   }
 
   Widget _buildStatsTab() {
-    if (_fanzineId == null) return const Center(child: Text("Loading...", style: TextStyle(fontSize: 10)));
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 16.0),
-      child: StatsTable(
-        contentId: _fanzineId!,
-        viewService: _viewService,
-        isFanzine: true,
-      ),
-    );
+    if (_fanzineId == null) return const SizedBox.shrink();
+    return Padding(padding: const EdgeInsets.only(top: 16.0), child: StatsTable(contentId: _fanzineId!, viewService: _viewService, isFanzine: true));
   }
-
-  // --- NAVIGATION HELPERS ---
 
   Widget _buildNavText(String text, int index) {
     final bool isActive = _currentPage == index;
     return GestureDetector(
       onTap: () => _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 10,
-              fontFamily: isActive ? 'Impact' : 'Arial',
-              fontWeight: isActive ? FontWeight.w900 : FontWeight.normal,
-              color: isActive ? Colors.black : const Color(0xFF999999),
-            ),
-          ),
-          if (isActive)
-            Container(
-              margin: const EdgeInsets.only(top: 2),
-              width: 4,
-              height: 4,
-              decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
-            ),
-        ],
-      ),
+      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? Colors.black : Colors.grey)),
     );
   }
 
-  Widget _buildNavDivider() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: Text("|", style: TextStyle(fontSize: 10, color: Color(0xFFD1D1D1))),
-    );
-  }
+  Widget _buildNavDivider() => const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(fontSize: 10, color: Color(0xFFD1D1D1))));
 }
-
-// --- UTILS ---
 
 class _DashedSeparator extends StatelessWidget {
   final double height;
   final Color color;
-
   const _DashedSeparator({this.height = 1, this.color = Colors.black});
-
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final boxWidth = constraints.constrainWidth();
-        const dashWidth = 4.0;
-        final dashHeight = height;
-        final dashCount = (boxWidth / (2 * dashWidth)).floor();
-        return Flex(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          direction: Axis.horizontal,
-          children: List.generate(dashCount, (_) {
-            return SizedBox(
-              width: dashWidth,
-              height: dashHeight,
-              child: DecoratedBox(decoration: BoxDecoration(color: color)),
-            );
-          }),
-        );
-      },
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      final dashCount = (constraints.constrainWidth() / 8).floor();
+      return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: List.generate(dashCount, (_) => SizedBox(width: 4, height: height, child: DecoratedBox(decoration: BoxDecoration(color: color)))));
+    });
   }
 }

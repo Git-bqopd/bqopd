@@ -59,7 +59,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   final ItemScrollController _desktopListScrollController = ItemScrollController();
   final ItemScrollController _desktopPanelScrollController = ItemScrollController();
 
-  // Layout Constants
   static const double kGridAloneWidth = 800.0;
   static const double kGridTogetherWidth = 400.0;
   static const double kReaderWidth = 800.0;
@@ -220,35 +219,59 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     });
   }
 
-  void _scrollToTop() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_mobileListScrollController.isAttached) {
-        _mobileListScrollController.scrollTo(index: 0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-      }
-      if (_desktopListScrollController.isAttached) {
-        _desktopListScrollController.scrollTo(index: 0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-      }
-      if (_desktopPanelScrollController.isAttached) {
-        _desktopPanelScrollController.scrollTo(index: 0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-      }
-    });
-  }
-
   void _showLoginHeader() {
+    debugPrint("FanzineReaderPage: Switching to AUTH VIEW (HeaderMode.login)");
     setState(() {
       _headerMode = HeaderMode.login;
-      _twoPagePreference = false;
-      if (!_showList) {
-        _showList = true;
-      }
-      _targetIndex = 0;
     });
-    _scrollToTop();
   }
 
   void _onAuthSuccess() {
-    setState(() => _headerMode = HeaderMode.fanzine);
+    final user = FirebaseAuth.instance.currentUser;
+    // CRITICAL: Ensure we only close the login screen for REAL users.
+    if (user == null || user.isAnonymous) {
+      debugPrint("FanzineReaderPage: Ignoring success callback for anonymous session.");
+      return;
+    }
+
+    debugPrint("FanzineReaderPage: Real Auth success detected. Resetting to fanzine view.");
+    setState(() {
+      _headerMode = HeaderMode.fanzine;
+      _showList = false;
+    });
     _initData();
+  }
+
+  Widget _buildAuthView() {
+    return Scaffold(
+      backgroundColor: Colors.grey[200],
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 1,
+        title: Text(_headerMode == HeaderMode.login ? "Sign In" : "Register Account"),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => setState(() => _headerMode = HeaderMode.fanzine),
+        ),
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: _headerMode == HeaderMode.login
+                ? LoginWidget(
+              onTap: () => setState(() => _headerMode = HeaderMode.register),
+              onLoginSuccess: _onAuthSuccess,
+            )
+                : RegisterWidget(
+              onTap: () => setState(() => _headerMode = HeaderMode.login),
+              onRegisterSuccess: _onAuthSuccess,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildHeader({bool isStickerOnly = false}) {
@@ -279,34 +302,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       );
     }
 
-    if (_headerMode == HeaderMode.login) {
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 450),
-          child: LoginWidget(
-            onTap: () {
-              setState(() => _headerMode = HeaderMode.register);
-              _scrollToTop();
-            },
-            onLoginSuccess: _onAuthSuccess,
-          ),
-        ),
-      );
-    } else if (_headerMode == HeaderMode.register) {
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 450),
-          child: RegisterWidget(
-            onTap: () {
-              setState(() => _headerMode = HeaderMode.login);
-              _scrollToTop();
-            },
-            onRegisterSuccess: _onAuthSuccess,
-          ),
-        ),
-      );
-    }
-
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 450),
@@ -321,6 +316,11 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Top-level switch for Auth UI
+    if (_headerMode != HeaderMode.fanzine) {
+      return _buildAuthView();
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
@@ -433,21 +433,18 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Column 1: Nav Grid (Spread Column)
                   if (_showGrid)
                     SizedBox(
                       width: _showList ? kGridTogetherWidth : kGridAloneWidth,
                       child: gridComponent,
                     ),
 
-                  // Column 2: Main Reader List
                   if (_showList)
                     SizedBox(
                       width: kReaderWidth,
                       child: listComponent,
                     ),
 
-                  // Column 3: The Panel Column (Takes remaining width)
                   if (isPanelOpen)
                     Expanded(
                       child: panelComponent,

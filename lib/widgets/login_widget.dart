@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../blocs/auth/auth_bloc.dart';
 import '../components/button.dart';
 import '../components/textfield.dart';
@@ -37,8 +38,16 @@ class _LoginWidgetState extends State<LoginWidget> {
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
+        // BREAK THE LOOP: Only trigger success if the user is NOT anonymous.
+        // The AuthBloc emits 'authenticated' for both real and anonymous users.
         if (state.status == AuthStatus.authenticated) {
-          if (widget.onLoginSuccess != null) widget.onLoginSuccess!();
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null && !user.isAnonymous) {
+            debugPrint("LoginWidget: Real user detected. Closing login form.");
+            if (widget.onLoginSuccess != null) widget.onLoginSuccess!();
+          } else {
+            debugPrint("LoginWidget: Staying open (User is anonymous or null).");
+          }
         } else if (state.status == AuthStatus.failure) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(state.errorMessage ?? "Login failed")),

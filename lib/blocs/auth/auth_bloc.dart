@@ -12,6 +12,14 @@ abstract class AuthEvent extends Equatable {
 
 class AuthSubscriptionRequested extends AuthEvent {}
 
+// NEW: Separate event to handle state changes without re-triggering the subscription
+class AuthUserChanged extends AuthEvent {
+  final User? user;
+  AuthUserChanged(this.user);
+  @override
+  List<Object?> get props => [user];
+}
+
 class LoginRequested extends AuthEvent {
   final String email;
   final String password;
@@ -56,6 +64,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       : _repository = repository,
         super(const AuthState()) {
     on<AuthSubscriptionRequested>(_onSubscriptionRequested);
+    on<AuthUserChanged>(_onUserChanged); // Handle the new separated event
     on<LoginRequested>(_onLoginRequested);
     on<RegisterRequested>(_onRegisterRequested);
     on<LogoutRequested>(_onLogoutRequested);
@@ -67,13 +76,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       ) async {
     emit(const AuthState(status: AuthStatus.loading));
     await _userSubscription?.cancel();
-    _userSubscription = _repository.authStateChanges.listen((user) {
-      add(AuthSubscriptionRequested()); // Trigger local state sync logic below
-    });
 
-    final user = _repository.currentUser;
-    if (user != null) {
-      emit(AuthState(status: AuthStatus.authenticated, user: user));
+    _userSubscription = _repository.authStateChanges.listen((user) {
+      // BREAK THE LOOP: Dispatch AuthUserChanged instead of restarting the subscription
+      add(AuthUserChanged(user));
+    });
+  }
+
+  void _onUserChanged(AuthUserChanged event, Emitter<AuthState> emit) {
+    if (event.user != null) {
+      emit(AuthState(status: AuthStatus.authenticated, user: event.user));
     } else {
       emit(const AuthState(status: AuthStatus.unauthenticated));
     }
@@ -83,7 +95,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthState(status: AuthStatus.loading));
     try {
       await _repository.login(event.email, event.password);
-      // Repository logic triggers authStateChanges which we listen to
     } catch (e) {
       emit(AuthState(status: AuthStatus.failure, errorMessage: e.toString()));
     }

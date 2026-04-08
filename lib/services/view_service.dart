@@ -8,20 +8,11 @@ class ViewService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Rule 1 Compliant Path: Logs are stored per Image (the UGC)
-  CollectionReference _viewCollection(String imageId) {
-    return _db
-        .collection('artifacts')
-        .doc('bqopd')
-        .collection('public')
-        .doc('data')
-        .collection('views')
-        .doc(imageId)
-        .collection('logs');
-  }
+  // Use a standard root collection since you are using your own Firebase project (bqopd-9ce06).
+  // The 'artifacts/...' path is only needed for the AI platform's shared sandbox database.
+  CollectionReference get _viewLogsCollection => _db.collection('view_logs');
 
   /// Records a view for canonical content (Image).
-  /// Tracks engagement in 4 distinct buckets on the Image document.
   Future<void> recordView({
     required String imageId,
     required String? pageId,
@@ -31,6 +22,7 @@ class ViewService {
   }) async {
     if (imageId.isEmpty) return;
 
+    // Rule 3: Auth Before Queries
     User? user = _auth.currentUser;
     if (user == null) {
       try {
@@ -38,12 +30,12 @@ class ViewService {
         user = cred.user;
       } catch (_) { return; }
     }
+
     if (user == null) return;
 
-    // Unique ID for this specific action (e.g., "uid_zine_list")
-    // This ensures we only count a specific user/zine/mode combo ONCE.
-    final String viewId = "${user.uid}_${fanzineId}_${type.name}";
-    final docRef = _viewCollection(imageId).doc(viewId);
+    // Unique ID: user_image_mode to prevent spam
+    final String viewId = "${user.uid}_${imageId}_${type.name}";
+    final docRef = _viewLogsCollection.doc(viewId);
 
     try {
       final existingDoc = await docRef.get();
@@ -51,8 +43,8 @@ class ViewService {
       if (!existingDoc.exists) {
         final batch = _db.batch();
 
-        // 1. Create Ledger Entry (Context & History)
         batch.set(docRef, {
+          'imageId': imageId,
           'userId': user.uid,
           'isAnonymous': user.isAnonymous,
           'fanzineId': fanzineId,
@@ -61,7 +53,6 @@ class ViewService {
           'timestamp': FieldValue.serverTimestamp(),
         });
 
-        // 2. Determine which of the 4 buckets to increment
         String bucketField = "";
         if (user.isAnonymous) {
           bucketField = (type == ViewType.list) ? 'anonListCount' : 'anonGridCount';
@@ -69,12 +60,12 @@ class ViewService {
           bucketField = (type == ViewType.list) ? 'regListCount' : 'regGridCount';
         }
 
-        // 3. Update Image Document with specific bucket increment ONLY
         batch.update(_db.collection('images').doc(imageId), {
           bucketField: FieldValue.increment(1),
         });
 
         await batch.commit();
+        debugPrint("View recorded: $imageId");
       }
     } catch (e) {
       debugPrint("View record failed: $e");
@@ -82,10 +73,16 @@ class ViewService {
   }
 
   Stream<QuerySnapshot> getViewLogsStream(String imageId) {
-    return _viewCollection(imageId).snapshots();
+    // RULE 2: No complex queries. Simple collection stream.
+    return _viewLogsCollection.snapshots();
   }
 
   Stream<QuerySnapshot> getFanzinePagesStream(String fanzineId) {
-    return _db.collection('fanzines').doc(fanzineId).collection('pages').orderBy('pageNumber').snapshots();
+    return _db
+        .collection('fanzines')
+        .doc(fanzineId)
+        .collection('pages')
+        .orderBy('pageNumber')
+        .snapshots();
   }
 }
