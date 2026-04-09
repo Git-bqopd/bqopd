@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/engagement_repository.dart';
 
@@ -14,7 +15,24 @@ class LoadProfileRequested extends ProfileEvent {
   final String userId;
   final String currentAuthId;
   final bool isViewerEditor;
-  LoadProfileRequested({required this.userId, required this.currentAuthId, required this.isViewerEditor});
+  LoadProfileRequested({
+    required this.userId,
+    required this.currentAuthId,
+    required this.isViewerEditor
+  });
+}
+
+// Internal events to handle stream emissions safely
+class _ProfileDataUpdated extends ProfileEvent {
+  final DocumentSnapshot doc;
+  final String currentAuthId;
+  final bool isViewerEditor;
+  _ProfileDataUpdated(this.doc, this.currentAuthId, this.isViewerEditor);
+}
+
+class _FollowStatusUpdated extends ProfileEvent {
+  final bool isFollowing;
+  _FollowStatusUpdated(this.isFollowing);
 }
 
 class ChangeTabRequested extends ProfileEvent {
@@ -79,42 +97,55 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         _engagementRepository = engagementRepository,
         super(const ProfileState(isLoading: true)) {
     on<LoadProfileRequested>(_onLoadRequested);
+    on<_ProfileDataUpdated>(_onProfileDataUpdated);
+    on<_FollowStatusUpdated>(_onFollowStatusUpdated);
     on<ChangeTabRequested>(_onChangeTab);
     on<ToggleFollowRequested>(_onToggleFollow);
   }
 
   Future<void> _onLoadRequested(LoadProfileRequested event, Emitter<ProfileState> emit) async {
+    emit(state.copyWith(isLoading: true, errorMessage: null));
+
     await _userSub?.cancel();
     await _followSub?.cancel();
 
+    // Listen to following status and dispatch internal event
     _followSub = _engagementRepository.isFollowing(event.userId).listen((following) {
-      add(LoadProfileRequested(userId: event.userId, currentAuthId: event.currentAuthId, isViewerEditor: event.isViewerEditor)); // Refresh local state via re-emission check
-      emit(state.copyWith(isFollowing: following));
+      add(_FollowStatusUpdated(following));
     });
 
+    // Listen to user data and dispatch internal event
     _userSub = _userRepository.watchUser(event.userId).listen((doc) {
-      if (!doc.exists) {
-        emit(state.copyWith(isLoading: false, errorMessage: "User not found"));
-        return;
-      }
-
-      final userData = doc.data() as Map<String, dynamic>;
-      final bool isMe = event.currentAuthId == event.userId;
-      final bool isTargetEditor = userData['Editor'] == true || userData['isEditor'] == true;
-
-      // Determine visible tabs
-      List<String> tabs = [];
-      if (isMe || (isTargetEditor && event.isViewerEditor)) {
-        tabs.add('editor');
-      }
-      tabs.addAll(['pages', 'works', 'comments', 'mentions', 'collection']);
-
-      emit(state.copyWith(
-        userData: userData,
-        visibleTabs: tabs,
-        isLoading: false,
-      ));
+      add(_ProfileDataUpdated(doc, event.currentAuthId, event.isViewerEditor));
     });
+  }
+
+  void _onProfileDataUpdated(_ProfileDataUpdated event, Emitter<ProfileState> emit) {
+    if (!event.doc.exists) {
+      emit(state.copyWith(isLoading: false, errorMessage: "User not found"));
+      return;
+    }
+
+    final userData = event.doc.data() as Map<String, dynamic>;
+    final bool isMe = event.currentAuthId == event.doc.id;
+    final bool isTargetEditor = userData['Editor'] == true || userData['isEditor'] == true;
+
+    // Determine visible tabs
+    List<String> tabs = [];
+    if (isMe || (isTargetEditor && event.isViewerEditor)) {
+      tabs.add('editor');
+    }
+    tabs.addAll(['pages', 'works', 'comments', 'mentions', 'collection']);
+
+    emit(state.copyWith(
+      userData: userData,
+      visibleTabs: tabs,
+      isLoading: false,
+    ));
+  }
+
+  void _onFollowStatusUpdated(_FollowStatusUpdated event, Emitter<ProfileState> emit) {
+    emit(state.copyWith(isFollowing: event.isFollowing));
   }
 
   void _onChangeTab(ChangeTabRequested event, Emitter<ProfileState> emit) {
