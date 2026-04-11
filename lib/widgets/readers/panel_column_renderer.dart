@@ -23,6 +23,7 @@ class PanelColumnRenderer extends StatelessWidget {
   final bool isEditingMode;
   final ItemScrollController itemScrollController;
   final VoidCallback onClose;
+  final int initialIndex;
 
   const PanelColumnRenderer({
     super.key,
@@ -34,10 +35,14 @@ class PanelColumnRenderer extends StatelessWidget {
     required this.isEditingMode,
     required this.itemScrollController,
     required this.onClose,
+    required this.initialIndex,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Determine if this panel type should be rendered once (singleton) or as a list per page
+    final bool isSingleton = activePanel == BonusRowType.settings || activePanel == BonusRowType.youtube;
+
     return Column(
       children: [
         // Header
@@ -59,9 +64,12 @@ class PanelColumnRenderer extends StatelessWidget {
           ),
         ),
         const Divider(height: 1, thickness: 1),
-        // List
+
+        // Body
         Expanded(
-          child: ScrollablePositionedList.separated(
+          child: isSingleton
+              ? _buildSingletonContent(context)
+              : ScrollablePositionedList.separated(
             itemScrollController: itemScrollController,
             itemCount: pages.length,
             separatorBuilder: (_, __) => const Divider(height: 32, thickness: 4, color: Colors.black12),
@@ -80,6 +88,73 @@ class PanelColumnRenderer extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSingletonContent(BuildContext context) {
+    // FIX: Mapping the UI index (which includes the header at index 0) to the data list.
+    // If initialIndex is 0 (Cover), we show data for the first page (index 0 in 'pages').
+    // If initialIndex is > 0 (Page 1+), we map it to index - 1 in the 'pages' list.
+    final int pageIdx = (initialIndex > 0 && initialIndex <= pages.length)
+        ? initialIndex - 1
+        : 0;
+
+    final pageData = pages.isNotEmpty ? pages[pageIdx] : null;
+    final String imageId = pageData?['imageId'] ?? '';
+    final String pageId = pageData?['id'] ?? pageData?['__id'] ?? '';
+    final String? templateId = pageData?['templateId'];
+
+    if (imageId.isEmpty && activePanel == BonusRowType.youtube) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text("No video data for this page.", style: TextStyle(color: Colors.grey)),
+        ),
+      );
+    }
+
+    // We use a StreamBuilder here to ensure the singleton panel has access to the
+    // live 'text' or metadata for whatever page is currently selected.
+    return StreamBuilder<DocumentSnapshot>(
+        stream: imageId.isNotEmpty
+            ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots()
+            : null,
+        builder: (context, snapshot) {
+          String actualText = "";
+          if (snapshot.hasData && snapshot.data?.data() != null) {
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
+          }
+
+          return SingleChildScrollView(
+            child: PanelContainer(
+              title: '',
+              isInline: false,
+              child: KeyedSubtree(
+                // The Key is CRITICAL: it forces the YouTube player to dispose and
+                // re-initialize when the imageId (page selection) changes.
+                key: ValueKey('singleton_${activePanel.name}_$imageId'),
+                child: PanelFactory.buildPanelContent(
+                  PanelContext(
+                    type: activePanel,
+                    imageId: imageId,
+                    fanzineId: fanzineId,
+                    pageId: pageId,
+                    actualText: actualText,
+                    templateId: templateId,
+                    isEditingMode: isEditingMode,
+                    viewService: viewService,
+                    engagementService: EngagementService(),
+                    commentController: TextEditingController(),
+                    onSubmitComment: () {},
+                    fontSizeNotifier: ValueNotifier(16.0),
+                    isInline: false,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
     );
   }
 }
@@ -179,8 +254,8 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
               child: Text("PAGE $pageNum", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
             ),
             PanelContainer(
-              title: '', // Header is handled by the main column container now
-              isInline: false, // Ensures it behaves predictably in a layout
+              title: '',
+              isInline: false,
               child: PanelFactory.buildPanelContent(
                   PanelContext(
                     type: widget.activePanel,

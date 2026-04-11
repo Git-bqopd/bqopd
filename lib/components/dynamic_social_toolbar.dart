@@ -47,12 +47,10 @@ class DynamicSocialToolbar extends StatefulWidget {
 class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   final EngagementService _engagementService = EngagementService();
 
-  bool _isLiked = false;
   int _likeCount = 0;
   int _commentCount = 0;
   int _viewCount = 0;
 
-  StreamSubscription? _likeSub;
   StreamSubscription? _pageSub;
   StreamSubscription? _imageSub;
 
@@ -62,13 +60,19 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
     _listenToStats();
   }
 
-  void _listenToStats() {
-    // 1. Listen for Likes on the Page Document
-    if (widget.pageId != null && widget.pageId!.isNotEmpty && widget.fanzineId != null && widget.fanzineId!.isNotEmpty) {
-      _likeSub = _engagementService.isLikedStream(widget.pageId!).listen((liked) {
-        if (mounted) setState(() => _isLiked = liked);
-      });
+  @override
+  void didUpdateWidget(covariant DynamicSocialToolbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pageId != widget.pageId || oldWidget.imageId != widget.imageId) {
+      _pageSub?.cancel();
+      _imageSub?.cancel();
+      _listenToStats();
+    }
+  }
 
+  void _listenToStats() {
+    // 1. Listen for Like Count on the Page Document
+    if (widget.pageId != null && widget.pageId!.isNotEmpty && widget.fanzineId != null && widget.fanzineId!.isNotEmpty) {
       _pageSub = FirebaseFirestore.instance
           .collection('fanzines')
           .doc(widget.fanzineId)
@@ -93,7 +97,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           final data = doc.data() as Map<String, dynamic>;
           setState(() {
             _commentCount = data['commentCount'] ?? 0;
-            // Sum all view variants
             _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) + (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
           });
         }
@@ -103,24 +106,28 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
 
   @override
   void dispose() {
-    _likeSub?.cancel();
     _pageSub?.cancel();
     _imageSub?.cancel();
     super.dispose();
   }
 
-  void _handleToolAction(ReaderTool tool) async {
+  void _handleToolAction(ReaderTool tool, bool isCurrentlyLiked) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final isGuest = user == null || user.isAnonymous;
+
     switch (tool.action) {
       case ToolAction.openBonusRow:
+        if (tool.id == 'Settings' && isGuest) {
+          showDialog(context: context, builder: (c) => const AuthModal());
+          return;
+        }
         if (tool.bonusRow != null) {
           widget.onToggleBonusRow(tool.bonusRow!);
         }
         break;
 
       case ToolAction.toggleLike:
-        final user = FirebaseAuth.instance.currentUser;
-        if (user == null || user.isAnonymous) {
-          // Trigger the AuthModal as a popup layer
+        if (isGuest) {
           showDialog(context: context, builder: (c) => const AuthModal());
           return;
         }
@@ -129,7 +136,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           await _engagementService.toggleLike(
             fanzineId: widget.fanzineId!,
             pageId: widget.pageId!,
-            isCurrentlyLiked: _isLiked,
+            isCurrentlyLiked: isCurrentlyLiked,
           );
         }
         break;
@@ -154,10 +161,8 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   }
 
   bool _isToolVisible(ReaderTool tool, UserProvider userProvider) {
-    // 1. Role Check
     if (tool.role == ToolRole.editor && !widget.isEditingMode) return false;
 
-    // 2. Condition Check
     switch (tool.condition) {
       case ToolCondition.requiresYouTube:
         if (widget.youtubeId == null || widget.youtubeId!.isEmpty) return false;
@@ -178,12 +183,10 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         break;
     }
 
-    // If it's a fanzine-specific tool (like Grid or Fanzine reading tools) and there is no fanzine context, hide it.
     if (widget.fanzineId == null && (tool.id == 'Grid' || tool.id == 'Fanzine' || tool.id == 'Indicia' || tool.id == 'OCR' || tool.id == 'Publisher' || tool.id == 'Entities')) {
       return false;
     }
 
-    // 3. User Preference Check
     final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
     if (!isVisibleByUser) return false;
 
@@ -207,17 +210,30 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         alignment: WrapAlignment.center,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: visibleTools.map((tool) {
-          bool isActive = false;
-
-          if (tool.action == ToolAction.openBonusRow) {
-            isActive = widget.activeBonusRow == tool.bonusRow;
-          } else if (tool.action == ToolAction.toggleLike) {
-            isActive = _isLiked;
+          // Use StreamBuilder specifically for the Like button to ensure it reacts
+          // correctly to user changes (auth) and page changes (scroll).
+          if (tool.action == ToolAction.toggleLike && widget.pageId != null) {
+            return StreamBuilder<bool>(
+              stream: _engagementService.isLikedStream(widget.pageId!),
+              builder: (context, snapshot) {
+                final bool isLiked = snapshot.data ?? false;
+                return DynamicToolbarButton(
+                  tool: tool,
+                  isActive: isLiked,
+                  isDarkMode: isDarkMode,
+                  count: _likeCount,
+                  onPressed: () => _handleToolAction(tool, isLiked),
+                );
+              },
+            );
           }
 
-          // Pass the appropriate stat count to the button
+          bool isActive = false;
+          if (tool.action == ToolAction.openBonusRow) {
+            isActive = widget.activeBonusRow == tool.bonusRow;
+          }
+
           int? count;
-          if (tool.id == 'Like') count = _likeCount;
           if (tool.id == 'Comment') count = _commentCount;
           if (tool.id == 'Views') count = _viewCount;
 
@@ -226,7 +242,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
             isActive: isActive,
             isDarkMode: isDarkMode,
             count: count,
-            onPressed: () => _handleToolAction(tool),
+            onPressed: () => _handleToolAction(tool, false),
           );
         }).toList(),
       ),

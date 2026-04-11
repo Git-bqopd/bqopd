@@ -228,7 +228,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   void _onAuthSuccess() {
     final user = FirebaseAuth.instance.currentUser;
-    // CRITICAL: Ensure we only close the login screen for REAL users.
     if (user == null || user.isAnonymous) {
       debugPrint("FanzineReaderPage: Ignoring success callback for anonymous session.");
       return;
@@ -255,7 +254,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       );
     }
 
-    // Embed the Auth view directly within the flow of the list/grid
     if (_headerMode == HeaderMode.login || _headerMode == HeaderMode.register) {
       return Center(
         child: ConstrainedBox(
@@ -273,7 +271,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               ),
               Positioned(
                 top: 16,
-                right: 16, // <--- CHANGED FROM left: 16 TO right: 16
+                right: 16,
                 child: Material(
                   color: Colors.white.withValues(alpha: 0.8),
                   shape: const CircleBorder(),
@@ -329,7 +327,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            // --- MOBILE LAYOUT ---
             if (!isDesktop) {
               if (!_showList) {
                 return FanzineGridRenderer(
@@ -358,7 +355,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               }
             }
 
-            // --- DESKTOP LAYOUT ---
             final bool isPanelOpen = _showList && _activeGlobalPanel != null;
 
             Widget gridComponent = Container(
@@ -421,6 +417,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 isEditingMode: _isEditingMode,
                 itemScrollController: _desktopPanelScrollController,
                 onClose: () => setState(() => _activeGlobalPanel = null),
+                initialIndex: _targetIndex, // Pass current selection
               ),
             )
                 : const SizedBox.shrink();
