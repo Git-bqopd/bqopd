@@ -211,20 +211,22 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
       try {
         final url =
         await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
-        if (mounted)
+        if (mounted) {
           setState(() {
             _resolvedImageUrl = url;
             _isLoading = false;
           });
+        }
         return;
       } catch (_) {}
     }
 
-    if (mounted)
+    if (mounted) {
       setState(() {
         _resolvedImageUrl = imageUrl;
         _isLoading = false;
       });
+    }
   }
 
   void _recordView() {

@@ -10,7 +10,7 @@ import 'publisher_panel.dart';
 import 'youtube_panel.dart';
 import 'comments_panel.dart';
 import 'views_panel.dart';
-import 'credits_panel.dart';
+import 'Credits_panel.dart';
 import 'indicia_panel.dart';
 import 'settings_panel.dart';
 
