@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-class ProfileHeader extends StatelessWidget {
+import '../services/user_provider.dart';
+import 'image_upload_modal.dart';
+import 'follow_list_modal.dart';
+
+class ProfileHeader extends StatefulWidget {
   final Map<String, dynamic> userData;
   final String profileUid;
   final bool isMe;
@@ -17,16 +25,63 @@ class ProfileHeader extends StatelessWidget {
   });
 
   @override
+  State<ProfileHeader> createState() => _ProfileHeaderState();
+}
+
+class _ProfileHeaderState extends State<ProfileHeader> {
+  int _topTabIndex = 0;
+
+  final Color _envelopeColor = const Color(0xFFF1B255);
+  final BoxDecoration _whiteBoxDecoration = const BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.zero,
+    boxShadow: [
+      BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(1, 1)),
+    ],
+  );
+
+  bool get _isManaged => widget.userData['isManaged'] == true;
+  List<dynamic> get _managers => widget.userData['managers'] ?? [];
+
+  bool get _canEdit {
+    final provider = Provider.of<UserProvider>(context, listen: false);
+    final currentUid = provider.currentUserId;
+    if (currentUid == null) return false;
+    if (widget.profileUid == currentUid) return true;
+    if (_isManaged && _managers.contains(currentUid)) return true;
+    return false;
+  }
+
+  void _showImageUpload() {
+    if (!_canEdit) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) =>
+          ImageUploadModal(userId: widget.profileUid),
+    );
+  }
+
+  void _showListModal(String title, String collectionName) {
+    showDialog(
+      context: context,
+      builder: (context) => FollowListModal(
+        userId: widget.profileUid,
+        title: title,
+        collectionName: collectionName,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 600;
-        final content = isMobile ? _buildMobileLayout() : _buildDesktopLayout();
-        return Container(
-          color: const Color(0xFFF1B255),
-          padding: const EdgeInsets.all(16.0),
-          child: content,
-        );
+        if (constraints.maxWidth < 600) {
+          return _buildMobileLayout();
+        } else {
+          return _buildDesktopLayout();
+        }
       },
     );
   }
@@ -35,15 +90,20 @@ class ProfileHeader extends StatelessWidget {
     return AspectRatio(
       aspectRatio: 8 / 3.5,
       child: Container(
-        decoration: _whiteBoxDecoration,
-        padding: const EdgeInsets.all(24.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildInfoSection()),
-            const VerticalDivider(width: 48, thickness: 1, color: Colors.black12),
-            Expanded(child: _buildStatsSection()),
-          ],
+        color: _envelopeColor,
+        padding: const EdgeInsets.all(16.0),
+        child: Container(
+          width: double.infinity,
+          decoration: _whiteBoxDecoration,
+          padding: const EdgeInsets.all(24.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 1, child: _buildProfileInfoContent()),
+              const VerticalDivider(width: 48, thickness: 1, color: Colors.black12),
+              Expanded(flex: 1, child: _buildRightSideContent()),
+            ],
+          ),
         ),
       ),
     );
@@ -52,78 +112,264 @@ class ProfileHeader extends StatelessWidget {
   Widget _buildMobileLayout() {
     return Column(
       children: [
-        Container(
-          decoration: _whiteBoxDecoration,
-          padding: const EdgeInsets.all(16.0),
-          child: _buildInfoSection(),
+        AspectRatio(
+          aspectRatio: 8 / 5,
+          child: Container(
+            color: _envelopeColor,
+            padding: const EdgeInsets.all(16.0),
+            child: Container(
+              decoration: _whiteBoxDecoration,
+              padding: const EdgeInsets.all(16.0),
+              child: _buildProfileInfoContent(),
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         Container(
-          decoration: _whiteBoxDecoration,
-          padding: const EdgeInsets.all(16.0),
-          child: _buildStatsSection(),
+          width: double.infinity,
+          color: _envelopeColor,
+          padding: const EdgeInsets.all(16),
+          child: Container(
+            decoration: _whiteBoxDecoration,
+            padding: const EdgeInsets.all(16.0),
+            child: _buildRightSideContent(),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildInfoSection() {
-    final String displayName = userData['displayName'] ?? '';
-    final String username = userData['username'] ?? '';
-    final String? photoUrl = userData['photoUrl'];
+  Widget _buildProfileInfoContent() {
+    final String displayName = widget.userData['displayName'] ?? '';
+    final String firstName = widget.userData['firstName'] ?? '';
+    final String lastName = widget.userData['lastName'] ?? '';
+    final String username = widget.userData['username'] ?? '';
+    final String bio = widget.userData['bio'] ?? '';
+    final String? photoUrl = widget.userData['photoUrl'];
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Row(
+    final String displayTitle = displayName.isNotEmpty
+        ? displayName
+        : (firstName.isNotEmpty || lastName.isNotEmpty
+        ? '$firstName $lastName'.trim()
+        : 'User');
+
+    int followers = widget.userData['followerCount'] ?? 0;
+    int following = widget.userData['followingCount'] ?? 0;
+
+    return ClipRect(
+      child: SingleChildScrollView(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 45,
-              backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
-              child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, size: 50) : null,
-            ),
-            const SizedBox(width: 24),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (!isMe)
-                  ElevatedButton(
-                    onPressed: onFollowToggle,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isFollowing ? Colors.grey[200] : Colors.white,
-                      foregroundColor: Colors.black,
-                      side: const BorderSide(color: Colors.black),
+                GestureDetector(
+                  onTap: _showImageUpload,
+                  child: Container(
+                    width: 90,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black12),
+                      image: photoUrl != null && photoUrl.isNotEmpty
+                          ? DecorationImage(
+                          image: NetworkImage(photoUrl),
+                          fit: BoxFit.cover)
+                          : null,
                     ),
-                    child: Text(isFollowing ? "unfollow" : "follow"),
-                  )
-                else
-                  OutlinedButton(
-                    onPressed: () {},
-                    child: const Text("edit info"),
+                    child: photoUrl == null || photoUrl.isEmpty
+                        ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                        : null,
                   ),
-                const SizedBox(height: 8),
-                Text("${userData['followerCount'] ?? 0} followers", style: const TextStyle(fontSize: 12)),
-                Text("${userData['followingCount'] ?? 0} following", style: const TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: 24),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!widget.isMe)
+                      GestureDetector(
+                        onTap: widget.onFollowToggle,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: widget.isFollowing ? Colors.grey[100] : Colors.transparent,
+                            border: Border.all(color: Colors.black),
+                          ),
+                          child: Text(widget.isFollowing ? "unfollow" : "follow",
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                        ),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: () => context.pushNamed('editInfo', queryParameters: {'userId': widget.profileUid}),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.black),
+                          ),
+                          child: const Text("edit info",
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _showListModal("Followers", "followers"),
+                          child: Text("$followers followers",
+                              style: const TextStyle(fontSize: 12, decoration: TextDecoration.underline)),
+                        ),
+                        GestureDetector(
+                          onTap: () => _showListModal("Following", "following"),
+                          child: Text("$following following",
+                              style: const TextStyle(fontSize: 12, decoration: TextDecoration.underline)),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
               ],
-            )
+            ),
+            const SizedBox(height: 16),
+            Text(displayTitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+            Text('@$username',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Colors.black54)),
+            if (_isManaged) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                color: Colors.grey[50],
+                child: Text(
+                  _canEdit ? "EDIT MANAGED PROFILE" : "MANAGED PROFILE",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+              ),
+            ],
+            if (bio.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text(bio,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
+                      maxLines: 6,
+                      overflow: TextOverflow.ellipsis)),
+            ],
+            const SizedBox(height: 20),
           ],
         ),
-        const SizedBox(height: 16),
-        Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        Text('@$username', style: const TextStyle(color: Colors.black54)),
-      ],
+      ),
     );
   }
 
-  Widget _buildStatsSection() {
-    return const Center(child: Text("Social Links & Highlights"));
+  Widget _buildRightSideContent() {
+    return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+              child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(width: 8),
+                        _buildTopTab("socials", 0),
+                        _buildSeparator(isNav: true),
+                        _buildTopTab("affiliations", 1),
+                        _buildSeparator(isNav: true),
+                        _buildTopTab("upcoming", 2),
+                        const SizedBox(width: 8),
+                      ]))),
+          const Divider(height: 24, thickness: 1, color: Colors.black12),
+          Flexible(
+              fit: FlexFit.loose,
+              child: SingleChildScrollView(
+                  child: Column(
+                      children: [
+                        if (_topTabIndex == 0) _buildSocialsTab(),
+                        if (_topTabIndex == 1) const Padding(padding: EdgeInsets.all(16), child: Text("Affiliations Coming Soon")),
+                        if (_topTabIndex == 2) const Padding(padding: EdgeInsets.all(16), child: Text("Upcoming Events Coming Soon")),
+                      ]))),
+          if (!_isManaged && widget.isMe)
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: GestureDetector(
+                    onTap: () async {
+                      await FirebaseAuth.instance.signOut();
+                      if (!mounted) return;
+                      context.go('/login');
+                    },
+                    child: const Text('logout',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ))),
+              ),
+            ),
+        ]);
   }
 
-  final BoxDecoration _whiteBoxDecoration = const BoxDecoration(
-    color: Colors.white,
-    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(1, 1))],
-  );
+  Widget _buildSocialsTab() {
+    List<Widget> links = [];
+    final xHandle = widget.userData['xHandle'] ?? '';
+    final instaHandle = widget.userData['instagramHandle'] ?? '';
+    final githubHandle = widget.userData['githubHandle'] ?? '';
+
+    if (xHandle.isNotEmpty) links.add(_buildLinkButton("X", '@$xHandle', 'https://x.com/$xHandle'));
+    if (instaHandle.isNotEmpty) links.add(_buildLinkButton("Instagram", '@$instaHandle', 'https://instagram.com/$instaHandle'));
+    if (githubHandle.isNotEmpty) links.add(_buildLinkButton("GitHub", '@$githubHandle', 'https://github.com/$githubHandle'));
+
+    if (links.isEmpty) return const Padding(padding: EdgeInsets.all(16.0), child: Text("No socials linked.", style: TextStyle(fontStyle: FontStyle.italic)));
+    return Column(children: links.map((w) => Padding(padding: const EdgeInsets.only(bottom: 12), child: w)).toList());
+  }
+
+  Widget _buildLinkButton(String platform, String handle, String url) {
+    return GestureDetector(
+        onTap: () => launchUrl(Uri.parse(url)),
+        child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            decoration: BoxDecoration(border: Border.all(color: Colors.black12), color: Colors.grey[50]),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text("$platform: ", style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(handle, style: const TextStyle(decoration: TextDecoration.underline))
+            ])));
+  }
+
+  Widget _buildTopTab(String title, int index) {
+    final isActive = _topTabIndex == index;
+    return GestureDetector(
+        onTap: () => setState(() => _topTabIndex = index),
+        child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    decoration: isActive ? TextDecoration.underline : null))));
+  }
+
+  Widget _buildSeparator({bool isNav = false}) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Text('|', style: TextStyle(color: isNav ? Colors.black : Colors.grey.shade400)));
 }
 
 class ProfileNavBar extends StatelessWidget {
