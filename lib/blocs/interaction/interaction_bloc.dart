@@ -22,6 +22,12 @@ class LoadCommentsRequested extends InteractionEvent {
   LoadCommentsRequested(this.imageId);
 }
 
+// Internal event to safely pass stream data back into the bloc
+class _CommentsUpdated extends InteractionEvent {
+  final List<DocumentSnapshot> comments;
+  _CommentsUpdated(this.comments);
+}
+
 class AddCommentRequested extends InteractionEvent {
   final String imageId;
   final String text;
@@ -82,6 +88,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
         super(const InteractionState()) {
     on<TogglePageLikeRequested>(_onTogglePageLike);
     on<LoadCommentsRequested>(_onLoadComments);
+    on<_CommentsUpdated>(_onCommentsUpdated);
     on<AddCommentRequested>(_onAddComment);
     on<DeleteCommentRequested>(_onDeleteComment);
     on<ToggleCommentLikeRequested>(_onToggleCommentLike);
@@ -101,11 +108,18 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
   Future<void> _onLoadComments(LoadCommentsRequested event, Emitter<InteractionState> emit) async {
     emit(state.copyWith(isLoadingComments: true));
+
     await _commentsSub?.cancel();
+
+    // Listen to the Firestore stream and dispatch the internal event
     _commentsSub = _repository.watchComments(event.imageId).listen((snapshot) {
-      add(LoadCommentsRequested(event.imageId)); // Dummy trigger to update list if needed, or just emit below
-      emit(state.copyWith(comments: snapshot.docs, isLoadingComments: false));
+      add(_CommentsUpdated(snapshot.docs));
     });
+  }
+
+  void _onCommentsUpdated(_CommentsUpdated event, Emitter<InteractionState> emit) {
+    // Safely emit state from within a proper Bloc event handler
+    emit(state.copyWith(comments: event.comments, isLoadingComments: false));
   }
 
   Future<void> _onAddComment(AddCommentRequested event, Emitter<InteractionState> emit) async {
