@@ -237,41 +237,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     debugPrint("FanzineReaderPage: Real Auth success detected. Resetting to fanzine view.");
     setState(() {
       _headerMode = HeaderMode.fanzine;
-      _showList = false;
     });
     _initData();
-  }
-
-  Widget _buildAuthView() {
-    return Scaffold(
-      backgroundColor: Colors.grey[200],
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        title: Text(_headerMode == HeaderMode.login ? "Sign In" : "Register Account"),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => setState(() => _headerMode = HeaderMode.fanzine),
-        ),
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 450),
-            child: _headerMode == HeaderMode.login
-                ? LoginWidget(
-              onTap: () => setState(() => _headerMode = HeaderMode.register),
-              onLoginSuccess: _onAuthSuccess,
-            )
-                : RegisterWidget(
-              onTap: () => setState(() => _headerMode = HeaderMode.login),
-              onRegisterSuccess: _onAuthSuccess,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildHeader({bool isStickerOnly = false}) {
@@ -283,6 +250,41 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             fanzineShortCode: _resolvedShortCode,
             isStickerOnly: true,
             onLoginRequested: _showLoginHeader,
+          ),
+        ),
+      );
+    }
+
+    // Embed the Auth view directly within the flow of the list/grid
+    if (_headerMode == HeaderMode.login || _headerMode == HeaderMode.register) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450),
+          child: Stack(
+            children: [
+              _headerMode == HeaderMode.login
+                  ? LoginWidget(
+                onTap: () => setState(() => _headerMode = HeaderMode.register),
+                onLoginSuccess: _onAuthSuccess,
+              )
+                  : RegisterWidget(
+                onTap: () => setState(() => _headerMode = HeaderMode.login),
+                onRegisterSuccess: _onAuthSuccess,
+              ),
+              Positioned(
+                top: 16,
+                right: 16, // <--- CHANGED FROM left: 16 TO right: 16
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.black),
+                    onPressed: () => setState(() => _headerMode = HeaderMode.fanzine),
+                    tooltip: "Cancel",
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -316,11 +318,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Top-level switch for Auth UI
-    if (_headerMode != HeaderMode.fanzine) {
-      return _buildAuthView();
-    }
-
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(

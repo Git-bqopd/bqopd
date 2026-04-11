@@ -15,25 +15,21 @@ class RegisterWidget extends StatefulWidget {
 }
 
 class _RegisterWidgetState extends State<RegisterWidget> {
-  final TextEditingController userNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController pwController = TextEditingController();
   final TextEditingController confirmPwController = TextEditingController();
 
   bool _isLoading = false;
 
-  final FocusNode userNameFocusNode = FocusNode();
   final FocusNode emailFocusNode = FocusNode();
   final FocusNode pwFocusNode = FocusNode();
   final FocusNode confirmPwFocusNode = FocusNode();
 
   @override
   void dispose() {
-    userNameController.dispose();
     emailController.dispose();
     pwController.dispose();
     confirmPwController.dispose();
-    userNameFocusNode.dispose();
     emailFocusNode.dispose();
     pwFocusNode.dispose();
     confirmPwFocusNode.dispose();
@@ -80,11 +76,14 @@ class _RegisterWidgetState extends State<RegisterWidget> {
       final user = userCredential!.user!;
       final usersCollection = FirebaseFirestore.instance.collection('Users');
 
+      // Default to the first part of their email as a placeholder username
+      final defaultUsername = (user.email ?? '').split('@').first;
+
       // CHANGE: Use UID as document ID
       await usersCollection.doc(user.uid).set({
         'uid': user.uid,
         'email': user.email,
-        'username': userNameController.text.trim(),
+        'username': defaultUsername,
         'createdAt': FieldValue.serverTimestamp(),
         'Editor': false,
         'bio': '',
@@ -136,14 +135,6 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                           child: Column(
                             children: [
                               MyTextField(
-                                controller: userNameController,
-                                focusNode: userNameFocusNode,
-                                hintText: "username",
-                                obscureText: false,
-                                autofillHints: const [AutofillHints.username],
-                              ),
-                              const SizedBox(height: 10),
-                              MyTextField(
                                 controller: emailController,
                                 focusNode: emailFocusNode,
                                 hintText: "email",
@@ -175,20 +166,22 @@ class _RegisterWidgetState extends State<RegisterWidget> {
                         text: "register",
                         onTap: registerUser,
                         isLoading: _isLoading,
+                        color: Colors.grey, // Added to match the login button
                       ),
                       const SizedBox(height: 25),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("already cool?"),
-                          const SizedBox(width: 5),
+                          const Text("already cool?", style: TextStyle(fontSize: 12)),
+                          const SizedBox(width: 4),
                           GestureDetector(
                             onTap: widget.onTap,
-                            child: Text(
+                            child: const Text(
                               "login here",
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Theme.of(context).primaryColorDark,
+                                fontSize: 12,
+                                // Color defaults to black, matching the login screen
                               ),
                             ),
                           ),

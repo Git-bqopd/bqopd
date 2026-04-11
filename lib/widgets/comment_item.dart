@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/engagement_service.dart';
+import 'auth_modal.dart';
 
 /// A standardized widget for displaying a single comment.
 /// Fetches live user data from the Users collection based on the userId.
@@ -40,7 +41,7 @@ class CommentItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final String commentId = data['_id'] ?? '';
     final String userId = data['userId'] ?? '';
-    final String imageId = data['contentId'] ?? ''; // Tied to global contentId
+    final String imageId = data['contentId'] ?? '';
     final String text = data['text'] ?? '';
     final int likeCount = data['likeCount'] ?? 0;
 
@@ -57,10 +58,12 @@ class CommentItem extends StatelessWidget {
     }
 
     final EngagementService service = EngagementService();
-    final String? currentUid = FirebaseAuth.instance.currentUser?.uid;
-    final bool isOwner = currentUid != null && currentUid == userId;
+    final user = FirebaseAuth.instance.currentUser;
+    final bool isGuest = user == null || user.isAnonymous;
+    final bool isOwner = !isGuest && user.uid == userId;
 
     return FutureBuilder<DocumentSnapshot>(
+      // Robust lookup ensures we get the current profile data for the comment author
       future: FirebaseFirestore.instance.collection('Users').doc(userId).get(),
       builder: (context, userSnap) {
         String display = fallbackDisplayName;
@@ -151,7 +154,6 @@ class CommentItem extends StatelessWidget {
                 ),
               ),
 
-              // Action Area: Delete (if owner) and Like
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -171,7 +173,13 @@ class CommentItem extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           GestureDetector(
-                            onTap: () => service.toggleCommentLike(commentId, isLiked),
+                            onTap: () {
+                              if (isGuest) {
+                                showDialog(context: context, builder: (c) => const AuthModal());
+                              } else {
+                                service.toggleCommentLike(commentId, isLiked);
+                              }
+                            },
                             child: Icon(
                               isLiked ? Icons.favorite : Icons.favorite_border,
                               size: 16,

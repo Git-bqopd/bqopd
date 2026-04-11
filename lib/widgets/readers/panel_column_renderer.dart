@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
@@ -11,6 +12,7 @@ import '../../models/panel_context.dart';
 
 import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
+import '../auth_modal.dart';
 
 class PanelColumnRenderer extends StatelessWidget {
   final String fanzineId;
@@ -122,6 +124,13 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
 
   Future<void> _submitComment(String imageId) async {
     if (_commentController.text.trim().isEmpty) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      showDialog(context: context, builder: (c) => const AuthModal());
+      return;
+    }
+
     final text = _commentController.text.trim();
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 

@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/reader_tool.dart';
 import '../config/reader_tools_config.dart';
 import '../services/user_provider.dart';
 import '../services/engagement_service.dart';
 import 'dynamic_toolbar_button.dart';
+import '../widgets/auth_modal.dart';
 
 class DynamicSocialToolbar extends StatefulWidget {
   final String imageId;
@@ -116,6 +118,13 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         break;
 
       case ToolAction.toggleLike:
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null || user.isAnonymous) {
+          // Trigger the AuthModal as a popup layer
+          showDialog(context: context, builder: (c) => const AuthModal());
+          return;
+        }
+
         if (widget.fanzineId != null && widget.pageId != null) {
           await _engagementService.toggleLike(
             fanzineId: widget.fanzineId!,

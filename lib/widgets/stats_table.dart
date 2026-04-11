@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/view_service.dart';
 
 /// A standardized table displaying view analytics for unique content (Images).
-/// Reads directly from the Image's 'views' subcollection (Ledger).
+/// Reads directly from the Image's pre-aggregated view counts.
 class StatsTable extends StatelessWidget {
   final String contentId;
   final ViewService viewService;
@@ -40,7 +40,6 @@ class StatsTable extends StatelessWidget {
               return _StatRowWrapper(
                 label: "$pageNum",
                 imageId: imageId,
-                viewService: viewService,
               );
             }).toList(),
           );
@@ -58,7 +57,6 @@ class StatsTable extends StatelessWidget {
           _StatRowWrapper(
             label: "",
             imageId: contentId,
-            viewService: viewService,
           ),
         ],
       ),
@@ -155,12 +153,10 @@ class StatsTable extends StatelessWidget {
 class _StatRowWrapper extends StatelessWidget {
   final String label;
   final String imageId;
-  final ViewService viewService;
 
   const _StatRowWrapper({
     required this.label,
     required this.imageId,
-    required this.viewService,
   });
 
   @override
@@ -168,63 +164,59 @@ class _StatRowWrapper extends StatelessWidget {
     const double colWidth = 60.0;
     const double labelWidth = 50.0;
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: viewService.getViewLogsStream(imageId),
+    // Fast fail if image isn't fully processed yet
+    if (imageId.isEmpty) {
+      return _buildTableRow(label, labelWidth, colWidth, 0, 0, 0, 0);
+    }
+
+    return StreamBuilder<DocumentSnapshot>(
+      // Pull directly from the aggregated counts on the image document
+      stream: FirebaseFirestore.instance.collection('images').doc(imageId).snapshots(),
       builder: (context, snap) {
         int regList = 0; int regGrid = 0; int anonList = 0; int anonGrid = 0;
 
-        if (snap.hasData) {
-          for (var doc in snap.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            final bool isAnon = data['isAnonymous'] ?? true;
-            final String type = data['viewType'] ?? 'list';
-
-            if (isAnon) {
-              if (type == 'list') {
-                anonList++;
-              } else {
-                anonGrid++;
-              }
-            } else {
-              if (type == 'list') {
-                regList++;
-              } else {
-                regGrid++;
-              }
-            }
-          }
+        if (snap.hasData && snap.data!.exists) {
+          final data = snap.data!.data() as Map<String, dynamic>;
+          regList = data['regListCount'] ?? 0;
+          regGrid = data['regGridCount'] ?? 0;
+          anonList = data['anonListCount'] ?? 0;
+          anonGrid = data['anonGridCount'] ?? 0;
         }
 
-        return Table(
-          columnWidths: {
-            0: label.isNotEmpty ? const FixedColumnWidth(labelWidth) : const FixedColumnWidth(0),
-            1: const FixedColumnWidth(colWidth),
-            2: const FixedColumnWidth(colWidth),
-            3: const FixedColumnWidth(colWidth),
-            4: const FixedColumnWidth(colWidth),
-          },
-          border: TableBorder(
-            verticalInside: BorderSide(color: Colors.grey.shade300, width: 0.5),
-            bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
-            left: BorderSide(color: Colors.grey.shade300, width: 0.5),
-            right: BorderSide(color: Colors.grey.shade300, width: 0.5),
-          ),
-          children: [
-            TableRow(
-              children: [
-                if (label.isNotEmpty)
-                  StatsTable._buildCell(label, const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))
-                else
-                  const SizedBox.shrink(),
-                StatsTable._buildCell("$regGrid", const TextStyle(fontSize: 12)),
-                StatsTable._buildCell("$anonGrid", const TextStyle(fontSize: 12)),
-                StatsTable._buildCell("$regList", const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo)),
-                StatsTable._buildCell("$anonList", const TextStyle(fontSize: 12)),
-              ],
-            ),
-          ],
-        );
+        return _buildTableRow(label, labelWidth, colWidth, regGrid, anonGrid, regList, anonList);
       },
+    );
+  }
+
+  Widget _buildTableRow(String lbl, double lblWidth, double colWidth, int regGrid, int anonGrid, int regList, int anonList) {
+    return Table(
+      columnWidths: {
+        0: lbl.isNotEmpty ? FixedColumnWidth(lblWidth) : const FixedColumnWidth(0),
+        1: FixedColumnWidth(colWidth),
+        2: FixedColumnWidth(colWidth),
+        3: FixedColumnWidth(colWidth),
+        4: FixedColumnWidth(colWidth),
+      },
+      border: TableBorder(
+        verticalInside: BorderSide(color: Colors.grey.shade300, width: 0.5),
+        bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
+        left: BorderSide(color: Colors.grey.shade300, width: 0.5),
+        right: BorderSide(color: Colors.grey.shade300, width: 0.5),
+      ),
+      children: [
+        TableRow(
+          children: [
+            if (lbl.isNotEmpty)
+              StatsTable._buildCell(lbl, const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))
+            else
+              const SizedBox.shrink(),
+            StatsTable._buildCell("$regGrid", const TextStyle(fontSize: 12)),
+            StatsTable._buildCell("$anonGrid", const TextStyle(fontSize: 12)),
+            StatsTable._buildCell("$regList", const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo)),
+            StatsTable._buildCell("$anonList", const TextStyle(fontSize: 12)),
+          ],
+        ),
+      ],
     );
   }
 }

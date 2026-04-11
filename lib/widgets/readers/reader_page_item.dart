@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../services/view_service.dart';
 import '../../services/engagement_service.dart';
@@ -13,6 +14,7 @@ import '../../components/dynamic_social_toolbar.dart';
 import '../templates/calendar_template.dart';
 import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
+import '../auth_modal.dart';
 
 /// A unified widget representing a single page in the reader.
 /// Handles image/template rendering, social engagement, and inline panel logic.
@@ -84,6 +86,13 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
 
   Future<void> _submitComment(String imageId) async {
     if (_commentController.text.trim().isEmpty) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      showDialog(context: context, builder: (c) => const AuthModal());
+      return;
+    }
+
     final text = _commentController.text.trim();
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
@@ -165,7 +174,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
                           youtubeId: youtubeId,
                           isEditingMode: widget.isEditingMode,
                           isIndiciaPage: isIndiciaPage,
-                          onOpenGrid: widget.onOpenGrid, // Now matches VoidCallback?
+                          onOpenGrid: widget.onOpenGrid,
                           activeBonusRow: widget.activeGlobalPanel,
                           onToggleBonusRow: widget.onTogglePanel,
                         ),

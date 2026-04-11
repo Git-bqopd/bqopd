@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../blocs/interaction/interaction_bloc.dart';
+import '../../repositories/engagement_repository.dart';
 import '../../services/user_provider.dart';
 import '../comment_item.dart';
+import '../auth_modal.dart';
 
 class CommentsPanel extends StatefulWidget {
   final String imageId;
@@ -27,12 +30,6 @@ class _CommentsPanelState extends State<CommentsPanel> {
   final TextEditingController _controller = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    context.read<InteractionBloc>().add(LoadCommentsRequested(widget.imageId));
-  }
-
-  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -40,6 +37,13 @@ class _CommentsPanelState extends State<CommentsPanel> {
 
   void _onSend() {
     if (_controller.text.trim().isEmpty) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      showDialog(context: context, builder: (c) => const AuthModal());
+      return;
+    }
+
     final userProvider = context.read<UserProvider>();
 
     context.read<InteractionBloc>().add(AddCommentRequested(
@@ -52,19 +56,26 @@ class _CommentsPanelState extends State<CommentsPanel> {
     ));
 
     _controller.clear();
+    FocusScope.of(context).unfocus();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<InteractionBloc, InteractionState>(
-      builder: (context, state) {
+    // Isolated StreamBuilder ensures each page loads its own specific comments
+    return StreamBuilder<QuerySnapshot>(
+      stream: context.read<EngagementRepository>().watchComments(widget.imageId),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text("Error loading comments", style: TextStyle(fontSize: 12, color: Colors.red)));
+        }
+
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (state.isLoadingComments)
+            if (!snapshot.hasData)
               const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())
             else
-              _CommentList(comments: state.comments, imageId: widget.imageId),
+              _CommentList(comments: snapshot.data!.docs, imageId: widget.imageId),
             _CommentInput(controller: _controller, onSend: _onSend),
           ],
         );
@@ -116,10 +127,14 @@ class _CommentList extends StatelessWidget {
 class _CommentInput extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+
   const _CommentInput({required this.controller, required this.onSend});
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final isGuest = user == null || user.isAnonymous;
+
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
@@ -127,11 +142,30 @@ class _CommentInput extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
-              decoration: const InputDecoration(hintText: "Add a comment...", isDense: true, border: OutlineInputBorder()),
+              readOnly: isGuest,
+              onTap: () {
+                if (isGuest) {
+                  showDialog(context: context, builder: (c) => const AuthModal());
+                }
+              },
+              decoration: const InputDecoration(
+                  hintText: "Add a comment...",
+                  isDense: true,
+                  border: OutlineInputBorder()
+              ),
               onSubmitted: (_) => onSend(),
             ),
           ),
-          IconButton(icon: const Icon(Icons.send), onPressed: onSend)
+          IconButton(
+              icon: const Icon(Icons.send),
+              onPressed: () {
+                if (isGuest) {
+                  showDialog(context: context, builder: (c) => const AuthModal());
+                } else {
+                  onSend();
+                }
+              }
+          )
         ],
       ),
     );

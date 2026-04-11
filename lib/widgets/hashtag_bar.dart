@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/engagement_service.dart';
+import 'auth_modal.dart';
 
 class HashtagBar extends StatefulWidget {
   final String imageId;
@@ -24,7 +25,10 @@ class _HashtagBarState extends State<HashtagBar> {
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   Future<void> _handleVote(String tag, bool isSelected) async {
-    if (currentUser == null) return; // Optional: Show login prompt
+    if (currentUser == null || currentUser!.isAnonymous) {
+      showDialog(context: context, builder: (c) => const AuthModal());
+      return;
+    }
     await _service.toggleHashtag(widget.imageId, tag, !isSelected);
   }
 
@@ -33,6 +37,13 @@ class _HashtagBarState extends State<HashtagBar> {
       setState(() => _isAdding = false);
       return;
     }
+
+    if (currentUser == null || currentUser!.isAnonymous) {
+      showDialog(context: context, builder: (c) => const AuthModal());
+      setState(() => _isAdding = false);
+      return;
+    }
+
     final newTag = _tagController.text.trim();
     await _service.toggleHashtag(widget.imageId, newTag, true);
     _tagController.clear();
@@ -118,7 +129,14 @@ class _HashtagBarState extends State<HashtagBar> {
           )
         else
           GestureDetector(
-            onTap: () => setState(() => _isAdding = true),
+            onTap: () {
+              // Intercept click on the '+' button before showing the input
+              if (currentUser == null || currentUser!.isAnonymous) {
+                showDialog(context: context, builder: (c) => const AuthModal());
+                return;
+              }
+              setState(() => _isAdding = true);
+            },
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
