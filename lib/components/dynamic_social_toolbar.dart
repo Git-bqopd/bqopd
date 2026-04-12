@@ -51,7 +51,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   int _commentCount = 0;
   int _viewCount = 0;
 
-  StreamSubscription? _pageSub;
   StreamSubscription? _imageSub;
 
   @override
@@ -63,30 +62,14 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   @override
   void didUpdateWidget(covariant DynamicSocialToolbar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.pageId != widget.pageId || oldWidget.imageId != widget.imageId) {
-      _pageSub?.cancel();
+    if (oldWidget.imageId != widget.imageId) {
       _imageSub?.cancel();
       _listenToStats();
     }
   }
 
   void _listenToStats() {
-    // 1. Listen for Like Count on the Page Document
-    if (widget.pageId != null && widget.pageId!.isNotEmpty && widget.fanzineId != null && widget.fanzineId!.isNotEmpty) {
-      _pageSub = FirebaseFirestore.instance
-          .collection('fanzines')
-          .doc(widget.fanzineId)
-          .collection('pages')
-          .doc(widget.pageId)
-          .snapshots()
-          .listen((doc) {
-        if (doc.exists && mounted) {
-          setState(() => _likeCount = doc.data()?['likeCount'] ?? 0);
-        }
-      });
-    }
-
-    // 2. Listen for Views and Comments on the Image Document
+    // SINGLE SOURCE OF TRUTH: Listen only to the Image document for engagement stats
     if (widget.imageId.isNotEmpty) {
       _imageSub = FirebaseFirestore.instance
           .collection('images')
@@ -96,6 +79,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         if (doc.exists && mounted) {
           final data = doc.data() as Map<String, dynamic>;
           setState(() {
+            _likeCount = data['likeCount'] ?? 0; // Canonical Like Count
             _commentCount = data['commentCount'] ?? 0;
             _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) + (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
           });
@@ -106,7 +90,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
 
   @override
   void dispose() {
-    _pageSub?.cancel();
     _imageSub?.cancel();
     super.dispose();
   }
@@ -131,19 +114,17 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           showDialog(context: context, builder: (c) => const AuthModal());
           return;
         }
-
-        if (widget.fanzineId != null && widget.pageId != null) {
-          await _engagementService.toggleLike(
-            fanzineId: widget.fanzineId!,
-            pageId: widget.pageId!,
-            isCurrentlyLiked: isCurrentlyLiked,
-          );
-        }
+        // Anchoring like to UGC
+        await _engagementService.toggleLike(
+          imageId: widget.imageId,
+          fanzineId: widget.fanzineId,
+          isCurrentlyLiked: isCurrentlyLiked,
+        );
         break;
 
       case ToolAction.copyShareLink:
         if (widget.fanzineId == null) return;
-        final link = 'https://bqopd.com/fanzine/${widget.fanzineId}?page=${widget.pageNumber ?? 1}';
+        final link = 'https://bqopd.com/fanzine/${widget.fanzineId}?p=${widget.pageNumber ?? 1}';
         await Clipboard.setData(ClipboardData(text: link));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -176,21 +157,12 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
       case ToolCondition.hideOnDesktopSplit:
         if (widget.onOpenGrid == null) return false;
         break;
-      case ToolCondition.requiresTwoPage:
-        if (widget.fanzineId == null) return false;
+      default:
         break;
-      case ToolCondition.always:
-        break;
-    }
-
-    if (widget.fanzineId == null && (tool.id == 'Grid' || tool.id == 'Fanzine' || tool.id == 'Indicia' || tool.id == 'OCR' || tool.id == 'Publisher' || tool.id == 'Entities')) {
-      return false;
     }
 
     final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
-    if (!isVisibleByUser) return false;
-
-    return true;
+    return isVisibleByUser;
   }
 
   @override
@@ -198,9 +170,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
     final userProvider = Provider.of<UserProvider>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    final visibleTools = ReaderToolsConfig.tools.where((tool) {
-      return _isToolVisible(tool, userProvider);
-    }).toList();
+    final visibleTools = ReaderToolsConfig.tools.where((tool) => _isToolVisible(tool, userProvider)).toList();
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
@@ -210,11 +180,9 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         alignment: WrapAlignment.center,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: visibleTools.map((tool) {
-          // Use StreamBuilder specifically for the Like button to ensure it reacts
-          // correctly to user changes (auth) and page changes (scroll).
-          if (tool.action == ToolAction.toggleLike && widget.pageId != null) {
+          if (tool.action == ToolAction.toggleLike) {
             return StreamBuilder<bool>(
-              stream: _engagementService.isLikedStream(widget.pageId!),
+              stream: _engagementService.isLikedStream(widget.imageId),
               builder: (context, snapshot) {
                 final bool isLiked = snapshot.data ?? false;
                 return DynamicToolbarButton(
@@ -228,10 +196,9 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
             );
           }
 
-          bool isActive = false;
-          if (tool.action == ToolAction.openBonusRow) {
-            isActive = widget.activeBonusRow == tool.bonusRow;
-          }
+          bool isActive = (tool.action == ToolAction.openBonusRow)
+              ? widget.activeBonusRow == tool.bonusRow
+              : false;
 
           int? count;
           if (tool.id == 'Comment') count = _commentCount;

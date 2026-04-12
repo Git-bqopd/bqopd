@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../blocs/interaction/interaction_bloc.dart';
-import '../../repositories/engagement_repository.dart';
 import '../../services/user_provider.dart';
 import '../comment_item.dart';
 import '../auth_modal.dart';
@@ -28,6 +27,13 @@ class CommentsPanel extends StatefulWidget {
 
 class _CommentsPanelState extends State<CommentsPanel> {
   final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Trigger the load event when the panel is mounted
+    context.read<InteractionBloc>().add(LoadCommentsRequested(widget.imageId));
+  }
 
   @override
   void dispose() {
@@ -56,26 +62,20 @@ class _CommentsPanelState extends State<CommentsPanel> {
     ));
 
     _controller.clear();
-    FocusScope.of(context).unfocus();
+    if (widget.isInline) FocusScope.of(context).unfocus();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Isolated StreamBuilder ensures each page loads its own specific comments
-    return StreamBuilder<QuerySnapshot>(
-      stream: context.read<EngagementRepository>().watchComments(widget.imageId),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text("Error loading comments", style: TextStyle(fontSize: 12, color: Colors.red)));
-        }
-
+    return BlocBuilder<InteractionBloc, InteractionState>(
+      builder: (context, state) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!snapshot.hasData)
+            if (state.isLoadingComments)
               const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())
             else
-              _CommentList(comments: snapshot.data!.docs, imageId: widget.imageId),
+              _CommentList(comments: state.comments, imageId: widget.imageId),
             _CommentInput(controller: _controller, onSend: _onSend),
           ],
         );
@@ -96,15 +96,16 @@ class _CommentList extends StatelessWidget {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(20),
-          child: Text("No comments yet."),
+          child: Text("No comments yet. Be the first to share a thought!"),
         ),
       );
     }
 
+    // Sort locally by creation date
     final sorted = List<DocumentSnapshot>.from(comments);
     sorted.sort((a, b) {
-      final aT = (a.data() as Map)['createdAt'] as Timestamp?;
-      final bT = (b.data() as Map)['createdAt'] as Timestamp?;
+      final aT = (a.data() as Map?)?['createdAt'] as Timestamp?;
+      final bT = (b.data() as Map?)?['createdAt'] as Timestamp?;
       if (aT == null) return 1;
       if (bT == null) return -1;
       return aT.compareTo(bT);
@@ -136,7 +137,7 @@ class _CommentInput extends StatelessWidget {
     final isGuest = user == null || user.isAnonymous;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 12),
       child: Row(
         children: [
           Expanded(
@@ -149,7 +150,7 @@ class _CommentInput extends StatelessWidget {
                 }
               },
               decoration: const InputDecoration(
-                  hintText: "Add a comment...",
+                  hintText: "Add a thought...",
                   isDense: true,
                   border: OutlineInputBorder()
               ),
@@ -158,13 +159,7 @@ class _CommentInput extends StatelessWidget {
           ),
           IconButton(
               icon: const Icon(Icons.send),
-              onPressed: () {
-                if (isGuest) {
-                  showDialog(context: context, builder: (c) => const AuthModal());
-                } else {
-                  onSend();
-                }
-              }
+              onPressed: onSend
           )
         ],
       ),

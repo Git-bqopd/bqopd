@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Handles persistence for Likes, Comments, Follows, and Hashtags.
+/// All interactions are now anchored to the UGC (Image/Content ID) level
+/// to ensure a single source of truth across different fanzines.
 class EngagementService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -10,38 +12,38 @@ class EngagementService {
   CollectionReference get _commentsCollection =>
       _db.collection('artifacts').doc('bqopd').collection('public').doc('data').collection('comments');
 
-  DocumentReference _pageRef(String fanzineId, String pageId) {
-    return _db.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId);
-  }
+  // --- UGC Likes (Canonical) ---
 
-  // --- Page Likes ---
-
+  /// Toggles a like on the specific media (UGC).
+  /// [fanzineId] is passed as context to track the path the user took.
   Future<void> toggleLike({
-    required String fanzineId,
-    required String pageId,
+    required String imageId,
+    required String? fanzineId,
     required bool isCurrentlyLiked,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) return;
+    if (user == null || imageId.isEmpty) return;
 
-    final pageRef = _pageRef(fanzineId, pageId);
+    // The activity log for the user references the Image, not the Page
     final userActivityRef = _db
         .collection('Users')
         .doc(user.uid)
         .collection('activity')
         .doc('likes')
-        .collection('pages')
-        .doc(pageId);
+        .collection('images')
+        .doc(imageId);
 
+    final imageRef = _db.collection('images').doc(imageId);
     final batch = _db.batch();
 
     if (isCurrentlyLiked) {
-      batch.update(pageRef, {'likeCount': FieldValue.increment(-1)});
+      batch.update(imageRef, {'likeCount': FieldValue.increment(-1)});
       batch.delete(userActivityRef);
     } else {
-      batch.update(pageRef, {'likeCount': FieldValue.increment(1)});
+      batch.update(imageRef, {'likeCount': FieldValue.increment(1)});
       batch.set(userActivityRef, {
-        'fanzineId': fanzineId,
+        'imageId': imageId,
+        'fanzineIdContext': fanzineId, // Preservation of the "Path"
         'likedAt': FieldValue.serverTimestamp(),
       });
     }
@@ -66,7 +68,7 @@ class EngagementService {
     final commentDoc = _commentsCollection.doc();
 
     await commentDoc.set({
-      'contentId': imageId,
+      'contentId': imageId, // The UGC link
       'userId': user.uid,
       'displayName': displayName ?? '',
       'username': username ?? 'user',
@@ -75,7 +77,7 @@ class EngagementService {
       'likeCount': 0,
       'parentId': parentId,
       'context': {
-        'fanzineId': fanzineId,
+        'fanzineId': fanzineId, // Tracks the path
         'fanzineTitle': fanzineTitle,
       },
     });
@@ -150,7 +152,8 @@ class EngagementService {
         .map((doc) => doc.exists);
   }
 
-  Stream<bool> isLikedStream(String pageId) {
+  /// Checks if the current user has liked a specific piece of media (UGC).
+  Stream<bool> isLikedStream(String imageId) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
 
@@ -159,8 +162,8 @@ class EngagementService {
         .doc(user.uid)
         .collection('activity')
         .doc('likes')
-        .collection('pages')
-        .doc(pageId)
+        .collection('images')
+        .doc(imageId)
         .snapshots()
         .map((doc) => doc.exists);
   }
@@ -224,8 +227,6 @@ class EngagementService {
       // Remove vote
       updateData['tags.$cleanTag'] = FieldValue.arrayRemove([user.uid]);
       // If removing approval, revert to pending
-      // NOTE: This assumes removing your vote removes approval. In a real community system,
-      // you might check if *anyone* else has approved it, but for a mod tool, this toggle is fine.
       if (cleanTag == 'approved') {
         updateData['status'] = 'pending';
       }

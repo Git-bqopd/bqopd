@@ -9,6 +9,7 @@ import '../../services/engagement_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/reader_tool.dart';
 import '../../models/panel_context.dart';
+import '../../blocs/interaction/interaction_bloc.dart';
 
 import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
@@ -40,7 +41,6 @@ class PanelColumnRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine if this panel type should be rendered once (singleton) or as a list per page
     final bool isSingleton = activePanel == BonusRowType.settings || activePanel == BonusRowType.youtube;
 
     return Column(
@@ -92,9 +92,6 @@ class PanelColumnRenderer extends StatelessWidget {
   }
 
   Widget _buildSingletonContent(BuildContext context) {
-    // FIX: Mapping the UI index (which includes the header at index 0) to the data list.
-    // If initialIndex is 0 (Cover), we show data for the first page (index 0 in 'pages').
-    // If initialIndex is > 0 (Page 1+), we map it to index - 1 in the 'pages' list.
     final int pageIdx = (initialIndex > 0 && initialIndex <= pages.length)
         ? initialIndex - 1
         : 0;
@@ -113,8 +110,6 @@ class PanelColumnRenderer extends StatelessWidget {
       );
     }
 
-    // We use a StreamBuilder here to ensure the singleton panel has access to the
-    // live 'text' or metadata for whatever page is currently selected.
     return StreamBuilder<DocumentSnapshot>(
         stream: imageId.isNotEmpty
             ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots()
@@ -131,8 +126,6 @@ class PanelColumnRenderer extends StatelessWidget {
               title: '',
               isInline: false,
               child: KeyedSubtree(
-                // The Key is CRITICAL: it forces the YouTube player to dispose and
-                // re-initialize when the imageId (page selection) changes.
                 key: ValueKey('singleton_${activePanel.name}_$imageId'),
                 child: PanelFactory.buildPanelContent(
                   PanelContext(
@@ -183,7 +176,6 @@ class _PanelColumnItem extends StatefulWidget {
 }
 
 class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAliveClientMixin {
-  final EngagementService _engagementService = EngagementService();
   final TextEditingController _commentController = TextEditingController();
   final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
 
@@ -197,7 +189,7 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
     super.dispose();
   }
 
-  Future<void> _submitComment(String imageId) async {
+  void _submitComment(String imageId) {
     if (_commentController.text.trim().isEmpty) return;
 
     final user = FirebaseAuth.instance.currentUser;
@@ -210,16 +202,16 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
     _commentController.clear();
-    FocusScope.of(context).unfocus();
 
-    await _engagementService.addComment(
+    // Using unified Bloc dispatching for social interactions
+    context.read<InteractionBloc>().add(AddCommentRequested(
         imageId: imageId,
         fanzineId: widget.fanzineId,
         fanzineTitle: widget.fanzineTitle,
         text: text,
         displayName: userProvider.userProfile?['displayName'],
         username: userProvider.userProfile?['username']
-    );
+    ));
   }
 
   @override
@@ -266,7 +258,7 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
                     templateId: templateId,
                     isEditingMode: widget.isEditingMode,
                     viewService: widget.viewService,
-                    engagementService: _engagementService,
+                    engagementService: EngagementService(),
                     commentController: _commentController,
                     onSubmitComment: () => _submitComment(imageId),
                     fontSizeNotifier: _fontSizeNotifier,

@@ -8,11 +8,10 @@ class ViewService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Use a standard root collection since you are using your own Firebase project (bqopd-9ce06).
-  // The 'artifacts/...' path is only needed for the AI platform's shared sandbox database.
   CollectionReference get _viewLogsCollection => _db.collection('view_logs');
 
-  /// Records a view for canonical content (Image).
+  /// Records a unique view for canonical content (Image).
+  /// Prevents double-counting by using a document ID format: {userId}_{imageId}_{viewType}
   Future<void> recordView({
     required String imageId,
     required String? pageId,
@@ -22,27 +21,36 @@ class ViewService {
   }) async {
     if (imageId.isEmpty) return;
 
-    // Rule 3: Auth Before Queries
+    // RULE: Do not trigger a new sign-in if we already have a user (Anonymous or Real)
     User? user = _auth.currentUser;
+
     if (user == null) {
       try {
+        // Attempt to sign in anonymously ONLY if no session exists
         final cred = await _auth.signInAnonymously();
         user = cred.user;
-      } catch (_) { return; }
+      } catch (e) {
+        debugPrint("Silent Auth Failed: $e");
+        return;
+      }
     }
 
     if (user == null) return;
 
-    // Unique ID: user_image_mode to prevent spam
+    // CREATE A DETERMINISTIC ID:
+    // This ensures if the same user (session) views the same image,
+    // the set() operation just overwrites rather than creating a new log or incrementing.
     final String viewId = "${user.uid}_${imageId}_${type.name}";
     final docRef = _viewLogsCollection.doc(viewId);
 
     try {
+      // Check if this specific user has ALREADY viewed this specific image/mode combo
       final existingDoc = await docRef.get();
 
       if (!existingDoc.exists) {
         final batch = _db.batch();
 
+        // 1. Log the unique view
         batch.set(docRef, {
           'imageId': imageId,
           'userId': user.uid,
@@ -53,6 +61,7 @@ class ViewService {
           'timestamp': FieldValue.serverTimestamp(),
         });
 
+        // 2. Increment the bucket on the master image document
         String bucketField = "";
         if (user.isAnonymous) {
           bucketField = (type == ViewType.list) ? 'anonListCount' : 'anonGridCount';
@@ -65,16 +74,11 @@ class ViewService {
         });
 
         await batch.commit();
-        debugPrint("View recorded: $imageId");
+        debugPrint("Unique view recorded for image: $imageId");
       }
     } catch (e) {
-      debugPrint("View record failed: $e");
+      debugPrint("View aggregation failed: $e");
     }
-  }
-
-  Stream<QuerySnapshot> getViewLogsStream(String imageId) {
-    // RULE 2: No complex queries. Simple collection stream.
-    return _viewLogsCollection.snapshots();
   }
 
   Stream<QuerySnapshot> getFanzinePagesStream(String fanzineId) {

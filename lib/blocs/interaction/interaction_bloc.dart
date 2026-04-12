@@ -10,11 +10,11 @@ abstract class InteractionEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class TogglePageLikeRequested extends InteractionEvent {
-  final String fanzineId;
-  final String pageId;
+class ToggleImageLikeRequested extends InteractionEvent {
+  final String imageId;
+  final String? fanzineId;
   final bool isCurrentlyLiked;
-  TogglePageLikeRequested({required this.fanzineId, required this.pageId, required this.isCurrentlyLiked});
+  ToggleImageLikeRequested({required this.imageId, this.fanzineId, required this.isCurrentlyLiked});
 }
 
 class LoadCommentsRequested extends InteractionEvent {
@@ -22,7 +22,6 @@ class LoadCommentsRequested extends InteractionEvent {
   LoadCommentsRequested(this.imageId);
 }
 
-// Internal event to safely pass stream data back into the bloc
 class _CommentsUpdated extends InteractionEvent {
   final List<DocumentSnapshot> comments;
   _CommentsUpdated(this.comments);
@@ -86,7 +85,7 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
   InteractionBloc({required EngagementRepository repository})
       : _repository = repository,
         super(const InteractionState()) {
-    on<TogglePageLikeRequested>(_onTogglePageLike);
+    on<ToggleImageLikeRequested>(_onToggleImageLike);
     on<LoadCommentsRequested>(_onLoadComments);
     on<_CommentsUpdated>(_onCommentsUpdated);
     on<AddCommentRequested>(_onAddComment);
@@ -94,11 +93,11 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
     on<ToggleCommentLikeRequested>(_onToggleCommentLike);
   }
 
-  Future<void> _onTogglePageLike(TogglePageLikeRequested event, Emitter<InteractionState> emit) async {
+  Future<void> _onToggleImageLike(ToggleImageLikeRequested event, Emitter<InteractionState> emit) async {
     try {
-      await _repository.togglePageLike(
+      await _repository.toggleImageLike(
+        imageId: event.imageId,
         fanzineId: event.fanzineId,
-        pageId: event.pageId,
         isCurrentlyLiked: event.isCurrentlyLiked,
       );
     } catch (e) {
@@ -111,14 +110,13 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
     await _commentsSub?.cancel();
 
-    // Listen to the Firestore stream and dispatch the internal event
-    _commentsSub = _repository.watchComments(event.imageId).listen((snapshot) {
+    // FIXED: Renamed watchComments to watchImageComments to match EngagementRepository update
+    _commentsSub = _repository.watchImageComments(event.imageId).listen((snapshot) {
       add(_CommentsUpdated(snapshot.docs));
     });
   }
 
   void _onCommentsUpdated(_CommentsUpdated event, Emitter<InteractionState> emit) {
-    // Safely emit state from within a proper Bloc event handler
     emit(state.copyWith(comments: event.comments, isLoadingComments: false));
   }
 

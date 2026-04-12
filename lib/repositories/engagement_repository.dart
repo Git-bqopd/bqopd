@@ -2,48 +2,66 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Repository for social interactions: Likes, Comments, and Following.
+/// Anchors all engagement to the UGC (Image) level for a single source of truth.
 class EngagementRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Path Rule 1 Compliant
+  // Path Rule 1 Compliant for shared social data
   CollectionReference get _commentsCollection =>
       _db.collection('artifacts').doc('bqopd').collection('public').doc('data').collection('comments');
 
-  // --- Page & Image Likes ---
+  // --- UGC Level Interactions (Likes) ---
 
-  /// Toggles a like on a fanzine page.
-  Future<void> togglePageLike({
-    required String fanzineId,
-    required String pageId,
+  Future<void> toggleImageLike({
+    required String imageId,
+    required String? fanzineId,
     required bool isCurrentlyLiked,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) return;
+    if (user == null || imageId.isEmpty) return;
 
-    final pageRef = _db.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId);
-    final activityRef = _db.collection('Users').doc(user.uid).collection('activity').doc('likes').collection('pages').doc(pageId);
+    final imageRef = _db.collection('images').doc(imageId);
+    final activityRef = _db
+        .collection('Users')
+        .doc(user.uid)
+        .collection('activity')
+        .doc('likes')
+        .collection('images')
+        .doc(imageId);
 
     final batch = _db.batch();
     if (isCurrentlyLiked) {
-      batch.update(pageRef, {'likeCount': FieldValue.increment(-1)});
+      batch.update(imageRef, {'likeCount': FieldValue.increment(-1)});
       batch.delete(activityRef);
     } else {
-      batch.update(pageRef, {'likeCount': FieldValue.increment(1)});
-      batch.set(activityRef, {'fanzineId': fanzineId, 'likedAt': FieldValue.serverTimestamp()});
+      batch.update(imageRef, {'likeCount': FieldValue.increment(1)});
+      batch.set(activityRef, {
+        'imageId': imageId,
+        'fanzineContext': fanzineId,
+        'likedAt': FieldValue.serverTimestamp()
+      });
     }
     await batch.commit();
   }
 
-  Stream<bool> isPageLiked(String pageId) {
+  Stream<bool> isImageLiked(String imageId) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
-    return _db.collection('Users').doc(user.uid).collection('activity').doc('likes').collection('pages').doc(pageId).snapshots().map((doc) => doc.exists);
+    return _db
+        .collection('Users')
+        .doc(user.uid)
+        .collection('activity')
+        .doc('likes')
+        .collection('images')
+        .doc(imageId)
+        .snapshots()
+        .map((doc) => doc.exists);
   }
 
   // --- Comment Management ---
 
-  Stream<QuerySnapshot> watchComments(String imageId) {
+  Stream<QuerySnapshot> watchImageComments(String imageId) {
     return _commentsCollection.where('contentId', isEqualTo: imageId).snapshots();
   }
 
@@ -118,7 +136,7 @@ class EngagementRepository {
     return _db.collection('Users').doc(user.uid).collection('activity').doc('likes').collection('comments').doc(commentId).snapshots().map((doc) => doc.exists);
   }
 
-  // --- Follow Logic ---
+  // --- Follow Logic (User Level) ---
 
   Stream<bool> isFollowing(String targetUid) {
     final user = _auth.currentUser;
