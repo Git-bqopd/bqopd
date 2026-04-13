@@ -551,7 +551,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             .snapshots()
             .map((snap) {
           final List<QueryDocumentSnapshot> filtered = snap.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
 
             final hasSourceFile = data.containsKey('sourceFile');
             final isLive = data['status'] == 'live';
@@ -585,7 +585,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             .snapshots()
             .map((snap) {
           final List<QueryDocumentSnapshot> filtered = snap.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
             if (data['type'] != 'folio') return false;
 
             final isLive = data['status'] == 'live' || data['status'] == 'published';
@@ -617,18 +617,18 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           if (isOwner) {
             if (_showDrafts) {
               return snap.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+                final data = doc.data();
                 return data['status'] == 'pending';
               }).toList();
             } else {
               return snap.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+                final data = doc.data();
                 return data['status'] != 'pending';
               }).toList();
             }
           }
           return snap.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
             return data['status'] != 'pending';
           }).toList();
         });
