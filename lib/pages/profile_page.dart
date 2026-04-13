@@ -53,7 +53,7 @@ class _ProfilePageView extends StatefulWidget {
 }
 
 class _ProfilePageViewState extends State<_ProfilePageView> {
-  // Local state for Pages tab sub-filter
+  // Local state for Pages/Maker tab sub-filter
   bool _showDrafts = false;
 
   // Local state for Editor tab sub-filter
@@ -87,6 +87,45 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       barrierDismissible: false,
       builder: (_) => ImageUploadModal(userId: userId),
     );
+  }
+
+  void _showMakerCreateModal(String userId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => MakerCreateModal(
+        onUploadImage: () => _showImageUpload(userId),
+        onCreateFolio: () => _createFolio(userId),
+      ),
+    );
+  }
+
+  Future<void> _createFolio(String userId) async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final folioRef = db.collection('fanzines').doc();
+
+      final shortCode = folioRef.id.substring(0, 7);
+
+      await folioRef.set({
+        'title': 'New Folio',
+        'editorId': userId,
+        'status': 'working', // Initial draft status
+        'processingStatus': 'complete', // No PDF processing needed
+        'creationDate': FieldValue.serverTimestamp(),
+        'type': 'folio',
+        'shortCode': shortCode,
+        'shortCodeKey': shortCode.toUpperCase(),
+        'twoPage': false, // Single column by default for general folios
+      });
+
+      if (mounted) context.push('/editor/${folioRef.id}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 
   Future<void> _createCalendarFanzine(String userId) async {
@@ -341,7 +380,77 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                       ),
                     ),
 
-                  // Sub-navigation for Pages Tab
+                  // Sub-navigation for Maker Tab (New Tab)
+                  if (activeTab == 'maker' && canEditProfile && isOwner)
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _ProfileTabsDelegate(
+                        child: Container(
+                          height: 50,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            border: Border(
+                                bottom: BorderSide(color: Colors.black12)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap: () => _showMakerCreateModal(targetUserId),
+                                child: const Text("create",
+                                    style: TextStyle(color: Colors.black)),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Text("|",
+                                    style: TextStyle(color: Colors.grey)),
+                              ),
+                              GestureDetector(
+                                onTap: () => setState(() => _showDrafts = false),
+                                child: Text(
+                                  "published",
+                                  style: TextStyle(
+                                    color: !_showDrafts
+                                        ? Colors.black
+                                        : Colors.grey,
+                                    fontWeight: !_showDrafts
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    decoration: !_showDrafts
+                                        ? TextDecoration.underline
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Text("|",
+                                    style: TextStyle(color: Colors.grey)),
+                              ),
+                              GestureDetector(
+                                onTap: () => setState(() => _showDrafts = true),
+                                child: Text(
+                                  "drafts",
+                                  style: TextStyle(
+                                    color: _showDrafts
+                                        ? Colors.black
+                                        : Colors.grey,
+                                    fontWeight: _showDrafts
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    decoration: _showDrafts
+                                        ? TextDecoration.underline
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Sub-navigation for Pages Tab (Legacy)
                   if (activeTab == 'pages' && canEditProfile && isOwner)
                     SliverPersistentHeader(
                       pinned: true,
@@ -442,7 +551,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             .snapshots()
             .map((snap) {
           final List<QueryDocumentSnapshot> filtered = snap.docs.where((doc) {
-            final data = doc.data();
+            final data = doc.data() as Map<String, dynamic>;
 
             final hasSourceFile = data.containsKey('sourceFile');
             final isLive = data['status'] == 'live';
@@ -457,6 +566,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
               final isUserInvolved = data['editorId'] == targetUserId ||
                   data['uploaderId'] == targetUserId;
               if (!isUserInvolved) return false;
+              if (data['type'] == 'folio') return false; // Filter out folios from publisher
               return !hasSourceFile || isLive;
             }
           }).toList();
@@ -473,7 +583,36 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           return filtered;
         });
         break;
-      case 'pages': // PAGES
+      case 'maker': // MAKER - Dedicated Folios Feed
+        stream = FirebaseFirestore.instance
+            .collection('fanzines')
+            .where('editorId', isEqualTo: targetUserId)
+            .snapshots()
+            .map((snap) {
+          final List<QueryDocumentSnapshot> filtered = snap.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            if (data['type'] != 'folio') return false;
+
+            final isLive = data['status'] == 'live' || data['status'] == 'published';
+
+            if (isOwner) {
+              return _showDrafts ? !isLive : isLive;
+            }
+            return isLive;
+          }).toList();
+
+          filtered.sort((a, b) {
+            final aT = (a.data() as Map)['creationDate'] as Timestamp?;
+            final bT = (b.data() as Map)['creationDate'] as Timestamp?;
+            if (aT == null) return 1;
+            if (bT == null) return -1;
+            return bT.compareTo(aT);
+          });
+
+          return filtered;
+        });
+        break;
+      case 'pages': // Legacy loose images feed
         stream = FirebaseFirestore.instance
             .collection('images')
             .where('uploaderId', isEqualTo: targetUserId)
@@ -483,18 +622,18 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           if (isOwner) {
             if (_showDrafts) {
               return snap.docs.where((doc) {
-                final data = doc.data();
+                final data = doc.data() as Map<String, dynamic>;
                 return data['status'] == 'pending';
               }).toList();
             } else {
               return snap.docs.where((doc) {
-                final data = doc.data();
+                final data = doc.data() as Map<String, dynamic>;
                 return data['status'] != 'pending';
               }).toList();
             }
           }
           return snap.docs.where((doc) {
-            final data = doc.data();
+            final data = doc.data() as Map<String, dynamic>;
             return data['status'] != 'pending';
           }).toList();
         });
@@ -584,7 +723,10 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
         if (totalItems == 0) {
           String emptyMsg = "No items found.";
-          if (activeTab == 'pages' && isOwner) {
+          if (activeTab == 'maker' && isOwner) {
+            emptyMsg =
+            _showDrafts ? "No pending folios." : "No published folios.";
+          } else if (activeTab == 'pages' && isOwner) {
             emptyMsg =
             _showDrafts ? "No pending drafts." : "No published pages.";
           } else if (activeTab == 'editor' && isOwner) {
@@ -617,11 +759,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
                 if (activeTab == 'editor' ||
                     activeTab == 'works' ||
-                    activeTab == 'mentions') {
+                    activeTab == 'mentions' ||
+                    activeTab == 'maker') {
                   return _FanzineCoverTile(
                     fanzineId: docId,
                     title: data['title'] ?? 'Untitled',
-                    shouldEdit: activeTab == 'editor',
+                    shouldEdit: activeTab == 'editor' || activeTab == 'maker',
                   );
                 } else {
                   String? imageUrl = data['fileUrl'];

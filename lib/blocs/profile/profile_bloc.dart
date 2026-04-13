@@ -135,7 +135,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (isMe || (isTargetEditor && event.isViewerEditor)) {
       tabs.add('editor');
     }
-    tabs.addAll(['pages', 'works', 'comments', 'mentions', 'collection']);
+    // Added 'maker' to the tab list to support transition
+    tabs.addAll(['maker', 'pages', 'works', 'comments', 'mentions', 'collection']);
 
     emit(state.copyWith(
       userData: userData,
