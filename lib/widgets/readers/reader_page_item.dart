@@ -21,6 +21,7 @@ import '../auth_modal.dart';
 class ReaderPageItem extends StatefulWidget {
   final String fanzineId;
   final String fanzineTitle;
+  final String? fanzineType;
   final Map<String, dynamic> pageData;
   final int pageIndex;
 
@@ -29,12 +30,13 @@ class ReaderPageItem extends StatefulWidget {
 
   final BonusRowType? activeGlobalPanel;
   final Function(BonusRowType) onTogglePanel;
-  final VoidCallback? onOpenGrid; // Changed to VoidCallback
+  final VoidCallback? onOpenGrid;
 
   const ReaderPageItem({
     super.key,
     required this.fanzineId,
     required this.fanzineTitle,
+    this.fanzineType,
     required this.pageData,
     required this.pageIndex,
     required this.isEditingMode,
@@ -169,6 +171,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
                           imageId: imageId,
                           pageId: pageId,
                           fanzineId: widget.fanzineId,
+                          fanzineType: widget.fanzineType,
                           pageNumber: widget.pageIndex + 1,
                           isGame: isGame,
                           youtubeId: youtubeId,

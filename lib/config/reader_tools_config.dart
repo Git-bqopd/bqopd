@@ -94,6 +94,7 @@ class ReaderToolsConfig {
       activeIcon: Icons.document_scanner,
       role: ToolRole.editor,
       action: ToolAction.openBonusRow,
+      condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.ocr,
     ),
     ReaderTool(
@@ -103,6 +104,7 @@ class ReaderToolsConfig {
       activeIcon: Icons.link,
       role: ToolRole.editor,
       action: ToolAction.openBonusRow,
+      condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
     ),
     ReaderTool(

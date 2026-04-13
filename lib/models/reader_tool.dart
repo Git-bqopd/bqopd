@@ -22,6 +22,7 @@ enum ToolCondition {
   requiresIndicia,    // Only shows if pageId == fanzine.indiciaPageId
   requiresTwoPage,    // Only shows if the fanzine document has twoPage == true
   hideOnDesktopSplit, // Hidden if the desktop UI is already showing Grid and List side-by-side
+  requiresOcrPipeline,// Hidden for manual 'folio' and 'calendar' types
 }
 
 /// Defines the specific widget drawer to mount when action == ToolAction.openBonusRow

@@ -16,6 +16,7 @@ class DynamicSocialToolbar extends StatefulWidget {
   final String imageId;
   final String? pageId;
   final String? fanzineId;
+  final String? fanzineType;
   final int? pageNumber;
   final bool isGame;
   final String? youtubeId;
@@ -30,6 +31,7 @@ class DynamicSocialToolbar extends StatefulWidget {
     required this.imageId,
     this.pageId,
     this.fanzineId,
+    this.fanzineType,
     this.pageNumber,
     this.isGame = false,
     this.youtubeId,
@@ -156,6 +158,10 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         break;
       case ToolCondition.hideOnDesktopSplit:
         if (widget.onOpenGrid == null) return false;
+        break;
+      case ToolCondition.requiresOcrPipeline:
+      // Hide these tools for Publisher-based folios/calendars
+        if (widget.fanzineType == 'folio' || widget.fanzineType == 'calendar') return false;
         break;
       default:
         break;

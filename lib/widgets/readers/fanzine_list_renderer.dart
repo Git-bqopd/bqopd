@@ -8,6 +8,7 @@ import 'reader_page_item.dart';
 
 class FanzineListRenderer extends StatefulWidget {
   final String fanzineId;
+  final String? fanzineType;
   final List<Map<String, dynamic>> pages;
   final Widget headerWidget;
   final ItemScrollController itemScrollController;
@@ -19,13 +20,13 @@ class FanzineListRenderer extends StatefulWidget {
   final BonusRowType? activeGlobalPanel;
   final Function(BonusRowType) onTogglePanel;
 
-  // FIXED: Changed from Function(int)? to VoidCallback?
   final VoidCallback? onOpenGrid;
   final int initialIndex;
 
   const FanzineListRenderer({
     super.key,
     required this.fanzineId,
+    this.fanzineType,
     required this.pages,
     required this.headerWidget,
     required this.itemScrollController,
@@ -77,13 +78,13 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
         return ReaderPageItem(
           fanzineId: widget.fanzineId,
           fanzineTitle: _fanzineTitle,
+          fanzineType: widget.fanzineType,
           pageData: pageData,
           pageIndex: pageIndex,
           isEditingMode: widget.isEditingMode,
           isDesktopLayout: widget.isDesktopLayout,
           activeGlobalPanel: widget.activeGlobalPanel,
           onTogglePanel: widget.onTogglePanel,
-          // FIXED: Pass directly instead of wrapping in a function
           onOpenGrid: widget.onOpenGrid,
         );
       },

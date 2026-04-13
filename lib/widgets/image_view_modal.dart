@@ -12,7 +12,7 @@ class ImageViewModal extends StatefulWidget {
   final String imageUrl;
   final String? imageText;
   final String? shortCode;
-  final String imageId; // REQUIRED: Need this to save reference to DB
+  final String imageId;
 
   const ImageViewModal({
     super.key,
@@ -101,6 +101,7 @@ class _ImageViewModalState extends State<ImageViewModal> {
 
                       return DynamicSocialToolbar(
                         imageId: widget.imageId,
+                        fanzineType: null,
                         isGame: isGame,
                         youtubeId: youtubeId,
                         isEditingMode: false,

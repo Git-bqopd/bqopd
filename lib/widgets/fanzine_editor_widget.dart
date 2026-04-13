@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../blocs/fanzine_editor_bloc.dart'; // Corrected path
+import '../blocs/fanzine_editor_bloc.dart';
 import '../repositories/fanzine_repository.dart';
 import '../services/username_service.dart';
 
@@ -74,6 +74,7 @@ class _FanzineEditorViewState extends State<_FanzineEditorView>
           final shortCode = data['shortCode'];
           final status = data['status'] ?? 'draft';
           final twoPage = data['twoPage'] ?? false;
+          final type = data['type'] ?? 'fanzine';
           final hasSourceFile = data.containsKey('sourceFile');
           final List<String> entities =
           List<String>.from(data['draftEntities'] ?? []);
@@ -111,7 +112,7 @@ class _FanzineEditorViewState extends State<_FanzineEditorView>
                       ],
                     ),
                     _buildTabContent(context, state, data, entities,
-                        hasSourceFile, shortCode, twoPage, status),
+                        hasSourceFile, shortCode, twoPage, status, type),
                   ],
                 ),
               ),
@@ -140,6 +141,7 @@ class _FanzineEditorViewState extends State<_FanzineEditorView>
       String? shortCode,
       bool twoPage,
       String status,
+      String type,
       ) {
     switch (_tabController.index) {
       case 0:
@@ -166,7 +168,7 @@ class _FanzineEditorViewState extends State<_FanzineEditorView>
           ),
         );
       case 2:
-        return _buildOCREntitiesTab(context, state, entities);
+        return _buildOCREntitiesTab(context, state, entities, type);
       default:
         return const SizedBox.shrink();
     }
@@ -278,7 +280,15 @@ class _FanzineEditorViewState extends State<_FanzineEditorView>
   }
 
   Widget _buildOCREntitiesTab(
-      BuildContext context, FanzineEditorLoaded state, List<String> entities) {
+      BuildContext context, FanzineEditorLoaded state, List<String> entities, String type) {
+
+    if (type == 'folio' || type == 'calendar') {
+      return const Padding(
+        padding: EdgeInsets.all(24.0),
+        child: Text("Automated OCR and Entity Extraction pipelines are not applicable for manually assembled Folios.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart'; // Import for launching URL
+import 'package:url_launcher/url_launcher.dart';
 import '../services/user_provider.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/hashtag_bar.dart';
@@ -230,6 +230,7 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                 // Social Toolbar (for Like/Comment toggling)
                 DynamicSocialToolbar(
                   imageId: widget.docId,
+                  fanzineType: null,
                   isGame: false,
                   isEditingMode: false,
                   activeBonusRow: _activePanel,

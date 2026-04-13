@@ -341,6 +341,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                   viewMode: FanzineViewMode.single,
                   pages: _pages,
                   fanzineId: _resolvedFanzineId ?? '',
+                  fanzineType: _resolvedType,
                   headerWidget: _buildHeader(),
                   gridScrollController: ScrollController(),
                   listScrollController: _mobileListScrollController,
@@ -375,6 +376,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                   Positioned.fill(
                     child: FanzineListRenderer(
                       fanzineId: _resolvedFanzineId ?? '',
+                      fanzineType: _resolvedType,
                       pages: _pages,
                       headerWidget: _buildHeader(isStickerOnly: false),
                       itemScrollController: _desktopListScrollController,
@@ -417,7 +419,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 isEditingMode: _isEditingMode,
                 itemScrollController: _desktopPanelScrollController,
                 onClose: () => setState(() => _activeGlobalPanel = null),
-                initialIndex: _targetIndex, // Pass current selection
+                initialIndex: _targetIndex,
               ),
             )
                 : const SizedBox.shrink();

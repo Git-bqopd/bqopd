@@ -11,6 +11,7 @@ class FanzineLayout extends StatelessWidget {
   final FanzineViewMode viewMode;
   final List<Map<String, dynamic>> pages;
   final String fanzineId;
+  final String? fanzineType;
   final Widget headerWidget;
 
   final ScrollController gridScrollController;
@@ -25,7 +26,6 @@ class FanzineLayout extends StatelessWidget {
   final ViewService viewService;
   final Function(int pageIndex) onSwitchToSingle;
 
-  // FIXED: Changed type to VoidCallback to match new unified architecture
   final VoidCallback? onOpenGrid;
 
   const FanzineLayout({
@@ -33,6 +33,7 @@ class FanzineLayout extends StatelessWidget {
     required this.viewMode,
     required this.pages,
     required this.fanzineId,
+    this.fanzineType,
     required this.headerWidget,
     required this.gridScrollController,
     required this.listScrollController,
@@ -58,6 +59,7 @@ class FanzineLayout extends StatelessWidget {
     } else {
       return FanzineListRenderer(
         fanzineId: fanzineId,
+        fanzineType: fanzineType,
         pages: pages,
         headerWidget: headerWidget,
         itemScrollController: listScrollController,

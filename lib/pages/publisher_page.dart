@@ -178,6 +178,7 @@ If you can read this, the system is working.
                       imageId: 'publisher_preview',
                       pageId: null,
                       fanzineId: null,
+                      fanzineType: 'folio',
                       pageNumber: null,
                       isEditingMode: true,
                       activeBonusRow: _isTextDrawerOpen ? BonusRowType.textReader : null,

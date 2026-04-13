@@ -110,13 +110,13 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       await folioRef.set({
         'title': 'New Folio',
         'editorId': userId,
-        'status': 'working', // Initial draft status
-        'processingStatus': 'complete', // No PDF processing needed
+        'status': 'working',
+        'processingStatus': 'complete',
         'creationDate': FieldValue.serverTimestamp(),
         'type': 'folio',
         'shortCode': shortCode,
         'shortCodeKey': shortCode.toUpperCase(),
-        'twoPage': false, // Single column by default for general folios
+        'twoPage': false,
       });
 
       if (mounted) context.push('/editor/${folioRef.id}');
@@ -380,7 +380,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                       ),
                     ),
 
-                  // Sub-navigation for Maker Tab (New Tab)
+                  // Sub-navigation for Maker Tab
                   if (activeTab == 'maker' && canEditProfile && isOwner)
                     SliverPersistentHeader(
                       pinned: true,
@@ -557,21 +557,16 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             final isLive = data['status'] == 'live';
 
             if (_editorSubTabIndex == 0) {
-              // CURATOR: Show all in-process PDF zines that haven't gone live.
-              // Mirroring the Dashboard logic: any zine not live that has a source file.
               return hasSourceFile && !isLive;
             } else {
-              // PUBLISHER: Show zines that were manually created OR are now live.
-              // Only show for the specific user being viewed.
               final isUserInvolved = data['editorId'] == targetUserId ||
                   data['uploaderId'] == targetUserId;
               if (!isUserInvolved) return false;
-              if (data['type'] == 'folio') return false; // Filter out folios from publisher
+              if (data['type'] == 'folio') return false;
               return !hasSourceFile || isLive;
             }
           }).toList();
 
-          // Memory sort by creationDate descending
           filtered.sort((a, b) {
             final aT = (a.data() as Map)['creationDate'] as Timestamp?;
             final bT = (b.data() as Map)['creationDate'] as Timestamp?;
@@ -764,6 +759,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                   return _FanzineCoverTile(
                     fanzineId: docId,
                     title: data['title'] ?? 'Untitled',
+                    type: data['type'] ?? 'fanzine',
                     shouldEdit: activeTab == 'editor' || activeTab == 'maker',
                   );
                 } else {
@@ -824,11 +820,13 @@ class _ProfileTabsDelegate extends SliverPersistentHeaderDelegate {
 class _FanzineCoverTile extends StatelessWidget {
   final String fanzineId;
   final String title;
+  final String type;
   final bool shouldEdit;
 
   const _FanzineCoverTile({
     required this.fanzineId,
     required this.title,
+    this.type = 'fanzine',
     this.shouldEdit = false,
   });
 
@@ -889,34 +887,55 @@ class _FanzineCoverTile extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (imageUrl != null)
+                if (imageUrl != null && imageUrl.isNotEmpty)
                   Image.network(imageUrl, fit: BoxFit.cover)
                 else if (isLoading)
                   const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                else
-                // Improved Placeholder for unprocessed zines
-                  Container(
-                    color: Colors.grey[200],
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.pending_actions,
-                            size: 40, color: Colors.grey[400]),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Text(
-                            "Ingesting...",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold),
+                else if (type == 'folio' || type == 'calendar')
+                    Container(
+                      color: Colors.grey[200],
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.edit_document, size: 40, color: Colors.grey[400]),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Text(
+                              "Draft\n(No Cover)",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      color: Colors.grey[200],
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.pending_actions,
+                              size: 40, color: Colors.grey[400]),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Text(
+                              "Ingesting...",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                 Positioned(
                   bottom: 0,
                   left: 0,
