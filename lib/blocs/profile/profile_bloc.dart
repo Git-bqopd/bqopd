@@ -15,19 +15,23 @@ class LoadProfileRequested extends ProfileEvent {
   final String userId;
   final String currentAuthId;
   final bool isViewerEditor;
+  final String? initialTab; // NEW: Accept optional target tab
+
   LoadProfileRequested({
     required this.userId,
     required this.currentAuthId,
-    required this.isViewerEditor
+    required this.isViewerEditor,
+    this.initialTab,
   });
 }
 
-// Internal events to handle stream emissions safely
 class _ProfileDataUpdated extends ProfileEvent {
   final DocumentSnapshot doc;
   final String currentAuthId;
   final bool isViewerEditor;
-  _ProfileDataUpdated(this.doc, this.currentAuthId, this.isViewerEditor);
+  final String? initialTab;
+
+  _ProfileDataUpdated(this.doc, this.currentAuthId, this.isViewerEditor, this.initialTab);
 }
 
 class _FollowStatusUpdated extends ProfileEvent {
@@ -116,7 +120,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     // Listen to user data and dispatch internal event
     _userSub = _userRepository.watchUser(event.userId).listen((doc) {
-      add(_ProfileDataUpdated(doc, event.currentAuthId, event.isViewerEditor));
+      add(_ProfileDataUpdated(doc, event.currentAuthId, event.isViewerEditor, event.initialTab));
     });
   }
 
@@ -135,12 +139,20 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     if (isMe || (isTargetEditor && event.isViewerEditor)) {
       tabs.add('editor');
     }
-    // Added 'maker' to the tab list to support transition
     tabs.addAll(['maker', 'pages', 'works', 'comments', 'mentions', 'collection']);
+
+    // Handle deep-linking to a specific tab on load
+    int startTab = state.currentTabIndex;
+    if (event.initialTab != null && tabs.contains(event.initialTab)) {
+      startTab = tabs.indexOf(event.initialTab!);
+    } else if (startTab >= tabs.length) {
+      startTab = 0;
+    }
 
     emit(state.copyWith(
       userData: userData,
       visibleTabs: tabs,
+      currentTabIndex: startTab,
       isLoading: false,
     ));
   }

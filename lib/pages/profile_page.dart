@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -11,6 +12,8 @@ import '../blocs/profile/profile_bloc.dart';
 import '../repositories/user_repository.dart';
 import '../repositories/engagement_repository.dart';
 import '../services/user_provider.dart';
+import '../services/user_bootstrap.dart';
+import '../services/username_service.dart';
 import '../widgets/profile_widget.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/new_fanzine_modal.dart';
@@ -31,6 +34,11 @@ class ProfilePage extends StatelessWidget {
       return const Scaffold(body: Center(child: Text("Please log in.")));
     }
 
+    // Intercept URL Query parameters
+    final queryParams = GoRouterState.of(context).uri.queryParameters;
+    final initialTab = queryParams['tab'];
+    final initialDrafts = queryParams['drafts'] == 'true';
+
     return BlocProvider(
       create: (context) => ProfileBloc(
         userRepository: context.read<UserRepository>(),
@@ -39,14 +47,17 @@ class ProfilePage extends StatelessWidget {
         userId: targetUserId!,
         currentAuthId: currentUid ?? '',
         isViewerEditor: userProvider.isEditor,
+        initialTab: initialTab, // Pass starting tab into the BLoC
       )),
-      child: const _ProfilePageView(),
+      child: _ProfilePageView(initialDrafts: initialDrafts),
     );
   }
 }
 
 class _ProfilePageView extends StatefulWidget {
-  const _ProfilePageView();
+  final bool initialDrafts;
+
+  const _ProfilePageView({this.initialDrafts = false});
 
   @override
   State<_ProfilePageView> createState() => _ProfilePageViewState();
@@ -60,6 +71,23 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   int _editorSubTabIndex = 0;
 
   bool _isUploadingPdf = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _showDrafts = widget.initialDrafts; // Seed initial value
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfilePageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Ensure hot-updates from URL are properly caught if Widget isn't completely disposed
+    if (oldWidget.initialDrafts != widget.initialDrafts) {
+      setState(() {
+        _showDrafts = widget.initialDrafts;
+      });
+    }
+  }
 
   bool _canEdit(Map<String, dynamic> userData) {
     final provider = Provider.of<UserProvider>(context, listen: false);
@@ -94,13 +122,13 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       context: context,
       barrierDismissible: false,
       builder: (_) => MakerCreateModal(
-        onUploadImage: () => _showImageUpload(userId),
-        onCreateFolio: () => _createFolio(userId),
+        onSingleImage: () => _createFolio(userId, isSingleImage: true),
+        onCreateFolio: () => _createFolio(userId, isSingleImage: false),
       ),
     );
   }
 
-  Future<void> _createFolio(String userId) async {
+  Future<void> _createFolio(String userId, {bool isSingleImage = false}) async {
     try {
       final db = FirebaseFirestore.instance;
       final folioRef = db.collection('fanzines').doc();
@@ -108,7 +136,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       final shortCode = folioRef.id.substring(0, 7);
 
       await folioRef.set({
-        'title': 'New Folio',
+        'title': isSingleImage ? 'Single Image' : 'New Folio',
         'editorId': userId,
         'status': 'working',
         'processingStatus': 'complete',
@@ -124,6 +152,35 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _deleteFanzine(String fanzineId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text("Delete Draft?"),
+        content: const Text("This will permanently remove this draft and its pages."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('delete_fanzine')
+          .call({'fanzineId': fanzineId});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Draft deleted.")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     }
   }
@@ -374,6 +431,29 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                   ),
                                 ),
                               ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Text("|",
+                                    style: TextStyle(color: Colors.grey)),
+                              ),
+                              GestureDetector(
+                                onTap: () =>
+                                    setState(() => _editorSubTabIndex = 2),
+                                child: Text(
+                                  "entities",
+                                  style: TextStyle(
+                                    color: _editorSubTabIndex == 2
+                                        ? Colors.black
+                                        : Colors.grey,
+                                    fontWeight: _editorSubTabIndex == 2
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    decoration: _editorSubTabIndex == 2
+                                        ? TextDecoration.underline
+                                        : null,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -397,7 +477,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                             children: [
                               GestureDetector(
                                 onTap: () => _showMakerCreateModal(targetUserId),
-                                child: const Text("create",
+                                child: const Text("make",
                                     style: TextStyle(color: Colors.black)),
                               ),
                               const Padding(
@@ -543,6 +623,68 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       case 'editor': // EDITOR
         if (!isOwner && !isEditor) {
           return const SliverToBoxAdapter(child: SizedBox());
+        }
+
+        if (_editorSubTabIndex == 2) {
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('fanzines')
+                .where('status', whereIn: ['draft', 'working']).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return SliverToBoxAdapter(
+                    child: Center(child: Text("Error: ${snapshot.error}")));
+              }
+              if (!snapshot.hasData) {
+                return const SliverToBoxAdapter(
+                    child: Center(child: CircularProgressIndicator()));
+              }
+
+              final Map<String, int> entityCounts = {};
+              for (var doc in snapshot.data!.docs) {
+                final data = doc.data() as Map<String, dynamic>;
+                final entities = List<String>.from(data['draftEntities'] ?? []);
+                for (var name in entities) {
+                  entityCounts[name] = (entityCounts[name] ?? 0) + 1;
+                }
+              }
+
+              if (entityCounts.isEmpty) {
+                return const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: Center(child: Text("No entities found in current drafts.")),
+                    ));
+              }
+
+              final sortedNames = entityCounts.keys.toList()
+                ..sort((a, b) {
+                  int countCompare = entityCounts[b]!.compareTo(entityCounts[a]!);
+                  if (countCompare != 0) return countCompare;
+                  return a.compareTo(b);
+                });
+
+              return SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                      final name = sortedNames[index];
+                      final count = entityCounts[name]!;
+                      return Column(
+                        children: [
+                          _EntityRow(name: name, count: count),
+                          if (index < sortedNames.length - 1)
+                            const Divider(height: 1),
+                        ],
+                      );
+                    },
+                    childCount: sortedNames.length,
+                  ),
+                ),
+              );
+            },
+          );
         }
 
         // Fetch all user zines and filter client-side to avoid index requirements
@@ -761,6 +903,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                     title: data['title'] ?? 'Untitled',
                     type: data['type'] ?? 'fanzine',
                     shouldEdit: activeTab == 'editor' || activeTab == 'maker',
+                    isDraft: _showDrafts && activeTab == 'maker',
+                    onDelete: () => _deleteFanzine(docId),
                   );
                 } else {
                   String? imageUrl = data['fileUrl'];
@@ -822,12 +966,16 @@ class _FanzineCoverTile extends StatelessWidget {
   final String title;
   final String type;
   final bool shouldEdit;
+  final bool isDraft;
+  final VoidCallback? onDelete;
 
   const _FanzineCoverTile({
     required this.fanzineId,
     required this.title,
     this.type = 'fanzine',
     this.shouldEdit = false,
+    this.isDraft = false,
+    this.onDelete,
   });
 
   Future<String?> _fetchCoverUrl() async {
@@ -964,11 +1112,182 @@ class _FanzineCoverTile extends StatelessWidget {
                     ),
                   ),
                 ),
+
+                // Draft Deletion Button (X)
+                if (isDraft && onDelete != null)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: GestureDetector(
+                      onTap: onDelete,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close, color: Colors.white, size: 16),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
         );
       },
     );
+  }
+}
+
+class _EntityRow extends StatelessWidget {
+  final String name;
+  final int count;
+
+  const _EntityRow({required this.name, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final handle = normalizeHandle(name);
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('usernames')
+          .doc(handle)
+          .snapshots(),
+      builder: (context, snapshot) {
+        Widget statusWidget;
+
+        if (!snapshot.hasData) {
+          statusWidget = const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2));
+        } else if (snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          String linkText = '/$handle';
+
+          if (data['isAlias'] == true) {
+            final redirect = data['redirect'] ?? 'unknown';
+            linkText = '/$handle -> /$redirect';
+          }
+
+          statusWidget = InkWell(
+            onTap: () => context.go('/$handle'),
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                linkText,
+                style: const TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline),
+              ),
+            ),
+          );
+        } else {
+          statusWidget = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: () => _createProfile(context, name),
+                child:
+                const Text("Create", style: TextStyle(color: Colors.green)),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => _createAlias(context, name),
+                child:
+                const Text("Alias", style: TextStyle(color: Colors.orange)),
+              ),
+            ],
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 40,
+                child: Text(count.toString(),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.grey)),
+              ),
+              Expanded(
+                child: Text(name, style: const TextStyle(fontSize: 16)),
+              ),
+              statusWidget,
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _createProfile(BuildContext context, String name) async {
+    String first = name;
+    String last = "";
+
+    if (name.contains(' ')) {
+      final parts = name.split(' ');
+      first = parts.first;
+      last = parts.sublist(1).join(' ');
+    }
+
+    try {
+      await createManagedProfile(
+          firstName: first, lastName: last, bio: "Auto-created from profile dashboard");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Profile Created!")));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
+  }
+
+  Future<void> _createAlias(BuildContext context, String name) async {
+    final target = await showDialog<String>(
+        context: context,
+        builder: (c) {
+          final controller = TextEditingController();
+          return AlertDialog(
+            title: Text("Create Alias for '$name'"),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text("Enter EXISTING username (target):"),
+              TextField(
+                  controller: controller,
+                  decoration:
+                  const InputDecoration(hintText: "e.g. julius-schwartz"))
+            ]),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(c),
+                  child: const Text("Cancel")),
+              TextButton(
+                  onPressed: () => Navigator.pop(c, controller.text.trim()),
+                  child: const Text("Create Alias")),
+            ],
+          );
+        });
+
+    if (target == null || target.isEmpty) return;
+
+    try {
+      await createAlias(aliasHandle: name, targetHandle: target);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Alias Created!")));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
   }
 }

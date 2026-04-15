@@ -10,7 +10,8 @@ import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
 import '../widgets/readers/panel_column_renderer.dart';
-import '../widgets/fanzine_editor_widget.dart';
+import '../widgets/fanzine_curator_widget.dart';
+import '../widgets/fanzine_maker_widget.dart';
 import '../widgets/calendar_editor_widget.dart';
 import '../widgets/login_widget.dart';
 import '../widgets/register_widget.dart';
@@ -296,7 +297,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: _resolvedType == 'calendar'
                 ? CalendarEditorWidget(folioId: _resolvedFanzineId!)
-                : FanzineEditorWidget(fanzineId: _resolvedFanzineId!),
+                : _resolvedType == 'folio'
+                ? FanzineMakerWidget(fanzineId: _resolvedFanzineId!)
+                : FanzineCuratorWidget(fanzineId: _resolvedFanzineId!),
           ),
         ),
       );

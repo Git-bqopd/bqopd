@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import '../blocs/upload/upload_bloc.dart';
-import '../components/button.dart'; // Added for the MakerCreateModal
+import '../components/button.dart';
 
 class ImageUploadModal extends StatefulWidget {
   final String userId;
@@ -31,13 +31,11 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
   }
 
   Future<void> _pickImage() async {
-    // Capture the BLoC before the async gap to avoid synchronous context issues
     final uploadBloc = context.read<UploadBloc>();
 
     final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
     if (file != null) {
       final bytes = await file.readAsBytes();
-      // Use standard mounted check
       if (mounted) {
         uploadBloc.add(ImagePicked(bytes, file.name));
       }
@@ -223,12 +221,12 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
 }
 
 class MakerCreateModal extends StatelessWidget {
-  final VoidCallback onUploadImage;
+  final VoidCallback onSingleImage;
   final VoidCallback onCreateFolio;
 
   const MakerCreateModal({
     super.key,
-    required this.onUploadImage,
+    required this.onSingleImage,
     required this.onCreateFolio,
   });
 
@@ -278,16 +276,16 @@ class MakerCreateModal extends StatelessWidget {
                               ),
                               const SizedBox(height: 32),
                               MyButton(
-                                text: "upload image",
+                                text: "single image",
                                 color: Colors.grey, // Match Login/Register theme
                                 onTap: () {
                                   Navigator.of(context).pop();
-                                  onUploadImage();
+                                  onSingleImage();
                                 },
                               ),
                               const SizedBox(height: 16),
                               MyButton(
-                                text: "create folio",
+                                text: "folio",
                                 color: Colors.grey, // Match Login/Register theme
                                 onTap: () {
                                   Navigator.of(context).pop();

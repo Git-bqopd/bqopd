@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'; // Added for debugPrint
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -36,7 +36,14 @@ class UserProvider with ChangeNotifier {
     if (_userProfile == null) return false;
     final role = _userProfile!['role'];
     final isEd = _userProfile!['isEditor'];
-    return role == 'editor' || role == 'admin' || role == 'curator' || role == 'moderator' || isEd == true;
+    final capEditor = _userProfile!['Editor']; // FIXED: Catch the capital 'E' field
+
+    return role == 'editor' ||
+        role == 'admin' ||
+        role == 'curator' ||
+        role == 'moderator' ||
+        isEd == true ||
+        capEditor == true;
   }
 
   Future<void> _fetchUserProfile(String uid) async {
@@ -44,7 +51,6 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // FIXED: Capital 'U' in 'Users' to match your Firestore database!
       DocumentSnapshot doc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
       if (doc.exists) {
         _userProfile = doc.data() as Map<String, dynamic>;
@@ -87,7 +93,6 @@ class UserProvider with ChangeNotifier {
     if (_user == null) return;
 
     try {
-      // FIXED: Capital 'U' in 'Users' to match your Firestore database!
       await FirebaseFirestore.instance.collection('Users').doc(_user!.uid).set({
         'preferences': {
           'socialButtons': _socialButtonVisibility,

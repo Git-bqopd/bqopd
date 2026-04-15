@@ -1,7 +1,7 @@
 import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../widgets/fanzine_editor_widget.dart';
+import '../widgets/fanzine_curator_widget.dart';
 
 class FanzineEditorPage extends StatefulWidget {
   final String fanzineId;
@@ -46,7 +46,7 @@ class _FanzineEditorPageState extends State<FanzineEditorPage> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
-                      child: FanzineEditorWidget(fanzineId: widget.fanzineId),
+                      child: FanzineCuratorWidget(fanzineId: widget.fanzineId),
                     ),
                   ),
 
