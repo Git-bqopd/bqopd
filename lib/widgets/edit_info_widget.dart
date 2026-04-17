@@ -7,6 +7,7 @@ import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart';
 import 'package:go_router/go_router.dart';
 import '../services/username_service.dart';
 import '../env.dart'; // Import Env
+import '../utils/script_loader.dart'; // Import script loader
 import 'image_selector_modal.dart'; // Import the new selector
 
 class EditInfoWidget extends StatefulWidget {
@@ -23,7 +24,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
 
   late final FlutterGooglePlacesSdk _places;
 
-  final TextEditingController displayNameController = TextEditingController(); // NEW
+  final TextEditingController displayNameController = TextEditingController();
   final TextEditingController userNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
@@ -56,9 +57,11 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   void initState() {
     super.initState();
 
+    // LAZY LOAD: Inject the Maps script only when this widget (Editor) is entered
+    loadGoogleMapsScript();
+
     // LOGIC TO SELECT THE CORRECT API KEY
     String apiKey = '';
-
     if (kIsWeb) {
       apiKey = Env.googleApiKeyWeb;
     } else if (defaultTargetPlatform == TargetPlatform.android) {
@@ -176,7 +179,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
       if (!mounted) return;
       displayMessageToUser("Error fetching address details: $e", context);
     } finally {
-      setState(() => _isLoadingData = false);
+      if (mounted) setState(() => _isLoadingData = false);
     }
   }
 
@@ -425,7 +428,7 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
                                 ? Image.network(
                               _profilePhotoUrl!,
                               fit: BoxFit
-                                  .cover, // Or contain based on preference
+                                  .cover,
                               errorBuilder: (c, e, s) => const Icon(
                                   Icons.broken_image,
                                   size: 40),
@@ -690,15 +693,19 @@ class _AddressSearchDialogState extends State<_AddressSearchDialog> {
 
       try {
         final response = await widget.places.findAutocompletePredictions(query);
-        setState(() {
-          _predictions = response.predictions;
-          _isSearching = false;
-        });
+        if (mounted) {
+          setState(() {
+            _predictions = response.predictions;
+            _isSearching = false;
+          });
+        }
       } catch (e) {
-        setState(() {
-          _isSearching = false;
-          _errorMessage = e.toString();
-        });
+        if (mounted) {
+          setState(() {
+            _isSearching = false;
+            _errorMessage = e.toString();
+          });
+        }
       }
     });
   }

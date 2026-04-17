@@ -60,9 +60,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   final ItemScrollController _desktopListScrollController = ItemScrollController();
   final ItemScrollController _desktopPanelScrollController = ItemScrollController();
 
-  static const double kGridAloneWidth = 800.0;
-  static const double kGridTogetherWidth = 400.0;
-  static const double kReaderWidth = 800.0;
+  // Adjusted constants for more flexible desktop layouts
+  static const double kMaxGridWidth = 600.0;
+  static const double kMaxReaderWidth = 800.0;
 
   @override
   void initState() {
@@ -274,7 +274,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 top: 16,
                 right: 16,
                 child: Material(
-                  color: Colors.white.withValues(alpha: 0.8),
+                  color: Colors.white.withOpacity(0.8),
                   shape: const CircleBorder(),
                   child: IconButton(
                     icon: const Icon(Icons.close, color: Colors.black),
@@ -359,73 +359,29 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               }
             }
 
+            // Desktop Proportional Layout Logic
+            final double availableWidth = constraints.maxWidth;
             final bool isPanelOpen = _showList && _activeGlobalPanel != null;
 
-            Widget gridComponent = Container(
-              color: Colors.grey[200],
-              child: FanzineGridRenderer(
-                pages: _pages,
-                headerWidget: _buildHeader(isStickerOnly: _showList),
-                scrollController: _desktopGridScrollController ??= ScrollController(),
-                viewService: _viewService,
-                onPageTap: _handlePageTap,
-              ),
-            );
+            // Define column widths based on state
+            double gridWidth = 0;
+            double listWidth = 0;
+            double panelWidth = 0;
 
-            Widget listComponent = Container(
-              color: Colors.white,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: FanzineListRenderer(
-                      fanzineId: _resolvedFanzineId ?? '',
-                      fanzineType: _resolvedType,
-                      pages: _pages,
-                      headerWidget: _buildHeader(isStickerOnly: false),
-                      itemScrollController: _desktopListScrollController,
-                      initialIndex: _targetIndex,
-                      viewService: _viewService,
-                      isEditingMode: _isEditingMode,
-                      isDesktopLayout: true,
-                      activeGlobalPanel: _activeGlobalPanel,
-                      onTogglePanel: _handlePanelToggle,
-                      onOpenGrid: _handleCloseList,
-                    ),
-                  ),
-                  if (_showList && _showGrid)
-                    Positioned(
-                      top: 8, right: 8,
-                      child: FloatingActionButton.small(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        elevation: 4,
-                        onPressed: _handleCloseList,
-                        child: const Icon(Icons.close),
-                      ),
-                    ),
-                ],
-              ),
-            );
-
-            Widget panelComponent = isPanelOpen
-                ? Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(left: BorderSide(color: Colors.black12)),
-              ),
-              child: PanelColumnRenderer(
-                fanzineId: _resolvedFanzineId ?? '',
-                fanzineTitle: _fanzineTitle,
-                pages: _pages,
-                activePanel: _activeGlobalPanel!,
-                viewService: _viewService,
-                isEditingMode: _isEditingMode,
-                itemScrollController: _desktopPanelScrollController,
-                onClose: () => setState(() => _activeGlobalPanel = null),
-                initialIndex: _targetIndex,
-              ),
-            )
-                : const SizedBox.shrink();
+            if (_showGrid && !_showList) {
+              gridWidth = availableWidth.clamp(0.0, kMaxGridWidth * 1.5);
+            } else if (_showGrid && _showList) {
+              gridWidth = (availableWidth * 0.3).clamp(300.0, 500.0);
+              listWidth = (availableWidth * 0.45).clamp(400.0, 800.0);
+              if (isPanelOpen) {
+                panelWidth = availableWidth - gridWidth - listWidth;
+              }
+            } else if (!_showGrid && _showList) {
+              listWidth = (availableWidth * 0.6).clamp(600.0, kMaxReaderWidth);
+              if (isPanelOpen) {
+                panelWidth = availableWidth - listWidth;
+              }
+            }
 
             return Center(
               child: Row(
@@ -434,19 +390,77 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 children: [
                   if (_showGrid)
                     SizedBox(
-                      width: _showList ? kGridTogetherWidth : kGridAloneWidth,
-                      child: gridComponent,
+                      width: gridWidth,
+                      child: Container(
+                        color: Colors.grey[200],
+                        child: FanzineGridRenderer(
+                          pages: _pages,
+                          headerWidget: _buildHeader(isStickerOnly: _showList),
+                          scrollController: _desktopGridScrollController ??= ScrollController(),
+                          viewService: _viewService,
+                          onPageTap: _handlePageTap,
+                        ),
+                      ),
                     ),
 
                   if (_showList)
                     SizedBox(
-                      width: kReaderWidth,
-                      child: listComponent,
+                      width: listWidth,
+                      child: Container(
+                        color: Colors.white,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: FanzineListRenderer(
+                                fanzineId: _resolvedFanzineId ?? '',
+                                fanzineType: _resolvedType,
+                                pages: _pages,
+                                headerWidget: _buildHeader(isStickerOnly: false),
+                                itemScrollController: _desktopListScrollController,
+                                initialIndex: _targetIndex,
+                                viewService: _viewService,
+                                isEditingMode: _isEditingMode,
+                                isDesktopLayout: true,
+                                activeGlobalPanel: _activeGlobalPanel,
+                                onTogglePanel: _handlePanelToggle,
+                                onOpenGrid: _handleCloseList,
+                              ),
+                            ),
+                            if (_showList && _showGrid)
+                              Positioned(
+                                top: 8, right: 8,
+                                child: FloatingActionButton.small(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black,
+                                  elevation: 4,
+                                  onPressed: _handleCloseList,
+                                  child: const Icon(Icons.close),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
 
                   if (isPanelOpen)
                     Expanded(
-                      child: panelComponent,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          border: Border(left: BorderSide(color: Colors.black12)),
+                        ),
+                        child: PanelColumnRenderer(
+                          fanzineId: _resolvedFanzineId ?? '',
+                          fanzineTitle: _fanzineTitle,
+                          pages: _pages,
+                          activePanel: _activeGlobalPanel!,
+                          viewService: _viewService,
+                          isEditingMode: _isEditingMode,
+                          itemScrollController: _desktopPanelScrollController,
+                          onClose: () => setState(() => _activeGlobalPanel = null),
+                          initialIndex: _targetIndex,
+                        ),
+                      ),
                     ),
                 ],
               ),

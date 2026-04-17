@@ -64,6 +64,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     } else {
       await _loadDashboard();
     }
+    // FIXED: Added mounted guard to prevent setState after dispose()
     if (mounted) setState(() => _isLoadingData = false);
   }
 
@@ -74,6 +75,8 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           .where('shortCode', isEqualTo: shortCode)
           .limit(1)
           .get();
+
+      if (!mounted) return;
 
       if (query.docs.isEmpty) {
         setState(() {
@@ -94,29 +97,33 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         });
       } else {
         final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
-        final myUsername = userDoc.data()?['username'] ?? 'user';
-        setState(() {
-          _showLoginLink = false;
-          _displayUrl = 'bqopd.com/$myUsername';
-          _targetShortCode = myUsername;
-        });
+        if (mounted) {
+          final myUsername = userDoc.data()?['username'] ?? 'user';
+          setState(() {
+            _showLoginLink = false;
+            _displayUrl = 'bqopd.com/$myUsername';
+            _targetShortCode = myUsername;
+          });
+        }
       }
     } catch (e) {
-      setState(() => _displayUrl = 'bqopd.com/error');
+      if (mounted) setState(() => _displayUrl = 'bqopd.com/error');
     }
   }
 
   Future<void> _loadDashboard() async {
     if (currentUser == null || currentUser!.isAnonymous) {
-      setState(() {
-        _displayUrl = 'Login / Register';
-        _showLoginLink = true;
-      });
+      if (mounted) {
+        setState(() {
+          _displayUrl = 'Login / Register';
+          _showLoginLink = true;
+        });
+      }
       return;
     }
     try {
       final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
-      if (userDoc.exists) {
+      if (userDoc.exists && mounted) {
         final username = userDoc.data()?['username'] as String?;
         setState(() {
           _displayUrl = 'bqopd.com/$username';
@@ -183,9 +190,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
           ],
         ),
         child: Image.asset('assets/logo200.gif', width: 100, fit: BoxFit.contain),
@@ -207,9 +214,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(50),
-                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                  border: Border.all(color: Colors.black.withOpacity(0.05)),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
                   ],
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -234,9 +241,9 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+              border: Border.all(color: Colors.black.withOpacity(0.05)),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
               ],
             ),
             clipBehavior: Clip.antiAlias,
@@ -298,6 +305,7 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           children: [
             SizedBox(width: 45, child: Text((creator['role'] ?? 'Creator').toString().toUpperCase(), style: const TextStyle(fontSize: 8, color: Colors.black54, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
             const Padding(padding: EdgeInsets.symmetric(horizontal: 6.0), child: Text("|", style: TextStyle(fontSize: 10, color: Colors.black12))),
+            // FIXED: Wrapped creator info in Expanded to prevent RenderFlex overflow
             Expanded(child: _buildCreatorInfo(creator['uid'], (creator['name'] ?? 'Unknown'))),
           ],
         );
@@ -308,9 +316,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   Widget _buildCreatorInfo(String? uid, String fallbackName) {
     if (uid == null || uid.isEmpty) {
       return Row(children: [
-        Container(width: 28, height: 28, decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.05), shape: BoxShape.circle), child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10, color: Colors.black54)))),
+        Container(width: 28, height: 28, decoration: BoxDecoration(color: Colors.black.withOpacity(0.05), shape: BoxShape.circle), child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10, color: Colors.black54)))),
         const SizedBox(width: 8),
-        Text(fallbackName.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+        // FIXED: Added Expanded and ellipsis for long names
+        Expanded(child: Text(fallbackName.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis)),
       ]);
     }
     return FutureBuilder<DocumentSnapshot>(
@@ -322,7 +331,8 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           return Row(children: [
             CircleAvatar(radius: 14, backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null, child: photoUrl == null ? Text(name[0]) : null),
             const SizedBox(width: 8),
-            Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+            // FIXED: Added Expanded and ellipsis for long names
+            Expanded(child: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis)),
           ]);
         }
     );

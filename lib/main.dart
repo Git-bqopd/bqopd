@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
-import 'utils/script_loader.dart';
 import 'env.dart';
 
 // Services & Repositories
@@ -40,7 +39,11 @@ import 'pages/moderator_feed_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Env.load();
-  await loadGoogleMapsScript();
+
+  // FIXED: Removed loadGoogleMapsScript() from here.
+  // It is now lazily loaded inside EditInfoWidget to prevent
+  // unnecessary API calls for guests/readers.
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   usePathUrlStrategy();
 

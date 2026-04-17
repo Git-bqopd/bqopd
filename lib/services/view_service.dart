@@ -8,7 +8,16 @@ class ViewService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  CollectionReference get _viewLogsCollection => _db.collection('view_logs');
+  // Track an in-flight authentication request to prevent multiple sign-ins on load
+  Future<User?>? _authInFlight;
+
+  // Rule 1 Compliant Path
+  CollectionReference get _viewLogsCollection => _db
+      .collection('artifacts')
+      .doc('bqopd')
+      .collection('public')
+      .doc('data')
+      .collection('view_logs');
 
   /// Records a unique view for canonical content (Image).
   /// Prevents double-counting by using a document ID format: {userId}_{imageId}_{viewType}
@@ -21,14 +30,24 @@ class ViewService {
   }) async {
     if (imageId.isEmpty) return;
 
-    // RULE: Do not trigger a new sign-in if we already have a user (Anonymous or Real)
+    // RULE 3 - Auth Before Queries
     User? user = _auth.currentUser;
 
     if (user == null) {
       try {
-        // Attempt to sign in anonymously ONLY if no session exists
-        final cred = await _auth.signInAnonymously();
-        user = cred.user;
+        // PREVENTION: If a sign-in is already happening, wait for it instead of starting a new one.
+        if (_authInFlight == null) {
+          debugPrint("ViewService: Initiating anonymous sign-in...");
+          _authInFlight = _auth.signInAnonymously().then((cred) {
+            final u = cred.user;
+            debugPrint("ViewService: Anonymous sign-in successful: ${u?.uid}");
+            return u;
+          }).catchError((e) {
+            _authInFlight = null; // Reset on failure to allow retry
+            throw e;
+          });
+        }
+        user = await _authInFlight;
       } catch (e) {
         debugPrint("Silent Auth Failed: $e");
         return;
@@ -38,8 +57,6 @@ class ViewService {
     if (user == null) return;
 
     // CREATE A DETERMINISTIC ID:
-    // This ensures if the same user (session) views the same image,
-    // the set() operation just overwrites rather than creating a new log or incrementing.
     final String viewId = "${user.uid}_${imageId}_${type.name}";
     final docRef = _viewLogsCollection.doc(viewId);
 
@@ -74,10 +91,16 @@ class ViewService {
         });
 
         await batch.commit();
-        debugPrint("Unique view recorded for image: $imageId");
+        debugPrint("Successfully recorded unique view: $viewId");
       }
     } catch (e) {
-      debugPrint("View aggregation failed: $e");
+      debugPrint("--- VIEW AGGREGATION ERROR ---");
+      debugPrint("Operation: recordView (get/set)");
+      debugPrint("Target Path: ${docRef.path}");
+      debugPrint("User ID: ${user.uid} (Anonymous: ${user.isAnonymous})");
+      debugPrint("Error Details: $e");
+      debugPrint("Image ID Context: $imageId");
+      debugPrint("------------------------------");
     }
   }
 
