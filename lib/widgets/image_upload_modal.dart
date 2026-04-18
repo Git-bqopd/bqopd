@@ -223,11 +223,13 @@ class _ImageUploadModalState extends State<ImageUploadModal> {
 class MakerCreateModal extends StatelessWidget {
   final VoidCallback onSingleImage;
   final VoidCallback onCreateFolio;
+  final VoidCallback onCreateCalendar;
 
   const MakerCreateModal({
     super.key,
     required this.onSingleImage,
     required this.onCreateFolio,
+    required this.onCreateCalendar,
   });
 
   @override
@@ -290,6 +292,15 @@ class MakerCreateModal extends StatelessWidget {
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   onCreateFolio();
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              MyButton(
+                                text: "calendar",
+                                color: Colors.grey, // Match Login/Register theme
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  onCreateCalendar();
                                 },
                               ),
                             ],

@@ -134,16 +134,28 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final userData = event.doc.data() as Map<String, dynamic>;
     final bool isMe = event.currentAuthId == event.doc.id;
 
-    // Determine visible tabs
+    // Determine visible tabs in the requested order:
+    // settings -> curator -> maker -> index -> collection
     List<String> tabs = [];
 
-    // NEW order: curator maker index collection
+    // 1. Settings (Conditional)
+    if (isMe || event.isViewerModerator) {
+      tabs.add('settings');
+    }
+
+    // 2. Curator (Conditional)
     if (isMe || event.isViewerCurator || event.isViewerModerator) {
       tabs.add('curator');
     }
 
-    // "works", "comments", and "mentions" are merged into "index"
-    tabs.addAll(['maker', 'index', 'collection']);
+    // 3. Maker
+    tabs.add('maker');
+
+    // 4. Index
+    tabs.add('index');
+
+    // 5. Collection
+    tabs.add('collection');
 
     int startTab = state.currentTabIndex;
     if (event.initialTab != null && tabs.contains(event.initialTab)) {
@@ -170,7 +182,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   Future<void> _onToggleFollow(ToggleFollowRequested event, Emitter<ProfileState> emit) async {
     final uid = state.userData?['uid'];
-    if (uid == null) return;
+    if (uid == null) {
+      return;
+    }
     try {
       await _engagementRepository.setFollowStatus(uid, !state.isFollowing);
     } catch (e) {
