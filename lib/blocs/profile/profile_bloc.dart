@@ -137,12 +137,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     // Determine visible tabs
     List<String> tabs = [];
 
-    // NEW: Respect Moderator/Curator roles for archival tools
+    // NEW order: curator maker index collection
     if (isMe || event.isViewerCurator || event.isViewerModerator) {
       tabs.add('curator');
     }
 
-    tabs.addAll(['maker', 'pages', 'works', 'comments', 'mentions', 'collection']);
+    // "works", "comments", and "mentions" are merged into "index"
+    tabs.addAll(['maker', 'index', 'collection']);
 
     int startTab = state.currentTabIndex;
     if (event.initialTab != null && tabs.contains(event.initialTab)) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:async/async.dart' show StreamGroup;
 
 import '../blocs/profile/profile_bloc.dart';
 import '../repositories/user_repository.dart';
@@ -17,6 +19,8 @@ import '../widgets/profile_widget.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/image_upload_modal.dart';
 import '../widgets/new_fanzine_modal.dart';
+import '../widgets/image_view_modal.dart';
+import '../widgets/comment_item.dart';
 
 class ProfilePage extends StatelessWidget {
   final String? userId;
@@ -63,6 +67,7 @@ class _ProfilePageView extends StatefulWidget {
 class _ProfilePageViewState extends State<_ProfilePageView> {
   bool _showDrafts = false;
   int _curatorSubTabIndex = 0;
+  int _indexSubTabIndex = 0;
   bool _isUploadingPdf = false;
 
   @override
@@ -92,8 +97,21 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       context: context,
       barrierDismissible: false,
       builder: (_) => MakerCreateModal(
-        onSingleImage: () => _createFolio(userId, isSingleImage: true),
+        onSingleImage: () {
+          _showImageUpload(userId);
+        },
         onCreateFolio: () => _createFolio(userId, isSingleImage: false),
+      ),
+    );
+  }
+
+  void _showCatalogModal(String userId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CatalogModal(
+        onUploadPdf: () => _handlePdfUpload(userId),
+        onUploadImages: () => _createArchivalFanzine(userId),
       ),
     );
   }
@@ -121,6 +139,30 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'twoPage': false,
       });
       if (mounted) context.push('/editor/${folioRef.id}');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _createArchivalFanzine(String userId) async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final fzRef = db.collection('fanzines').doc();
+      final shortCode = fzRef.id.substring(0, 7);
+      await fzRef.set({
+        'title': 'Archival Work',
+        'ownerId': userId,
+        'editorId': userId,
+        'editors': [],
+        'status': 'working',
+        'processingStatus': 'idle',
+        'creationDate': FieldValue.serverTimestamp(),
+        'type': 'ingested',
+        'shortCode': shortCode,
+        'shortCodeKey': shortCode.toUpperCase(),
+        'twoPage': false,
+      });
+      if (mounted) context.push('/editor/${fzRef.id}');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
@@ -225,7 +267,11 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           currentIndex: state.currentTabIndex,
                           onTabChanged: (idx) {
                             context.read<ProfileBloc>().add(ChangeTabRequested(idx));
-                            setState(() { _showDrafts = false; _curatorSubTabIndex = 0; });
+                            setState(() {
+                              _showDrafts = false;
+                              _curatorSubTabIndex = 0;
+                              _indexSubTabIndex = 0;
+                            });
                           },
                           canEdit: canEditProfile,
                           onUploadImage: () => _showImageUpload(targetUserId),
@@ -245,15 +291,22 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               GestureDetector(
-                                onTap: _isUploadingPdf ? null : () => _handlePdfUpload(targetUserId),
-                                child: Text(_isUploadingPdf ? "uploading..." : "upload PDF", style: const TextStyle(color: Colors.black)),
+                                onTap: () => _showCatalogModal(targetUserId),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                  decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+                                  child: Text(
+                                    _isUploadingPdf ? "uploading..." : "catalog",
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
+                                  ),
+                                ),
                               ),
+                              const SizedBox(width: 12),
+                              _buildSubTab("curator", 0, isCurator: true),
                               const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("curator", 0),
+                              _buildSubTab("publisher", 1, isCurator: true),
                               const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("publisher", 1),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("entities", 2),
+                              _buildSubTab("entities", 2, isCurator: true),
                             ],
                           ),
                         ),
@@ -272,9 +325,14 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                             children: [
                               GestureDetector(
                                 onTap: () => _showMakerCreateModal(targetUserId),
-                                child: const Text("make", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                  decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+                                  child: const Text("make",
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                                ),
                               ),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                              const SizedBox(width: 12),
                               GestureDetector(
                                 onTap: () => setState(() => _showDrafts = false),
                                 child: Text("published", style: TextStyle(color: !_showDrafts ? Colors.black : Colors.grey, fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal, decoration: !_showDrafts ? TextDecoration.underline : null)),
@@ -290,7 +348,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                       ),
                     ),
 
-                  if (activeTab == 'pages' && isOwner)
+                  if (activeTab == 'index')
                     SliverPersistentHeader(
                       pinned: true,
                       delegate: _ProfileTabsDelegate(
@@ -300,20 +358,11 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              GestureDetector(
-                                onTap: () => _showImageUpload(targetUserId),
-                                child: const Text("upload", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                              ),
+                              _buildSubTab("works", 0, isCurator: false),
                               const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              GestureDetector(
-                                onTap: () => setState(() => _showDrafts = false),
-                                child: Text("published", style: TextStyle(color: !_showDrafts ? Colors.black : Colors.grey, fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal, decoration: !_showDrafts ? TextDecoration.underline : null)),
-                              ),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              GestureDetector(
-                                onTap: () => setState(() => _showDrafts = true),
-                                child: Text("pending", style: TextStyle(color: _showDrafts ? Colors.black : Colors.grey, fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal, decoration: _showDrafts ? TextDecoration.underline : null)),
-                              ),
+                              _buildSubTab("mentions", 1, isCurator: false),
+                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                              _buildSubTab("comments", 2, isCurator: false),
                             ],
                           ),
                         ),
@@ -332,16 +381,23 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     );
   }
 
-  Widget _buildSubTab(String label, int index) {
-    final isActive = _curatorSubTabIndex == index;
+  Widget _buildSubTab(String label, int index, {required bool isCurator}) {
+    final int currentIdx = isCurator ? _curatorSubTabIndex : _indexSubTabIndex;
+    final isActive = currentIdx == index;
     return GestureDetector(
-      onTap: () => setState(() => _curatorSubTabIndex = index),
+      onTap: () => setState(() {
+        if (isCurator) {
+          _curatorSubTabIndex = index;
+        } else {
+          _indexSubTabIndex = index;
+        }
+      }),
       child: Text(label, style: TextStyle(color: isActive ? Colors.black : Colors.grey, fontWeight: isActive ? FontWeight.bold : FontWeight.normal, decoration: isActive ? TextDecoration.underline : null)),
     );
   }
 
   Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab) {
-    Stream<List<QueryDocumentSnapshot>>? stream;
+    Stream<List<dynamic>>? stream;
 
     switch (activeTab) {
       case 'curator':
@@ -373,40 +429,33 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         break;
 
       case 'maker':
-        stream = FirebaseFirestore.instance.collection('fanzines').snapshots().map((snap) {
-          return snap.docs.where((doc) {
-            final data = doc.data();
-            if (data['type'] != 'folio' && data['type'] != 'calendar') return false;
+        return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts);
 
-            // Legacy Support: Check ownerId, editorId, and uploaderId
-            final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
-            if (owner != targetUserId) return false;
-
-            final isLive = data['status'] == 'live' || data['status'] == 'published';
-            return _showDrafts ? !isLive : isLive;
-          }).toList();
-        });
+      case 'index':
+        if (_indexSubTabIndex == 0) {
+          // Works
+          stream = context.read<UserRepository>().watchUserWorks(targetUserId).map((snap) => snap.docs);
+        } else if (_indexSubTabIndex == 1) {
+          // Mentions
+          stream = context.read<UserRepository>().watchUserMentions(targetUserId).map((snap) => snap.docs);
+        } else {
+          // Comments
+          return _UserCommentsView(userId: targetUserId);
+        }
         break;
 
-      case 'pages':
-        stream = FirebaseFirestore.instance.collection('images').where('uploaderId', isEqualTo: targetUserId).snapshots().map((snap) {
-          return snap.docs.where((doc) {
-            final data = doc.data();
-            final isPending = data['status'] == 'pending';
-            return _showDrafts ? isPending : !isPending;
-          }).toList();
-        });
-        break;
+      case 'collection':
+      // Placeholder for collection logic
+        return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Collection Coming Soon"))));
 
       default:
         return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Coming Soon"))));
     }
 
-    return StreamBuilder<List<QueryDocumentSnapshot>>(
+    return StreamBuilder<List<dynamic>>(
       stream: stream,
       builder: (context, snapshot) {
         final List<Widget> buttons = [];
-        // Publisher creation buttons
         if (activeTab == 'curator' && _curatorSubTabIndex == 1 && isOwner) {
           buttons.add(_QuickActionTile(label: "make new fanzine", color: Colors.blueAccent, onTap: () => _showNewFanzineModal(targetUserId)));
           buttons.add(_QuickActionTile(label: "con calendar", color: Colors.purple, onTap: () => _createCalendarFanzine(targetUserId)));
@@ -425,8 +474,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             delegate: SliverChildBuilderDelegate((context, index) {
               if (index < buttons.length) return buttons[index];
               final docIndex = index - buttons.length;
-              final data = docs[docIndex].data() as Map<String, dynamic>;
-              return _FanzineCoverTile(fanzineId: docs[docIndex].id, title: data['title'] ?? 'Untitled', shouldEdit: activeTab == 'curator' || activeTab == 'maker');
+              final doc = docs[docIndex];
+
+              return _MakerItemTile(
+                  doc: doc,
+                  shouldEdit: activeTab == 'curator' || (activeTab == 'maker' && isOwner)
+              );
             }, childCount: docs.length + buttons.length),
           ),
         );
@@ -463,6 +516,118 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         );
       },
     );
+  }
+}
+
+class _UserCommentsView extends StatelessWidget {
+  final String userId;
+  const _UserCommentsView({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('artifacts')
+          .doc('bqopd')
+          .collection('public')
+          .doc('data')
+          .collection('comments')
+          .where('userId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found"))));
+
+        return SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              data['_id'] = docs[index].id;
+              return CommentItem(data: data);
+            }, childCount: docs.length),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MakerCombinedView extends StatelessWidget {
+  final String targetUserId;
+  final bool showDrafts;
+
+  const _MakerCombinedView({required this.targetUserId, required this.showDrafts});
+
+  @override
+  Widget build(BuildContext context) {
+    final fzStream = FirebaseFirestore.instance.collection('fanzines').snapshots();
+    final imgStream = FirebaseFirestore.instance.collection('images').snapshots();
+
+    return StreamBuilder(
+        stream: StreamGroup.merge([fzStream, imgStream]),
+        builder: (context, _) {
+          return FutureBuilder<List<dynamic>>(
+              future: _getCombinedData(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+                final items = snapshot.data!;
+
+                if (items.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
+
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        childAspectRatio: 5 / 8,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8
+                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      return _MakerItemTile(doc: items[index], shouldEdit: true);
+                    }, childCount: items.length),
+                  ),
+                );
+              }
+          );
+        }
+    );
+  }
+
+  Future<List<dynamic>> _getCombinedData() async {
+    final fzSnap = await FirebaseFirestore.instance.collection('fanzines').get();
+    final imgSnap = await FirebaseFirestore.instance.collection('images').get();
+
+    final List<dynamic> combined = [];
+
+    for (var doc in fzSnap.docs) {
+      final data = doc.data();
+      if (data['type'] != 'folio' && data['type'] != 'calendar') continue;
+      final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
+      if (owner != targetUserId) continue;
+      final isLive = data['status'] == 'live' || data['status'] == 'published';
+      if (showDrafts ? !isLive : isLive) combined.add(doc);
+    }
+
+    for (var doc in imgSnap.docs) {
+      final data = doc.data();
+      if (data['uploaderId'] != targetUserId) continue;
+      final isPending = data['status'] == 'pending';
+      if (showDrafts ? isPending : !isPending) combined.add(doc);
+    }
+
+    combined.sort((a, b) {
+      final aData = a.data() as Map<String, dynamic>;
+      final bData = b.data() as Map<String, dynamic>;
+      final aTime = aData['creationDate'] ?? aData['timestamp'] as Timestamp?;
+      final bTime = bData['creationDate'] ?? bData['timestamp'] as Timestamp?;
+      return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+    });
+
+    return combined;
   }
 }
 
@@ -564,24 +729,67 @@ class _ProfileTabsDelegate extends SliverPersistentHeaderDelegate {
   @override bool shouldRebuild(covariant _ProfileTabsDelegate oldDelegate) => true;
 }
 
-class _FanzineCoverTile extends StatelessWidget {
-  final String fanzineId;
-  final String title;
+class _MakerItemTile extends StatelessWidget {
+  final dynamic doc;
   final bool shouldEdit;
 
-  const _FanzineCoverTile({required this.fanzineId, required this.title, this.shouldEdit = false});
+  const _MakerItemTile({required this.doc, this.shouldEdit = false});
 
   @override
   Widget build(BuildContext context) {
+    final data = doc.data() as Map<String, dynamic>;
+    final isImage = doc.reference.path.startsWith('images/');
+    final title = data['title'] ?? 'Untitled';
+    final imageUrl = data['fileUrl'];
+
     return GestureDetector(
-      onTap: () => context.push(shouldEdit ? '/editor/$fanzineId' : '/reader/$fanzineId'),
+      onTap: () {
+        if (isImage) {
+          showDialog(
+              context: context,
+              builder: (_) => ImageViewModal(
+                  imageUrl: imageUrl ?? '',
+                  imageId: doc.id,
+                  imageText: data['text'] ?? data['text_raw']
+              )
+          );
+        } else {
+          context.push(shouldEdit ? '/editor/${doc.id}' : '/reader/${doc.id}');
+        }
+      },
       child: Container(
         decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black12)),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Container(color: Colors.grey[200], child: const Icon(Icons.menu_book, color: Colors.black12, size: 40)),
-            Positioned(bottom: 0, left: 0, right: 0, child: Container(padding: const EdgeInsets.all(8), color: Colors.black54, child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis))),
+            Container(
+                color: Colors.grey[200],
+                child: imageUrl != null
+                    ? Image.network(imageUrl, fit: BoxFit.cover)
+                    : Icon(isImage ? Icons.image : Icons.menu_book, color: Colors.black12, size: 40)
+            ),
+            Positioned(
+                bottom: 0, left: 0, right: 0,
+                child: Container(
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.black54,
+                    child: Text(
+                        title,
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis
+                    )
+                )
+            ),
+            if (isImage)
+              Positioned(
+                  top: 4, right: 4,
+                  child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      color: Colors.black.withValues(alpha: 0.6),
+                      child: const Text("SINGLE", style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold))
+                  )
+              ),
           ],
         ),
       ),

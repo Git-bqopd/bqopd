@@ -270,7 +270,7 @@ class MakerCreateModal extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const Text(
-                                "Maker Options",
+                                "maker options",
                                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.center,
                               ),
@@ -290,6 +290,107 @@ class MakerCreateModal extends StatelessWidget {
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   onCreateFolio();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Material(
+                color: Colors.white.withValues(alpha: 0.8),
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.black),
+                  onPressed: () => Navigator.of(context).pop(),
+                  tooltip: "Cancel",
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CatalogModal extends StatelessWidget {
+  final VoidCallback onUploadPdf;
+  final VoidCallback onUploadImages;
+
+  const CatalogModal({
+    super.key,
+    required this.onUploadPdf,
+    required this.onUploadImages,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450),
+        child: Stack(
+          children: [
+            AspectRatio(
+              aspectRatio: 5 / 8,
+              child: Container(
+                color: const Color(0xFFF1B255),
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
+                          )
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12.0),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                "curator options",
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 32),
+                              MyButton(
+                                text: "upload PDF",
+                                color: Colors.grey,
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  onUploadPdf();
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              MyButton(
+                                text: "upload images",
+                                color: Colors.grey,
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  onUploadImages();
                                 },
                               ),
                             ],
