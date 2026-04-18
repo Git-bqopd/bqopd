@@ -24,9 +24,9 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Security Gate: Ensure only Editors/Mods can see this
+    // Security Gate: Using isModerator instead of isEditor
     final userProvider = Provider.of<UserProvider>(context);
-    if (!userProvider.isEditor) {
+    if (!userProvider.isModerator) {
       return const Scaffold(body: Center(child: Text("Restricted Area. Authorized Personnel Only.")));
     }
 
@@ -41,20 +41,16 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
         maxWidth: 800,
         scroll: false,
         child: StreamBuilder<QuerySnapshot>(
-          // Query: pending status, ordered by newest.
           stream: FirebaseFirestore.instance
               .collection('images')
               .where('status', isEqualTo: 'pending')
               .orderBy('timestamp', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
-            // --- ERROR HANDLING START ---
             if (snapshot.hasError) {
               final errorMsg = snapshot.error.toString();
-              // Check for Firestore Index requirement
               if (errorMsg.contains('failed-precondition') ||
                   errorMsg.contains('requires an index')) {
-                // Try to extract URL
                 final urlRegex =
                 RegExp(r'https://console\.firebase\.google\.com[^\s]+');
                 final match = urlRegex.firstMatch(errorMsg);
@@ -90,7 +86,6 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
               }
               return Center(child: SelectableText("Error: $errorMsg"));
             }
-            // --- ERROR HANDLING END ---
 
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
@@ -164,7 +159,6 @@ class _ModeratorCardState extends State<_ModeratorCard> {
     final tags = widget.data['tags'] as Map<String, dynamic>? ?? {};
     final uploaderId = widget.data['uploaderId'] as String? ?? 'unknown';
 
-    // Check approval status via hashtags
     final bool isApproved = tags.containsKey('approved') && (tags['approved'] as List).isNotEmpty;
 
     return Container(
@@ -181,7 +175,6 @@ class _ModeratorCardState extends State<_ModeratorCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Banner for unapproved
           if (!isApproved)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -193,14 +186,13 @@ class _ModeratorCardState extends State<_ModeratorCard> {
               ),
             ),
 
-          // Image
           if (imageUrl != null)
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               child: Image.network(
                 imageUrl,
                 fit: BoxFit.cover,
-                height: 400, // Fixed height for consistency in feed
+                height: 400,
                 errorBuilder: (c, e, s) => const SizedBox(height: 200, child: Center(child: Icon(Icons.broken_image))),
               ),
             ),
@@ -210,7 +202,6 @@ class _ModeratorCardState extends State<_ModeratorCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Uploader Info
                 FutureBuilder<DocumentSnapshot>(
                   future: FirebaseFirestore.instance.collection('Users').doc(uploaderId).get(),
                   builder: (context, snap) {
@@ -220,14 +211,9 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                   },
                 ),
                 const SizedBox(height: 8),
-
-                // Hashtag Bar
                 HashtagBar(imageId: widget.docId, tags: tags),
-
                 const SizedBox(height: 12),
                 const Divider(height: 1),
-
-                // Social Toolbar (for Like/Comment toggling)
                 DynamicSocialToolbar(
                   imageId: widget.docId,
                   fanzineType: null,
@@ -240,8 +226,6 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                     });
                   },
                 ),
-
-                // Inline Bonus Row Section
                 if (_activePanel != null) ...[
                   const Divider(height: 1),
                   PanelContainer(

@@ -1,16 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/link_parser.dart';
+import '../models/fanzine.dart';
+import '../models/fanzine_page.dart';
 
 /// Centralized repository for all Fanzine-related database operations.
 class FanzineRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Returns a stream of a specific fanzine document.
+  // --- LEGACY STREAMS (Kept intact to avoid breaking CuratorWorkbenchBloc) ---
+
   Stream<DocumentSnapshot> watchFanzine(String fanzineId) {
     return _db.collection('fanzines').doc(fanzineId).snapshots();
   }
 
-  /// Returns a stream of pages for a fanzine, ordered by page number.
   Stream<QuerySnapshot> watchPages(String fanzineId) {
     return _db
         .collection('fanzines')
@@ -20,23 +22,37 @@ class FanzineRepository {
         .snapshots();
   }
 
-  /// Updates top-level fanzine metadata.
+  // --- STRICT MODEL STREAMS ---
+
+  Stream<Fanzine> watchFanzineModel(String fanzineId) {
+    return _db.collection('fanzines').doc(fanzineId).snapshots().map((doc) => Fanzine.fromFirestore(doc));
+  }
+
+  Stream<List<FanzinePage>> watchPageModels(String fanzineId) {
+    return _db
+        .collection('fanzines')
+        .doc(fanzineId)
+        .collection('pages')
+        .orderBy('pageNumber')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => FanzinePage.fromFirestore(d)).toList());
+  }
+
+  // --- OPERATIONS ---
+
   Future<void> updateFanzine(String fanzineId, Map<String, dynamic> data) async {
     await _db.collection('fanzines').doc(fanzineId).update(data);
   }
 
-  /// Updates text for a specific page.
   Future<void> updatePageText(String fanzineId, String pageId, String text) async {
     final batch = _db.batch();
     batch.update(_db.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId), {
       'text_processed': text,
       'lastEdited': FieldValue.serverTimestamp(),
     });
-    // Also sync to the master fanzine page count if needed
     await batch.commit();
   }
 
-  /// Adds a page to a fanzine and links it to an existing image via shortcode.
   Future<void> addPageByShortcode(String fanzineId, String shortcode) async {
     final imageQuery = await _db
         .collection('images')
@@ -81,7 +97,7 @@ class FanzineRepository {
     await batch.commit();
   }
 
-  /// Swaps positions of two pages.
+  /// Swaps positions of two pages using the legacy Snapshot method.
   Future<void> reorderPage(String fanzineId, DocumentSnapshot doc, int delta, List<DocumentSnapshot> allPages) async {
     final int currentPos = doc.get('pageNumber');
     final int targetPos = currentPos + delta;
@@ -96,7 +112,21 @@ class FanzineRepository {
     await batch.commit();
   }
 
-  /// Parses mentions across all pages and marks the fanzine as soft-published.
+  /// Swaps positions of two pages using strictly typed models.
+  Future<void> reorderPageModel(String fanzineId, FanzinePage page, int delta, List<FanzinePage> allPages) async {
+    final int currentPos = page.pageNumber;
+    final int targetPos = currentPos + delta;
+
+    if (targetPos < 1 || targetPos > allPages.length) return;
+
+    final targetPage = allPages.firstWhere((p) => p.pageNumber == targetPos);
+
+    final batch = _db.batch();
+    batch.update(page.reference, {'pageNumber': targetPos});
+    batch.update(targetPage.reference, {'pageNumber': currentPos});
+    await batch.commit();
+  }
+
   Future<void> softPublish(String fanzineId) async {
     final allMentions = <String>{};
     final pagesSnap = await _db.collection('fanzines').doc(fanzineId).collection('pages').get();
@@ -117,7 +147,6 @@ class FanzineRepository {
     });
   }
 
-  /// Looks up a handle status in the registry.
   Future<Map<String, dynamic>?> checkHandleStatus(String handle) async {
     final doc = await _db.collection('usernames').doc(handle).get();
     return doc.exists ? doc.data() : null;

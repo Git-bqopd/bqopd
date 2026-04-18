@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../repositories/fanzine_repository.dart';
+import '../../models/fanzine.dart';
+import '../../models/fanzine_page.dart';
 
 // --- EVENTS ---
 
@@ -25,6 +26,13 @@ class UpdateFanzineTitle extends FanzineEditorEvent {
   List<Object?> get props => [title];
 }
 
+class ToggleTwoPageRequested extends FanzineEditorEvent {
+  final bool twoPage;
+  ToggleTwoPageRequested(this.twoPage);
+  @override
+  List<Object?> get props => [twoPage];
+}
+
 class AddPageRequested extends FanzineEditorEvent {
   final String shortcode;
   AddPageRequested(this.shortcode);
@@ -33,10 +41,10 @@ class AddPageRequested extends FanzineEditorEvent {
 }
 
 class ReorderPageRequested extends FanzineEditorEvent {
-  final DocumentSnapshot pageDoc;
+  final FanzinePage page;
   final int delta;
-  final List<DocumentSnapshot> allPages;
-  ReorderPageRequested(this.pageDoc, this.delta, this.allPages);
+  final List<FanzinePage> allPages;
+  ReorderPageRequested(this.page, this.delta, this.allPages);
 }
 
 class ToggleLiveStatusRequested extends FanzineEditorEvent {
@@ -58,30 +66,30 @@ class FanzineEditorInitial extends FanzineEditorState {}
 class FanzineEditorLoading extends FanzineEditorState {}
 
 class FanzineEditorLoaded extends FanzineEditorState {
-  final Map<String, dynamic> fanzineData;
-  final List<DocumentSnapshot> pages;
-  final bool isProcessing; // For local UI loading overlay during saves
+  final Fanzine fanzine;
+  final List<FanzinePage> pages;
+  final bool isProcessing;
 
   FanzineEditorLoaded({
-    required this.fanzineData,
+    required this.fanzine,
     required this.pages,
     this.isProcessing = false
   });
 
   FanzineEditorLoaded copyWith({
-    Map<String, dynamic>? fanzineData,
-    List<DocumentSnapshot>? pages,
+    Fanzine? fanzine,
+    List<FanzinePage>? pages,
     bool? isProcessing,
   }) {
     return FanzineEditorLoaded(
-      fanzineData: fanzineData ?? this.fanzineData,
+      fanzine: fanzine ?? this.fanzine,
       pages: pages ?? this.pages,
       isProcessing: isProcessing ?? this.isProcessing,
     );
   }
 
   @override
-  List<Object?> get props => [fanzineData, pages, isProcessing];
+  List<Object?> get props => [fanzine, pages, isProcessing];
 }
 
 class FanzineEditorFailure extends FanzineEditorState {
@@ -105,6 +113,7 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
         super(FanzineEditorInitial()) {
     on<LoadFanzineRequested>(_onLoadRequested);
     on<UpdateFanzineTitle>(_onUpdateTitle);
+    on<ToggleTwoPageRequested>(_onToggleTwoPage);
     on<AddPageRequested>(_onAddPage);
     on<ReorderPageRequested>(_onReorderPage);
     on<ToggleLiveStatusRequested>(_onToggleStatus);
@@ -117,28 +126,22 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     await _fanzineSub?.cancel();
     await _pagesSub?.cancel();
 
-    // We use a Completer to wait for the first data emissions before continuing
     final firstDataReceived = Completer<void>();
 
-    _fanzineSub = _repository.watchFanzine(fanzineId).listen((fzDoc) {
-      if (!fzDoc.exists) {
-        addError("Fanzine not found");
-        return;
-      }
-
-      _pagesSub ??= _repository.watchPages(fanzineId).listen((pagesSnap) {
+    _fanzineSub = _repository.watchFanzineModel(fanzineId).listen((fzModel) {
+      _pagesSub ??= _repository.watchPageModels(fanzineId).listen((pages) {
         if (!firstDataReceived.isCompleted) firstDataReceived.complete();
 
         final current = state;
         if (current is FanzineEditorLoaded) {
           emit(current.copyWith(
-            fanzineData: fzDoc.data() as Map<String, dynamic>,
-            pages: pagesSnap.docs,
+            fanzine: fzModel,
+            pages: pages,
           ));
         } else {
           emit(FanzineEditorLoaded(
-            fanzineData: fzDoc.data() as Map<String, dynamic>,
-            pages: pagesSnap.docs,
+            fanzine: fzModel,
+            pages: pages,
           ));
         }
       });
@@ -160,6 +163,15 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
+  Future<void> _onToggleTwoPage(ToggleTwoPageRequested event, Emitter<FanzineEditorState> emit) async {
+    if (state is! FanzineEditorLoaded) return;
+    try {
+      await _repository.updateFanzine(fanzineId, {'twoPage': event.twoPage});
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    }
+  }
+
   Future<void> _onAddPage(AddPageRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
@@ -176,14 +188,14 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
 
   Future<void> _onReorderPage(ReorderPageRequested event, Emitter<FanzineEditorState> emit) async {
     try {
-      await _repository.reorderPage(fanzineId, event.pageDoc, event.delta, event.allPages);
+      await _repository.reorderPageModel(fanzineId, event.page, event.delta, event.allPages);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     }
   }
 
   Future<void> _onToggleStatus(ToggleLiveStatusRequested event, Emitter<FanzineEditorState> emit) async {
-    final newStatus = event.currentStatus == 'live' ? 'working' : 'live';
+    final newStatus = event.currentStatus == FanzineStatus.live.name ? 'working' : 'live';
     await _repository.updateFanzine(fanzineId, {'status': newStatus});
   }
 

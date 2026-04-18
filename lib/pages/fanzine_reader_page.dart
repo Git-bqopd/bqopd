@@ -60,7 +60,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   final ItemScrollController _desktopListScrollController = ItemScrollController();
   final ItemScrollController _desktopPanelScrollController = ItemScrollController();
 
-  // Adjusted constants for more flexible desktop layouts
   static const double kMaxGridWidth = 600.0;
   static const double kMaxReaderWidth = 800.0;
 
@@ -221,7 +220,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   }
 
   void _showLoginHeader() {
-    debugPrint("FanzineReaderPage: Switching to AUTH VIEW (HeaderMode.login)");
     setState(() {
       _headerMode = HeaderMode.login;
     });
@@ -229,12 +227,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   void _onAuthSuccess() {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.isAnonymous) {
-      debugPrint("FanzineReaderPage: Ignoring success callback for anonymous session.");
-      return;
-    }
-
-    debugPrint("FanzineReaderPage: Real Auth success detected. Resetting to fanzine view.");
+    if (user == null || user.isAnonymous) return;
     setState(() {
       _headerMode = HeaderMode.fanzine;
     });
@@ -274,7 +267,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 top: 16,
                 right: 16,
                 child: Material(
-                  color: Colors.white.withOpacity(0.8),
+                  // FIXED: withValues instead of withOpacity
+                  color: Colors.white.withValues(alpha: 0.8),
                   shape: const CircleBorder(),
                   child: IconButton(
                     icon: const Icon(Icons.close, color: Colors.black),
@@ -359,28 +353,19 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               }
             }
 
-            // Desktop Proportional Layout Logic
             final double availableWidth = constraints.maxWidth;
             final bool isPanelOpen = _showList && _activeGlobalPanel != null;
 
-            // Define column widths based on state
             double gridWidth = 0;
             double listWidth = 0;
-            double panelWidth = 0;
 
             if (_showGrid && !_showList) {
               gridWidth = availableWidth.clamp(0.0, kMaxGridWidth * 1.5);
             } else if (_showGrid && _showList) {
               gridWidth = (availableWidth * 0.3).clamp(300.0, 500.0);
               listWidth = (availableWidth * 0.45).clamp(400.0, 800.0);
-              if (isPanelOpen) {
-                panelWidth = availableWidth - gridWidth - listWidth;
-              }
             } else if (!_showGrid && _showList) {
               listWidth = (availableWidth * 0.6).clamp(600.0, kMaxReaderWidth);
-              if (isPanelOpen) {
-                panelWidth = availableWidth - listWidth;
-              }
             }
 
             return Center(

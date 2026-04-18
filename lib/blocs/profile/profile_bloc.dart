@@ -14,13 +14,15 @@ abstract class ProfileEvent extends Equatable {
 class LoadProfileRequested extends ProfileEvent {
   final String userId;
   final String currentAuthId;
-  final bool isViewerEditor;
-  final String? initialTab; // NEW: Accept optional target tab
+  final bool isViewerModerator;
+  final bool isViewerCurator;
+  final String? initialTab;
 
   LoadProfileRequested({
     required this.userId,
     required this.currentAuthId,
-    required this.isViewerEditor,
+    required this.isViewerModerator,
+    required this.isViewerCurator,
     this.initialTab,
   });
 }
@@ -28,10 +30,11 @@ class LoadProfileRequested extends ProfileEvent {
 class _ProfileDataUpdated extends ProfileEvent {
   final DocumentSnapshot doc;
   final String currentAuthId;
-  final bool isViewerEditor;
+  final bool isViewerModerator;
+  final bool isViewerCurator;
   final String? initialTab;
 
-  _ProfileDataUpdated(this.doc, this.currentAuthId, this.isViewerEditor, this.initialTab);
+  _ProfileDataUpdated(this.doc, this.currentAuthId, this.isViewerModerator, this.isViewerCurator, this.initialTab);
 }
 
 class _FollowStatusUpdated extends ProfileEvent {
@@ -113,14 +116,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     await _userSub?.cancel();
     await _followSub?.cancel();
 
-    // Listen to following status and dispatch internal event
     _followSub = _engagementRepository.isFollowing(event.userId).listen((following) {
       add(_FollowStatusUpdated(following));
     });
 
-    // Listen to user data and dispatch internal event
     _userSub = _userRepository.watchUser(event.userId).listen((doc) {
-      add(_ProfileDataUpdated(doc, event.currentAuthId, event.isViewerEditor, event.initialTab));
+      add(_ProfileDataUpdated(doc, event.currentAuthId, event.isViewerModerator, event.isViewerCurator, event.initialTab));
     });
   }
 
@@ -132,16 +133,17 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     final userData = event.doc.data() as Map<String, dynamic>;
     final bool isMe = event.currentAuthId == event.doc.id;
-    final bool isTargetEditor = userData['Editor'] == true || userData['isEditor'] == true;
 
     // Determine visible tabs
     List<String> tabs = [];
-    if (isMe || (isTargetEditor && event.isViewerEditor)) {
-      tabs.add('editor');
+
+    // NEW: Respect Moderator/Curator roles for archival tools
+    if (isMe || event.isViewerCurator || event.isViewerModerator) {
+      tabs.add('curator');
     }
+
     tabs.addAll(['maker', 'pages', 'works', 'comments', 'mentions', 'collection']);
 
-    // Handle deep-linking to a specific tab on load
     int startTab = state.currentTabIndex;
     if (event.initialTab != null && tabs.contains(event.initialTab)) {
       startTab = tabs.indexOf(event.initialTab!);

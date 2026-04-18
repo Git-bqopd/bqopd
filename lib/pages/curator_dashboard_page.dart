@@ -7,7 +7,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart'; // Ensure this import is present
+import 'package:url_launcher/url_launcher.dart';
 import '../services/user_provider.dart';
 import '../services/user_bootstrap.dart';
 import '../services/username_service.dart';
@@ -43,7 +43,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true, // Necessary for web
+        withData: true,
       );
 
       if (result != null) {
@@ -54,12 +54,10 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
         String fileName = file.name;
 
         if (fileBytes != null) {
-          // Upload to Firebase Storage
           final storageRef = FirebaseStorage.instance
               .ref()
               .child('uploads/raw_pdfs/$fileName');
 
-          // Metadata for the trigger
           final metadata = SettableMetadata(
             contentType: 'application/pdf',
             customMetadata: {
@@ -148,7 +146,8 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    if (!userProvider.isEditor) {
+    // FIXED: Using isCurator instead of isEditor
+    if (!userProvider.isCurator) {
       return const Scaffold(body: Center(child: Text("Access Denied.")));
     }
 
@@ -160,7 +159,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           tabs: const [Tab(text: "Review Fanzines"), Tab(text: "Entities")],
         ),
         actions: [
-          // NEW MODERATOR FEED BUTTON
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: OutlinedButton.icon(
@@ -189,7 +187,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // --- UPLOAD AREA ---
         Container(
           padding: const EdgeInsets.all(16),
           color: Colors.grey[100],
@@ -223,8 +220,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           ),
         ),
         const Divider(height: 1),
-
-        // --- LIST ---
         Expanded(child: _buildDraftsList()),
       ],
     );
@@ -240,10 +235,8 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           final errorMsg = snapshot.error.toString();
-          // Check for Firestore Index requirement
           if (errorMsg.contains('failed-precondition') ||
               errorMsg.contains('requires an index')) {
-            // Try to extract URL
             final urlRegex =
             RegExp(r'https://console\.firebase\.google\.com[^\s]+');
             final match = urlRegex.firstMatch(errorMsg);
@@ -513,9 +506,6 @@ class _EntityRow extends StatelessWidget {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text("Profile Created!")));
       }
-      if (context.mounted) {
-        (context as Element).markNeedsBuild();
-      }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -556,7 +546,6 @@ class _EntityRow extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text("Alias Created!")));
-        (context as Element).markNeedsBuild();
       }
     } catch (e) {
       if (context.mounted) {

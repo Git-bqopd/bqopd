@@ -42,7 +42,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   void initState() {
     super.initState();
     _loadData();
-    // Listen for auth changes to update the "Login" string immediately
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) {
         _loadData();
@@ -64,7 +63,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     } else {
       await _loadDashboard();
     }
-    // FIXED: Added mounted guard to prevent setState after dispose()
     if (mounted) setState(() => _isLoadingData = false);
   }
 
@@ -137,14 +135,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   }
 
   void _handleLinkTap() {
-    debugPrint("FanzineWidget: URL Pill Tapped. _showLoginLink: $_showLoginLink");
-
     if (_showLoginLink) {
       if (widget.onLoginRequested != null) {
-        debugPrint("FanzineWidget: Calling onLoginRequested callback...");
         widget.onLoginRequested!();
       } else {
-        debugPrint("FanzineWidget: No callback found, showing default dialog.");
         showDialog(
           context: context,
           builder: (context) => Dialog(
@@ -190,9 +184,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          // FIXED: Use withValues to resolve deprecation info
+          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
           ],
         ),
         child: Image.asset('assets/logo200.gif', width: 100, fit: BoxFit.contain),
@@ -204,7 +199,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // --- TOP PILL (URL) ---
         Center(
           child: GestureDetector(
             onTap: _handleLinkTap,
@@ -214,9 +208,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(50),
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                  // FIXED: Use withValues to resolve deprecation info
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
                   ],
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -235,15 +230,15 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           ),
         ),
 
-        // --- MAIN CARD ---
         Expanded(
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              // FIXED: Use withValues to resolve deprecation info
+              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
               ],
             ),
             clipBehavior: Clip.antiAlias,
@@ -305,7 +300,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           children: [
             SizedBox(width: 45, child: Text((creator['role'] ?? 'Creator').toString().toUpperCase(), style: const TextStyle(fontSize: 8, color: Colors.black54, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
             const Padding(padding: EdgeInsets.symmetric(horizontal: 6.0), child: Text("|", style: TextStyle(fontSize: 10, color: Colors.black12))),
-            // FIXED: Wrapped creator info in Expanded to prevent RenderFlex overflow
             Expanded(child: _buildCreatorInfo(creator['uid'], (creator['name'] ?? 'Unknown'))),
           ],
         );
@@ -316,9 +310,8 @@ class _FanzineWidgetState extends State<FanzineWidget> {
   Widget _buildCreatorInfo(String? uid, String fallbackName) {
     if (uid == null || uid.isEmpty) {
       return Row(children: [
-        Container(width: 28, height: 28, decoration: BoxDecoration(color: Colors.black.withOpacity(0.05), shape: BoxShape.circle), child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10, color: Colors.black54)))),
+        Container(width: 28, height: 28, decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.05), shape: BoxShape.circle), child: Center(child: Text(fallbackName.isNotEmpty ? fallbackName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10, color: Colors.black54)))),
         const SizedBox(width: 8),
-        // FIXED: Added Expanded and ellipsis for long names
         Expanded(child: Text(fallbackName.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis)),
       ]);
     }
@@ -331,7 +324,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           return Row(children: [
             CircleAvatar(radius: 14, backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null, child: photoUrl == null ? Text(name[0]) : null),
             const SizedBox(width: 8),
-            // FIXED: Added Expanded and ellipsis for long names
             Expanded(child: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis)),
           ]);
         }
