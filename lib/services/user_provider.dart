@@ -35,15 +35,24 @@ class UserProvider with ChangeNotifier {
   String? get currentUserId => _user?.uid;
   bool get isLoading => _isLoading;
 
+  bool get isAdmin {
+    if (_userAccount == null) return false;
+    return _userAccount!.roles.contains('admin') || _userAccount!.role == 'admin';
+  }
+
   bool get isModerator {
     if (_userAccount == null) return false;
-    return _userAccount!.role == 'admin' || _userAccount!.role == 'moderator';
+    return _userAccount!.roles.contains('admin') ||
+        _userAccount!.roles.contains('moderator') ||
+        _userAccount!.role == 'admin' ||
+        _userAccount!.role == 'moderator';
   }
 
   bool get isCurator {
     if (_userAccount == null) return false;
-    if (isModerator) return true;
-    return _userAccount!.role == 'curator' || _userAccount!.isCurator;
+    return _userAccount!.roles.contains('curator') ||
+        _userAccount!.role == 'curator' ||
+        _userAccount!.isCurator;
   }
 
   bool canEditFanzine(Fanzine fanzine) {
@@ -71,7 +80,6 @@ class UserProvider with ChangeNotifier {
       if (results[1].exists) {
         _userProfile = UserProfile.fromFirestore(results[1]);
 
-        // Fixed: Removed unused local variable 'prefs' and utilized userAccount for visibility logic
         if (_userAccount != null && _userAccount!.preferences.containsKey('socialButtons')) {
           _socialButtonVisibility = Map<String, bool>.from(_userAccount!.preferences['socialButtons']);
         }

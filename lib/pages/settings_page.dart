@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_bootstrap.dart';
+import '../widgets/reader_panels/social_matrix_tab.dart'; // NEW
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -21,7 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _bioController = TextEditingController();
 
   bool _isCreatingProfile = false;
-  int _activeSubTab = 0; // 0: Shortcodes, 1: Managed Profiles, 2: Permissions
+  int _activeSubTab = 0; // 0: Shortcodes, 1: Managed Profiles, 2: Permissions, 3: Social Buttons
 
   @override
   void initState() {
@@ -183,13 +184,17 @@ class _SettingsPageState extends State<SettingsPage> {
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildSubNavButton("shortcodes", 0),
-                _buildSubNavButton("managed profiles", 1),
-                _buildSubNavButton("permissions", 2),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildSubNavButton("shortcodes", 0),
+                  _buildSubNavButton("managed profiles", 1),
+                  _buildSubNavButton("permissions", 2),
+                  _buildSubNavButton("social buttons", 3), // NEW
+                ],
+              ),
             ),
           ),
           const Divider(height: 1),
@@ -228,6 +233,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return _buildManagedProfilesSection();
       case 2:
         return _buildPermissionsSection();
+      case 3:
+        return const SocialMatrixTab(); // NEW
       default:
         return const SizedBox.shrink();
     }

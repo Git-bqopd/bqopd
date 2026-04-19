@@ -45,6 +45,7 @@ enum BonusRowType {
 class ReaderTool {
   final String id; // e.g., 'Comment', 'Share' (matches UserProvider visibility keys)
   final String label;
+  final String description; // NEW: Brief description for the settings matrix
   final IconData defaultIcon;
   final IconData? activeIcon;
   final IconData? darkIcon;
@@ -59,6 +60,7 @@ class ReaderTool {
   const ReaderTool({
     required this.id,
     required this.label,
+    required this.description,
     required this.defaultIcon,
     this.activeIcon,
     this.darkIcon,

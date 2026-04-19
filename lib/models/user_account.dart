@@ -4,7 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class UserAccount {
   final String uid;
   final String email;
-  final String role; // admin, moderator, curator, user
+  final String role; // admin, moderator, curator, user (Legacy field)
+  final List<String> roles; // Multi-select roles: admin, moderator, curator
   final bool isCurator;
 
   // Real Name / Contact
@@ -25,6 +26,7 @@ class UserAccount {
     required this.uid,
     required this.email,
     this.role = 'user',
+    this.roles = const [],
     this.isCurator = false,
     this.firstName = '',
     this.lastName = '',
@@ -45,6 +47,7 @@ class UserAccount {
       uid: doc.id,
       email: data['email'] ?? '',
       role: data['role'] ?? 'user',
+      roles: List<String>.from(data['roles'] ?? []),
       isCurator: data['isCurator'] ?? false,
       firstName: data['firstName'] ?? '',
       lastName: data['lastName'] ?? '',
@@ -65,6 +68,7 @@ class UserAccount {
       'uid': uid,
       'email': email,
       'role': role,
+      'roles': roles,
       'isCurator': isCurator,
       'firstName': firstName,
       'lastName': lastName,

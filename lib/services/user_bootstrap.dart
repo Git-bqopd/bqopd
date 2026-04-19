@@ -20,6 +20,7 @@ Future<void> ensureUserDocument() async {
       'uid': user.uid,
       'email': user.email,
       'role': 'user', // Default role
+      'roles': [],    // NEW: roles list
       'isCurator': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -40,7 +41,9 @@ Future<void> ensureUserDocument() async {
       'photoUrl': user.photoURL ?? '',
       'bio': '',
       'isManaged': false,
-      'managers': [], // Empty for real users
+      'isCurator': false, // Public flag
+      'isAdmin': false,   // NEW: Public flag
+      'managers': [],
       'followerCount': 0,
       'followingCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
@@ -85,6 +88,8 @@ Future<String?> createManagedProfile({
     'bio': bio,
     'photoUrl': '',
     'isManaged': true,
+    'isCurator': false,
+    'isAdmin': false,
     'managers': [currentUser.uid],
     'followerCount': 0,
     'followingCount': 0,

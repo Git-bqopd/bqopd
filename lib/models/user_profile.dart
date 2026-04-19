@@ -8,6 +8,8 @@ class UserProfile {
   final String photoUrl;
   final String bio;
   final bool isManaged;
+  final bool isCurator; // Public flag for tab visibility
+  final bool isAdmin;   // NEW: Public flag for admin identity/parity
   final List<String> managers;
   final int followerCount;
   final int followingCount;
@@ -26,6 +28,8 @@ class UserProfile {
     this.photoUrl = '',
     this.bio = '',
     this.isManaged = false,
+    this.isCurator = false,
+    this.isAdmin = false,
     this.managers = const [],
     this.followerCount = 0,
     this.followingCount = 0,
@@ -44,6 +48,8 @@ class UserProfile {
       photoUrl: data['photoUrl'] ?? '',
       bio: data['bio'] ?? '',
       isManaged: data['isManaged'] ?? false,
+      isCurator: data['isCurator'] ?? false,
+      isAdmin: data['isAdmin'] ?? false,
       managers: List<String>.from(data['managers'] ?? []),
       followerCount: data['followerCount'] ?? 0,
       followingCount: data['followingCount'] ?? 0,
@@ -62,6 +68,8 @@ class UserProfile {
       'photoUrl': photoUrl,
       'bio': bio,
       'isManaged': isManaged,
+      'isCurator': isCurator,
+      'isAdmin': isAdmin,
       'managers': managers,
       'followerCount': followerCount,
       'followingCount': followingCount,

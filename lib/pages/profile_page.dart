@@ -13,12 +13,13 @@ import '../repositories/user_repository.dart';
 import '../repositories/engagement_repository.dart';
 import '../services/user_provider.dart';
 import '../services/user_bootstrap.dart';
-import '../services/username_service.dart'; // Added for normalizeHandle and createAlias
+import '../services/username_service.dart';
 import '../widgets/profile_widget.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/image_upload_modal.dart';
 import '../widgets/image_view_modal.dart';
 import '../widgets/comment_item.dart';
+import '../widgets/reader_panels/social_matrix_tab.dart';
 
 class ProfilePage extends StatelessWidget {
   final String? userId;
@@ -45,6 +46,7 @@ class ProfilePage extends StatelessWidget {
       )..add(LoadProfileRequested(
         userId: targetUserId!,
         currentAuthId: currentUid ?? '',
+        isViewerAdmin: userProvider.isAdmin, // UPDATED
         isViewerModerator: userProvider.isModerator,
         isViewerCurator: userProvider.isCurator,
         initialTab: initialTab,
@@ -320,7 +322,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
           return SafeArea(
             child: PageWrapper(
-              maxWidth: 900,
+              maxWidth: 1000,
               scroll: false,
               padding: EdgeInsets.zero,
               child: CustomScrollView(
@@ -367,16 +369,27 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                       delegate: _ProfileTabsDelegate(
                         child: Container(
                           height: 50,
-                          decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.black12))),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _buildSubTab("shortcodes", 0, type: 'settings'),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("managed profiles", 1, type: 'settings'),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("permissions", 2, type: 'settings'),
-                            ],
+                          decoration: const BoxDecoration(
+                              color: Colors.white,
+                              border: Border(bottom: BorderSide(color: Colors.black12))
+                          ),
+                          child: Center(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _buildSubTab("shortcodes", 0, type: 'settings'),
+                                  const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                  _buildSubTab("managed profiles", 1, type: 'settings'),
+                                  const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                  _buildSubTab("permissions", 2, type: 'settings'),
+                                  const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                  _buildSubTab("social buttons", 3, type: 'settings'),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -510,6 +523,16 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab) {
     switch (activeTab) {
       case 'settings':
+        if (_settingsSubTabIndex == 3) {
+          return const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: SocialMatrixTab(),
+              ),
+            ),
+          );
+        }
         return _buildSettingsSubView(targetUserId);
       case 'curator':
         if (_curatorSubTabIndex == 2) return _buildEntitiesSubView();
@@ -611,13 +634,19 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final uid = docs[index].id;
-                  final role = (docs[index].data() as Map)['role'] ?? 'user';
+                  final userData = docs[index].data() as Map<String, dynamic>;
+
+                  final dynamic rolesData = userData['roles'];
+                  final Set<String> selectedRolesSet = rolesData != null
+                      ? Set<String>.from(rolesData)
+                      : (userData['role'] != null && userData['role'] != 'user' ? {userData['role']} : <String>{});
 
                   return FutureBuilder<DocumentSnapshot>(
                       future: FirebaseFirestore.instance.collection('profiles').doc(uid).get(),
                       builder: (context, profileSnap) {
                         final pData = profileSnap.data?.data() as Map?;
                         final name = pData?['displayName'] ?? pData?['username'] ?? 'unknown';
+                        final username = pData?['username'] ?? 'unknown';
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -626,17 +655,61 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: ListTile(
                             title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                             subtitle: Text("UID: $uid", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                            trailing: DropdownButton<String>(
-                              value: ['admin', 'moderator', 'curator', 'user'].contains(role) ? role : 'user',
-                              underline: const SizedBox(),
-                              items: ['admin', 'moderator', 'curator', 'user'].map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-                              onChanged: (newRole) async {
-                                if (newRole == null) return;
-                                await FirebaseFirestore.instance.collection('Users').doc(uid).update({
-                                  'role': newRole,
-                                  'isCurator': newRole == 'curator' || newRole == 'admin' || newRole == 'moderator',
-                                });
-                              },
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                InkWell(
+                                  onTap: () => context.go('/$username'),
+                                  child: Text('/$username',
+                                      style: const TextStyle(
+                                          color: Colors.blue,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                          decoration: TextDecoration.underline
+                                      )
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                SegmentedButton<String>(
+                                  showSelectedIcon: false,
+                                  segments: const [
+                                    ButtonSegment(value: 'admin', label: Text('ADMIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                                    ButtonSegment(value: 'moderator', label: Text('MODERATOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                                    ButtonSegment(value: 'curator', label: Text('CURATOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                                  ],
+                                  selected: selectedRolesSet,
+                                  onSelectionChanged: (newSelection) async {
+                                    final rolesList = newSelection.toList();
+                                    final bool isCurator = newSelection.contains('curator');
+                                    final bool isAdmin = newSelection.contains('admin'); // NEW
+
+                                    String legacyRole = 'user';
+                                    if (newSelection.contains('admin')) {
+                                      legacyRole = 'admin';
+                                    } else if (newSelection.contains('moderator')) legacyRole = 'moderator';
+                                    else if (newSelection.contains('curator')) legacyRole = 'curator';
+
+                                    final batch = FirebaseFirestore.instance.batch();
+
+                                    // 1. Update Private System Data
+                                    batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {
+                                      'roles': rolesList,
+                                      'role': legacyRole,
+                                      'isCurator': isCurator || isAdmin || newSelection.contains('moderator'),
+                                    });
+
+                                    // 2. Update Public Profile Data (Sync statuses)
+                                    batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {
+                                      'isCurator': isCurator || isAdmin || newSelection.contains('moderator'),
+                                      'isAdmin': isAdmin, // NEW
+                                    });
+
+                                    await batch.commit();
+                                  },
+                                  multiSelectionEnabled: true,
+                                  emptySelectionAllowed: true,
+                                ),
+                              ],
                             ),
                           ),
                         );

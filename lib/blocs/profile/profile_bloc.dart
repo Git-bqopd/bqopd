@@ -14,6 +14,7 @@ abstract class ProfileEvent extends Equatable {
 class LoadProfileRequested extends ProfileEvent {
   final String userId;
   final String currentAuthId;
+  final bool isViewerAdmin;      // UPDATED
   final bool isViewerModerator;
   final bool isViewerCurator;
   final String? initialTab;
@@ -21,6 +22,7 @@ class LoadProfileRequested extends ProfileEvent {
   LoadProfileRequested({
     required this.userId,
     required this.currentAuthId,
+    required this.isViewerAdmin,
     required this.isViewerModerator,
     required this.isViewerCurator,
     this.initialTab,
@@ -30,11 +32,12 @@ class LoadProfileRequested extends ProfileEvent {
 class _ProfileDataUpdated extends ProfileEvent {
   final UserProfile profile;
   final String currentAuthId;
+  final bool isViewerAdmin;      // UPDATED
   final bool isViewerModerator;
   final bool isViewerCurator;
   final String? initialTab;
 
-  _ProfileDataUpdated(this.profile, this.currentAuthId, this.isViewerModerator, this.isViewerCurator, this.initialTab);
+  _ProfileDataUpdated(this.profile, this.currentAuthId, this.isViewerAdmin, this.isViewerModerator, this.isViewerCurator, this.initialTab);
 }
 
 class _FollowStatusUpdated extends ProfileEvent {
@@ -51,7 +54,7 @@ class ToggleFollowRequested extends ProfileEvent {}
 
 // --- STATE ---
 class ProfileState extends Equatable {
-  final UserProfile? userData; // Strongly typed
+  final UserProfile? userData;
   final bool isLoading;
   final bool isFollowing;
   final int currentTabIndex;
@@ -125,6 +128,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         add(_ProfileDataUpdated(
             UserProfile.fromFirestore(doc),
             event.currentAuthId,
+            event.isViewerAdmin,
             event.isViewerModerator,
             event.isViewerCurator,
             event.initialTab
@@ -139,11 +143,18 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     List<String> tabs = [];
 
-    if (isMe || event.isViewerModerator) {
+    // UPDATED: Settings tab is visible ONLY if it's my own profile AND I am an admin
+    if (isMe && event.isViewerAdmin) {
       tabs.add('settings');
     }
 
-    if (isMe || event.isViewerCurator || event.isViewerModerator) {
+    // Curator tab visibility logic
+    final bool viewerHasAccess = event.isViewerCurator || event.isViewerModerator;
+    final bool ownerIsCurator = profile.isCurator;
+
+    if (isMe && viewerHasAccess) {
+      tabs.add('curator');
+    } else if (!isMe && viewerHasAccess && ownerIsCurator) {
       tabs.add('curator');
     }
 

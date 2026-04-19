@@ -71,7 +71,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   }
 
   void _listenToStats() {
-    // SINGLE SOURCE OF TRUTH: Listen only to the Image document for engagement stats
     if (widget.imageId.isNotEmpty) {
       _imageSub = FirebaseFirestore.instance
           .collection('images')
@@ -81,7 +80,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         if (doc.exists && mounted) {
           final data = doc.data() as Map<String, dynamic>;
           setState(() {
-            _likeCount = data['likeCount'] ?? 0; // Canonical Like Count
+            _likeCount = data['likeCount'] ?? 0;
             _commentCount = data['commentCount'] ?? 0;
             _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) + (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
           });
@@ -116,7 +115,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           showDialog(context: context, builder: (c) => const AuthModal());
           return;
         }
-        // Anchoring like to UGC
         await _engagementService.toggleLike(
           imageId: widget.imageId,
           fanzineId: widget.fanzineId,
@@ -143,40 +141,31 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
     }
   }
 
-  bool _isToolVisible(ReaderTool tool, UserProvider userProvider) {
-    if (tool.role == ToolRole.editor && !widget.isEditingMode) return false;
-
-    switch (tool.condition) {
-      case ToolCondition.requiresYouTube:
-        if (widget.youtubeId == null || widget.youtubeId!.isEmpty) return false;
-        break;
-      case ToolCondition.requiresGame:
-        if (!widget.isGame) return false;
-        break;
-      case ToolCondition.requiresIndicia:
-        if (!widget.isIndiciaPage || widget.fanzineId == null) return false;
-        break;
-      case ToolCondition.hideOnDesktopSplit:
-        if (widget.onOpenGrid == null) return false;
-        break;
-      case ToolCondition.requiresOcrPipeline:
-      // Hide these tools for Publisher-based folios/calendars
-        if (widget.fanzineType == 'folio' || widget.fanzineType == 'calendar') return false;
-        break;
-      default:
-        break;
-    }
-
-    final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
-    return isVisibleByUser;
-  }
-
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    final visibleTools = ReaderToolsConfig.tools.where((tool) => _isToolVisible(tool, userProvider)).toList();
+    // Use CENTRALIZED LOGIC to filter tools
+    final visibleTools = ReaderToolsConfig.tools.where((tool) {
+      // 1. Check logical visibility based on environment/context
+      bool isContextuallyVisible = ReaderToolsConfig.isToolVisibleInContext(
+        tool: tool,
+        userRole: userProvider.userAccount?.role ?? 'user',
+        isEditingMode: widget.isEditingMode,
+        fanzineType: widget.fanzineType,
+        hasYoutube: widget.youtubeId != null && widget.youtubeId!.isNotEmpty,
+        isGame: widget.isGame,
+        isIndiciaPage: widget.isIndiciaPage,
+        canOpenGrid: widget.onOpenGrid != null,
+      );
+
+      if (!isContextuallyVisible) return false;
+
+      // 2. Check personal visibility preferences set by the user
+      final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
+      return isVisibleByUser;
+    }).toList();
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
