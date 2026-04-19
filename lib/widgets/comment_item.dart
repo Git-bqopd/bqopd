@@ -6,8 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/engagement_service.dart';
 import 'auth_modal.dart';
 
-/// A standardized widget for displaying a single comment.
-/// Fetches live user data from the Users collection based on the userId.
+/// Displays a comment, fetching the author's display data from the 'profiles' collection.
 class CommentItem extends StatelessWidget {
   final Map<String, dynamic> data;
 
@@ -63,18 +62,18 @@ class CommentItem extends StatelessWidget {
     final bool isOwner = !isGuest && user.uid == userId;
 
     return FutureBuilder<DocumentSnapshot>(
-      // Robust lookup ensures we get the current profile data for the comment author
-      future: FirebaseFirestore.instance.collection('Users').doc(userId).get(),
-      builder: (context, userSnap) {
+      // autoraity is now the 'profiles' collection
+      future: FirebaseFirestore.instance.collection('profiles').doc(userId).get(),
+      builder: (context, profileSnap) {
         String display = fallbackDisplayName;
         String handle = fallbackUsername;
         String? photoUrl;
 
-        if (userSnap.hasData && userSnap.data!.exists) {
-          final userData = userSnap.data!.data() as Map<String, dynamic>;
-          display = userData['displayName'] ?? '';
-          handle = userData['username'] ?? fallbackUsername;
-          photoUrl = userData['photoUrl'];
+        if (profileSnap.hasData && profileSnap.data!.exists) {
+          final profileData = profileSnap.data!.data() as Map<String, dynamic>;
+          display = profileData['displayName'] ?? '';
+          handle = profileData['username'] ?? fallbackUsername;
+          photoUrl = profileData['photoUrl'];
         }
 
         return Padding(

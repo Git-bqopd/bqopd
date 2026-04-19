@@ -2,20 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Handles persistence for Likes, Comments, Follows, and Hashtags.
-/// All interactions are now anchored to the UGC (Image/Content ID) level
-/// to ensure a single source of truth across different fanzines.
 class EngagementService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Rule 1 Compliant Path for Public Data
   CollectionReference get _commentsCollection =>
       _db.collection('artifacts').doc('bqopd').collection('public').doc('data').collection('comments');
 
   // --- UGC Likes (Canonical) ---
 
-  /// Toggles a like on the specific media (UGC).
-  /// [fanzineId] is passed as context to track the path the user took.
   Future<void> toggleLike({
     required String imageId,
     required String? fanzineId,
@@ -24,7 +19,6 @@ class EngagementService {
     final user = _auth.currentUser;
     if (user == null || imageId.isEmpty) return;
 
-    // The activity log for the user references the Image, not the Page
     final userActivityRef = _db
         .collection('Users')
         .doc(user.uid)
@@ -43,7 +37,7 @@ class EngagementService {
       batch.update(imageRef, {'likeCount': FieldValue.increment(1)});
       batch.set(userActivityRef, {
         'imageId': imageId,
-        'fanzineIdContext': fanzineId, // Preservation of the "Path"
+        'fanzineIdContext': fanzineId,
         'likedAt': FieldValue.serverTimestamp(),
       });
     }
@@ -68,7 +62,7 @@ class EngagementService {
     final commentDoc = _commentsCollection.doc();
 
     await commentDoc.set({
-      'contentId': imageId, // The UGC link
+      'contentId': imageId,
       'userId': user.uid,
       'displayName': displayName ?? '',
       'username': username ?? 'user',
@@ -77,7 +71,7 @@ class EngagementService {
       'likeCount': 0,
       'parentId': parentId,
       'context': {
-        'fanzineId': fanzineId, // Tracks the path
+        'fanzineId': fanzineId,
         'fanzineTitle': fanzineTitle,
       },
     });
@@ -89,7 +83,6 @@ class EngagementService {
     }
   }
 
-  /// Removes a comment and decrements the counter on the image.
   Future<void> deleteComment(String commentId, String imageId) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -152,7 +145,6 @@ class EngagementService {
         .map((doc) => doc.exists);
   }
 
-  /// Checks if the current user has liked a specific piece of media (UGC).
   Stream<bool> isLikedStream(String imageId) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
@@ -168,65 +160,77 @@ class EngagementService {
         .map((doc) => doc.exists);
   }
 
-  // --- Follow Logic ---
+  // --- Follow Logic (Unified Profiles) ---
 
   Future<void> followUser(String targetUid) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null || currentUser.uid == targetUid) return;
 
+    final followingRef = _db.collection('profiles').doc(currentUser.uid).collection('following').doc(targetUid);
+
+    // IDEMPOTENCY CHECK: Only proceed if not already following
+    final doc = await followingRef.get();
+    if (doc.exists) return;
+
     final batch = _db.batch();
-    final followingRef = _db.collection('Users').doc(currentUser.uid).collection('following').doc(targetUid);
+
     batch.set(followingRef, {'followedAt': FieldValue.serverTimestamp()});
-    final followersRef = _db.collection('Users').doc(targetUid).collection('followers').doc(currentUser.uid);
+
+    final followersRef = _db.collection('profiles').doc(targetUid).collection('followers').doc(currentUser.uid);
     batch.set(followersRef, {'followerAt': FieldValue.serverTimestamp()});
-    batch.set(_db.collection('Users').doc(currentUser.uid), {'followingCount': FieldValue.increment(1)}, SetOptions(merge: true));
-    batch.set(_db.collection('Users').doc(targetUid), {'followerCount': FieldValue.increment(1)}, SetOptions(merge: true));
+
+    batch.set(_db.collection('profiles').doc(currentUser.uid), {'followingCount': FieldValue.increment(1)}, SetOptions(merge: true));
+    batch.set(_db.collection('profiles').doc(targetUid), {'followerCount': FieldValue.increment(1)}, SetOptions(merge: true));
+
     await batch.commit();
   }
 
   Future<void> unfollowUser(String targetUid) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
+
+    final followingRef = _db.collection('profiles').doc(currentUser.uid).collection('following').doc(targetUid);
+
+    // IDEMPOTENCY CHECK: Only proceed if actually following
+    final doc = await followingRef.get();
+    if (!doc.exists) return;
+
     final batch = _db.batch();
-    batch.delete(_db.collection('Users').doc(currentUser.uid).collection('following').doc(targetUid));
-    batch.delete(_db.collection('Users').doc(targetUid).collection('followers').doc(currentUser.uid));
-    batch.set(_db.collection('Users').doc(currentUser.uid), {'followingCount': FieldValue.increment(-1)}, SetOptions(merge: true));
-    batch.set(_db.collection('Users').doc(targetUid), {'followerCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+
+    batch.delete(followingRef);
+    batch.delete(_db.collection('profiles').doc(targetUid).collection('followers').doc(currentUser.uid));
+
+    batch.set(_db.collection('profiles').doc(currentUser.uid), {'followingCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+    batch.set(_db.collection('profiles').doc(targetUid), {'followerCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+
     await batch.commit();
   }
 
   Stream<bool> isFollowingStream(String targetUid) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
-    return _db.collection('Users').doc(user.uid).collection('following').doc(targetUid).snapshots().map((doc) => doc.exists);
+    return _db.collection('profiles').doc(user.uid).collection('following').doc(targetUid).snapshots().map((doc) => doc.exists);
   }
 
   // --- Hashtag / Voting Logic ---
 
-  /// Toggles a user's vote on a hashtag for a specific image.
-  /// Handles "Status Sync": If the 'approved' tag is toggled, update the 'status' field.
   Future<void> toggleHashtag(String imageId, String tag, bool isVoting) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
     final imageRef = _db.collection('images').doc(imageId);
-    // Sanitize tag (lowercase, no hash, no spaces)
     final cleanTag = tag.toLowerCase().replaceAll('#', '').trim();
     if (cleanTag.isEmpty) return;
 
     final Map<String, dynamic> updateData = {};
 
     if (isVoting) {
-      // Add vote
       updateData['tags.$cleanTag'] = FieldValue.arrayUnion([user.uid]);
-      // If prioritizing this tag changes the document status
       if (cleanTag == 'approved') {
         updateData['status'] = 'approved';
       }
     } else {
-      // Remove vote
       updateData['tags.$cleanTag'] = FieldValue.arrayRemove([user.uid]);
-      // If removing approval, revert to pending
       if (cleanTag == 'approved') {
         updateData['status'] = 'pending';
       }

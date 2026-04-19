@@ -94,9 +94,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
           _targetShortCode = null;
         });
       } else {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
+        // FIXED: Look up my profile in the 'profiles' collection, not 'Users'
+        final profileDoc = await FirebaseFirestore.instance.collection('profiles').doc(currentUser!.uid).get();
         if (mounted) {
-          final myUsername = userDoc.data()?['username'] ?? 'user';
+          final myUsername = profileDoc.data()?['username'] ?? 'user';
           setState(() {
             _showLoginLink = false;
             _displayUrl = 'bqopd.com/$myUsername';
@@ -120,9 +121,10 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       return;
     }
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('Users').doc(currentUser!.uid).get();
-      if (userDoc.exists && mounted) {
-        final username = userDoc.data()?['username'] as String?;
+      // FIXED: Use 'profiles' collection for the URL display
+      final profileDoc = await FirebaseFirestore.instance.collection('profiles').doc(currentUser!.uid).get();
+      if (profileDoc.exists && mounted) {
+        final username = profileDoc.data()?['username'] as String?;
         setState(() {
           _displayUrl = 'bqopd.com/$username';
           _targetShortCode = username;
@@ -184,7 +186,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          // FIXED: Use withValues to resolve deprecation info
           border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: [
             BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
@@ -208,7 +209,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(50),
-                  // FIXED: Use withValues to resolve deprecation info
                   border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
@@ -235,7 +235,6 @@ class _FanzineWidgetState extends State<FanzineWidget> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              // FIXED: Use withValues to resolve deprecation info
               border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
               boxShadow: [
                 BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1))
@@ -316,7 +315,8 @@ class _FanzineWidgetState extends State<FanzineWidget> {
       ]);
     }
     return FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
+      // FIXED: Fetch from 'profiles' for correct display name/photo
+        future: FirebaseFirestore.instance.collection('profiles').doc(uid).get(),
         builder: (context, snap) {
           final data = snap.data?.data() as Map<String, dynamic>?;
           final name = (data?['displayName'] ?? data?['username'] ?? fallbackName).toString().toUpperCase();

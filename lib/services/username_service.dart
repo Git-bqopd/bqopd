@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 String normalizeHandle(String raw) =>
     raw.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '');
 
+/// Claims a unique handle for an existing profile.
 Future<String?> claimHandle(String desiredRaw) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return 'Not signed in';
@@ -12,10 +13,11 @@ Future<String?> claimHandle(String desiredRaw) async {
   if (handle.isEmpty) return 'Invalid handle';
 
   final db = FirebaseFirestore.instance;
-
   final shortCodeKey = handle.toUpperCase();
+
+  // Check if handle is already in use
   final short = await db.collection('shortcodes').doc(shortCodeKey).get();
-  if (short.exists) return 'Handle is reserved';
+  if (short.exists) return 'Handle is reserved or taken';
 
   final ref = db.collection('usernames').doc(handle);
 
@@ -26,19 +28,21 @@ Future<String?> claimHandle(String desiredRaw) async {
         throw Exception('Handle already taken');
       }
 
+      // 1. Set global registry
       transaction.set(ref, {
         'uid': user.uid,
+        'isManaged': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      final userDoc = db.collection('Users').doc(user.uid);
-      transaction.set(userDoc, {
-        'uid': user.uid,
+      // 2. Update the Unified Profile
+      final profileDoc = db.collection('profiles').doc(user.uid);
+      transaction.update(profileDoc, {
         'username': handle,
-        'email': user.email,
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
 
+      // 3. Set standard shortcode lookup
       final shortcodeRef = db.collection('shortcodes').doc(shortCodeKey);
       transaction.set(shortcodeRef, {
         'type': 'user',
@@ -55,7 +59,7 @@ Future<String?> claimHandle(String desiredRaw) async {
   }
 }
 
-/// Creates a redirection alias.
+/// Creates a redirection alias for a profile.
 Future<String?> createAlias({
   required String aliasHandle,
   required String targetHandle,

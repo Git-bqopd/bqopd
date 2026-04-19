@@ -35,10 +35,10 @@ class _FollowListModalState extends State<FollowListModal> {
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
       child: Center(
         child: Container(
-          color: const Color(0xFFF1B255), // Manilla Envelope Color
+          color: const Color(0xFFF1B255),
           padding: const EdgeInsets.all(16.0),
           child: AspectRatio(
-            aspectRatio: 5 / 8, // Sticker Ratio
+            aspectRatio: 5 / 8,
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -49,13 +49,12 @@ class _FollowListModalState extends State<FollowListModal> {
               ),
               child: Column(
                 children: [
-                  // Header
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const SizedBox(width: 40), // Balancer
+                        const SizedBox(width: 40),
                         Text(widget.title,
                             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
                         IconButton(
@@ -67,7 +66,6 @@ class _FollowListModalState extends State<FollowListModal> {
                   ),
                   const Divider(height: 1),
 
-                  // Search Bar
                   Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: TextField(
@@ -87,11 +85,11 @@ class _FollowListModalState extends State<FollowListModal> {
                     ),
                   ),
 
-                  // List
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
+                      // FIXED: Look in 'profiles' for follow relationships
                       stream: FirebaseFirestore.instance
-                          .collection('Users')
+                          .collection('profiles')
                           .doc(widget.userId)
                           .collection(widget.collectionName)
                           .snapshots(),
@@ -135,7 +133,8 @@ class _UserListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('Users').doc(uid).get(),
+      // FIXED: Fetch user display metadata from 'profiles'
+      future: FirebaseFirestore.instance.collection('profiles').doc(uid).get(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
         final data = snapshot.data!.data() as Map<String, dynamic>?;
@@ -143,12 +142,9 @@ class _UserListTile extends StatelessWidget {
 
         final username = data['username'] ?? '';
         final displayName = data['displayName'] ?? '';
-        final firstName = data['firstName'] ?? '';
-        final lastName = data['lastName'] ?? '';
-        final fullName = displayName.isNotEmpty ? displayName : "$firstName $lastName".trim();
+        final fullName = displayName.isNotEmpty ? displayName : username;
         final photoUrl = data['photoUrl'];
 
-        // Filter
         if (searchQuery.isNotEmpty &&
             !username.toLowerCase().contains(searchQuery) &&
             !fullName.toLowerCase().contains(searchQuery)) {
@@ -162,10 +158,10 @@ class _UserListTile extends StatelessWidget {
           },
           leading: CircleAvatar(
             backgroundColor: Colors.grey[200],
-            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-            child: photoUrl == null ? const Icon(Icons.person, color: Colors.grey) : null,
+            backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+            child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, color: Colors.grey) : null,
           ),
-          title: Text(fullName.isNotEmpty ? fullName : username,
+          title: Text(fullName,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
           subtitle: Text("@$username", style: const TextStyle(fontSize: 12, color: Colors.grey)),
           trailing: OutlinedButton(

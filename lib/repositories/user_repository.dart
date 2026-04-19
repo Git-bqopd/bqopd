@@ -6,14 +6,39 @@ import '../services/username_service.dart';
 class UserRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Returns a stream of a user's profile data.
+  /// Returns a stream of a user's PUBLIC profile data.
   Stream<DocumentSnapshot> watchUser(String uid) {
+    return _db.collection('profiles').doc(uid).snapshots();
+  }
+
+  /// Returns a stream of a user's PRIVATE account data (roles, etc).
+  Stream<DocumentSnapshot> watchUserAccount(String uid) {
     return _db.collection('Users').doc(uid).snapshots();
   }
 
-  /// Updates a user profile.
+  /// Updates a user profile (Public fields go to 'profiles', private to 'Users').
   Future<void> updateProfile(String uid, Map<String, dynamic> data) async {
-    await _db.collection('Users').doc(uid).set(data, SetOptions(merge: true));
+    final publicFields = ['username', 'displayName', 'bio', 'photoUrl', 'updatedAt'];
+
+    final Map<String, dynamic> publicData = {};
+    final Map<String, dynamic> privateData = {};
+
+    data.forEach((key, value) {
+      if (publicFields.contains(key)) {
+        publicData[key] = value;
+      } else {
+        privateData[key] = value;
+      }
+    });
+
+    final batch = _db.batch();
+    if (publicData.isNotEmpty) {
+      batch.set(_db.collection('profiles').doc(uid), publicData, SetOptions(merge: true));
+    }
+    if (privateData.isNotEmpty) {
+      batch.set(_db.collection('Users').doc(uid), privateData, SetOptions(merge: true));
+    }
+    await batch.commit();
   }
 
   /// Fetches fanzines where the user is an editor.
@@ -37,18 +62,5 @@ class UserRepository {
   /// Claims a unique handle for a user.
   Future<String?> claimHandleForUser(String handle) async {
     return await claimHandle(handle);
-  }
-
-  /// Creates a managed profile (estate).
-  Future<String?> createEstateProfile({
-    required String first,
-    required String last,
-    required String bio,
-  }) async {
-    return await createManagedProfile(
-        firstName: first,
-        lastName: last,
-        bio: bio
-    );
   }
 }

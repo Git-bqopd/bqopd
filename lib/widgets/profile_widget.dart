@@ -3,11 +3,15 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/user_provider.dart';
 import 'image_upload_modal.dart';
 import 'follow_list_modal.dart';
 
+/// Renders the top section of a unified profile.
+/// Fixed logic: Primary button is for Following (Social),
+/// Banner is for Management (Administrative).
 class ProfileHeader extends StatefulWidget {
   final Map<String, dynamic> userData;
   final String profileUid;
@@ -43,17 +47,16 @@ class _ProfileHeaderState extends State<ProfileHeader> {
   bool get _isManaged => widget.userData['isManaged'] == true;
   List<dynamic> get _managers => widget.userData['managers'] ?? [];
 
-  bool get _canEdit {
+  /// Can manage if I am in the managers list.
+  bool get _canManage {
     final provider = Provider.of<UserProvider>(context, listen: false);
     final currentUid = provider.currentUserId;
     if (currentUid == null) return false;
-    if (widget.profileUid == currentUid) return true;
-    if (_isManaged && _managers.contains(currentUid)) return true;
-    return false;
+    return _isManaged && _managers.contains(currentUid);
   }
 
   void _showImageUpload() {
-    if (!_canEdit) return;
+    if (!widget.isMe && !_canManage) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -141,17 +144,11 @@ class _ProfileHeaderState extends State<ProfileHeader> {
 
   Widget _buildProfileInfoContent() {
     final String displayName = widget.userData['displayName'] ?? '';
-    final String firstName = widget.userData['firstName'] ?? '';
-    final String lastName = widget.userData['lastName'] ?? '';
     final String username = widget.userData['username'] ?? '';
     final String bio = widget.userData['bio'] ?? '';
     final String? photoUrl = widget.userData['photoUrl'];
 
-    final String displayTitle = displayName.isNotEmpty
-        ? displayName
-        : (firstName.isNotEmpty || lastName.isNotEmpty
-        ? '$firstName $lastName'.trim()
-        : 'User');
+    final String displayTitle = displayName.isNotEmpty ? displayName : 'User';
 
     int followers = widget.userData['followerCount'] ?? 0;
     int following = widget.userData['followingCount'] ?? 0;
@@ -189,6 +186,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // PRIMARY BUTTON LOGIC
                     if (!widget.isMe)
                       GestureDetector(
                         onTap: widget.onFollowToggle,
@@ -241,24 +239,31 @@ class _ProfileHeaderState extends State<ProfileHeader> {
             Text('@$username',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 14, color: Colors.black54)),
+
+            // SECONDARY MANAGEMENT BANNER
             if (_isManaged) ...[
               const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                color: Colors.grey[50],
-                child: Text(
-                  _canEdit ? "EDIT MANAGED PROFILE" : "MANAGED PROFILE",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black54,
-                    letterSpacing: 2.0,
+              GestureDetector(
+                onTap: _canManage ? () => context.pushNamed('editInfo', queryParameters: {'userId': widget.profileUid}) : null,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  color: _canManage ? Colors.black.withValues(alpha: 0.05) : Colors.grey[50],
+                  child: Text(
+                    _canManage ? "EDIT MANAGED PROFILE" : "MANAGED PROFILE",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: _canManage ? Colors.indigo : Colors.black54,
+                      letterSpacing: 2.0,
+                      decoration: _canManage ? TextDecoration.underline : null,
+                    ),
                   ),
                 ),
               ),
             ],
+
             if (bio.isNotEmpty) ...[
               const SizedBox(height: 16),
               Padding(

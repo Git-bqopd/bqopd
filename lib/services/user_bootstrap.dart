@@ -1,78 +1,63 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Ensures the user has a valid Firestore document with their UID as the key.
+/// Ensures the user has a valid Firestore setup.
+/// Real users get a record in 'Users' (private/system) and 'profiles' (public).
 Future<void> ensureUserDocument() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return;
 
   final db = FirebaseFirestore.instance;
-  final usersCollection = db.collection('Users');
 
-  final uidDocRef = usersCollection.doc(user.uid);
-  final uidDocSnap = await uidDocRef.get();
+  // 1. Private User Record (System/Auth Data)
+  final userRef = db.collection('Users').doc(user.uid);
+  final userSnap = await userRef.get();
 
-  if (uidDocSnap.exists) {
-    await uidDocRef.update({'updatedAt': FieldValue.serverTimestamp()});
+  if (userSnap.exists) {
+    await userRef.update({'updatedAt': FieldValue.serverTimestamp()});
   } else {
-    // Check for old email-based doc
-    DocumentSnapshot? emailDocSnap;
-    if (user.email != null) {
-      emailDocSnap = await usersCollection.doc(user.email).get();
-    }
-
-    if (emailDocSnap != null && emailDocSnap.exists) {
-      // Migration logic
-      final oldData = emailDocSnap.data() as Map<String, dynamic>;
-      await uidDocRef.set({
-        ...oldData,
-        'uid': user.uid,
-        'email': user.email,
-        'migratedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } else {
-      // Create fresh real user
-      await uidDocRef.set({
-        'uid': user.uid,
-        'email': user.email,
-        'username': (user.email ?? '').split('@').first,
-        'firstName': '',
-        'lastName': '',
-        'street1': '',
-        'street2': '',
-        'city': '',
-        'state': '',
-        'zipCode': '',
-        'country': 'USA',
-        'bio': '',
-        'Editor': false,
-        'newFanzine': null,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    }
+    await userRef.set({
+      'uid': user.uid,
+      'email': user.email,
+      'role': 'user', // Default role
+      'isCurator': false,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  // Handle Registry for Real User
-  final uname = ((user.displayName ?? '').trim().isNotEmpty)
-      ? user.displayName!.trim()
-      : (user.email ?? '').split('@').first;
+  // 2. Public Profile Record (Unified Display Data)
+  final profileRef = db.collection('profiles').doc(user.uid);
+  final profileSnap = await profileRef.get();
 
-  if (uname.isNotEmpty) {
-    final unameDoc = db.collection('usernames').doc(uname.toLowerCase());
-    final uSnap = await unameDoc.get();
-    if (!uSnap.exists) {
-      await unameDoc.set({
-        'uid': user.uid,
-        'email': user.email,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
+  if (!profileSnap.exists) {
+    final defaultUsername = (user.email ?? '').split('@').first;
+
+    await profileRef.set({
+      'uid': user.uid,
+      'username': defaultUsername,
+      'displayName': user.displayName ?? '',
+      'photoUrl': user.photoURL ?? '',
+      'bio': '',
+      'isManaged': false,
+      'managers': [], // Empty for real users
+      'followerCount': 0,
+      'followingCount': 0,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Register handle in global registry
+    await db.collection('usernames').doc(defaultUsername.toLowerCase()).set({
+      'uid': user.uid,
+      'isManaged': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 }
 
-/// Creates a "Managed" or "Estate" profile.
+/// Creates a "Managed" profile (Estate/Historical Entity).
+/// These exist ONLY in the 'profiles' collection and are controlled by real users.
 Future<String?> createManagedProfile({
   required String firstName,
   required String lastName,
@@ -82,53 +67,47 @@ Future<String?> createManagedProfile({
   if (currentUser == null) return null;
 
   final db = FirebaseFirestore.instance;
+  final profileRef = db.collection('profiles').doc();
 
-  // 1. Generate a new Random Document ID
-  final newProfileRef = db.collection('Users').doc();
+  final fullName = "$firstName $lastName".trim();
+  String baseHandle = fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
 
-  // 2. Generate a URL-friendly username (FIXED LOGIC)
-  // Join parts with hyphen, but filter empty parts to avoid trailing/leading hyphens
-  final parts = [firstName.trim(), lastName.trim()].where((s) => s.isNotEmpty).join('-');
-
-  String baseHandle = parts.toLowerCase();
-  baseHandle = baseHandle.replaceAll(RegExp(r'[^a-z0-9-]'), '');
-
-  // Safety fallback
   if (baseHandle.isEmpty) {
-    baseHandle = 'user-${DateTime.now().millisecondsSinceEpoch}';
-  } else if (baseHandle.length < 3) {
-    baseHandle += '-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+    baseHandle = 'entity-${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  // 3. Create the Document
-  await newProfileRef.set({
-    'uid': newProfileRef.id,
+  final profileData = {
+    'uid': profileRef.id,
+    'username': baseHandle,
+    'displayName': fullName,
     'firstName': firstName.trim(),
     'lastName': lastName.trim(),
-    'username': baseHandle,
     'bio': bio,
+    'photoUrl': '',
     'isManaged': true,
     'managers': [currentUser.uid],
+    'followerCount': 0,
+    'followingCount': 0,
     'createdAt': FieldValue.serverTimestamp(),
-    'email': '',
-    'Editor': false,
-    'newFanzine': null,
-  });
+    'updatedAt': FieldValue.serverTimestamp(),
+  };
 
-  // 4. Register the Handle
+  await profileRef.set(profileData);
+
+  // Register handle
   await db.collection('usernames').doc(baseHandle).set({
-    'uid': newProfileRef.id,
+    'uid': profileRef.id,
     'isManaged': true,
     'createdAt': FieldValue.serverTimestamp(),
   });
 
-  // 5. Add to Master Shortcodes
+  // Add to Master Shortcodes for /handle navigation
   await db.collection('shortcodes').doc(baseHandle.toUpperCase()).set({
     'type': 'user',
-    'contentId': newProfileRef.id,
+    'contentId': profileRef.id,
     'displayCode': baseHandle,
     'createdAt': FieldValue.serverTimestamp(),
   });
 
-  return newProfileRef.id;
+  return profileRef.id;
 }

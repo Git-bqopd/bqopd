@@ -6,7 +6,6 @@ class UploadRepository {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Uploads raw bytes to Firebase Storage and returns the download URL.
   Future<String> uploadBytes(Uint8List bytes, String path, String contentType) async {
     final ref = _storage.ref().child(path);
     final metadata = SettableMetadata(contentType: contentType);
@@ -14,7 +13,6 @@ class UploadRepository {
     return await uploadTask.ref.getDownloadURL();
   }
 
-  /// Creates a new image document in the global 'images' collection.
   Future<void> saveImageMetadata(Map<String, dynamic> data) async {
     final docRef = _db.collection('images').doc();
     await docRef.set({
@@ -24,11 +22,11 @@ class UploadRepository {
     });
   }
 
-  /// Looks up a user's UID and display name by their @handle.
   Future<Map<String, dynamic>?> lookupUserByHandle(String handle) async {
     final cleanHandle = handle.toLowerCase().replaceAll('@', '');
+    // FIXED: Lookup redirected to the unified 'profiles' collection
     final query = await _db
-        .collection('Users')
+        .collection('profiles')
         .where('username', isEqualTo: cleanHandle)
         .limit(1)
         .get();

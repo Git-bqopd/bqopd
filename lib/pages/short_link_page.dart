@@ -39,13 +39,11 @@ class ShortLinkPage extends StatelessWidget {
               );
             }
 
-            // CASE 1: It's a User Profile (e.g. /kevin)
             if (result.startsWith('user:')) {
               final userId = result.substring(5);
               return ProfilePage(userId: userId);
             }
 
-            // CASE 2: It's a Fanzine (e.g. /QrnSbYA)
             if (result.startsWith('fanzine:')) {
               final fanzineCode = result.substring(8);
               return FanzineReaderPage(shortCode: fanzineCode);
@@ -58,13 +56,10 @@ class ShortLinkPage extends StatelessWidget {
     );
   }
 
-  /// Resolves the incoming URL code to a specific Type and ID.
   Future<String?> _resolveShortcode(String code) async {
     final db = FirebaseFirestore.instance;
     final String cleanCode = code.trim();
 
-    // 1. MASTER LOOKUP (Check shortcodes collection first for explicit mappings)
-    // We check both UPPERCASE and lowercase to be safe
     final List<String> variations = [cleanCode.toUpperCase(), cleanCode.toLowerCase(), cleanCode];
 
     for (var v in variations) {
@@ -77,12 +72,9 @@ class ShortLinkPage extends StatelessWidget {
       }
     }
 
-    // 2. USERNAME REGISTRY LOOKUP (Check the usernames collection)
     final unameDoc = await db.collection('usernames').doc(cleanCode.toLowerCase()).get();
     if (unameDoc.exists) {
       final data = unameDoc.data() as Map<String, dynamic>;
-
-      // Handle redirects/aliases (e.g., "The Comet" -> "kevin")
       if (data.containsKey('redirect')) {
         final targetHandle = data['redirect'] as String;
         final targetDoc = await db.collection('usernames').doc(targetHandle).get();
@@ -91,23 +83,21 @@ class ShortLinkPage extends StatelessWidget {
           if (targetData['uid'] != null) return 'user:${targetData['uid']}';
         }
       }
-
       if (data['uid'] != null) return 'user:${data['uid']}';
     }
 
-    // 3. FANZINE DIRECT LOOKUP (Search by shortCode field)
     final fz = await db.collection('fanzines')
         .where('shortCode', isEqualTo: cleanCode)
         .limit(1)
         .get();
     if (fz.docs.isNotEmpty) return 'fanzine:$cleanCode';
 
-    // 4. USERS COLLECTION FALLBACK (Search by username field)
-    final usersByUsername = await db.collection('Users')
+    // FIXED: Fallback check redirected to 'profiles'
+    final profilesByUsername = await db.collection('profiles')
         .where('username', isEqualTo: cleanCode.toLowerCase())
         .limit(1)
         .get();
-    if (usersByUsername.docs.isNotEmpty) return 'user:${usersByUsername.docs.first.id}';
+    if (profilesByUsername.docs.isNotEmpty) return 'user:${profilesByUsername.docs.first.id}';
 
     return null;
   }
