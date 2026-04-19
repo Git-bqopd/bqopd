@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/user_bootstrap.dart';
 import '../services/username_service.dart';
 
 /// Repository responsible for User profiles, handles, and following relationships.
@@ -18,7 +17,17 @@ class UserRepository {
 
   /// Updates a user profile (Public fields go to 'profiles', private to 'Users').
   Future<void> updateProfile(String uid, Map<String, dynamic> data) async {
-    final publicFields = ['username', 'displayName', 'bio', 'photoUrl', 'updatedAt'];
+    // Define which keys belong to the public profile
+    final publicFields = [
+      'username',
+      'displayName',
+      'bio',
+      'photoUrl',
+      'xHandle',
+      'instagramHandle',
+      'githubHandle',
+      'updatedAt'
+    ];
 
     final Map<String, dynamic> publicData = {};
     final Map<String, dynamic> privateData = {};
@@ -41,7 +50,6 @@ class UserRepository {
     await batch.commit();
   }
 
-  /// Fetches fanzines where the user is an editor.
   Stream<QuerySnapshot> watchUserWorks(String uid) {
     return _db
         .collection('fanzines')
@@ -50,7 +58,6 @@ class UserRepository {
         .snapshots();
   }
 
-  /// Fetches fanzines where the user is mentioned.
   Stream<QuerySnapshot> watchUserMentions(String uid) {
     return _db
         .collection('fanzines')
@@ -59,7 +66,6 @@ class UserRepository {
         .snapshots();
   }
 
-  /// Claims a unique handle for a user.
   Future<String?> claimHandleForUser(String handle) async {
     return await claimHandle(handle);
   }

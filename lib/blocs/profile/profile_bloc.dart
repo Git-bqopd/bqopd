@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/engagement_repository.dart';
+import '../../models/user_profile.dart';
 
 // --- EVENTS ---
 abstract class ProfileEvent extends Equatable {
@@ -28,13 +28,13 @@ class LoadProfileRequested extends ProfileEvent {
 }
 
 class _ProfileDataUpdated extends ProfileEvent {
-  final DocumentSnapshot doc;
+  final UserProfile profile;
   final String currentAuthId;
   final bool isViewerModerator;
   final bool isViewerCurator;
   final String? initialTab;
 
-  _ProfileDataUpdated(this.doc, this.currentAuthId, this.isViewerModerator, this.isViewerCurator, this.initialTab);
+  _ProfileDataUpdated(this.profile, this.currentAuthId, this.isViewerModerator, this.isViewerCurator, this.initialTab);
 }
 
 class _FollowStatusUpdated extends ProfileEvent {
@@ -51,7 +51,7 @@ class ToggleFollowRequested extends ProfileEvent {}
 
 // --- STATE ---
 class ProfileState extends Equatable {
-  final Map<String, dynamic>? userData;
+  final UserProfile? userData; // Strongly typed
   final bool isLoading;
   final bool isFollowing;
   final int currentTabIndex;
@@ -68,7 +68,7 @@ class ProfileState extends Equatable {
   });
 
   ProfileState copyWith({
-    Map<String, dynamic>? userData,
+    UserProfile? userData,
     bool? isLoading,
     bool? isFollowing,
     int? currentTabIndex,
@@ -121,40 +121,34 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     });
 
     _userSub = _userRepository.watchUser(event.userId).listen((doc) {
-      add(_ProfileDataUpdated(doc, event.currentAuthId, event.isViewerModerator, event.isViewerCurator, event.initialTab));
+      if (doc.exists) {
+        add(_ProfileDataUpdated(
+            UserProfile.fromFirestore(doc),
+            event.currentAuthId,
+            event.isViewerModerator,
+            event.isViewerCurator,
+            event.initialTab
+        ));
+      }
     });
   }
 
   void _onProfileDataUpdated(_ProfileDataUpdated event, Emitter<ProfileState> emit) {
-    if (!event.doc.exists) {
-      emit(state.copyWith(isLoading: false, errorMessage: "User not found"));
-      return;
-    }
+    final profile = event.profile;
+    final bool isMe = event.currentAuthId == profile.uid;
 
-    final userData = event.doc.data() as Map<String, dynamic>;
-    final bool isMe = event.currentAuthId == event.doc.id;
-
-    // Determine visible tabs in the requested order:
-    // settings -> curator -> maker -> index -> collection
     List<String> tabs = [];
 
-    // 1. Settings (Conditional)
     if (isMe || event.isViewerModerator) {
       tabs.add('settings');
     }
 
-    // 2. Curator (Conditional)
     if (isMe || event.isViewerCurator || event.isViewerModerator) {
       tabs.add('curator');
     }
 
-    // 3. Maker
     tabs.add('maker');
-
-    // 4. Index
     tabs.add('index');
-
-    // 5. Collection
     tabs.add('collection');
 
     int startTab = state.currentTabIndex;
@@ -165,7 +159,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     }
 
     emit(state.copyWith(
-      userData: userData,
+      userData: profile,
       visibleTabs: tabs,
       currentTabIndex: startTab,
       isLoading: false,
@@ -181,10 +175,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   Future<void> _onToggleFollow(ToggleFollowRequested event, Emitter<ProfileState> emit) async {
-    final uid = state.userData?['uid'];
-    if (uid == null) {
-      return;
-    }
+    final uid = state.userData?.uid;
+    if (uid == null) return;
     try {
       await _engagementRepository.setFollowStatus(uid, !state.isFollowing);
     } catch (e) {

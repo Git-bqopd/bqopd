@@ -106,8 +106,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
         fanzineId: widget.fanzineId,
         fanzineTitle: widget.fanzineTitle,
         text: text,
-        displayName: userProvider.userProfile?['displayName'],
-        username: userProvider.userProfile?['username']
+        displayName: userProvider.userProfile?.displayName,
+        username: userProvider.userProfile?.username
     );
   }
 
@@ -120,7 +120,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
     final String? templateId = widget.pageData['templateId'];
 
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AspectRatio(

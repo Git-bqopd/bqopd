@@ -203,14 +203,13 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
 
     _commentController.clear();
 
-    // Using unified Bloc dispatching for social interactions
     context.read<InteractionBloc>().add(AddCommentRequested(
         imageId: imageId,
         fanzineId: widget.fanzineId,
         fanzineTitle: widget.fanzineTitle,
         text: text,
-        displayName: userProvider.userProfile?['displayName'],
-        username: userProvider.userProfile?['username']
+        displayName: userProvider.userProfile?.displayName,
+        username: userProvider.userProfile?.username
     ));
   }
 

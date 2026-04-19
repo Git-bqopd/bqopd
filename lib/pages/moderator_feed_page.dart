@@ -12,6 +12,7 @@ import '../widgets/reader_panels/panel_factory.dart';
 import '../widgets/reader_panels/panel_container.dart';
 import '../services/engagement_service.dart';
 import '../services/view_service.dart';
+import '../models/user_profile.dart';
 
 class ModeratorFeedPage extends StatefulWidget {
   const ModeratorFeedPage({super.key});
@@ -24,7 +25,7 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Security Gate: Using isModerator instead of isEditor
+    // Security Gate: Using isModerator from the refactored UserProvider
     final userProvider = Provider.of<UserProvider>(context);
     if (!userProvider.isModerator) {
       return const Scaffold(body: Center(child: Text("Restricted Area. Authorized Personnel Only.")));
@@ -141,8 +142,9 @@ class _ModeratorCardState extends State<_ModeratorCard> {
       fanzineId: 'moderation_queue',
       fanzineTitle: 'Moderator Feed',
       text: text,
-      displayName: userProvider.userProfile?['displayName'],
-      username: userProvider.userProfile?['username'],
+      // FIXED: Using dot notation for UserProfile properties
+      displayName: userProvider.userProfile?.displayName,
+      username: userProvider.userProfile?.username,
     );
   }
 
@@ -203,11 +205,14 @@ class _ModeratorCardState extends State<_ModeratorCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 FutureBuilder<DocumentSnapshot>(
-                  future: FirebaseFirestore.instance.collection('Users').doc(uploaderId).get(),
+                  future: FirebaseFirestore.instance.collection('profiles').doc(uploaderId).get(),
                   builder: (context, snap) {
-                    final userData = snap.data?.data() as Map<String, dynamic>?;
-                    final username = userData?['username'] ?? uploaderId;
-                    return Text("Uploaded by @$username", style: const TextStyle(color: Colors.grey, fontSize: 12));
+                    if (snap.hasData && snap.data!.exists) {
+                      // FIXED: Using UserProfile model to ensure correct property access
+                      final profile = UserProfile.fromFirestore(snap.data!);
+                      return Text("Uploaded by @${profile.username}", style: const TextStyle(color: Colors.grey, fontSize: 12));
+                    }
+                    return Text("Uploaded by @$uploaderId", style: const TextStyle(color: Colors.grey, fontSize: 12));
                   },
                 ),
                 const SizedBox(height: 8),

@@ -57,8 +57,8 @@ class _CommentsPanelState extends State<CommentsPanel> {
       text: _controller.text.trim(),
       fanzineId: widget.fanzineId,
       fanzineTitle: widget.fanzineTitle,
-      displayName: userProvider.userProfile?['displayName'],
-      username: userProvider.userProfile?['username'],
+      displayName: userProvider.userProfile?.displayName,
+      username: userProvider.userProfile?.username,
     ));
 
     _controller.clear();

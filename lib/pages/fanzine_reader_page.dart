@@ -83,26 +83,39 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     String? targetShortCode = widget.shortCode;
     String? targetId = widget.fanzineId;
 
+    // If no specific fanzine was requested (hitting the root URL)
     if (targetShortCode == null && targetId == null) {
       final user = FirebaseAuth.instance.currentUser;
+
+      // 1. Check for User-specific preference
       if (user != null && !user.isAnonymous) {
         final userDoc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
-        targetShortCode = userDoc.data()?['newFanzine'];
-      } else {
+        if (userDoc.exists) {
+          targetShortCode = userDoc.data()?['newFanzine'];
+        }
+      }
+
+      // 2. FALLBACK: If no user preference found (or not logged in), check Global Settings
+      if (targetShortCode == null) {
         final settings = await FirebaseFirestore.instance.collection('app_settings').doc('main_settings').get();
-        targetShortCode = settings.data()?['login_zine_shortcode'];
+        if (settings.exists) {
+          targetShortCode = settings.data()?['login_zine_shortcode'];
+        }
       }
     }
 
+    // Resolve the shortcode to an actual Fanzine ID if necessary
     if (targetId == null && targetShortCode != null) {
       final fanzineQuery = await FirebaseFirestore.instance
           .collection('fanzines')
           .where('shortCode', isEqualTo: targetShortCode)
           .limit(1)
           .get();
+
       if (fanzineQuery.docs.isNotEmpty) {
         targetId = fanzineQuery.docs.first.id;
       } else {
+        // Check shortcodes registry as a fallback
         final scDoc = await FirebaseFirestore.instance.collection('shortcodes').doc(targetShortCode.toUpperCase()).get();
         if (scDoc.exists && scDoc.data()?['type'] == 'fanzine') {
           targetId = scDoc.data()?['contentId'];
@@ -157,7 +170,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           _isLoading = false;
         });
       }
-    } catch (e) { if (mounted) setState(() => _isLoading = false); }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _processDeepLink() {
@@ -167,7 +182,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       if (pQuery != null) {
         final pageNum = int.tryParse(pQuery);
         if (pageNum != null && pageNum > 0) {
-          setState(() { _targetIndex = pageNum; _showGrid = false; _showList = true; _twoPagePreference = false; });
+          setState(() {
+            _targetIndex = pageNum;
+            _showGrid = false;
+            _showList = true;
+            _twoPagePreference = false;
+          });
         }
       }
     } catch (_) {}
@@ -179,6 +199,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
+          // If we are at root or a different zine and not editing, redirect to the correct URL
           if (!currentLoc.contains(_resolvedShortCode!) && !_isEditingMode) {
             context.go('/$_resolvedShortCode');
           }
@@ -267,7 +288,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 top: 16,
                 right: 16,
                 child: Material(
-                  // FIXED: withValues instead of withOpacity
                   color: Colors.white.withValues(alpha: 0.8),
                   shape: const CircleBorder(),
                   child: IconButton(

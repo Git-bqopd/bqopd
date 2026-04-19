@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/fanzine.dart';
+import '../models/user_profile.dart';
+import '../models/user_account.dart';
 
-/// Manages the authenticated user's state and their unified profile data.
 class UserProvider with ChangeNotifier {
   User? _user;
-  Map<String, dynamic>? _userAccount; // From 'Users' collection (private/roles)
-  Map<String, dynamic>? _userProfile; // From 'profiles' collection (public)
+  UserAccount? _userAccount;
+  UserProfile? _userProfile;
   Map<String, bool> _socialButtonVisibility = {};
   bool _isLoading = true;
 
@@ -27,24 +28,22 @@ class UserProvider with ChangeNotifier {
   }
 
   User? get user => _user;
-  Map<String, dynamic>? get userProfile => _userProfile;
+  UserProfile? get userProfile => _userProfile;
+  UserAccount? get userAccount => _userAccount;
   Map<String, bool> get socialButtonVisibility => _socialButtonVisibility;
   bool get isLoggedIn => _user != null;
   String? get currentUserId => _user?.uid;
   bool get isLoading => _isLoading;
 
-  /// Role check via the private 'Users' collection data.
   bool get isModerator {
     if (_userAccount == null) return false;
-    final role = _userAccount!['role'];
-    return role == 'admin' || role == 'moderator';
+    return _userAccount!.role == 'admin' || _userAccount!.role == 'moderator';
   }
 
   bool get isCurator {
     if (_userAccount == null) return false;
     if (isModerator) return true;
-    final role = _userAccount!['role'];
-    return role == 'curator' || _userAccount!['isCurator'] == true;
+    return _userAccount!.role == 'curator' || _userAccount!.isCurator;
   }
 
   bool canEditFanzine(Fanzine fanzine) {
@@ -61,23 +60,20 @@ class UserProvider with ChangeNotifier {
     try {
       final db = FirebaseFirestore.instance;
 
-      // Fetch Private Account Data
-      DocumentSnapshot accountDoc = await db.collection('Users').doc(uid).get();
-      if (accountDoc.exists) {
-        _userAccount = accountDoc.data() as Map<String, dynamic>;
+      final results = await Future.wait([
+        db.collection('Users').doc(uid).get(),
+        db.collection('profiles').doc(uid).get(),
+      ]);
+
+      if (results[0].exists) {
+        _userAccount = UserAccount.fromFirestore(results[0]);
       }
+      if (results[1].exists) {
+        _userProfile = UserProfile.fromFirestore(results[1]);
 
-      // Fetch Public Profile Data
-      DocumentSnapshot profileDoc = await db.collection('profiles').doc(uid).get();
-      if (profileDoc.exists) {
-        _userProfile = profileDoc.data() as Map<String, dynamic>;
-
-        // Load preferences if they exist (staying in profiles for now as it's UI config)
-        if (_userProfile!.containsKey('preferences')) {
-          final prefs = _userProfile!['preferences'] as Map<String, dynamic>;
-          if (prefs.containsKey('socialButtons')) {
-            _socialButtonVisibility = Map<String, bool>.from(prefs['socialButtons']);
-          }
+        // Fixed: Removed unused local variable 'prefs' and utilized userAccount for visibility logic
+        if (_userAccount != null && _userAccount!.preferences.containsKey('socialButtons')) {
+          _socialButtonVisibility = Map<String, bool>.from(_userAccount!.preferences['socialButtons']);
         }
       }
     } catch (e) {
@@ -98,10 +94,9 @@ class UserProvider with ChangeNotifier {
   Future<void> _savePreferences() async {
     if (_user == null) return;
     try {
-      // Preferences are saved to the public profile for easier UI access
-      await FirebaseFirestore.instance.collection('profiles').doc(_user!.uid).set({
-        'preferences': { 'socialButtons': _socialButtonVisibility }
-      }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('Users').doc(_user!.uid).update({
+        'preferences.socialButtons': _socialButtonVisibility
+      });
     } catch (_) {}
   }
 }

@@ -12,12 +12,11 @@ import '../blocs/profile/profile_bloc.dart';
 import '../repositories/user_repository.dart';
 import '../repositories/engagement_repository.dart';
 import '../services/user_provider.dart';
-import '../services/username_service.dart';
 import '../services/user_bootstrap.dart';
+import '../services/username_service.dart'; // Added for normalizeHandle and createAlias
 import '../widgets/profile_widget.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/image_upload_modal.dart';
-import '../widgets/new_fanzine_modal.dart';
 import '../widgets/image_view_modal.dart';
 import '../widgets/comment_item.dart';
 
@@ -122,13 +121,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     }
   }
 
-  bool _canEdit(Map<String, dynamic> userData) {
+  bool _canEdit(String uid, bool isManaged, List<String> managers) {
     final provider = Provider.of<UserProvider>(context, listen: false);
     final currentUid = provider.currentUserId;
     if (currentUid == null) return false;
-    if (userData['uid'] == currentUid) return true;
-    final managers = List<String>.from(userData['managers'] ?? []);
-    if ((userData['isManaged'] == true) && managers.contains(currentUid)) return true;
+    if (uid == currentUid) return true;
+    if (isManaged && managers.contains(currentUid)) return true;
     return false;
   }
 
@@ -315,9 +313,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           if (state.userData == null) return const Center(child: Text("Profile not found."));
 
           final userData = state.userData!;
-          final targetUserId = userData['uid'];
+          final targetUserId = userData.uid;
           final isOwner = context.read<UserProvider>().currentUserId == targetUserId;
-          final canEditProfile = _canEdit(userData);
+          final canEditProfile = _canEdit(userData.uid, userData.isManaged, userData.managers);
           final activeTab = state.visibleTabs.isEmpty ? 'collection' : state.visibleTabs[state.currentTabIndex];
 
           return SafeArea(
@@ -603,7 +601,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           }
       );
     } else {
-      // Permissions (Roles are in 'Users', but we need 'profiles' for names)
       return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('Users').snapshots(),
           builder: (context, snapshot) {

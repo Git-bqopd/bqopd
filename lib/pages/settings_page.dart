@@ -297,7 +297,7 @@ class _SettingsPageState extends State<SettingsPage> {
         if (currentUser != null)
           StreamBuilder<QuerySnapshot>(
             stream: _firestore
-                .collection('Users')
+                .collection('profiles')
                 .where('isManaged', isEqualTo: true)
                 .where('managers', arrayContains: currentUser.uid)
                 .snapshots(),
@@ -327,7 +327,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 itemCount: docs.length,
                 itemBuilder: (context, index) {
                   final data = docs[index].data() as Map<String, dynamic>;
-                  final name = "${data['firstName']} ${data['lastName']}";
+                  final name = data['displayName'] ?? "Untitled";
                   final username = data['username'] ?? 'No handle';
 
                   return Card(
@@ -382,54 +382,62 @@ class _SettingsPageState extends State<SettingsPage> {
               itemBuilder: (context, index) {
                 final userData = users[index].data() as Map<String, dynamic>;
                 final uid = users[index].id;
-                final String username = userData['username'] ?? 'unknown';
-                final String currentRole = userData['role'] ?? 'user';
-                final String displayName = userData['displayName'] ?? '';
+                final currentRole = userData['role'] ?? 'user';
 
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(displayName.isNotEmpty ? displayName : "@$username", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: Text("UID: $uid", style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'monospace')),
-                  trailing: DropdownButtonHideUnderline(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(4),
+                return FutureBuilder<DocumentSnapshot>(
+                  future: _firestore.collection('profiles').doc(uid).get(),
+                  builder: (context, profileSnap) {
+                    final pData = profileSnap.data?.data() as Map?;
+                    final String username = pData?['username'] ?? 'unknown';
+                    final String displayName = pData?['displayName'] ?? '';
+
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(displayName.isNotEmpty ? displayName : "@$username", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      subtitle: Text("UID: $uid", style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'monospace')),
+                      trailing: DropdownButtonHideUnderline(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: DropdownButton<String>(
+                            value: ['admin', 'moderator', 'curator', 'user'].contains(currentRole) ? currentRole : 'user',
+                            style: const TextStyle(fontSize: 12, color: Colors.black),
+                            items: const [
+                              DropdownMenuItem(value: 'admin', child: Text("Admin")),
+                              DropdownMenuItem(value: 'moderator', child: Text("Moderator")),
+                              DropdownMenuItem(value: 'curator', child: Text("Curator")),
+                              DropdownMenuItem(value: 'user', child: Text("Standard User")),
+                            ],
+                            onChanged: (newRole) async {
+                              if (newRole == null) return;
+
+                              try {
+                                await _firestore.collection('Users').doc(uid).update({
+                                  'role': newRole,
+                                  'isCurator': newRole == 'curator' || newRole == 'admin' || newRole == 'moderator',
+                                });
+                                // Corrected async context usage with mounted check
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Permission updated!')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Permission update failed: $e')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ),
                       ),
-                      child: DropdownButton<String>(
-                        value: ['admin', 'moderator', 'curator', 'user'].contains(currentRole) ? currentRole : 'user',
-                        style: const TextStyle(fontSize: 12, color: Colors.black),
-                        items: const [
-                          DropdownMenuItem(value: 'admin', child: Text("Admin")),
-                          DropdownMenuItem(value: 'moderator', child: Text("Moderator")),
-                          DropdownMenuItem(value: 'curator', child: Text("Curator")),
-                          DropdownMenuItem(value: 'user', child: Text("Standard User")),
-                        ],
-                        onChanged: (newRole) async {
-                          if (newRole == null) return;
-
-                          // Optimistic update
-                          setState(() {
-                            userData['role'] = newRole;
-                          });
-
-                          try {
-                            await _firestore.collection('Users').doc(uid).update({
-                              'role': newRole,
-                              'isCurator': newRole == 'curator' || newRole == 'admin' || newRole == 'moderator',
-                            });
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Permission update failed: $e')),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             );
