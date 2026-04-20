@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:equatable/equatable.dart';
 
 enum FanzineType { ingested, folio, calendar }
 enum FanzineStatus { draft, working, live }
 
 /// Canonical data model for the top-level Fanzine document.
-class Fanzine {
+class Fanzine extends Equatable {
   final String id;
   final String title;
   final FanzineType type;
@@ -24,7 +25,12 @@ class Fanzine {
   final List<Map<String, dynamic>> masterCreators;
   final String? masterIndicia;
 
-  Fanzine({
+  final String? indiciaPageId;
+  final int? startMonth;
+  final int? startYear;
+  final bool isSoftPublished;
+
+  const Fanzine({
     required this.id,
     required this.title,
     required this.type,
@@ -38,6 +44,10 @@ class Fanzine {
     this.draftEntities = const [],
     this.masterCreators = const [],
     this.masterIndicia,
+    this.indiciaPageId,
+    this.startMonth,
+    this.startYear,
+    this.isSoftPublished = false,
   });
 
   factory Fanzine.fromFirestore(DocumentSnapshot doc) {
@@ -51,7 +61,6 @@ class Fanzine {
     if (data['status'] == 'working') parsedStatus = FanzineStatus.working;
     if (data['status'] == 'live') parsedStatus = FanzineStatus.live;
 
-    // Normalize owner/editor fields for legacy documents
     final String owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
     final List<String> editorList = List<String>.from(data['editors'] ?? []);
 
@@ -71,6 +80,13 @@ class Fanzine {
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList(),
       masterIndicia: data['masterIndicia'],
+      indiciaPageId: data['indiciaPageId'],
+      startMonth: data['startMonth'],
+      startYear: data['startYear'],
+      isSoftPublished: data['isSoftPublished'] ?? false,
     );
   }
+
+  @override
+  List<Object?> get props => [id, title, type, status, processingStatus, ownerId, editors, twoPage, shortCode, sourceFile, draftEntities, masterCreators, masterIndicia, indiciaPageId, startMonth, startYear, isSoftPublished];
 }

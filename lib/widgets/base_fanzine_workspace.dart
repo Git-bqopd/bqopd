@@ -8,7 +8,6 @@ import '../models/fanzine.dart';
 import '../models/fanzine_page.dart';
 
 /// A universal wrapper for Fanzine Editor configurations (Curator, Maker, Editor).
-/// Respects ownership, designated editors, and moderator roles.
 class BaseFanzineWorkspace extends StatefulWidget {
   final String fanzineId;
   final List<Tab> customTabs;
@@ -78,12 +77,11 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                   final fanzine = state.fanzine;
                   final pages = state.pages;
 
-                  // SECURITY GATE: Verify user has permission to edit
                   if (!userProvider.canEditFanzine(fanzine)) {
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24.0),
-                        child: Text("You do not have permission to edit this work. Contact the owner to be added as an editor."),
+                        child: Text("You do not have permission to edit this work."),
                       ),
                     );
                   }
@@ -193,23 +191,6 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                 child: const Text('Add Page')),
           ]),
           const SizedBox(height: 20),
-          const Text("COLLABORATORS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Owner: ${fanzine.ownerId == context.read<UserProvider>().currentUserId ? 'You' : fanzine.ownerId}", style: const TextStyle(fontSize: 12)),
-                if (fanzine.editors.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text("Editors: ${fanzine.editors.length}", style: const TextStyle(fontSize: 12)),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             const Text('Has two page spread view', style: TextStyle(fontSize: 12)),
             Switch(
@@ -257,12 +238,29 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
     );
   }
 
+  bool _isPage5x8(FanzinePage page) {
+    if (page.templateId != null) return true;
+    final w = page.width;
+    final h = page.height;
+    if (w != null && h != null) {
+      final ratio = w / h;
+      return ratio >= 0.58 && ratio <= 0.67;
+    }
+    return false;
+  }
+
   Widget _buildOrderTab(BuildContext context, FanzineEditorLoaded state, List<FanzinePage> pages) {
+    final bloc = context.read<FanzineEditorBloc>();
+
+    final fullPages = pages.where((p) => _isPage5x8(p)).toList();
+    final ordered = fullPages.where((p) => p.pageNumber > 0).toList();
+    final unordered = fullPages.where((p) => p.pageNumber == 0).toList();
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text('PAGE ORDER',
               style: TextStyle(
@@ -270,16 +268,16 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                   fontWeight: FontWeight.bold,
                   color: Colors.grey)),
           const SizedBox(height: 8),
-          if (pages.isEmpty)
-            const Text('No pages added.',
+          if (ordered.isEmpty)
+            const Text('No pages in the sequence.',
                 style: TextStyle(color: Colors.grey, fontSize: 12))
           else
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: pages.length,
+              itemCount: ordered.length,
               itemBuilder: (context, index) {
-                final page = pages[index];
+                final page = ordered[index];
                 final num = page.pageNumber;
 
                 return Container(
@@ -291,25 +289,60 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                       Text('$num.',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                       const SizedBox(width: 8),
-                      const Expanded(
-                          child: Text("Page Image",
-                              style: TextStyle(fontSize: 11),
+                      Expanded(
+                          child: Text(page.templateId != null ? "Template Page" : "Image Page",
+                              style: const TextStyle(fontSize: 11),
                               overflow: TextOverflow.ellipsis)),
                       IconButton(
                           icon: const Icon(Icons.arrow_upward, size: 14),
-                          onPressed: num > 1 ? () {
-                            context.read<FanzineEditorBloc>().add(ReorderPageRequested(page, -1, pages));
-                          } : null),
+                          onPressed: num > 1 ? () => bloc.add(ReorderPageRequested(page, -1, pages)) : null),
                       IconButton(
                           icon: const Icon(Icons.arrow_downward, size: 14),
-                          onPressed: num < pages.length ? () {
-                            context.read<FanzineEditorBloc>().add(ReorderPageRequested(page, 1, pages));
-                          } : null),
+                          onPressed: num < ordered.length ? () => bloc.add(ReorderPageRequested(page, 1, pages)) : null),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 14, color: Colors.red),
+                        onPressed: () => bloc.add(TogglePageOrderingRequested(page, false)),
+                        tooltip: "Unorder",
+                      ),
                     ],
                   ),
                 );
               },
             ),
+
+          if (unordered.isNotEmpty) ...[
+            const SizedBox(height: 32),
+            const Text('UNORDERED FULL PAGES',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey)),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 5,
+                childAspectRatio: 0.625,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+              ),
+              itemCount: unordered.length,
+              itemBuilder: (context, index) {
+                final page = unordered[index];
+                return GestureDetector(
+                  onTap: () => bloc.add(TogglePageOrderingRequested(page, true)),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.black12),
+                      image: page.imageUrl != null ? DecorationImage(image: NetworkImage(page.imageUrl!), fit: BoxFit.cover) : null,
+                    ),
+                    child: page.imageUrl == null ? const Center(child: Icon(Icons.auto_awesome_motion, size: 16)) : null,
+                  ),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );

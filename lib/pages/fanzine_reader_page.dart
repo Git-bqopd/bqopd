@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -55,6 +56,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   BonusRowType? _activeGlobalPanel;
 
+  // Stream subscriptions for real-time updates
+  StreamSubscription? _fanzineSubscription;
+  StreamSubscription? _pagesSubscription;
+
   final ItemScrollController _mobileListScrollController = ItemScrollController();
   ScrollController? _desktopGridScrollController;
   final ItemScrollController _desktopListScrollController = ItemScrollController();
@@ -72,6 +77,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   void dispose() {
+    _fanzineSubscription?.cancel();
+    _pagesSubscription?.cancel();
     _desktopGridScrollController?.dispose();
     super.dispose();
   }
@@ -83,19 +90,14 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     String? targetShortCode = widget.shortCode;
     String? targetId = widget.fanzineId;
 
-    // If no specific fanzine was requested (hitting the root URL)
     if (targetShortCode == null && targetId == null) {
       final user = FirebaseAuth.instance.currentUser;
-
-      // 1. Check for User-specific preference
       if (user != null && !user.isAnonymous) {
         final userDoc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
         if (userDoc.exists) {
           targetShortCode = userDoc.data()?['newFanzine'];
         }
       }
-
-      // 2. FALLBACK: If no user preference found (or not logged in), check Global Settings
       if (targetShortCode == null) {
         final settings = await FirebaseFirestore.instance.collection('app_settings').doc('main_settings').get();
         if (settings.exists) {
@@ -104,7 +106,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       }
     }
 
-    // Resolve the shortcode to an actual Fanzine ID if necessary
     if (targetId == null && targetShortCode != null) {
       final fanzineQuery = await FirebaseFirestore.instance
           .collection('fanzines')
@@ -115,7 +116,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       if (fanzineQuery.docs.isNotEmpty) {
         targetId = fanzineQuery.docs.first.id;
       } else {
-        // Check shortcodes registry as a fallback
         final scDoc = await FirebaseFirestore.instance.collection('shortcodes').doc(targetShortCode.toUpperCase()).get();
         if (scDoc.exists && scDoc.data()?['type'] == 'fanzine') {
           targetId = scDoc.data()?['contentId'];
@@ -128,37 +128,33 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
     if (_resolvedFanzineId != null) {
       _processDeepLink();
-      await _fetchFanzineData(_resolvedFanzineId!);
+      _setupListeners(_resolvedFanzineId!);
       _updateUrlIfNeeded();
     } else {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _fetchFanzineData(String fanzineId) async {
-    try {
-      final fanzineDoc = await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).get();
-      if (!fanzineDoc.exists) throw Exception("Fanzine not found");
-      final fanzineData = fanzineDoc.data() ?? {};
+  /// Sets up real-time Firestore listeners for fanzine metadata and pages.
+  void _setupListeners(String fanzineId) {
+    // 1. Listen for Fanzine Metadata changes
+    _fanzineSubscription?.cancel();
+    _fanzineSubscription = FirebaseFirestore.instance
+        .collection('fanzines')
+        .doc(fanzineId)
+        .snapshots()
+        .listen((doc) {
+      if (!doc.exists || !mounted) return;
+      final fanzineData = doc.data() ?? {};
 
-      _resolvedType = fanzineData['type'] ?? 'fanzine';
-      _fanzineTitle = fanzineData['title'] ?? 'Untitled';
+      setState(() {
+        _resolvedType = fanzineData['type'] ?? 'fanzine';
+        _fanzineTitle = fanzineData['title'] ?? 'Untitled';
 
-      final bool twoPage = fanzineData['twoPage'] ?? true;
-      final snapshot = await FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').get();
-      final docs = snapshot.docs.map((d) {
-        final data = d.data();
-        data['__id'] = d.id;
-        return data;
-      }).toList();
-      docs.sort((a, b) => (a['pageNumber'] as int).compareTo(b['pageNumber'] as int));
-
-      if (mounted) {
-        setState(() {
-          _pages = docs;
-          if (_targetIndex > _pages.length) _targetIndex = _pages.length;
+        // Only auto-switch view modes on initial load to avoid jarring transitions
+        if (_isLoading) {
+          _twoPagePreference = fanzineData['twoPage'] ?? true;
           if (_targetIndex == 0) {
-            _twoPagePreference = twoPage;
             if (_twoPagePreference) {
               _showGrid = true;
               _showList = false;
@@ -167,12 +163,33 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               _showList = true;
             }
           }
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
+        }
+      });
+    });
+
+    // 2. Listen for Page subcollection changes
+    _pagesSubscription?.cancel();
+    _pagesSubscription = FirebaseFirestore.instance
+        .collection('fanzines')
+        .doc(fanzineId)
+        .collection('pages')
+        .orderBy('pageNumber')
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+
+      final docs = snapshot.docs.map((d) {
+        final data = d.data();
+        data['__id'] = d.id;
+        return data;
+      }).toList();
+
+      setState(() {
+        _pages = docs;
+        if (_targetIndex > _pages.length) _targetIndex = _pages.length;
+        _isLoading = false;
+      });
+    });
   }
 
   void _processDeepLink() {
@@ -199,7 +216,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-          // If we are at root or a different zine and not editing, redirect to the correct URL
           if (!currentLoc.contains(_resolvedShortCode!) && !_isEditingMode) {
             context.go('/$_resolvedShortCode');
           }
