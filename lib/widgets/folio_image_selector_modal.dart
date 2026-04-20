@@ -100,7 +100,9 @@ class _FolioImageSelectorModalState extends State<FolioImageSelectorModal> {
                     itemBuilder: (context, index) {
                       final doc = docs[index];
                       final data = doc.data() as Map<String, dynamic>;
-                      final url = data['fileUrl'] ?? '';
+
+                      // OPTIMIZATION: Pull the 450px grid thumbnail if available
+                      final url = data['gridUrl'] ?? data['fileUrl'] ?? '';
                       final isSelected = _selectedImageIds.contains(doc.id);
 
                       return GestureDetector(

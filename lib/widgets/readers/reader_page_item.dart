@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -119,6 +118,10 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
     final String imageId = widget.pageData['imageId'] ?? '';
     final String? templateId = widget.pageData['templateId'];
 
+    // STRIPPED BOTTLENECK: Use the cached URLs directly from pageData
+    // Prioritizing the 800px listUrl -> then falling back to the original imageUrl
+    final String? optimalDisplayUrl = widget.pageData['listUrl'] ?? widget.pageData['imageUrl'];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -130,10 +133,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
                 ? CalendarPageRenderer(isLeft: true, folioId: widget.fanzineId)
                 : templateId == 'calendar_right'
                 ? CalendarPageRenderer(isLeft: false, folioId: widget.fanzineId)
-                : _PageImageLoader(
-                imageUrl: widget.pageData['imageUrl'],
-                storagePath: widget.pageData['storagePath']
-            ),
+                : _PageImageLoader(url: optimalDisplayUrl),
           ),
         ),
 
@@ -218,46 +218,21 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
   }
 }
 
-class _PageImageLoader extends StatefulWidget {
-  final String? imageUrl;
-  final String? storagePath;
+/// A lightning-fast stateless image loader that removes all database queries and artificial delays
+class _PageImageLoader extends StatelessWidget {
+  final String? url;
 
-  const _PageImageLoader({this.imageUrl, this.storagePath});
-
-  @override
-  State<_PageImageLoader> createState() => _PageImageLoaderState();
-}
-
-class _PageImageLoaderState extends State<_PageImageLoader> {
-  String? _currentUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.storagePath != null && widget.storagePath!.isNotEmpty) {
-      _resolveUrl();
-    } else {
-      _currentUrl = widget.imageUrl;
-    }
-  }
-
-  Future<void> _resolveUrl() async {
-    try {
-      final url = await FirebaseStorage.instance.ref(widget.storagePath!).getDownloadURL();
-      if (mounted) setState(() => _currentUrl = url);
-    } catch (_) {
-      if (mounted) setState(() => _currentUrl = widget.imageUrl);
-    }
-  }
+  const _PageImageLoader({this.url});
 
   @override
   Widget build(BuildContext context) {
-    if (_currentUrl == null || _currentUrl!.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+    if (url == null || url!.isEmpty) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     return Image.network(
-        _currentUrl!,
+        url!,
         fit: BoxFit.contain,
+        gaplessPlayback: true, // Prevents flickering or fading delays
         errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image, color: Colors.grey))
     );
   }

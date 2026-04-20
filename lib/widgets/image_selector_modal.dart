@@ -65,12 +65,15 @@ class ImageSelectorModal extends StatelessWidget {
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
                       final data = docs[index].data() as Map<String, dynamic>;
-                      final url = data['fileUrl'] ?? '';
+
+                      // OPTIMIZATION: Render using the gridUrl, but return the master fileUrl to be saved
+                      final gridUrl = data['gridUrl'] ?? data['fileUrl'] ?? '';
+                      final fileUrl = data['fileUrl'] ?? '';
 
                       return GestureDetector(
                         onTap: () {
-                          // Return the selected URL
-                          Navigator.pop(context, url);
+                          // Return the selected full-res URL
+                          Navigator.pop(context, fileUrl);
                         },
                         child: Container(
                           decoration: BoxDecoration(
@@ -80,7 +83,7 @@ class ImageSelectorModal extends StatelessWidget {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: Image.network(
-                              url,
+                              gridUrl,
                               fit: BoxFit.cover,
                               errorBuilder: (c, e, s) => const Center(
                                   child: Icon(Icons.broken_image)),

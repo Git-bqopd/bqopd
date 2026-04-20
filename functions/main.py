@@ -4,6 +4,11 @@ import json
 import tempfile
 import re
 import traceback
+import urllib.request
+import urllib.parse
+from io import BytesIO
+from PIL import Image
+
 import firebase_admin
 from firebase_admin import firestore, storage
 from firebase_functions import storage_fn, https_fn, firestore_fn
@@ -103,6 +108,7 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
 
     db = firestore.client()
     page_ref = event.data.after.reference
+    fanzine_id = event.params['fanzineId']
 
     try:
         vision_client = vision.ImageAnnotatorClient()
@@ -115,7 +121,6 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
         else:
             image_url = data.get('imageUrl')
             if not image_url: raise ValueError("No image source available for Vision API.")
-            import urllib.request
             req = urllib.request.Request(image_url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req) as res: image_bytes = res.read()
             image.content = image_bytes
@@ -142,7 +147,9 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
                 'timestamp': firestore.SERVER_TIMESTAMP,
                 'uploaderId': data.get('uploaderId', 'system_ingest'),
                 'text': transcription,
-                'text_raw': transcription
+                'text_raw': transcription,
+                'folioContext': fanzine_id,
+                'usedInFanzines': [fanzine_id]
             })
             page_ref.update({'imageId': image_id})
         else:
@@ -220,7 +227,125 @@ def entity_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Doc
         page_ref.update({'status': 'error', 'errorLog': f"Entities: {str(e)}"})
 
 # --------------------------------------------------------------------------------
-# CALLABLES & PDF PROCESSING (Now with Payload Armor & Error Snitching)
+# WORKER 3: IMAGE RESIZING (Grid & List View Thumbnails)
+# --------------------------------------------------------------------------------
+@firestore_fn.on_document_written(document="images/{imageId}", memory=1024, timeout_sec=120)
+def generate_thumbnails(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    if not event.data.after or not event.data.after.exists: return
+    data = event.data.after.to_dict()
+
+    file_url = data.get('fileUrl')
+    storage_path = data.get('storagePath')
+
+    # Needs at least one valid source to process
+    if not file_url and not storage_path: return
+
+    # Check if we already created the WEBP thumbnails (prevents infinite loop)
+    grid_exists = data.get('gridUrl') and '.webp' in data.get('gridUrl')
+    list_exists = data.get('listUrl') and '.webp' in data.get('listUrl')
+    if grid_exists and list_exists:
+        return
+
+    # Avoid endless retry loops if it threw a hard error
+    if data.get('thumbnail_processing_error'): return
+
+    # Lock to prevent simultaneous triggers from running this
+    if data.get('processing_thumbnails'): return
+
+    db = firestore.client()
+    bucket = storage.bucket()
+    image_id = event.params['imageId']
+    img_ref = db.collection('images').document(image_id)
+
+    # Place a lock
+    img_ref.update({'processing_thumbnails': True})
+
+    try:
+        # Step 1: Download bytes natively from Storage or HTTP fallback
+        if storage_path:
+            blob = bucket.blob(storage_path)
+            image_bytes = blob.download_as_bytes()
+        else:
+            req = urllib.request.Request(file_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as res:
+                image_bytes = res.read()
+
+        img = Image.open(BytesIO(image_bytes))
+
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        orig_w, orig_h = img.size
+
+        def resize_and_upload(target_w, suffix):
+            # Fast-pass: don't upscale images smaller than the target
+            if orig_w <= target_w:
+                ratio = 1
+                target_h = orig_h
+            else:
+                ratio = target_w / orig_w
+                target_h = int(orig_h * ratio)
+
+            resized = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            out_io = BytesIO()
+
+            # Format changed to highly optimized WEBP
+            resized.save(out_io, format='WEBP', quality=80)
+            out_io.seek(0)
+
+            dest_path = f"thumbnails/{image_id}_{suffix}.webp"
+            new_blob = bucket.blob(dest_path)
+            new_blob.upload_from_file(out_io, content_type="image/webp")
+
+            # Make public via standard download token
+            new_blob.metadata = {"firebaseStorageDownloadTokens": image_id}
+            new_blob.patch()
+
+            download_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{urllib.parse.quote(dest_path, safe='')}?alt=media&token={image_id}"
+            return download_url
+
+        # Execute Resizing
+        grid_url = resize_and_upload(450, 'grid')
+        list_url = resize_and_upload(800, 'list')
+
+        # Update the master image document and release the lock
+        img_ref.update({
+            'gridUrl': grid_url,
+            'listUrl': list_url,
+            'processing_thumbnails': firestore.DELETE_FIELD
+        })
+
+        # Redundancy: Push URLs down into ALL Pages actively displaying this image
+        used_in = data.get('usedInFanzines', [])
+
+        if used_in:
+            for fanzine_id in used_in:
+                try:
+                    pages = db.collection('fanzines').document(fanzine_id).collection('pages').where(filter=firestore.FieldFilter('imageId', '==', image_id)).stream()
+                    for p in pages:
+                        p.reference.update({'gridUrl': grid_url, 'listUrl': list_url})
+                except Exception as e:
+                    print(f"Failed to update page in Fanzine {fanzine_id}: {e}")
+        else:
+            # Bulletproof fallback for old ingested PDFs that don't have 'usedInFanzines' arrays yet
+            fanzines = db.collection('fanzines').stream()
+            for fz in fanzines:
+                try:
+                    pages = fz.reference.collection('pages').where(filter=firestore.FieldFilter('imageId', '==', image_id)).stream()
+                    for p in pages:
+                        p.reference.update({'gridUrl': grid_url, 'listUrl': list_url})
+                except Exception as e:
+                    print(f"Fallback update error for {fz.id}: {e}")
+
+    except Exception as e:
+        print(f"Thumbnail Extraction Error: {traceback.format_exc()}")
+        img_ref.update({
+            'thumbnail_processing_error': str(e),
+            'processing_thumbnails': firestore.DELETE_FIELD
+        })
+
+# --------------------------------------------------------------------------------
+# CALLABLES & PDF PROCESSING
 # --------------------------------------------------------------------------------
 
 @https_fn.on_call()

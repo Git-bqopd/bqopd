@@ -225,7 +225,10 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
       itemBuilder: (context, index) {
         final doc = documents[index];
         final data = doc.data() as Map<String, dynamic>;
-        final url = data['fileUrl'];
+
+        // OPTIMIZATION: Pull the 450px grid thumbnail if available
+        final url = data['gridUrl'] ?? data['fileUrl'];
+
         final title = data['title'] ?? data['fileName'] ?? 'Untitled';
         final badge = _getBadgeLabel(data);
         final width = data['width'];

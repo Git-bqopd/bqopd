@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/view_service.dart';
 
 /// A single row in the Fanzine Grid (Gallery) view representing a two-page spread.
@@ -191,42 +190,11 @@ class _SpreadPageItem extends StatefulWidget {
 }
 
 class _SpreadPageItemState extends State<_SpreadPageItem> {
-  String? _resolvedImageUrl;
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _recordView();
-    _resolveUrl();
-  }
-
-  Future<void> _resolveUrl() async {
-    final storagePath =
-        widget.pageData['thumbnailStoragePath'] ?? widget.pageData['storagePath'];
-    final imageUrl =
-        widget.pageData['thumbnailUrl'] ?? widget.pageData['imageUrl'];
-
-    if (storagePath != null && storagePath.toString().isNotEmpty) {
-      try {
-        final url =
-        await FirebaseStorage.instance.ref(storagePath).getDownloadURL();
-        if (mounted) {
-          setState(() {
-            _resolvedImageUrl = url;
-            _isLoading = false;
-          });
-        }
-        return;
-      } catch (_) {}
-    }
-
-    if (mounted) {
-      setState(() {
-        _resolvedImageUrl = imageUrl;
-        _isLoading = false;
-      });
-    }
   }
 
   void _recordView() {
@@ -248,6 +216,24 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
   Widget build(BuildContext context) {
     final pageNum = widget.pageData['pageNumber'] ?? widget.index;
 
+    // STRIPPED BOTTLENECK: Look exclusively to the pageData map without initiating any new database queries.
+    // Prioritize gridUrl (450px) -> thumbnailUrl -> original imageUrl
+    final String? url = widget.pageData['gridUrl'] ?? widget.pageData['thumbnailUrl'] ?? widget.pageData['imageUrl'];
+
+    Widget buildImage() {
+      if (url != null && url.isNotEmpty) {
+        return Image.network(
+          url,
+          fit: BoxFit.contain,
+          gaplessPlayback: true, // Prevents fading delays or layout thrashing
+          errorBuilder: (c, e, s) => Center(
+            child: Text("Page $pageNum", style: const TextStyle(color: Colors.grey)),
+          ),
+        );
+      }
+      return Center(child: Text("Page $pageNum"));
+    }
+
     return GestureDetector(
       onTap: widget.onTap,
       child: AspectRatio(
@@ -256,21 +242,9 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(1),
-            border:
-            Border.all(color: Colors.black.withValues(alpha: 0.05), width: 0.5),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05), width: 0.5),
           ),
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-              : (_resolvedImageUrl != null && _resolvedImageUrl!.isNotEmpty)
-              ? Image.network(
-            _resolvedImageUrl!,
-            fit: BoxFit.contain,
-            errorBuilder: (c, e, s) => Center(
-              child: Text("Page $pageNum",
-                  style: const TextStyle(color: Colors.grey)),
-            ),
-          )
-              : Center(child: Text("Page $pageNum")),
+          child: buildImage(),
         ),
       ),
     );
