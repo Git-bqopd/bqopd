@@ -47,6 +47,13 @@ class ToggleTwoPageRequested extends FanzineEditorEvent {
   List<Object?> get props => [twoPage];
 }
 
+class ToggleHasCoverRequested extends FanzineEditorEvent {
+  final bool hasCover;
+  ToggleHasCoverRequested(this.hasCover);
+  @override
+  List<Object?> get props => [hasCover];
+}
+
 class AddPageRequested extends FanzineEditorEvent {
   final String shortcode;
   AddPageRequested(this.shortcode);
@@ -60,6 +67,14 @@ class AddExistingImageRequested extends FanzineEditorEvent {
   final int? width;
   final int? height;
   AddExistingImageRequested(this.imageId, this.imageUrl, {this.width, this.height});
+}
+
+class UpdatePageLayoutRequested extends FanzineEditorEvent {
+  final FanzinePage page;
+  final String? spreadPosition;
+  final String sidePreference;
+  final List<FanzinePage> allPages;
+  UpdatePageLayoutRequested(this.page, this.spreadPosition, this.sidePreference, this.allPages);
 }
 
 class TogglePageOrderingRequested extends FanzineEditorEvent {
@@ -159,8 +174,10 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     on<_PagesUpdated>(_onPagesUpdated);
     on<UpdateFanzineTitle>(_onUpdateTitle);
     on<ToggleTwoPageRequested>(_onToggleTwoPage);
+    on<ToggleHasCoverRequested>(_onToggleHasCover);
     on<AddPageRequested>(_onAddPage);
     on<AddExistingImageRequested>(_onAddExistingImage);
+    on<UpdatePageLayoutRequested>(_onUpdatePageLayout);
     on<TogglePageOrderingRequested>(_onTogglePageOrdering);
     on<RemovePageRequested>(_onRemovePage);
     on<DeleteAssetRequested>(_onDeleteAsset);
@@ -227,6 +244,15 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
+  Future<void> _onToggleHasCover(ToggleHasCoverRequested event, Emitter<FanzineEditorState> emit) async {
+    if (state is! FanzineEditorLoaded) return;
+    try {
+      await _repository.updateFanzine(fanzineId, {'hasCover': event.hasCover});
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    }
+  }
+
   Future<void> _onAddPage(AddPageRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
@@ -255,6 +281,21 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
         width: event.width,
         height: event.height,
       );
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    } finally {
+      if (state is FanzineEditorLoaded) {
+        emit((state as FanzineEditorLoaded).copyWith(isProcessing: false));
+      }
+    }
+  }
+
+  Future<void> _onUpdatePageLayout(UpdatePageLayoutRequested event, Emitter<FanzineEditorState> emit) async {
+    final current = state;
+    if (current is! FanzineEditorLoaded) return;
+    emit(current.copyWith(isProcessing: true));
+    try {
+      await _repository.updatePageLayout(fanzineId, event.page, event.spreadPosition, event.sidePreference, event.allPages);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     } finally {

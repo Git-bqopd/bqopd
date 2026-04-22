@@ -19,6 +19,7 @@ class Fanzine extends Equatable {
   final List<String> editors;
 
   final bool twoPage;
+  final bool hasCover;
   final String? shortCode;
   final String? sourceFile;
   final List<String> draftEntities;
@@ -39,6 +40,7 @@ class Fanzine extends Equatable {
     required this.ownerId,
     this.editors = const [],
     this.twoPage = false,
+    this.hasCover = true,
     this.shortCode,
     this.sourceFile,
     this.draftEntities = const [],
@@ -73,6 +75,7 @@ class Fanzine extends Equatable {
       ownerId: owner,
       editors: editorList,
       twoPage: data['twoPage'] ?? false,
+      hasCover: data['hasCover'] ?? true,
       shortCode: data['shortCode'],
       sourceFile: data['sourceFile'],
       draftEntities: List<String>.from(data['draftEntities'] ?? []),
@@ -88,5 +91,5 @@ class Fanzine extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, title, type, status, processingStatus, ownerId, editors, twoPage, shortCode, sourceFile, draftEntities, masterCreators, masterIndicia, indiciaPageId, startMonth, startYear, isSoftPublished];
+  List<Object?> get props => [id, title, type, status, processingStatus, ownerId, editors, twoPage, hasCover, shortCode, sourceFile, draftEntities, masterCreators, masterIndicia, indiciaPageId, startMonth, startYear, isSoftPublished];
 }

@@ -81,7 +81,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24.0),
-                        child: Text("You do not have permission to edit this work."),
+                        child: Text("you do not have permission to edit this work."),
                       ),
                     );
                   }
@@ -110,8 +110,8 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                               labelColor: Theme.of(context).primaryColor,
                               unselectedLabelColor: Colors.grey,
                               tabs: [
-                                const Tab(text: "Settings", icon: Icon(Icons.settings, size: 20)),
-                                const Tab(text: "Order", icon: Icon(Icons.format_list_numbered, size: 20)),
+                                const Tab(text: "settings", icon: Icon(Icons.settings, size: 20)),
+                                const Tab(text: "order", icon: Icon(Icons.format_list_numbered, size: 20)),
                                 ...widget.customTabs,
                               ],
                             ),
@@ -130,7 +130,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                   );
                 }
 
-                return const Center(child: Text("Error loading workspace."));
+                return const Center(child: Text("error loading workspace."));
               },
             );
           }
@@ -165,61 +165,12 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
             controller: _titleController,
             onSubmitted: (val) => bloc.add(UpdateFanzineTitle(val)),
             decoration: const InputDecoration(
-                labelText: 'Fanzine Name',
-                isDense: true,
-                border: OutlineInputBorder(),
-                helperText: "Press enter to save"),
+              labelText: 'fanzine name',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-                child: TextField(
-                    controller: _shortcodeController,
-                    decoration: const InputDecoration(
-                        hintText: 'Paste image shortcode',
-                        isDense: true,
-                        border: OutlineInputBorder()))),
-            const SizedBox(width: 8),
-            ElevatedButton(
-                onPressed: state.isProcessing
-                    ? null
-                    : () {
-                  bloc.add(AddPageRequested(_shortcodeController.text));
-                  _shortcodeController.clear();
-                },
-                child: const Text('Add Page')),
-          ]),
-          const SizedBox(height: 20),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('Has two page spread view', style: TextStyle(fontSize: 12)),
-            Switch(
-                value: fanzine.twoPage,
-                onChanged: (val) => bloc.add(ToggleTwoPageRequested(val))),
-          ]),
-          const Divider(height: 24),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('STATUS',
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey)),
-              Text(fanzine.status.name.toUpperCase(),
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: fanzine.status == FanzineStatus.live ? Colors.green : Colors.orange)),
-            ]),
-            Row(children: [
-              TextButton(
-                  onPressed: () => bloc.add(SoftPublishRequested()),
-                  child: const Text('Soft Publish')),
-              Switch(
-                  value: fanzine.status == FanzineStatus.live,
-                  onChanged: (_) => bloc.add(ToggleLiveStatusRequested(fanzine.status.name))),
-              const Text('Live', style: TextStyle(fontSize: 12)),
-            ])
-          ]),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: state.isProcessing
@@ -231,7 +182,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
             style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).primaryColor,
                 foregroundColor: Colors.white),
-            child: const Text("SAVE SETTINGS", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text("save settings", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -262,14 +213,14 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('PAGE ORDER',
+          const Text('page order',
               style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   color: Colors.grey)),
           const SizedBox(height: 8),
           if (ordered.isEmpty)
-            const Text('No pages in the sequence.',
+            const Text('no pages in the sequence.',
                 style: TextStyle(color: Colors.grey, fontSize: 12))
           else
             ListView.builder(
@@ -279,20 +230,89 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
               itemBuilder: (context, index) {
                 final page = ordered[index];
                 final num = page.pageNumber;
+                final bool showLayoutButtons = !(num == 1 && state.fanzine.hasCover);
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   decoration: const BoxDecoration(
                       border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5))),
                   child: Row(
                     children: [
-                      Text('$num.',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 24, child: Text('$num.', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
                       Expanded(
-                          child: Text(page.templateId != null ? "Template Page" : "Image Page",
+                          child: Text(page.templateId != null ? "template page" : "image page",
                               style: const TextStyle(fontSize: 11),
                               overflow: TextOverflow.ellipsis)),
+
+                      SizedBox(
+                        width: 280, // Fixed width column for layout buttons
+                        child: showLayoutButtons ? FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              SegmentedButton<String>(
+                                  showSelectedIcon: false,
+                                  emptySelectionAllowed: true,
+                                  style: SegmentedButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      textStyle: const TextStyle(fontSize: 9),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6)
+                                  ),
+                                  segments: const [
+                                    ButtonSegment(value: 'start', label: Text('start')),
+                                    ButtonSegment(value: 'end', label: Text('end')),
+                                  ],
+                                  selected: page.spreadPosition != null ? {page.spreadPosition!} : <String>{},
+                                  onSelectionChanged: (sel) {
+                                    final val = sel.isEmpty ? null : sel.first;
+                                    bloc.add(UpdatePageLayoutRequested(page, val, page.sidePreference, pages));
+                                  }
+                              ),
+                              const SizedBox(width: 4),
+                              SegmentedButton<String>(
+                                  showSelectedIcon: false,
+                                  emptySelectionAllowed: false,
+                                  style: SegmentedButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      textStyle: const TextStyle(fontSize: 9),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6)
+                                  ),
+                                  segments: const [
+                                    ButtonSegment(value: 'left', label: Text('left')),
+                                    ButtonSegment(value: 'either', label: Text('either')),
+                                    ButtonSegment(value: 'right', label: Text('right')),
+                                  ],
+                                  selected: {page.sidePreference},
+                                  onSelectionChanged: (sel) {
+                                    bloc.add(UpdatePageLayoutRequested(page, page.spreadPosition, sel.first, pages));
+                                  }
+                              ),
+                            ],
+                          ),
+                        ) : null, // Uses null instead of shrink() to maintain column width
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      SizedBox(
+                        width: 90, // Fixed width column for the cover switch
+                        child: (num == 1) ? Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            const Text("cover", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            Transform.scale(
+                              scale: 0.7,
+                              child: Switch(
+                                value: state.fanzine.hasCover,
+                                onChanged: (val) => bloc.add(ToggleHasCoverRequested(val)),
+                              ),
+                            ),
+                          ],
+                        ) : null, // Uses null instead of shrink() to maintain column width
+                      ),
+
                       IconButton(
                           icon: const Icon(Icons.arrow_upward, size: 14),
                           onPressed: num > 1 ? () => bloc.add(ReorderPageRequested(page, -1, pages)) : null),
@@ -302,7 +322,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                       IconButton(
                         icon: const Icon(Icons.close, size: 14, color: Colors.red),
                         onPressed: () => bloc.add(TogglePageOrderingRequested(page, false)),
-                        tooltip: "Unorder",
+                        tooltip: "unorder",
                       ),
                     ],
                   ),
@@ -312,7 +332,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
 
           if (unordered.isNotEmpty) ...[
             const SizedBox(height: 32),
-            const Text('UNORDERED FULL PAGES',
+            const Text('unordered full pages',
                 style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,

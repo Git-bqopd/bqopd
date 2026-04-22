@@ -21,7 +21,7 @@ class FanzineMakerWidget extends StatelessWidget {
     return BaseFanzineWorkspace(
       fanzineId: fanzineId,
       customTabs: const [
-        Tab(text: "Upload", icon: Icon(Icons.upload, size: 20)),
+        Tab(text: "upload", icon: Icon(Icons.upload, size: 20)),
       ],
       customTabViews: [
             (context, fanzine, pages) => _MakerUploadTab(fanzineId: fanzineId, folioTitle: fanzine.title),
@@ -68,7 +68,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
 
     if (mounted) {
       setState(() {
-        _folioNames = {for (var doc in snap.docs) doc.id: doc.data()['title'] ?? 'Untitled'};
+        _folioNames = {for (var doc in snap.docs) doc.id: doc.data()['title'] ?? 'untitled'};
       });
     }
   }
@@ -123,13 +123,13 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(is5x8 ? 'Full page added successfully!' : 'Asset uploaded successfully!'))
+            SnackBar(content: Text(is5x8 ? 'full page added successfully!' : 'asset uploaded successfully!'))
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Upload Error: $e'))
+            SnackBar(content: Text('upload error: $e'))
         );
       }
     } finally {
@@ -174,10 +174,10 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
   String _getBadgeLabel(Map<String, dynamic> data) {
     final List usedIn = data['usedInFanzines'] ?? [];
     final String? context = data['folioContext'];
-    if (context != null && context != widget.fanzineId) return _folioNames[context] ?? "Other Folio";
-    if (context == null && usedIn.contains(widget.fanzineId)) return "Orphan";
+    if (context != null && context != widget.fanzineId) return _folioNames[context] ?? "other folio";
+    if (context == null && usedIn.contains(widget.fanzineId)) return "orphan";
     if (context == widget.fanzineId) return widget.folioTitle;
-    return "Orphan";
+    return "orphan";
   }
 
   bool _isImage5x8(Map<String, dynamic> data) {
@@ -195,15 +195,15 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isDirect ? "Delete Image Completely?" : "Remove from Folio?"),
+        title: Text(isDirect ? "delete image completely?" : "remove from folio?"),
         content: Text(isDirect
-            ? "This is a direct upload. Deleting it will remove it from ALL folios and your library."
-            : "This image exists in your library. Removing it here will not delete the source file."),
+            ? "this is a direct upload. deleting it will remove it from ALL folios and your library."
+            : "this image exists in your library. removing it here will not delete the source file."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("CANCEL")),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("cancel")),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(isDirect ? "DELETE" : "REMOVE", style: const TextStyle(color: Colors.red))
+              child: Text(isDirect ? "delete" : "remove", style: const TextStyle(color: Colors.red))
           ),
         ],
       ),
@@ -229,7 +229,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
         // OPTIMIZATION: Pull the 450px grid thumbnail if available
         final url = data['gridUrl'] ?? data['fileUrl'];
 
-        final title = data['title'] ?? data['fileName'] ?? 'Untitled';
+        final title = data['title'] ?? data['fileName'] ?? 'untitled';
         final badge = _getBadgeLabel(data);
         final width = data['width'];
         final height = data['height'];
@@ -259,10 +259,10 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
-                        color: badge == "Orphan" ? Colors.redAccent.withOpacity(0.8) : Colors.indigo.withOpacity(0.8),
+                        color: badge.toLowerCase() == "orphan" ? Colors.redAccent.withOpacity(0.8) : Colors.indigo.withOpacity(0.8),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(badge.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      child: Text(badge.toLowerCase(), style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
                     const SizedBox(height: 2),
                     Container(
@@ -298,7 +298,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                   width: double.infinity,
                   decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8))),
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  child: Text(title.toLowerCase(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ),
             ],
@@ -311,7 +311,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return const Center(child: Text("Please sign in."));
+    if (user == null) return const Center(child: Text("please sign in."));
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -324,7 +324,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                 child: ElevatedButton.icon(
                   onPressed: _isUploading ? null : _uploadImage,
                   icon: _isUploading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.add_photo_alternate, size: 18),
-                  label: Text(_isUploading ? "Uploading..." : "Upload New Image", style: const TextStyle(fontSize: 12)),
+                  label: Text(_isUploading ? "uploading..." : "upload new image", style: const TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
                 ),
               ),
@@ -333,7 +333,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                 child: OutlinedButton.icon(
                   onPressed: _openOrphanSelector,
                   icon: const Icon(Icons.manage_search, size: 18),
-                  label: const Text("Select Orphan Image", style: TextStyle(fontSize: 12)),
+                  label: const Text("select orphan image", style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                 ),
               ),
@@ -352,7 +352,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                 return data['folioContext'] == widget.fanzineId || usedIn.contains(widget.fanzineId);
               }).toList();
 
-              if (folioDocs.isEmpty) return const Padding(padding: EdgeInsets.symmetric(vertical: 48.0), child: Text("No images in this folio yet.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)));
+              if (folioDocs.isEmpty) return const Padding(padding: EdgeInsets.symmetric(vertical: 48.0), child: Text("no images in this folio yet.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)));
 
               final fiveByEightDocs = folioDocs.where((d) => _isImage5x8(d.data() as Map<String, dynamic>)).toList();
               final otherDocs = folioDocs.where((d) => !_isImage5x8(d.data() as Map<String, dynamic>)).toList();
@@ -362,14 +362,14 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                 children: [
                   if (fiveByEightDocs.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text("FULL PAGES (5x8)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const Text("full pages (5x8)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                     const SizedBox(height: 8),
                     _buildGrid(fiveByEightDocs),
                     const SizedBox(height: 24),
                   ],
                   if (otherDocs.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text("INLINE ASSETS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const Text("inline assets", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                     const SizedBox(height: 8),
                     _buildGrid(otherDocs),
                     const SizedBox(height: 24),
@@ -414,7 +414,7 @@ class _AssetEditModalState extends State<_AssetEditModal> {
     setState(() => _isSavingTitle = true);
     try {
       await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'title': _titleController.text.trim()});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title saved!')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('title saved!')));
     } finally {
       if (mounted) setState(() => _isSavingTitle = false);
     }
@@ -447,7 +447,7 @@ class _AssetEditModalState extends State<_AssetEditModal> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("ASSET DETAILS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        const Text("asset details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                         IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                       ],
                     ),
@@ -457,17 +457,17 @@ class _AssetEditModalState extends State<_AssetEditModal> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Text("Asset Name / Title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const Text("asset name / title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                             const SizedBox(height: 8),
                             Row(
                               children: [
                                 Expanded(child: TextField(controller: _titleController, decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true))),
                                 const SizedBox(width: 8),
-                                ElevatedButton(onPressed: _isSavingTitle ? null : _saveTitle, child: Text(_isSavingTitle ? "Saving..." : "Save Name")),
+                                ElevatedButton(onPressed: _isSavingTitle ? null : _saveTitle, child: Text(_isSavingTitle ? "saving..." : "save name")),
                               ],
                             ),
                             const SizedBox(height: 12),
-                            TextField(readOnly: true, controller: TextEditingController(text: url), decoration: const InputDecoration(labelText: "URL", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Color(0xFFF5F5F5)), style: const TextStyle(fontFamily: 'Courier', fontSize: 11)),
+                            TextField(readOnly: true, controller: TextEditingController(text: url), decoration: const InputDecoration(labelText: "url", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Color(0xFFF5F5F5)), style: const TextStyle(fontFamily: 'Courier', fontSize: 11)),
                             const SizedBox(height: 24),
                             const Divider(),
                             const SizedBox(height: 16),

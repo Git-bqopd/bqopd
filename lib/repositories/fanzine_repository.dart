@@ -43,6 +43,58 @@ class FanzineRepository {
     await _db.collection('fanzines').doc(fanzineId).update(data);
   }
 
+  Future<void> updatePageLayout(String fanzineId, FanzinePage page, String? spreadPosition, String sidePreference, List<FanzinePage> allPages) async {
+    final batch = _db.batch();
+
+    String finalSide = sidePreference;
+    FanzinePage? linkedPage;
+    String? linkedSpread;
+    String? linkedSide;
+
+    if (spreadPosition == 'start') {
+      finalSide = 'left';
+      linkedPage = allPages.where((p) => p.pageNumber == page.pageNumber + 1).firstOrNull;
+      linkedSpread = 'end';
+      linkedSide = 'right';
+    } else if (spreadPosition == 'end') {
+      finalSide = 'right';
+      linkedPage = allPages.where((p) => p.pageNumber == page.pageNumber - 1).firstOrNull;
+      linkedSpread = 'start';
+      linkedSide = 'left';
+    } else if (spreadPosition == null) {
+      // If the user unlinks an image, automatically unlink its previously paired image
+      if (page.spreadPosition == 'start') {
+        linkedPage = allPages.where((p) => p.pageNumber == page.pageNumber + 1).firstOrNull;
+        if (linkedPage != null && linkedPage.spreadPosition == 'end') {
+          linkedSpread = null;
+        } else {
+          linkedPage = null; // Pair broken elsewhere, don't modify it
+        }
+      } else if (page.spreadPosition == 'end') {
+        linkedPage = allPages.where((p) => p.pageNumber == page.pageNumber - 1).firstOrNull;
+        if (linkedPage != null && linkedPage.spreadPosition == 'start') {
+          linkedSpread = null;
+        } else {
+          linkedPage = null;
+        }
+      }
+    }
+
+    batch.update(page.reference, {
+      'spreadPosition': spreadPosition,
+      'sidePreference': finalSide,
+    });
+
+    if (linkedPage != null) {
+      batch.update(linkedPage.reference, {
+        'spreadPosition': linkedSpread,
+        'sidePreference': linkedSide ?? linkedPage.sidePreference,
+      });
+    }
+
+    await batch.commit();
+  }
+
   Future<void> updatePageText(String fanzineId, String pageId, String text) async {
     final batch = _db.batch();
     batch.update(_db.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId), {

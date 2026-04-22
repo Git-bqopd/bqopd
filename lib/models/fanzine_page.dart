@@ -12,6 +12,10 @@ class FanzinePage extends Equatable {
   final String? templateId;
   final DocumentReference reference;
 
+  // New properties for layout control
+  final String? spreadPosition; // 'start', 'end', or null
+  final String sidePreference; // 'left', 'right', 'either'
+
   // Physical dimensions for assembly validation
   final int? width;
   final int? height;
@@ -25,6 +29,8 @@ class FanzinePage extends Equatable {
     required this.status,
     this.templateId,
     required this.reference,
+    this.spreadPosition,
+    this.sidePreference = 'either',
     this.width,
     this.height,
   });
@@ -41,11 +47,25 @@ class FanzinePage extends Equatable {
       status: data['status'] ?? 'ready',
       templateId: data['templateId'],
       reference: doc.reference,
+      spreadPosition: data['spreadPosition'],
+      sidePreference: data['sidePreference'] ?? 'either',
       width: data['width'] as int?,
       height: data['height'] as int?,
     );
   }
 
   @override
-  List<Object?> get props => [id, pageNumber, imageId, imageUrl, storagePath, status, templateId, width, height];
+  List<Object?> get props => [
+    id,
+    pageNumber,
+    imageId,
+    imageUrl,
+    storagePath,
+    status,
+    templateId,
+    spreadPosition,
+    sidePreference,
+    width,
+    height
+  ];
 }

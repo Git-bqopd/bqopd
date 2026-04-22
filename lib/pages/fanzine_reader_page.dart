@@ -47,6 +47,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   List<Map<String, dynamic>> _pages = [];
 
   bool _twoPagePreference = true;
+  bool _hasCover = true;
   bool _isEditingMode = false;
   HeaderMode _headerMode = HeaderMode.fanzine;
   int _targetIndex = 0;
@@ -151,14 +152,33 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         _resolvedType = fanzineData['type'] ?? 'fanzine';
         _fanzineTitle = fanzineData['title'] ?? 'Untitled';
 
-        // Only auto-switch view modes on initial load to avoid jarring transitions
-        if (_isLoading) {
-          _twoPagePreference = fanzineData['twoPage'] ?? true;
-          if (_targetIndex == 0) {
+        bool newTwoPagePref = fanzineData['twoPage'] ?? true;
+        bool newHasCover = fanzineData['hasCover'] ?? true;
+        bool prefChanged = !_isLoading && (_twoPagePreference != newTwoPagePref || _hasCover != newHasCover);
+
+        // Auto-switch view modes on initial load OR if the toggle was flipped
+        if (_isLoading || prefChanged) {
+          _twoPagePreference = newTwoPagePref;
+          _hasCover = newHasCover;
+
+          bool isDesktop = MediaQuery.of(context).size.width > 900;
+
+          // Preserve deep-link behavior on initial load
+          if (_isLoading && _targetIndex > 0) {
+            // Keep existing deep-link view state
+          } else {
             if (_twoPagePreference) {
-              _showGrid = true;
-              _showList = false;
+              if (_isEditingMode && isDesktop) {
+                // Maker View + Desktop: Show both side-by-side
+                _showGrid = true;
+                _showList = true;
+              } else {
+                // Reader View or Mobile: Default to Grid
+                _showGrid = true;
+                _showList = false;
+              }
             } else {
+              // Two-page off: Default to List
               _showGrid = false;
               _showList = true;
             }
@@ -367,6 +387,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                   headerWidget: _buildHeader(isStickerOnly: false),
                   scrollController: ScrollController(),
                   viewService: _viewService,
+                  hasCover: _hasCover,
                   onPageTap: _handlePageTap,
                 );
               } else {
@@ -419,6 +440,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                           headerWidget: _buildHeader(isStickerOnly: _showList),
                           scrollController: _desktopGridScrollController ??= ScrollController(),
                           viewService: _viewService,
+                          hasCover: _hasCover,
                           onPageTap: _handlePageTap,
                         ),
                       ),

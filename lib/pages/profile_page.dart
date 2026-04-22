@@ -175,7 +175,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'type': 'folio',
         'shortCode': shortCode,
         'shortCodeKey': shortCode.toUpperCase(),
-        'twoPage': false,
+        'twoPage': true, // ALWAYS TRUE for new folios built in the Maker section
       });
       if (mounted) context.push('/editor/${folioRef.id}');
     } catch (e) {
