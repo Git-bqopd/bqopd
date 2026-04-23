@@ -5,8 +5,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+// ignore: depend_on_referenced_packages
 import 'package:http/http.dart' as http;
 import 'base_fanzine_workspace.dart';
 import 'reader_panels/credits_panel.dart';
@@ -102,10 +102,13 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
         'aspectRatio': ratio,
         'is5x8': is5x8,
       });
+
+      if (!mounted) return;
+
       if (is5x8) {
         context.read<FanzineEditorBloc>().add(AddExistingImageRequested(imageDocRef.id, url, width: decodedImage.width, height: decodedImage.height));
       }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(is5x8 ? 'full page added successfully!' : 'asset uploaded successfully!')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(is5x8 ? 'full page added successfully!' : 'asset uploaded successfully!')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('upload error: $e')));
     } finally {
@@ -117,7 +120,10 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final result = await showDialog<List<Map<String, dynamic>>>(context: context, builder: (context) => FolioImageSelectorModal(userId: user.uid));
-    if (result != null && result.isNotEmpty && mounted) {
+
+    if (!mounted) return;
+
+    if (result != null && result.isNotEmpty) {
       final bloc = context.read<FanzineEditorBloc>();
       for (final img in result) {
         int? w = img['width']; int? h = img['height'];
@@ -198,13 +204,13 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.grey.shade800.withOpacity(0.8), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: Colors.grey.shade800.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(4)),
                       child: Text(badge.toLowerCase(), style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
                     const SizedBox(height: 2),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(4)),
                       child: Text("${width ?? '??'}x${height ?? '??'}", style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 1),
                     ),
                   ],
@@ -214,10 +220,10 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
                 top: 2, right: 2,
                 child: GestureDetector(
                   onTap: () => _handleDelete(doc.id, isDirect),
-                  child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle), child: Icon(isDirect ? Icons.delete_outline : Icons.close, size: 14, color: Colors.white)),
+                  child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle), child: Icon(isDirect ? Icons.delete_outline : Icons.close, size: 14, color: Colors.white)),
                 ),
               ),
-              Align(alignment: Alignment.bottomCenter, child: Container(width: double.infinity, decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8))), padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4), child: Text(title.toLowerCase(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9), maxLines: 1, overflow: TextOverflow.ellipsis))),
+              Align(alignment: Alignment.bottomCenter, child: Container(width: double.infinity, decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8))), padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4), child: Text(title.toLowerCase(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9), maxLines: 1, overflow: TextOverflow.ellipsis))),
             ],
           ),
         );

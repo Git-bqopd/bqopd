@@ -1,37 +1,42 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-import 'dart:js' as js; // Import for JavaScript interop
+import 'dart:js_interop';
+// ignore: depend_on_referenced_packages
+import 'package:web/web.dart' as web;
 import 'package:flutter/foundation.dart';
 import '../env.dart';
 
+/// Global setter for the Maps initialization callback using modern JS interop.
+@JS('initMap')
+external set _initMap(JSFunction value);
+
 /// Injects the Google Maps JavaScript SDK into the document head.
-/// Uses asynchronous loading to avoid performance warnings.
+/// Migrated to package:web and dart:js_interop to resolve lint warnings
+/// and support modern Flutter web standards.
 Future<void> loadGoogleMapsScript() async {
   if (Env.googleApiKeyWeb.isEmpty) {
     debugPrint('Warning: Google Maps config not loaded or API key is empty.');
     return;
   }
 
-  // Prevent multiple injections
-  if (html.document.getElementById('google-maps-sdk') != null) {
+  // Prevent multiple injections by checking the DOM
+  if (web.document.getElementById('google-maps-sdk') != null) {
     return;
   }
 
   // Define the global callback that the Maps API expects.
-  // We use allowInterop to make a Dart function accessible to JavaScript.
-  js.context['initMap'] = js.allowInterop(() {
+  // Using .toJS to convert the Dart function to a JavaScript function.
+  _initMap = (() {
     debugPrint('Google Maps JavaScript SDK initialized via callback.');
-  });
+  }).toJS;
 
-  final script = html.ScriptElement()
+  // Create the script element using the modern package:web API
+  final script = web.document.createElement('script') as web.HTMLScriptElement
     ..id = 'google-maps-sdk'
-  // Added 'loading=async' and 'callback=initMap' to follow Google's best practices
-  // and suppress the performance warning in the console.
     ..src =
         'https://maps.googleapis.com/maps/api/js?key=${Env.googleApiKeyWeb}&libraries=places&loading=async&callback=initMap'
     ..async = true
     ..defer = true;
 
-  html.document.head!.append(script);
+  // Append to the head of the document
+  web.document.head?.append(script);
   debugPrint('Google Maps SDK injection initiated.');
 }

@@ -41,6 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final doc = await _firestore
           .collection('app_settings')
@@ -52,31 +53,26 @@ class _SettingsPageState extends State<SettingsPage> {
         _registerZineController.text = data['register_zine_shortcode'] ?? '';
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading settings: ${e.toString()}')),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error loading settings: ${e.toString()}')),
+      );
     }
   }
 
   Future<void> _saveSettings() async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await _firestore.collection('app_settings').doc('main_settings').set({
         'login_zine_shortcode': _loginZineController.text,
         'register_zine_shortcode': _registerZineController.text,
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settings saved successfully!')),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Settings saved successfully!')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving settings: ${e.toString()}')),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error saving settings: ${e.toString()}')),
+      );
     }
   }
 
@@ -91,6 +87,8 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _isCreatingProfile = true;
     });
+
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
 
     try {
@@ -104,18 +102,14 @@ class _SettingsPageState extends State<SettingsPage> {
       _lastNameController.clear();
       _bioController.clear();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Managed Profile Created!')),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Managed Profile Created!')),
+      );
     } catch (e) {
       debugPrint("Managed Profile Creation Error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating profile: $e')),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error creating profile: $e')),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -420,24 +414,21 @@ class _SettingsPageState extends State<SettingsPage> {
                             ],
                             onChanged: (newRole) async {
                               if (newRole == null) return;
+                              final messenger = ScaffoldMessenger.of(context);
 
                               try {
                                 await _firestore.collection('Users').doc(uid).update({
                                   'role': newRole,
                                   'isCurator': newRole == 'curator' || newRole == 'admin' || newRole == 'moderator',
                                 });
-                                // Corrected async context usage with mounted check
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Permission updated!')),
-                                  );
-                                }
+
+                                messenger.showSnackBar(
+                                  const SnackBar(content: Text('Permission updated!')),
+                                );
                               } catch (e) {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Permission update failed: $e')),
-                                  );
-                                }
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text('Permission update failed: $e')),
+                                );
                               }
                             },
                           ),
