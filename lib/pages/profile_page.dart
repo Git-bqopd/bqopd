@@ -360,7 +360,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
           return SafeArea(
             child: PageWrapper(
-              maxWidth: 1000,
+              maxWidth: 800,
               scroll: false,
               padding: EdgeInsets.zero,
               child: CustomScrollView(
@@ -1077,7 +1077,8 @@ class _MakerItemTile extends StatelessWidget {
     final data = doc.data() as Map<String, dynamic>;
     final isImage = doc.reference.path.startsWith('images/');
     final title = data['title'] ?? 'Untitled';
-    final imageUrl = data['fileUrl'];
+    final fileUrl = data['fileUrl'];
+    final displayUrl = data['gridUrl'] ?? data['fileUrl'];
 
     return GestureDetector(
       onTap: () {
@@ -1085,7 +1086,7 @@ class _MakerItemTile extends StatelessWidget {
           showDialog(
               context: context,
               builder: (_) => ImageViewModal(
-                  imageUrl: imageUrl ?? '',
+                  imageUrl: fileUrl ?? '',
                   imageId: doc.id,
                   imageText: data['text'] ?? data['text_raw']
               )
@@ -1101,8 +1102,8 @@ class _MakerItemTile extends StatelessWidget {
           children: [
             Container(
                 color: Colors.grey[200],
-                child: imageUrl != null
-                    ? Image.network(imageUrl, fit: BoxFit.cover)
+                child: displayUrl != null
+                    ? Image.network(displayUrl, fit: BoxFit.cover)
                     : Icon(isImage ? Icons.image : Icons.menu_book, color: Colors.black12, size: 40)
             ),
             Positioned(
