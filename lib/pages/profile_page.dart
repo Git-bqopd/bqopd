@@ -959,6 +959,49 @@ class _MakerItemTile extends StatelessWidget {
     }
   }
 
+  /// Implements the priority list for Folio Thumbnails
+  Future<String?> _getFolioThumbnail(String fanzineId) async {
+    final db = FirebaseFirestore.instance;
+
+    try {
+      // Priority 1 & 2: First image on the order page (lowest pageNumber > 0)
+      // Note: If 'cover' is selected in the UI, it occupies pageNumber 1.
+      final pagesSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
+          .where('pageNumber', isGreaterThan: 0)
+          .orderBy('pageNumber')
+          .limit(1)
+          .get();
+
+      if (pagesSnap.docs.isNotEmpty) {
+        final pageData = pagesSnap.docs.first.data();
+        final url = pageData['gridUrl'] ?? pageData['thumbnailUrl'] ?? pageData['imageUrl'];
+        if (url != null && url.toString().isNotEmpty) return url;
+      }
+
+      // Priority 3: Any other image put on the upload page (fallback)
+      // Fetching without orderBy to prevent composite index requirement errors
+      final imagesSnap = await db.collection('images')
+          .where('folioContext', isEqualTo: fanzineId)
+          .get();
+
+      if (imagesSnap.docs.isNotEmpty) {
+        final docs = imagesSnap.docs.toList();
+        docs.sort((a, b) {
+          final aTime = (a.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+          final bTime = (b.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+          return bTime.compareTo(aTime);
+        });
+
+        final imgData = docs.first.data();
+        return imgData['gridUrl'] ?? imgData['fileUrl'];
+      }
+    } catch (e) {
+      debugPrint("Error fetching folio thumbnail: $e");
+    }
+
+    return null; // No images exist for this folio yet
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = doc.data() as Map<String, dynamic>;
@@ -980,7 +1023,26 @@ class _MakerItemTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Container(color: Colors.grey[200], child: displayUrl != null ? Image.network(displayUrl, fit: BoxFit.cover) : Icon(isFanzine ? Icons.menu_book : Icons.image, color: Colors.black12, size: 40)),
+            Container(
+              color: Colors.grey[200],
+              child: isFanzine
+                  ? FutureBuilder<String?>(
+                future: _getFolioThumbnail(doc.id),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
+                  }
+                  if (snapshot.hasData && snapshot.data != null && snapshot.data!.isNotEmpty) {
+                    return Image.network(snapshot.data!, fit: BoxFit.cover);
+                  }
+                  return const Icon(Icons.menu_book, color: Colors.black12, size: 40);
+                },
+              )
+                  : (displayUrl != null
+                  ? Image.network(displayUrl, fit: BoxFit.cover)
+                  : const Icon(Icons.image, color: Colors.black12, size: 40)),
+            ),
+
             Positioned(bottom: 0, left: 0, right: 0, child: Container(padding: const EdgeInsets.all(8), color: Colors.black54, child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis))),
 
             Positioned(

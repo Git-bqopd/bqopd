@@ -161,8 +161,8 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
         title: Text(isDirect ? "delete image completely?" : "remove from folio?"),
         content: Text(isDirect ? "this is a direct upload. deleting it will remove it from ALL folios and your library." : "this image exists in your library. removing it here will not delete the source file."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("cancel")),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isDirect ? "delete" : "remove", style: const TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("cancel", style: TextStyle(color: Colors.black))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isDirect ? "delete" : "remove", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))),
         ],
       ),
     );
@@ -236,9 +236,31 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
         children: [
           Row(
             children: [
-              Expanded(child: ElevatedButton.icon(onPressed: _isUploading ? null : _uploadImage, icon: _isUploading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.add_photo_alternate, size: 18), label: Text(_isUploading ? "uploading..." : "upload new image", style: const TextStyle(fontSize: 12)), style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)))),
+              Expanded(
+                  child: ElevatedButton(
+                      onPressed: _isUploading ? null : _uploadImage,
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey, // Grayscale
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12)
+                      ),
+                      child: _isUploading
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Text("upload new image", style: TextStyle(fontSize: 12))
+                  )
+              ),
               const SizedBox(width: 8),
-              Expanded(child: OutlinedButton.icon(onPressed: _openOrphanSelector, icon: const Icon(Icons.manage_search, size: 18), label: const Text("select orphan image", style: TextStyle(fontSize: 12)), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)))),
+              Expanded(
+                  child: ElevatedButton(
+                      onPressed: _openOrphanSelector,
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey, // Grayscale
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12)
+                      ),
+                      child: const Text("select orphan image", style: TextStyle(fontSize: 12))
+                  )
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -246,7 +268,7 @@ class _MakerUploadTabState extends State<_MakerUploadTab> {
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('images').where('uploaderId', isEqualTo: user.uid).orderBy('timestamp', descending: true).snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: Padding(padding: EdgeInsets.all(24.0), child: CircularProgressIndicator()));
+              if (!snapshot.hasData) return const Center(child: Padding(padding: EdgeInsets.all(24.0), child: CircularProgressIndicator(color: Colors.black)));
               final folioDocs = snapshot.data!.docs.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return data['folioContext'] == widget.fanzineId || (data['usedInFanzines'] ?? []).contains(widget.fanzineId);
@@ -298,7 +320,7 @@ class _AssetEditModalState extends State<_AssetEditModal> {
           final isMobile = constraints.maxWidth < 600;
           final url = widget.data['fileUrl'] ?? '';
           final imgWidget = Container(color: Colors.grey[200], width: isMobile ? double.infinity : null, height: isMobile ? 200 : null, child: ClipRRect(borderRadius: isMobile ? const BorderRadius.vertical(top: Radius.circular(12)) : const BorderRadius.horizontal(left: Radius.circular(12)), child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain))));
-          final editWidget = Padding(padding: const EdgeInsets.all(24.0), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("asset details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))]), const Divider(), Expanded(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const Text("asset name / title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)), const SizedBox(height: 8), Row(children: [Expanded(child: TextField(controller: _titleController, decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true))), const SizedBox(width: 8), ElevatedButton(onPressed: _isSavingTitle ? null : _saveTitle, child: Text(_isSavingTitle ? "saving..." : "save name"))]), const SizedBox(height: 12), TextField(readOnly: true, controller: TextEditingController(text: url), decoration: const InputDecoration(labelText: "url", border: OutlineInputBorder(), isDense: true, filled: true, fillColor: Color(0xFFF5F5F5)), style: const TextStyle(fontFamily: 'Courier', fontSize: 11)), const SizedBox(height: 24), const Divider(), const SizedBox(height: 16), CreditsPanel(imageId: widget.imageId)])))]));
+          final editWidget = Padding(padding: const EdgeInsets.all(24.0), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("asset details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))]), const Divider(), Expanded(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const Text("asset name / title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)), const SizedBox(height: 8), Row(children: [Expanded(child: TextField(controller: _titleController, decoration: const InputDecoration(border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), isDense: true))), const SizedBox(width: 8), ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white), onPressed: _isSavingTitle ? null : _saveTitle, child: Text(_isSavingTitle ? "saving..." : "save name"))]), const SizedBox(height: 12), TextField(readOnly: true, controller: TextEditingController(text: url), decoration: const InputDecoration(labelText: "url", border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), floatingLabelStyle: TextStyle(color: Colors.black87), isDense: true, filled: true, fillColor: Color(0xFFF5F5F5)), style: const TextStyle(fontFamily: 'Courier', fontSize: 11)), const SizedBox(height: 24), const Divider(), const SizedBox(height: 16), CreditsPanel(imageId: widget.imageId)])))]));
           return isMobile ? Column(children: [imgWidget, Expanded(child: editWidget)]) : Row(children: [Expanded(child: imgWidget), Expanded(child: editWidget)]);
         }),
       ),

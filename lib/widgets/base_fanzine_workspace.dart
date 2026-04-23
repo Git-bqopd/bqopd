@@ -73,7 +73,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
               listener: (context, state) {
                 if (state is FanzineEditorFailure) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+                    SnackBar(content: Text(state.message), backgroundColor: Colors.black87),
                   );
                 }
               },
@@ -107,7 +107,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                         // If unbounded (List View), it can scroll normally.
                         final bool isGridView = constraints.maxHeight != double.infinity;
 
-                        return Stack(
+                        Widget mainContent = Stack(
                           children: [
                             Container(
                               decoration: BoxDecoration(
@@ -127,8 +127,9 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                                   children: [
                                     TabBar(
                                       controller: _tabController,
-                                      labelColor: Theme.of(context).primaryColor,
+                                      labelColor: Colors.black, // Grayscale
                                       unselectedLabelColor: Colors.grey,
+                                      indicatorColor: Colors.black, // Grayscale
                                       tabs: [
                                         const Tab(text: "settings", icon: Icon(Icons.settings, size: 20)),
                                         const Tab(text: "order", icon: Icon(Icons.format_list_numbered, size: 20)),
@@ -144,11 +145,23 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                               Positioned.fill(
                                 child: Container(
                                   color: Colors.white60,
-                                  child: const Center(child: CircularProgressIndicator()),
+                                  child: const Center(child: CircularProgressIndicator(color: Colors.black)),
                                 ),
                               ),
                           ],
                         );
+
+                        if (isGridView) {
+                          // Grid View handles its own Manila envelope padding inside the page renderer
+                          return mainContent;
+                        } else {
+                          // List View needs the Manila Envelope injected locally
+                          return Container(
+                            color: const Color(0xFFF1B255), // Manila Envelope Color
+                            padding: const EdgeInsets.all(10.0),
+                            child: mainContent,
+                          );
+                        }
                       }
                   );
                 }
@@ -191,6 +204,8 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
               labelText: 'fanzine name',
               isDense: true,
               border: OutlineInputBorder(),
+              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+              floatingLabelStyle: TextStyle(color: Colors.black87),
             ),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
@@ -218,7 +233,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
               }
             },
             style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).primaryColor,
+                backgroundColor: Colors.grey, // Grayscale
                 foregroundColor: Colors.white),
             child: const Text("save folio", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
@@ -276,7 +291,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                       final num = page.pageNumber;
                       final bool showLayoutButtons = !(num == 1 && state.fanzine.hasCover);
 
-                      // Component 1: Segmented Grid layout preferences
+                      // Component 1: Segmented Grid layout preferences (Grayscale)
                       final layoutRow = Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         mainAxisSize: MainAxisSize.min,
@@ -285,9 +300,11 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                               showSelectedIcon: false,
                               emptySelectionAllowed: true,
                               style: SegmentedButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  textStyle: const TextStyle(fontSize: 9),
-                                  padding: const EdgeInsets.symmetric(horizontal: 6)
+                                visualDensity: VisualDensity.compact,
+                                textStyle: const TextStyle(fontSize: 9),
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                                selectedBackgroundColor: Colors.grey,
+                                selectedForegroundColor: Colors.white,
                               ),
                               segments: const [
                                 ButtonSegment(value: 'start', label: Text('start')),
@@ -304,9 +321,11 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                               showSelectedIcon: false,
                               emptySelectionAllowed: false,
                               style: SegmentedButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  textStyle: const TextStyle(fontSize: 9),
-                                  padding: const EdgeInsets.symmetric(horizontal: 6)
+                                visualDensity: VisualDensity.compact,
+                                textStyle: const TextStyle(fontSize: 9),
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                                selectedBackgroundColor: Colors.grey,
+                                selectedForegroundColor: Colors.white,
                               ),
                               segments: const [
                                 ButtonSegment(value: 'left', label: Text('left')),
@@ -321,7 +340,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                         ],
                       );
 
-                      // Component 2: The Cover toggle logic
+                      // Component 2: The Cover toggle logic (Grayscale)
                       final coverRow = Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -330,6 +349,10 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                             scale: 0.7,
                             child: Switch(
                               value: state.fanzine.hasCover,
+                              activeColor: Colors.white,
+                              activeTrackColor: Colors.grey,
+                              inactiveThumbColor: Colors.grey.shade400,
+                              inactiveTrackColor: Colors.grey.shade200,
                               onChanged: (val) => bloc.add(ToggleHasCoverRequested(val)),
                             ),
                           ),
@@ -351,19 +374,19 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                           else
                             SizedBox(width: 90, child: num == 1 ? coverRow : null),
                           IconButton(
-                              icon: const Icon(Icons.arrow_upward, size: 14),
+                              icon: const Icon(Icons.arrow_upward, size: 14, color: Colors.black87),
                               padding: const EdgeInsets.all(4),
                               constraints: const BoxConstraints(),
                               onPressed: num > 1 ? () => bloc.add(ReorderPageRequested(page, -1, pages)) : null),
                           const SizedBox(width: 12),
                           IconButton(
-                              icon: const Icon(Icons.arrow_downward, size: 14),
+                              icon: const Icon(Icons.arrow_downward, size: 14, color: Colors.black87),
                               padding: const EdgeInsets.all(4),
                               constraints: const BoxConstraints(),
                               onPressed: num < ordered.length ? () => bloc.add(ReorderPageRequested(page, 1, pages)) : null),
                           const SizedBox(width: 12),
                           IconButton(
-                            icon: const Icon(Icons.close, size: 14, color: Colors.red),
+                            icon: const Icon(Icons.close, size: 14, color: Colors.black54), // Grayscale
                             padding: const EdgeInsets.all(4),
                             constraints: const BoxConstraints(),
                             onPressed: () => bloc.add(TogglePageOrderingRequested(page, false)),
@@ -432,7 +455,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                             border: Border.all(color: Colors.black12),
                             image: page.imageUrl != null ? DecorationImage(image: NetworkImage(page.imageUrl!), fit: BoxFit.cover) : null,
                           ),
-                          child: page.imageUrl == null ? const Center(child: Icon(Icons.auto_awesome_motion, size: 16)) : null,
+                          child: page.imageUrl == null ? const Center(child: Icon(Icons.auto_awesome_motion, size: 16, color: Colors.grey)) : null,
                         ),
                       );
                     },

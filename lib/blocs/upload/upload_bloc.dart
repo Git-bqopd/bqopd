@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/material.dart'; // Added for decodeImageFromList
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../repositories/upload_repository.dart';
@@ -122,6 +123,13 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
 
       final url = await _repository.uploadBytes(state.imageBytes!, path, 'image/jpeg');
 
+      // --- FIX: Measure image dimensions before saving ---
+      final decodedImage = await decodeImageFromList(state.imageBytes!);
+      final int width = decodedImage.width;
+      final int height = decodedImage.height;
+      final double ratio = width / height;
+      final bool is5x8 = (ratio >= 0.58 && ratio <= 0.67);
+
       await _repository.saveImageMetadata({
         'uid': event.userId,
         'uploaderId': event.userId,
@@ -133,6 +141,11 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         'tags': {},
         'indicia': event.indicia,
         'creators': event.creators,
+        // --- FIX: Save dimensions to metadata ---
+        'width': width,
+        'height': height,
+        'aspectRatio': ratio,
+        'is5x8': is5x8,
       });
 
       emit(state.copyWith(status: UploadStatus.success));
