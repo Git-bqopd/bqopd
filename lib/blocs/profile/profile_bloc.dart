@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/engagement_repository.dart';
 import '../../models/user_profile.dart';
@@ -22,7 +23,8 @@ class LoadProfileRequested extends ProfileEvent {
 
   LoadProfileRequested({
     required this.userId,
-    required this.currentAuthId,    required this.isViewerAdmin,
+    required this.currentAuthId,
+    required this.isViewerAdmin,
     required this.isViewerModerator,
     required this.isViewerCurator,
     this.initialTab,
@@ -55,6 +57,11 @@ class ToggleFollowRequested extends ProfileEvent {}
 class DeleteFolioRequested extends ProfileEvent {
   final String fanzineId;
   DeleteFolioRequested(this.fanzineId);
+}
+
+class DeleteImageRequested extends ProfileEvent {
+  final String imageId;
+  DeleteImageRequested(this.imageId);
 }
 
 // --- STATE ---
@@ -117,6 +124,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<ChangeTabRequested>(_onChangeTab);
     on<ToggleFollowRequested>(_onToggleFollow);
     on<DeleteFolioRequested>(_onDeleteFolio);
+    on<DeleteImageRequested>(_onDeleteImage);
   }
 
   Future<void> _onLoadRequested(LoadProfileRequested event, Emitter<ProfileState> emit) async {
@@ -149,12 +157,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     List<String> tabs = [];
 
-    // Settings tab is visible ONLY if it's my own profile AND I am an admin
     if (isMe && event.isViewerAdmin) {
       tabs.add('settings');
     }
 
-    // Curator tab visibility logic
     final bool viewerHasAccess = event.isViewerCurator || event.isViewerModerator;
     final bool ownerIsCurator = profile.isCurator;
 
@@ -168,15 +174,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     tabs.add('index');
     tabs.add('collection');
 
-    // DEFAULT LOGIC: Use the initialTab if provided (e.g., from deep link or saving a folio).
-    // If no instruction is provided, default to the 'maker' tab.
     int startTab = tabs.indexOf('maker');
-    if (startTab == -1) startTab = 0; // Fallback if maker isn't present
+    if (startTab == -1) startTab = 0;
 
     if (event.initialTab != null && tabs.contains(event.initialTab)) {
       startTab = tabs.indexOf(event.initialTab!);
     } else if (state.currentTabIndex < tabs.length && state.currentTabIndex != 0) {
-      // Maintain current index if we are already in a flow, unless we are resetting
       startTab = state.currentTabIndex;
     }
 
@@ -211,7 +214,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final fzId = event.fanzineId;
 
     try {
-      // 1. Get all pages in the folio
       final pagesSnap = await db.collection('fanzines').doc(fzId).collection('pages').get();
       final batch = db.batch();
 
@@ -225,24 +227,50 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
             final imgData = imgDoc.data()!;
             final String? folioContext = imgData['folioContext'];
 
-            // 2. Logic: If folioContext matches this fanzineId, it's a "Direct Upload" and should be deleted.
-            // If it's null or different, it's an "Orphan" or borrowed from elsewhere and should be preserved.
             if (folioContext == fzId) {
+              final path = imgData['storagePath'];
+              if (path != null) await FirebaseStorage.instance.ref(path).delete().catchError((_) => null);
               batch.delete(imgDoc.reference);
             } else {
-              // Preserve Orphan: Just remove this folio from its usage list
               batch.update(imgDoc.reference, {
                 'usedInFanzines': FieldValue.arrayRemove([fzId])
               });
             }
           }
         }
-        // Always delete the page reference itself
         batch.delete(pageDoc.reference);
       }
 
-      // 3. Delete the folio document
       batch.delete(db.collection('fanzines').doc(fzId));
+      await batch.commit();
+    } catch (e) {
+      emit(state.copyWith(errorMessage: "Delete failed: ${e.toString()}"));
+    }
+  }
+
+  Future<void> _onDeleteImage(DeleteImageRequested event, Emitter<ProfileState> emit) async {
+    final db = FirebaseFirestore.instance;
+    final imageId = event.imageId;
+
+    try {
+      final imgDoc = await db.collection('images').doc(imageId).get();
+      if (!imgDoc.exists) return;
+
+      final data = imgDoc.data()!;
+      final path = data['storagePath'];
+      final List usedIn = data['usedInFanzines'] ?? [];
+
+      final batch = db.batch();
+
+      for (String fzId in usedIn) {
+        final pages = await db.collection('fanzines').doc(fzId).collection('pages').where('imageId', isEqualTo: imageId).get();
+        for (var p in pages.docs) {
+          batch.delete(p.reference);
+        }
+      }
+
+      if (path != null) await FirebaseStorage.instance.ref(path).delete().catchError((_) => null);
+      batch.delete(imgDoc.reference);
 
       await batch.commit();
     } catch (e) {

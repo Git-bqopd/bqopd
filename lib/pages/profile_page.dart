@@ -35,7 +35,6 @@ class ProfilePage extends StatelessWidget {
       return const Scaffold(body: Center(child: Text("Please log in.")));
     }
 
-    // Capture hidden GoRouter extra state to preserve "clean" URL navigation
     final extra = GoRouterState.of(context).extra;
     final extraMap = extra is Map<String, dynamic> ? extra : null;
     final queryParams = GoRouterState.of(context).uri.queryParameters;
@@ -130,15 +129,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   bool _canEdit(String uid, bool isManaged, List<String> managers) {
     final provider = Provider.of<UserProvider>(context, listen: false);
     final currentUid = provider.currentUserId;
-    if (currentUid == null) {
-      return false;
-    }
-    if (uid == currentUid) {
-      return true;
-    }
-    if (isManaged && managers.contains(currentUid)) {
-      return true;
-    }
+    if (currentUid == null) return false;
+    if (uid == currentUid) return true;
+    if (isManaged && managers.contains(currentUid)) return true;
     return false;
   }
 
@@ -187,13 +180,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'shortCodeKey': shortCode.toUpperCase(),
         'twoPage': true,
       });
-      if (mounted) {
-        context.push('/editor/${folioRef.id}');
-      }
+      if (mounted) context.push('/editor/${folioRef.id}');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -215,13 +204,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'shortCodeKey': shortCode.toUpperCase(),
         'twoPage': false,
       });
-      if (mounted) {
-        context.push('/editor/${fzRef.id}');
-      }
+      if (mounted) context.push('/editor/${fzRef.id}');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -247,20 +232,14 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       await fanzineRef.collection('pages').add({'pageNumber': 1, 'templateId': 'calendar_left', 'status': 'ready'});
       await fanzineRef.collection('pages').add({'pageNumber': 2, 'templateId': 'calendar_right', 'status': 'ready'});
 
-      if (mounted) {
-        context.push('/editor/${fanzineRef.id}');
-      }
+      if (mounted) context.push('/editor/${fanzineRef.id}');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   Future<void> _handlePdfUpload(String userId) async {
-    if (_isUploadingPdf) {
-      return;
-    }
+    if (_isUploadingPdf) return;
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf'], withData: true);
       if (result != null) {
@@ -277,13 +256,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload Error: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload Error: $e')));
     } finally {
-      if (mounted) {
-        setState(() => _isUploadingPdf = false);
-      }
+      if (mounted) setState(() => _isUploadingPdf = false);
     }
   }
 
@@ -297,13 +272,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       _firstNameController.clear();
       _lastNameController.clear();
       _bioController.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Managed Profile Created!')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Managed Profile Created!')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error creating profile: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error creating profile: $e')));
     }
   }
 
@@ -345,12 +316,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           }
         },
         builder: (context, state) {
-          if (state.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state.userData == null) {
-            return const Center(child: Text("Profile not found."));
-          }
+          if (state.isLoading) return const Center(child: CircularProgressIndicator());
+          if (state.userData == null) return const Center(child: Text("Profile not found."));
 
           final userData = state.userData!;
           final targetUserId = userData.uid;
@@ -407,10 +374,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                       delegate: _ProfileTabsDelegate(
                         child: Container(
                           height: 50,
-                          decoration: const BoxDecoration(
-                              color: Colors.white,
-                              border: Border(bottom: BorderSide(color: Colors.black12))
-                          ),
+                          decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.black12))),
                           child: Center(
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
@@ -448,10 +412,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                                   decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-                                  child: Text(
-                                    _isUploadingPdf ? "uploading..." : "catalog",
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
-                                  ),
+                                  child: Text(_isUploadingPdf ? "uploading..." : "catalog", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -561,28 +522,15 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab) {
     switch (activeTab) {
       case 'settings':
-        if (_settingsSubTabIndex == 3) {
-          return const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(24.0),
-                child: SocialMatrixTab(),
-              ),
-            ),
-          );
-        }
+        if (_settingsSubTabIndex == 3) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: SocialMatrixTab())));
         return _buildSettingsSubView(targetUserId);
       case 'curator':
-        if (_curatorSubTabIndex == 2) {
-          return _buildEntitiesSubView();
-        }
+        if (_curatorSubTabIndex == 2) return _buildEntitiesSubView();
         return _buildCuratorSubView(targetUserId);
       case 'maker':
         return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts);
       case 'index':
-        if (_indexSubTabIndex == 2) {
-          return _UserCommentsView(userId: targetUserId);
-        }
+        if (_indexSubTabIndex == 2) return _UserCommentsView(userId: targetUserId);
         return _buildIndexSubView(targetUserId);
       case 'collection':
         return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Collection Coming Soon"))));
@@ -595,16 +543,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
+        if (!snap.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         final filtered = snap.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           final hasSource = data.containsKey('sourceFile');
           final isLive = data['status'] == 'live';
-          if (_curatorSubTabIndex == 0) {
-            return hasSource && !isLive;
-          }
+          if (_curatorSubTabIndex == 0) return hasSource && !isLive;
           final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
           return (!hasSource || isLive) && (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
         }).toList();
@@ -621,9 +565,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
+        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         return _buildGrid(snapshot.data!.docs, false);
       },
     );
@@ -643,11 +585,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
               const SizedBox(height: 16),
               TextField(controller: _registerZineController, decoration: const InputDecoration(labelText: 'Register Zine ShortCode', border: OutlineInputBorder(), isDense: true)),
               const SizedBox(height: 24),
-              ElevatedButton(
-                  onPressed: _saveGlobalShortcodes,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
-                  child: const Text("SAVE CONFIGURATION", style: TextStyle(fontWeight: FontWeight.bold))
-              ),
+              ElevatedButton(onPressed: _saveGlobalShortcodes, style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)), child: const Text("SAVE CONFIGURATION", style: TextStyle(fontWeight: FontWeight.bold))),
             ],
           ),
         ),
@@ -656,19 +594,15 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('profiles').where('isManaged', isEqualTo: true).where('managers', arrayContains: targetUserId).snapshots(),
           builder: (context, snapshot) {
-            final List<Widget> buttons = [_QuickActionTile(label: "+ managed profile", color: Colors.indigo, onTap: _showCreateManagedProfileDialog)];
-            if (!snapshot.hasData) {
-              return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-            }
+            final List<Widget> buttons = [_QuickActionTile(label: "+ managed profile", color: Colors.grey.shade800, onTap: _showCreateManagedProfileDialog)];
+            if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
             final docs = snapshot.data!.docs;
             return SliverPadding(
               padding: const EdgeInsets.all(8.0),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
                 delegate: SliverChildBuilderDelegate((context, index) {
-                  if (index < buttons.length) {
-                    return buttons[index];
-                  }
+                  if (index < buttons.length) return buttons[index];
                   return _MakerItemTile(doc: docs[index - buttons.length], shouldEdit: true);
                 }, childCount: docs.length + buttons.length),
               ),
@@ -679,9 +613,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('Users').snapshots(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-            }
+            if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
             final docs = snapshot.data!.docs;
             return SliverPadding(
               padding: const EdgeInsets.all(16),
@@ -689,11 +621,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final uid = docs[index].id;
                   final userData = docs[index].data() as Map<String, dynamic>;
-
                   final dynamic rolesData = userData['roles'];
-                  final Set<String> selectedRolesSet = rolesData != null
-                      ? Set<String>.from(rolesData)
-                      : (userData['role'] != null && userData['role'] != 'user' ? {userData['role']} : <String>{});
+                  final Set<String> selectedRolesSet = rolesData != null ? Set<String>.from(rolesData) : (userData['role'] != null && userData['role'] != 'user' ? {userData['role']} : <String>{});
 
                   return FutureBuilder<DocumentSnapshot>(
                       future: FirebaseFirestore.instance.collection('profiles').doc(uid).get(),
@@ -712,17 +641,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                InkWell(
-                                  onTap: () => context.go('/$username'),
-                                  child: Text('/$username',
-                                      style: const TextStyle(
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 11,
-                                          decoration: TextDecoration.underline
-                                      )
-                                  ),
-                                ),
+                                InkWell(onTap: () => context.go('/$username'), child: Text('/$username', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline))),
                                 const SizedBox(width: 16),
                                 SegmentedButton<String>(
                                   showSelectedIcon: false,
@@ -736,31 +655,14 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                     final rolesList = newSelection.toList();
                                     final bool isCurator = newSelection.contains('curator');
                                     final bool isAdmin = newSelection.contains('admin');
-
                                     String legacyRole = 'user';
-                                    if (newSelection.contains('admin')) {
-                                      legacyRole = 'admin';
-                                    } else if (newSelection.contains('moderator')) {
-                                      legacyRole = 'moderator';
-                                    } else if (newSelection.contains('curator')) {
-                                      legacyRole = 'curator';
-                                    }
+                                    if (newSelection.contains('admin')) legacyRole = 'admin';
+                                    else if (newSelection.contains('moderator')) legacyRole = 'moderator';
+                                    else if (newSelection.contains('curator')) legacyRole = 'curator';
 
                                     final batch = FirebaseFirestore.instance.batch();
-
-                                    // 1. Update Private System Data
-                                    batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {
-                                      'roles': rolesList,
-                                      'role': legacyRole,
-                                      'isCurator': isCurator || isAdmin || newSelection.contains('moderator'),
-                                    });
-
-                                    // 2. Update Public Profile Data (Sync statuses)
-                                    batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {
-                                      'isCurator': isCurator || isAdmin || newSelection.contains('moderator'),
-                                      'isAdmin': isAdmin,
-                                    });
-
+                                    batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {'roles': rolesList, 'role': legacyRole, 'isCurator': isCurator || isAdmin || newSelection.contains('moderator')});
+                                    batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {'isCurator': isCurator || isAdmin || newSelection.contains('moderator'), 'isAdmin': isAdmin});
                                     await batch.commit();
                                   },
                                   multiSelectionEnabled: true,
@@ -794,20 +696,14 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').where('status', whereIn: ['draft', 'working']).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
+        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         final Map<String, int> entityCounts = {};
         for (var doc in snapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
           final entities = List<String>.from(data['draftEntities'] ?? []);
-          for (var name in entities) {
-            entityCounts[name] = (entityCounts[name] ?? 0) + 1;
-          }
+          for (var name in entities) entityCounts[name] = (entityCounts[name] ?? 0) + 1;
         }
-        if (entityCounts.isEmpty) {
-          return const SliverToBoxAdapter(child: Center(child: Text("No entities found.")));
-        }
+        if (entityCounts.isEmpty) return const SliverToBoxAdapter(child: Center(child: Text("No entities found.")));
         final sortedNames = entityCounts.keys.toList()..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
         return SliverPadding(
           padding: const EdgeInsets.all(16),
@@ -837,14 +733,9 @@ class _UserCommentsView extends StatelessWidget {
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
+        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) {
-          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found"))));
-        }
-
+        if (docs.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found"))));
         return SliverPadding(
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
@@ -877,26 +768,14 @@ class _MakerCombinedView extends StatelessWidget {
                 return FutureBuilder<List<dynamic>>(
                     future: _getCombinedData(),
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-                      }
+                      if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
                       final items = snapshot.data!;
-                      if (items.isEmpty) {
-                        return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
-                      }
-
+                      if (items.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
                       return SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
                         sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              childAspectRatio: 5 / 8,
-                              mainAxisSpacing: 8,
-                              crossAxisSpacing: 8
-                          ),
-                          delegate: SliverChildBuilderDelegate((context, index) {
-                            return _MakerItemTile(doc: items[index], shouldEdit: true);
-                          }, childCount: items.length),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
+                          delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: items[index], shouldEdit: true, isDraftView: showDrafts), childCount: items.length),
                         ),
                       );
                     }
@@ -910,33 +789,22 @@ class _MakerCombinedView extends StatelessWidget {
   Future<List<dynamic>> _getCombinedData() async {
     final fzSnap = await FirebaseFirestore.instance.collection('fanzines').get();
     final imgSnap = await FirebaseFirestore.instance.collection('images').get();
-
     final List<dynamic> combined = [];
 
     for (var doc in fzSnap.docs) {
       final data = doc.data();
-      if (data['type'] != 'folio' && data['type'] != 'calendar') {
-        continue;
-      }
+      if (data['type'] != 'folio' && data['type'] != 'calendar') continue;
       final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
-      if (owner != targetUserId) {
-        continue;
-      }
+      if (owner != targetUserId) continue;
       final isLive = data['status'] == 'live' || data['status'] == 'published';
-      if (showDrafts ? !isLive : isLive) {
-        combined.add(doc);
-      }
+      if (showDrafts ? !isLive : isLive) combined.add(doc);
     }
 
     for (var doc in imgSnap.docs) {
       final data = doc.data();
-      if (data['uploaderId'] != targetUserId) {
-        continue;
-      }
+      if (data['uploaderId'] != targetUserId) continue;
       final isPending = data['status'] == 'pending';
-      if (showDrafts ? isPending : !isPending) {
-        combined.add(doc);
-      }
+      if (showDrafts ? isPending : !isPending) combined.add(doc);
     }
 
     combined.sort((a, b) {
@@ -946,7 +814,6 @@ class _MakerCombinedView extends StatelessWidget {
       final bTime = bData['creationDate'] ?? bData['timestamp'] as Timestamp?;
       return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
     });
-
     return combined;
   }
 }
@@ -987,13 +854,8 @@ class _EntityRow extends StatelessWidget {
         } else if (snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           String linkText = '/$handle';
-          if (data['isAlias'] == true) {
-            linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
-          }
-          statusWidget = InkWell(
-              onTap: () => context.go('/$handle'),
-              child: Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline))
-          );
+          if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
+          statusWidget = InkWell(onTap: () => context.go('/$handle'), child: Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline)));
         } else {
           statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
             TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
@@ -1013,23 +875,14 @@ class _EntityRow extends StatelessWidget {
   }
 
   Future<void> _createProfile(BuildContext context, String name) async {
-    String first = name;
-    String last = "";
-    if (name.contains(' ')) {
-      final parts = name.split(' ');
-      first = parts.first;
-      last = parts.sublist(1).join(' ');
-    }
+    String first = name; String last = "";
+    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
     try {
       await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
     } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
@@ -1039,19 +892,13 @@ class _EntityRow extends StatelessWidget {
       final controller = TextEditingController();
       return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
     });
-    if (target == null || target.isEmpty) {
-      return;
-    }
+    if (target == null || target.isEmpty) return;
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
     } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
@@ -1069,28 +916,61 @@ class _ProfileTabsDelegate extends SliverPersistentHeaderDelegate {
 class _MakerItemTile extends StatelessWidget {
   final dynamic doc;
   final bool shouldEdit;
+  final bool isDraftView;
 
-  const _MakerItemTile({required this.doc, this.shouldEdit = false});
+  const _MakerItemTile({required this.doc, this.shouldEdit = false, this.isDraftView = false});
+
+  bool _is5x8(Map<String, dynamic> data) {
+    if (data['is5x8'] == true) return true;
+    final w = data['width'] as num?;
+    final h = data['height'] as num?;
+    if (w != null && h != null) {
+      final ratio = w / h;
+      return ratio >= 0.58 && ratio <= 0.67;
+    }
+    return false;
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final data = doc.data() as Map<String, dynamic>;
+    final isFanzine = doc.reference.path.startsWith('fanzines/');
+    final title = data['title'] ?? 'Untitled';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Delete $title?"),
+        content: Text(isFanzine
+            ? "Are you sure you want to delete this folio? Direct uploads will be permanently removed. Orphan images imported from your library will be preserved."
+            : "Are you sure you want to delete this image? All associated page references will be removed from all folios."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      if (isFanzine) {
+        context.read<ProfileBloc>().add(DeleteFolioRequested(doc.id));
+      } else {
+        context.read<ProfileBloc>().add(DeleteImageRequested(doc.id));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final data = doc.data() as Map<String, dynamic>;
-    final isImage = doc.reference.path.startsWith('images/');
+    final isFanzine = doc.reference.path.startsWith('fanzines/');
     final title = data['title'] ?? 'Untitled';
     final fileUrl = data['fileUrl'];
     final displayUrl = data['gridUrl'] ?? data['fileUrl'];
 
     return GestureDetector(
       onTap: () {
-        if (isImage) {
-          showDialog(
-              context: context,
-              builder: (_) => ImageViewModal(
-                  imageUrl: fileUrl ?? '',
-                  imageId: doc.id,
-                  imageText: data['text'] ?? data['text_raw']
-              )
-          );
+        if (!isFanzine) {
+          showDialog(context: context, builder: (_) => ImageViewModal(imageUrl: fileUrl ?? '', imageId: doc.id, imageText: data['text'] ?? data['text_raw']));
         } else {
           context.push(shouldEdit ? '/editor/${doc.id}' : '/reader/${doc.id}');
         }
@@ -1100,37 +980,63 @@ class _MakerItemTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Container(
-                color: Colors.grey[200],
-                child: displayUrl != null
-                    ? Image.network(displayUrl, fit: BoxFit.cover)
-                    : Icon(isImage ? Icons.image : Icons.menu_book, color: Colors.black12, size: 40)
-            ),
+            Container(color: Colors.grey[200], child: displayUrl != null ? Image.network(displayUrl, fit: BoxFit.cover) : Icon(isFanzine ? Icons.menu_book : Icons.image, color: Colors.black12, size: 40)),
+            Positioned(bottom: 0, left: 0, right: 0, child: Container(padding: const EdgeInsets.all(8), color: Colors.black54, child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis))),
+
             Positioned(
-                bottom: 0, left: 0, right: 0,
-                child: Container(
-                    padding: const EdgeInsets.all(8),
-                    color: Colors.black54,
-                    child: Text(
-                        title,
-                        style: const TextStyle(color: Colors.white, fontSize: 10),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis
+              top: 26, left: 4, right: 4,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (isFanzine)
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('fanzines').doc(doc.id).collection('pages').where('pageNumber', isGreaterThan: 0).snapshots(),
+                      builder: (context, snap) {
+                        final count = snap.data?.docs.length ?? 0;
+                        return _Badge(label: "folio ($count)", color: Colors.grey.shade800);
+                      },
                     )
-                )
+                  else ...[
+                    _Badge(label: _is5x8(data) ? "full page 5x8" : "image", color: Colors.grey.shade800),
+                    const SizedBox(height: 2),
+                    _Badge(label: "${data['width'] ?? '??'}x${data['height'] ?? '??'}", color: Colors.black, opacity: 0.7),
+                  ],
+                ],
+              ),
             ),
-            if (isImage)
+
+            if (isDraftView)
               Positioned(
-                  top: 4, right: 4,
+                top: 2,
+                right: 2,
+                child: GestureDetector(
+                  onTap: () => _confirmDelete(context),
                   child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      color: Colors.black.withValues(alpha: 0.6),
-                      child: const Text("SINGLE", style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold))
-                  )
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
+                    child: const Icon(Icons.close, size: 14, color: Colors.white),
+                  ),
+                ),
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+  final double opacity;
+  const _Badge({required this.label, required this.color, this.opacity = 0.8});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(color: color.withOpacity(opacity), borderRadius: BorderRadius.circular(4)),
+      child: Text(label.toLowerCase(), style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 }
