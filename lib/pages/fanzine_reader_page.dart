@@ -384,7 +384,19 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               if (!_showList) {
                 return FanzineGridRenderer(
                   pages: _pages,
-                  headerWidget: _buildHeader(isStickerOnly: false),
+                  headerWidget: _isEditingMode
+                      ? GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _showList = true;
+                        _targetIndex = 0;
+                      });
+                    },
+                    child: AbsorbPointer(
+                      child: _buildHeader(isStickerOnly: true),
+                    ),
+                  )
+                      : _buildHeader(isStickerOnly: false),
                   scrollController: ScrollController(),
                   viewService: _viewService,
                   hasCover: _hasCover,

@@ -27,11 +27,7 @@ class FanzineMakerWidget extends StatelessWidget {
             (context, fanzine, pages) => _MakerUploadTab(fanzineId: fanzineId, folioTitle: fanzine.title),
       ],
       onSaveCallback: () {
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go('/profile?tab=maker&drafts=true');
-        }
+        context.go('/profile?tab=maker&drafts=true');
       },
     );
   }
