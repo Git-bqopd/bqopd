@@ -203,7 +203,18 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
               if (widget.onSaveCallback != null) {
                 widget.onSaveCallback!();
               } else {
-                context.go('/profile?tab=maker&drafts=true');
+                // Safely return to the profile page without overwriting the clean URL
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  final userProvider = Provider.of<UserProvider>(context, listen: false);
+                  final username = userProvider.userProfile?.username;
+                  if (username != null) {
+                    context.go('/$username');
+                  } else {
+                    context.go('/');
+                  }
+                }
               }
             },
             style: ElevatedButton.styleFrom(

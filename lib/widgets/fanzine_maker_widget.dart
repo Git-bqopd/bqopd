@@ -6,11 +6,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'base_fanzine_workspace.dart';
 import 'reader_panels/credits_panel.dart';
 import 'folio_image_selector_modal.dart';
 import '../blocs/fanzine_editor_bloc.dart';
+import '../services/user_provider.dart';
 
 class FanzineMakerWidget extends StatelessWidget {
   final String fanzineId;
@@ -27,7 +29,18 @@ class FanzineMakerWidget extends StatelessWidget {
             (context, fanzine, pages) => _MakerUploadTab(fanzineId: fanzineId, folioTitle: fanzine.title),
       ],
       onSaveCallback: () {
-        context.go('/profile?tab=maker&drafts=true');
+        // Safely return to the profile page without overwriting the clean URL
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          final userProvider = Provider.of<UserProvider>(context, listen: false);
+          final username = userProvider.userProfile?.username;
+          if (username != null) {
+            context.go('/$username', extra: {'tab': 'maker', 'drafts': true});
+          } else {
+            context.go('/');
+          }
+        }
       },
     );
   }

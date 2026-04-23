@@ -4,9 +4,34 @@ import 'package:flutter/material.dart';
 import 'profile_page.dart';
 import 'fanzine_reader_page.dart';
 
-class ShortLinkPage extends StatelessWidget {
+class ShortLinkPage extends StatefulWidget {
   final String code;
   const ShortLinkPage({super.key, required this.code});
+
+  @override
+  State<ShortLinkPage> createState() => _ShortLinkPageState();
+}
+
+class _ShortLinkPageState extends State<ShortLinkPage> {
+  late Future<String?> _resolveFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Cache the resolution future to prevent "amnesia" when popping
+    // back to this page from an editor or modal.
+    _resolveFuture = _resolveShortcode(widget.code);
+  }
+
+  @override
+  void didUpdateWidget(covariant ShortLinkPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.code != widget.code) {
+      setState(() {
+        _resolveFuture = _resolveShortcode(widget.code);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +39,7 @@ class ShortLinkPage extends StatelessWidget {
       backgroundColor: Colors.grey[200],
       body: SafeArea(
         child: FutureBuilder<String?>(
-          future: _resolveShortcode(code),
+          future: _resolveFuture,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -31,7 +56,7 @@ class ShortLinkPage extends StatelessWidget {
                   children: [
                     const Icon(Icons.search_off, size: 64, color: Colors.grey),
                     const SizedBox(height: 16),
-                    Text('"$code" not found.', style: const TextStyle(fontSize: 18, color: Colors.grey)),
+                    Text('"${widget.code}" not found.', style: const TextStyle(fontSize: 18, color: Colors.grey)),
                     const SizedBox(height: 8),
                     TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Go Back")),
                   ],
@@ -92,7 +117,7 @@ class ShortLinkPage extends StatelessWidget {
         .get();
     if (fz.docs.isNotEmpty) return 'fanzine:$cleanCode';
 
-    // FIXED: Fallback check redirected to 'profiles'
+    // Fallback check redirected to 'profiles'
     final profilesByUsername = await db.collection('profiles')
         .where('username', isEqualTo: cleanCode.toLowerCase())
         .limit(1)

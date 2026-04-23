@@ -11,10 +11,7 @@ class _GridSpread {
 
   _GridSpread({
     this.leftWidget,
-    this.leftPage,
-    this.rightPage,
     this.leftListIndex,
-    this.rightListIndex,
   });
 }
 
