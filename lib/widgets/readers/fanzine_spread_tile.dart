@@ -137,9 +137,8 @@ class FanzineSpreadTile extends StatelessWidget {
                                 child: Container(
                                   decoration: const BoxDecoration(
                                     color: Color(0xFFF1B255), // Manila
-                                    borderRadius: BorderRadius.horizontal(
-                                      right: Radius.circular(12),
-                                    ),
+                                    // ENVELOPE: Outside rectangle has square edges
+                                    borderRadius: BorderRadius.zero,
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.black26,

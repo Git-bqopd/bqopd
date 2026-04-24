@@ -319,14 +319,68 @@ class _AssetEditModalState extends State<_AssetEditModal> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor: Colors.white,
+      // STICKER: In a modal context without an envelope, the "white inside" rectangle is the dialog itself.
+      // We apply rounded corners to the dialog to match the sticker aesthetic.
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
         child: LayoutBuilder(builder: (context, constraints) {
           final isMobile = constraints.maxWidth < 600;
           final url = widget.data['fileUrl'] ?? '';
-          final imgWidget = Container(color: Colors.grey[200], width: isMobile ? double.infinity : null, height: isMobile ? 200 : null, child: ClipRRect(borderRadius: isMobile ? const BorderRadius.vertical(top: Radius.circular(12)) : const BorderRadius.horizontal(left: Radius.circular(12)), child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain))));
-          final editWidget = Padding(padding: const EdgeInsets.all(24.0), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("asset details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))]), const Divider(), Expanded(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const Text("asset name / title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)), const SizedBox(height: 8), Row(children: [Expanded(child: TextField(controller: _titleController, decoration: const InputDecoration(border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), isDense: true))), const SizedBox(width: 8), ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white), onPressed: _isSavingTitle ? null : _saveTitle, child: Text(_isSavingTitle ? "saving..." : "save name"))]), const SizedBox(height: 12), TextField(readOnly: true, controller: TextEditingController(text: url), decoration: const InputDecoration(labelText: "url", border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), floatingLabelStyle: TextStyle(color: Colors.black87), isDense: true, filled: true, fillColor: Color(0xFFF5F5F5)), style: const TextStyle(fontFamily: 'Courier', fontSize: 11)), const SizedBox(height: 24), const Divider(), const SizedBox(height: 16), CreditsPanel(imageId: widget.imageId)])))]));
+
+          final imgWidget = Container(
+              color: Colors.grey[200],
+              width: isMobile ? double.infinity : null,
+              height: isMobile ? 200 : null,
+              child: ClipRRect(
+                // STICKER: The image clipping matches the rounded edges of the internal workspace
+                  borderRadius: isMobile ? const BorderRadius.vertical(top: Radius.circular(12)) : const BorderRadius.horizontal(left: Radius.circular(12)),
+                  child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain))
+              )
+          );
+
+          final editWidget = Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("asset details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))
+                        ]
+                    ),
+                    const Divider(),
+                    Expanded(
+                        child: SingleChildScrollView(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Text("asset name / title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                      children: [
+                                        Expanded(child: TextField(controller: _titleController, decoration: const InputDecoration(border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), isDense: true))),
+                                        const SizedBox(width: 8),
+                                        ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white), onPressed: _isSavingTitle ? null : _saveTitle, child: Text(_isSavingTitle ? "saving..." : "save name"))
+                                      ]
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(readOnly: true, controller: TextEditingController(text: url), decoration: const InputDecoration(labelText: "url", border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), floatingLabelStyle: TextStyle(color: Colors.black87), isDense: true, filled: true, fillColor: Color(0xFFF5F5F5)), style: const TextStyle(fontFamily: 'Courier', fontSize: 11)),
+                                  const SizedBox(height: 24),
+                                  const Divider(),
+                                  const SizedBox(height: 16),
+                                  CreditsPanel(imageId: widget.imageId)
+                                ]
+                            )
+                        )
+                    )
+                  ]
+              )
+          );
+
           return isMobile ? Column(children: [imgWidget, Expanded(child: editWidget)]) : Row(children: [Expanded(child: imgWidget), Expanded(child: editWidget)]);
         }),
       ),

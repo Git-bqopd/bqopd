@@ -112,13 +112,14 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
+                                // STICKER: The white internal workspace always has rounded corners
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: Colors.black12),
                                 boxShadow: const [
                                   BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
                                 ],
                               ),
-                              clipBehavior: Clip.antiAlias, // Clips overflowing content cleanly at the border radius
+                              clipBehavior: Clip.antiAlias,
                               child: SingleChildScrollView(
                                 controller: _scrollController,
                                 physics: isGridView ? const NeverScrollableScrollPhysics() : null,
@@ -157,7 +158,11 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                         } else {
                           // List View needs the Manila Envelope injected locally
                           return Container(
-                            color: const Color(0xFFF1B255), // Manila Envelope Color
+                            // ENVELOPE: The orange outside rectangle has square edges
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF1B255),
+                              borderRadius: BorderRadius.zero,
+                            ),
                             padding: const EdgeInsets.all(10.0),
                             child: mainContent,
                           );
@@ -361,7 +366,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
 
                       // Assemble the layout buttons wrapper. Desktop keeps a hard width to align like a table.
                       Widget layoutButtonsWidget = isCompact
-                          ? (showLayoutButtons ? FittedBox(fit: BoxFit.scaleDown, child: layoutRow) : const SizedBox.shrink())
+                          ? (showLayoutButtons ? Align(alignment: Alignment.centerLeft, child: FittedBox(fit: BoxFit.scaleDown, child: layoutRow)) : const SizedBox.shrink())
                           : SizedBox(width: 280, child: showLayoutButtons ? FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: layoutRow) : null);
 
                       // Assemble the action control wrapper. Desktop keeps a hard width to align like a table.
@@ -404,13 +409,19 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
                             ? Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            // ROW 1: Number and Name (Full room now)
                             Row(
                               children: [
                                 SizedBox(width: 24, child: Text('$num.', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
                                 Expanded(child: Text(page.templateId != null ? "template page" : "image page", style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-                                layoutButtonsWidget,
                               ],
                             ),
+                            // ROW 2: Layout Buttons (only if visible)
+                            if (showLayoutButtons) ...[
+                              const SizedBox(height: 8),
+                              layoutButtonsWidget,
+                            ],
+                            // ROW 3: Control Buttons
                             const SizedBox(height: 4),
                             controlButtonsWidget,
                           ],
