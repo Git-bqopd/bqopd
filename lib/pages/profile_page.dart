@@ -350,8 +350,13 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
           final userData = state.userData!;
           final targetUserId = userData.uid;
-          final isOwner = context.read<UserProvider>().currentUserId == targetUserId;
+          final userProvider = context.read<UserProvider>();
+          final isOwner = userProvider.currentUserId == targetUserId;
           final canEditProfile = _canEdit(userData.uid, userData.isManaged, userData.managers);
+
+          // GATING: Drafts visible to Owner, Managers, Admins, and Moderators
+          final bool canSeeDrafts = canEditProfile || userProvider.isAdmin || userProvider.isModerator;
+
           final activeTab = state.visibleTabs.isEmpty ? 'collection' : state.visibleTabs[state.currentTabIndex];
 
           return SafeArea(
@@ -456,7 +461,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                       ),
                     ),
 
-                  if (activeTab == 'maker' && isOwner)
+                  if (activeTab == 'maker')
                     SliverPersistentHeader(
                       pinned: true,
                       delegate: _ProfileTabsDelegate(
@@ -466,24 +471,28 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              GestureDetector(
-                                onTap: () => _showMakerCreateModal(targetUserId),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                  decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-                                  child: const Text("make", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                              if (canEditProfile)
+                                GestureDetector(
+                                  onTap: () => _showMakerCreateModal(targetUserId),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                    decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+                                    child: const Text("make", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
+                              if (canEditProfile) const SizedBox(width: 12),
                               GestureDetector(
                                 onTap: () => setState(() => _showDrafts = false),
                                 child: Text("published", style: TextStyle(color: !_showDrafts ? Colors.black : Colors.grey, fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal, decoration: !_showDrafts ? TextDecoration.underline : null)),
                               ),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              GestureDetector(
-                                onTap: () => setState(() => _showDrafts = true),
-                                child: Text("drafts", style: TextStyle(color: _showDrafts ? Colors.black : Colors.grey, fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal, decoration: _showDrafts ? TextDecoration.underline : null)),
-                              ),
+                              // UPDATED GATING: Now allows Admin and Moderators to see the tab
+                              if (canSeeDrafts) ...[
+                                const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                GestureDetector(
+                                  onTap: () => setState(() => _showDrafts = true),
+                                  child: Text("drafts", style: TextStyle(color: _showDrafts ? Colors.black : Colors.grey, fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal, decoration: _showDrafts ? TextDecoration.underline : null)),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -512,7 +521,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                     ),
 
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  _buildContentSliver(targetUserId, isOwner, activeTab),
+                  _buildContentSliver(targetUserId, isOwner, activeTab, canSeeDrafts),
                   const SliverToBoxAdapter(child: SizedBox(height: 64)),
                 ],
               ),
@@ -548,7 +557,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     );
   }
 
-  Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab) {
+  Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab, bool canSeeDrafts) {
     switch (activeTab) {
       case 'settings':
         if (_settingsSubTabIndex == 3) {
@@ -561,7 +570,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         }
         return _buildCuratorSubView(targetUserId);
       case 'maker':
-        return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts);
+      // Ensure showDrafts is only truly active if the user has permission
+        return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts && canSeeDrafts);
       case 'index':
         if (_indexSubTabIndex == 2) {
           return _UserCommentsView(userId: targetUserId);
@@ -1139,7 +1149,22 @@ class _MakerItemTile extends StatelessWidget {
                   : const Icon(Icons.image, color: Colors.black12, size: 40)),
             ),
 
-            Positioned(bottom: 0, left: 0, right: 0, child: Container(padding: const EdgeInsets.all(8), color: Colors.black54, child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis))),
+            Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.black54,
+                    child: Text(
+                        title,
+                        // UPDATED: Title font matches standard button style (size 12)
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis
+                    )
+                )
+            ),
 
             Positioned(
               top: 26, left: 4, right: 4,
@@ -1194,7 +1219,14 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(color: color.withValues(alpha: opacity), borderRadius: BorderRadius.circular(4)),
-      child: Text(label.toLowerCase(), style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+      child: Text(
+          label.toLowerCase(),
+          // UPDATED: Badge font size matches standard navigation tab style (size 12)
+          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.normal),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis
+      ),
     );
   }
 }
