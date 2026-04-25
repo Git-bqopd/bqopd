@@ -32,6 +32,7 @@ dependencies:
   url_launcher: ^6.3.0
   scrollable_positioned_list: ^0.3.8
   youtube_player_iframe: ^5.1.2
+  http: ^1.1.0
 
   # --- State Management ---
   flutter_bloc: ^8.1.5

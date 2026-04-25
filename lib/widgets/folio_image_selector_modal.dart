@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// A specialized modal that allows a user to select images from their total library.
-/// Returns a List of Map<String, dynamic> containing image metadata.
+/// Returns a [List] of [Map] objects containing image metadata.
 class FolioImageSelectorModal extends StatefulWidget {
   final String userId;
 
