@@ -190,18 +190,35 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
               itemBuilder: (context, index) {
                 final page = pages[index];
                 final num = page.pageNumber;
+                final thumbUrl = page.imageUrl; // Ingested pages have imageUrl
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   decoration: const BoxDecoration(
                       border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5))),
                   child: Row(
                     children: [
-                      Text('$num.',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      SizedBox(
+                        width: 24,
+                        child: Text('$num.',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      ),
                       const SizedBox(width: 8),
+                      // Mini Thumbnail Preview
+                      Container(
+                        width: 32,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          border: Border.all(color: Colors.black12),
+                          image: thumbUrl != null && thumbUrl.isNotEmpty
+                              ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover)
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       const Expanded(
-                          child: Text("Archival Ingested Page",
+                          child: Text("Archival Page",
                               style: TextStyle(fontSize: 11),
                               overflow: TextOverflow.ellipsis)),
                       IconButton(
@@ -210,6 +227,11 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                       IconButton(
                           icon: const Icon(Icons.arrow_downward, size: 14),
                           onPressed: num < pages.length ? () => bloc.add(ReorderPageRequested(page, 1, pages)) : null),
+                      // NEW: REMOVE PAGE BUTTON
+                      IconButton(
+                          icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+                          tooltip: "Remove from issue",
+                          onPressed: () => bloc.add(RemovePageRequested(page, pages))),
                     ],
                   ),
                 );
@@ -317,7 +339,7 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
         'height': decodedImage.height,
         'aspectRatio': ratio,
         'is5x8': is5x8,
-        'storagePath': path, // Ensure storagePath is saved
+        'storagePath': path,
       });
 
       if (!mounted) return;
@@ -370,11 +392,16 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isDirect ? "delete image completely?" : "remove from folio?"),
-        content: Text(isDirect ? "this is a direct upload. deleting it will remove it from ALL folios and your library." : "this image exists in your library. removing it here will not delete the source file."),
+        title: Text(isDirect ? "Delete Image Completely?" : "Remove from Folio?"),
+        content: Text(isDirect
+            ? "This is a direct upload. Deleting it will remove it from ALL issues and your master library forever."
+            : "This image exists in your library. Removing it here will only delete it from this specific folio."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("cancel", style: TextStyle(color: Colors.black))),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isDirect ? "delete" : "remove", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isDirect ? "DELETE FOREVER" : "REMOVE",
+                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
         ],
       ),
     );
@@ -385,7 +412,8 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.625, crossAxisSpacing: 8, mainAxisSpacing: 8),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, childAspectRatio: 0.625, crossAxisSpacing: 8, mainAxisSpacing: 8),
       itemCount: documents.length,
       itemBuilder: (context, index) {
         final doc = documents[index];
@@ -402,7 +430,13 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Container(decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.black12), image: url != null ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover) : null)),
+              Container(
+                  decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.black12),
+                      image: url != null ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover) : null)),
+              // Badge Info
               Positioned(
                 top: 26, left: 4, right: 4,
                 child: Column(
@@ -422,14 +456,39 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
                   ],
                 ),
               ),
+              // NEW: UPDATED DELETE BUTTON (X)
               Positioned(
                 top: 2, right: 2,
                 child: GestureDetector(
                   onTap: () => _handleDelete(doc.id, isDirect),
-                  child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle), child: Icon(isDirect ? Icons.delete_outline : Icons.close, size: 14, color: Colors.white)),
+                  child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1),
+                      ),
+                      child: Icon(
+                        isDirect ? Icons.delete_forever : Icons.close,
+                        size: 16,
+                        color: isDirect ? Colors.redAccent : Colors.white,
+                      )),
                 ),
               ),
-              Align(alignment: Alignment.bottomCenter, child: Container(width: double.infinity, decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8))), padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4), child: Text(title.toLowerCase(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9), maxLines: 1, overflow: TextOverflow.ellipsis))),
+              // Label
+              Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8))),
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                      child: Text(title.toLowerCase(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 9),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis))),
             ],
           ),
         );
@@ -454,13 +513,11 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.grey,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12)
-                      ),
+                          padding: const EdgeInsets.symmetric(vertical: 12)),
                       child: _isUploading
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Text("upload new image", style: TextStyle(fontSize: 12))
-                  )
-              ),
+                          ? const SizedBox(
+                          width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Text("upload new image", style: TextStyle(fontSize: 12)))),
               const SizedBox(width: 8),
               Expanded(
                   child: ElevatedButton(
@@ -468,11 +525,8 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.grey,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12)
-                      ),
-                      child: const Text("select orphan image", style: TextStyle(fontSize: 12))
-                  )
-              ),
+                          padding: const EdgeInsets.symmetric(vertical: 12)),
+                      child: const Text("select orphan image", style: TextStyle(fontSize: 12)))),
             ],
           ),
           const SizedBox(height: 24),
@@ -480,14 +534,20 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('images').orderBy('timestamp', descending: true).snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: Padding(padding: EdgeInsets.all(24.0), child: CircularProgressIndicator(color: Colors.black)));
+              if (!snapshot.hasData)
+                return const Center(
+                    child: Padding(padding: EdgeInsets.all(24.0), child: CircularProgressIndicator(color: Colors.black)));
 
               final folioDocs = snapshot.data!.docs.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return data['folioContext'] == widget.fanzineId || (data['usedInFanzines'] ?? []).contains(widget.fanzineId);
               }).toList();
 
-              if (folioDocs.isEmpty) return const Padding(padding: EdgeInsets.symmetric(vertical: 48.0), child: Text("no images in this folio yet.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)));
+              if (folioDocs.isEmpty)
+                return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48.0),
+                    child: Text("no images in this folio yet.",
+                        textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)));
 
               final uploadedDocs = folioDocs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
@@ -540,13 +600,27 @@ class _CuratorAssetEditModalState extends State<_CuratorAssetEditModal> {
   late TextEditingController _titleController;
   bool _isSavingTitle = false;
   @override
-  void initState() { super.initState(); _titleController = TextEditingController(text: widget.data['title'] ?? widget.data['fileName'] ?? ''); }
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.data['title'] ?? widget.data['fileName'] ?? '');
+  }
+
   @override
-  void dispose() { _titleController.dispose(); super.dispose(); }
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
+  }
+
   Future<void> _saveTitle() async {
     setState(() => _isSavingTitle = true);
-    try { await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'title': _titleController.text.trim()}); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('title saved!'))); } finally { if (mounted) setState(() => _isSavingTitle = false); }
+    try {
+      await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({'title': _titleController.text.trim()});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('title saved!')));
+    } finally {
+      if (mounted) setState(() => _isSavingTitle = false);
+    }
   }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -563,51 +637,57 @@ class _CuratorAssetEditModalState extends State<_CuratorAssetEditModal> {
               width: isMobile ? double.infinity : null,
               height: isMobile ? 200 : null,
               child: ClipRRect(
-                  borderRadius: isMobile ? const BorderRadius.vertical(top: Radius.circular(12)) : const BorderRadius.horizontal(left: Radius.circular(12)),
-                  child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain))
-              )
-          );
+                  borderRadius: isMobile
+                      ? const BorderRadius.vertical(top: Radius.circular(12))
+                      : const BorderRadius.horizontal(left: Radius.circular(12)),
+                  child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain))));
 
           final editWidget = Padding(
               padding: const EdgeInsets.all(24.0),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text("asset details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))
-                        ]
-                    ),
-                    const Divider(),
-                    Expanded(
-                        child: SingleChildScrollView(
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  const Text("asset name / title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                      children: [
-                                        Expanded(child: TextField(controller: _titleController, decoration: const InputDecoration(border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), isDense: true))),
-                                        const SizedBox(width: 8),
-                                        ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white), onPressed: _isSavingTitle ? null : _saveTitle, child: Text(_isSavingTitle ? "saving..." : "save name"))
-                                      ]
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(readOnly: true, controller: TextEditingController(text: url), decoration: const InputDecoration(labelText: "url", border: OutlineInputBorder(), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)), floatingLabelStyle: TextStyle(color: Colors.black87), isDense: true, filled: true, fillColor: Color(0xFFF5F5F5)), style: const TextStyle(fontFamily: 'Courier', fontSize: 11)),
-                                  const SizedBox(height: 24),
-                                  const Divider(),
-                                  const SizedBox(height: 16),
-                                  CreditsPanel(imageId: widget.imageId)
-                                ]
-                            )
-                        )
-                    )
-                  ]
-              )
-          );
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text("asset details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))
+                ]),
+                const Divider(),
+                Expanded(
+                    child: SingleChildScrollView(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          const Text("asset name / title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(
+                                child: TextField(
+                                    controller: _titleController,
+                                    decoration: const InputDecoration(
+                                        border: OutlineInputBorder(),
+                                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                                        isDense: true))),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                                onPressed: _isSavingTitle ? null : _saveTitle,
+                                child: Text(_isSavingTitle ? "saving..." : "save name"))
+                          ]),
+                          const SizedBox(height: 12),
+                          TextField(
+                              readOnly: true,
+                              controller: TextEditingController(text: url),
+                              decoration: const InputDecoration(
+                                  labelText: "url",
+                                  border: OutlineInputBorder(),
+                                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                                  floatingLabelStyle: TextStyle(color: Colors.black87),
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: Color(0xFFF5F5F5)),
+                              style: const TextStyle(fontFamily: 'Courier', fontSize: 11)),
+                          const SizedBox(height: 24),
+                          const Divider(),
+                          const SizedBox(height: 16),
+                          CreditsPanel(imageId: widget.imageId)
+                        ])))
+              ]));
 
           return isMobile ? Column(children: [imgWidget, Expanded(child: editWidget)]) : Row(children: [Expanded(child: imgWidget), Expanded(child: editWidget)]);
         }),
@@ -626,8 +706,7 @@ class _Counter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      Text("$count",
-          style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 18)),
+      Text("$count", style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 18)),
       Text(label, style: const TextStyle(fontSize: 10))
     ]);
   }
@@ -650,11 +729,17 @@ class _EntityRow extends StatelessWidget {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           String linkText = '/$handle';
           if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
-          statusWidget = Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
+          statusWidget = Text(linkText,
+              style: const TextStyle(
+                  color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
         } else {
           statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
-            TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
-            TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
+            TextButton(
+                onPressed: () => _createProfile(context, name),
+                child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
+            TextButton(
+                onPressed: () => _createAlias(context, name),
+                child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
           ]);
         }
         return Padding(
@@ -669,8 +754,13 @@ class _EntityRow extends StatelessWidget {
   }
 
   Future<void> _createProfile(BuildContext context, String name) async {
-    String first = name; String last = "";
-    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    String first = name;
+    String last = "";
+    if (name.contains(' ')) {
+      final parts = name.split(' ');
+      first = parts.first;
+      last = parts.sublist(1).join(' ');
+    }
     try {
       await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
       if (!context.mounted) return;
@@ -682,10 +772,22 @@ class _EntityRow extends StatelessWidget {
   }
 
   Future<void> _createAlias(BuildContext context, String name) async {
-    final target = await showDialog<String>(context: context, builder: (c) {
-      final controller = TextEditingController();
-      return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
-    });
+    final target = await showDialog<String>(
+        context: context,
+        builder: (c) {
+          final controller = TextEditingController();
+          return AlertDialog(
+              title: Text("Create Alias for '$name'"),
+              content: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text("Enter EXISTING username (target):"),
+                TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))
+              ]),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+                TextButton(
+                    onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))
+              ]);
+        });
     if (target == null || target.isEmpty) return;
     try {
       await createAlias(aliasHandle: name, targetHandle: target);

@@ -118,7 +118,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
     final String imageId = widget.pageData['imageId'] ?? '';
     final String? templateId = widget.pageData['templateId'];
 
-    // STRIPPED BOTTLENECK: Use the cached URLs directly from pageData
+    // --- STRIPPED BOTTLENECK: OPTIMIZED FOR WEBP THUMBNAILS ---
     // Prioritizing the 800px listUrl -> then falling back to the original imageUrl
     final String? optimalDisplayUrl = widget.pageData['listUrl'] ?? widget.pageData['imageUrl'];
 
