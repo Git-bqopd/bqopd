@@ -190,7 +190,9 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
               itemBuilder: (context, index) {
                 final page = pages[index];
                 final num = page.pageNumber;
-                final thumbUrl = page.imageUrl; // Ingested pages have imageUrl
+
+                // PRIORITIZE WebP Grid (450px) -> Original imageUrl
+                final thumbUrl = page.gridUrl ?? page.imageUrl;
 
                 return Container(
                   padding: const EdgeInsets.symmetric(vertical: 4),
@@ -215,6 +217,9 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                               ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover)
                               : null,
                         ),
+                        child: (thumbUrl == null || thumbUrl.isEmpty)
+                            ? const Center(child: Icon(Icons.image_not_supported, size: 10, color: Colors.grey))
+                            : null,
                       ),
                       const SizedBox(width: 12),
                       const Expanded(
@@ -227,7 +232,6 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                       IconButton(
                           icon: const Icon(Icons.arrow_downward, size: 14),
                           onPressed: num < pages.length ? () => bloc.add(ReorderPageRequested(page, 1, pages)) : null),
-                      // NEW: REMOVE PAGE BUTTON
                       IconButton(
                           icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
                           tooltip: "Remove from issue",
@@ -418,7 +422,10 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
       itemBuilder: (context, index) {
         final doc = documents[index];
         final data = doc.data() as Map<String, dynamic>;
+
+        // PRIORITIZE WebP Grid (450px)
         final url = data['gridUrl'] ?? data['fileUrl'];
+
         final title = data['title'] ?? data['fileName'] ?? 'untitled';
         final badge = _getBadgeLabel(data);
         final width = data['width'];
@@ -456,7 +463,6 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
                   ],
                 ),
               ),
-              // NEW: UPDATED DELETE BUTTON (X)
               Positioned(
                 top: 2, right: 2,
                 child: GestureDetector(

@@ -485,7 +485,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                 onTap: () => setState(() => _showDrafts = false),
                                 child: Text("published", style: TextStyle(color: !_showDrafts ? Colors.black : Colors.grey, fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal, decoration: !_showDrafts ? TextDecoration.underline : null)),
                               ),
-                              // UPDATED GATING: Now allows Admin and Moderators to see the tab
                               if (canSeeDrafts) ...[
                                 const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
                                 GestureDetector(
@@ -568,9 +567,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         if (_curatorSubTabIndex == 2) {
           return _buildEntitiesSubView();
         }
-        return _buildCuratorSubView(targetUserId);
+        return _buildCuratorSubView(targetUserId, canSeeDrafts);
       case 'maker':
-      // Ensure showDrafts is only truly active if the user has permission
         return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts && canSeeDrafts);
       case 'index':
         if (_indexSubTabIndex == 2) {
@@ -584,7 +582,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     }
   }
 
-  Widget _buildCuratorSubView(String targetUserId) {
+  Widget _buildCuratorSubView(String targetUserId, bool canEdit) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
       builder: (context, snap) {
@@ -602,7 +600,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           return (!hasSource || isLive) && (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
         }).toList();
         filtered.sort((a, b) => ((b.data() as Map)['creationDate'] as Timestamp? ?? Timestamp.now()).compareTo((a.data() as Map)['creationDate'] as Timestamp? ?? Timestamp.now()));
-        return _buildGrid(filtered, true);
+        return _buildGrid(filtered, true, isDraftView: canEdit);
       },
     );
   }
@@ -743,12 +741,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     }
   }
 
-  Widget _buildGrid(List<dynamic> docs, bool edit) {
+  Widget _buildGrid(List<dynamic> docs, bool edit, {bool isDraftView = false}) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
-        delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: docs[index], shouldEdit: edit), childCount: docs.length),
+        delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: docs[index], shouldEdit: edit, isDraftView: isDraftView), childCount: docs.length),
       ),
     );
   }
@@ -1063,13 +1061,24 @@ class _MakerItemTile extends StatelessWidget {
     }
   }
 
-  /// Implements the priority list for Folio Thumbnails
+  /// Implements the priority list for Folio Thumbnails, preferring optimized WebP Grid images.
   Future<String?> _getFolioThumbnail(String fanzineId) async {
     final db = FirebaseFirestore.instance;
 
     try {
-      // Priority 1 & 2: First image on the order page (lowest pageNumber > 0)
-      // Note: If 'cover' is selected in the UI, it occupies pageNumber 1.
+      // STRATEGY 1: Check specifically for Page 1 (The Cover)
+      final coverSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
+          .where('pageNumber', isEqualTo: 1)
+          .limit(1)
+          .get();
+
+      if (coverSnap.docs.isNotEmpty) {
+        final d = coverSnap.docs.first.data();
+        final url = d['gridUrl'] ?? d['thumbnailUrl'] ?? d['imageUrl'];
+        if (url != null && url.toString().isNotEmpty) return url;
+      }
+
+      // STRATEGY 2: Lowest numbered page > 0
       final pagesSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
           .where('pageNumber', isGreaterThan: 0)
           .orderBy('pageNumber')
@@ -1078,14 +1087,23 @@ class _MakerItemTile extends StatelessWidget {
 
       if (pagesSnap.docs.isNotEmpty) {
         final pageData = pagesSnap.docs.first.data();
+        // Priority: WebP Grid (450px) -> Legacy Thumb -> Original
         final url = pageData['gridUrl'] ?? pageData['thumbnailUrl'] ?? pageData['imageUrl'];
-        if (url != null && url.toString().isNotEmpty) {
-          return url;
-        }
+        if (url != null && url.toString().isNotEmpty) return url;
       }
 
-      // Priority 3: Any other image put on the upload page (fallback)
-      // Fetching without orderBy to prevent composite index requirement errors
+      // STRATEGY 3: First page found (Unordered fallback for draft states)
+      final fallbackPageSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
+          .limit(1)
+          .get();
+
+      if (fallbackPageSnap.docs.isNotEmpty) {
+        final d = fallbackPageSnap.docs.first.data();
+        final url = d['gridUrl'] ?? d['thumbnailUrl'] ?? d['imageUrl'];
+        if (url != null && url.toString().isNotEmpty) return url;
+      }
+
+      // STRATEGY 4: Search Library for items with this Folio Context
       final imagesSnap = await db.collection('images')
           .where('folioContext', isEqualTo: fanzineId)
           .get();
@@ -1105,7 +1123,7 @@ class _MakerItemTile extends StatelessWidget {
       debugPrint("Error fetching folio thumbnail: $e");
     }
 
-    return null; // No images exist for this folio yet
+    return null;
   }
 
   @override
@@ -1114,6 +1132,8 @@ class _MakerItemTile extends StatelessWidget {
     final isFanzine = doc.reference.path.startsWith('fanzines/');
     final title = data['title'] ?? 'Untitled';
     final fileUrl = data['fileUrl'];
+
+    // For single images, prioritize the WebP grid thumbnail
     final displayUrl = data['gridUrl'] ?? data['fileUrl'];
 
     return GestureDetector(
@@ -1158,7 +1178,6 @@ class _MakerItemTile extends StatelessWidget {
                     color: Colors.black54,
                     child: Text(
                         title,
-                        // UPDATED: Title font matches standard button style (size 12)
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis
@@ -1221,7 +1240,6 @@ class _Badge extends StatelessWidget {
       decoration: BoxDecoration(color: color.withValues(alpha: opacity), borderRadius: BorderRadius.circular(4)),
       child: Text(
           label.toLowerCase(),
-          // UPDATED: Badge font size matches standard navigation tab style (size 12)
           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.normal),
           textAlign: TextAlign.center,
           maxLines: 1,
