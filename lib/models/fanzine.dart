@@ -2,14 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
 enum FanzineType { ingested, folio, calendar }
-enum FanzineStatus { draft, working, live }
 
 /// Canonical data model for the top-level Fanzine document.
 class Fanzine extends Equatable {
   final String id;
   final String title;
   final FanzineType type;
-  final FanzineStatus status;
+  final bool isLive; // REPLACED: FanzineStatus status
   final String processingStatus;
 
   /// The primary creator/uploader
@@ -35,7 +34,7 @@ class Fanzine extends Equatable {
     required this.id,
     required this.title,
     required this.type,
-    required this.status,
+    required this.isLive,
     required this.processingStatus,
     required this.ownerId,
     this.editors = const [],
@@ -59,10 +58,6 @@ class Fanzine extends Equatable {
     if (data['type'] == 'folio') parsedType = FanzineType.folio;
     if (data['type'] == 'calendar') parsedType = FanzineType.calendar;
 
-    FanzineStatus parsedStatus = FanzineStatus.draft;
-    if (data['status'] == 'working') parsedStatus = FanzineStatus.working;
-    if (data['status'] == 'live') parsedStatus = FanzineStatus.live;
-
     final String owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
     final List<String> editorList = List<String>.from(data['editors'] ?? []);
 
@@ -70,7 +65,7 @@ class Fanzine extends Equatable {
       id: doc.id,
       title: data['title'] ?? 'Untitled',
       type: parsedType,
-      status: parsedStatus,
+      isLive: data['isLive'] ?? false,
       processingStatus: data['processingStatus'] ?? 'idle',
       ownerId: owner,
       editors: editorList,
@@ -91,5 +86,5 @@ class Fanzine extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, title, type, status, processingStatus, ownerId, editors, twoPage, hasCover, shortCode, sourceFile, draftEntities, masterCreators, masterIndicia, indiciaPageId, startMonth, startYear, isSoftPublished];
+  List<Object?> get props => [id, title, type, isLive, processingStatus, ownerId, editors, twoPage, hasCover, shortCode, sourceFile, draftEntities, masterCreators, masterIndicia, indiciaPageId, startMonth, startYear, isSoftPublished];
 }

@@ -27,13 +27,11 @@ class FanzineCuratorWidget extends StatefulWidget {
 
 class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _shortcodeController = TextEditingController();
   String? _lastSyncedTitle;
 
   @override
   void dispose() {
     _titleController.dispose();
-    _shortcodeController.dispose();
     super.dispose();
   }
 
@@ -82,26 +80,15 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                 helperText: "Press enter to save"),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-                child: TextField(
-                    controller: _shortcodeController,
-                    decoration: const InputDecoration(
-                      hintText: 'paste image shortcode',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                    ))),
-            const SizedBox(width: 8),
-            ElevatedButton(
-                onPressed: () {
-                  bloc.add(AddPageRequested(_shortcodeController.text));
-                  _shortcodeController.clear();
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey, foregroundColor: Colors.white),
-                child: const Text('add page')),
-          ]),
+          const SizedBox(height: 20),
+          const Text("SHORTCODE",
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 4),
+          SelectableText(
+            fanzine.shortCode ?? 'pending...',
+            style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo, letterSpacing: 1.1),
+          ),
           const SizedBox(height: 20),
           const Text("COLLABORATORS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
           const SizedBox(height: 8),
@@ -129,24 +116,11 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
           ]),
           const Divider(height: 24),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('STATUS',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-              Text(fanzine.status.name.toUpperCase(),
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: fanzine.status == FanzineStatus.live ? Colors.green : Colors.orange)),
-            ]),
-            Row(children: [
-              TextButton(
-                  onPressed: () => bloc.add(SoftPublishRequested()),
-                  child: const Text('Soft Publish', style: TextStyle(color: Colors.black))),
-              Switch(
-                  value: fanzine.status == FanzineStatus.live,
-                  activeColor: Colors.green,
-                  onChanged: (_) => bloc.add(ToggleLiveStatusRequested(fanzine.status.name))),
-              const Text('Live', style: TextStyle(fontSize: 12)),
-            ])
+            const Text('Live on site (available via shortcode)', style: TextStyle(fontSize: 12)),
+            Switch(
+                value: fanzine.isLive,
+                activeColor: Colors.green,
+                onChanged: (val) => bloc.add(ToggleIsLiveRequested(val))),
           ]),
           const SizedBox(height: 16),
           ElevatedButton(
@@ -191,7 +165,6 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                 final page = pages[index];
                 final num = page.pageNumber;
 
-                // IMPROVED: Robust URL priority checking for PDF ingest scenarios
                 final String? thumbUrl = page.gridUrl ?? page.listUrl ?? page.imageUrl;
                 final bool isPending = thumbUrl == null || thumbUrl.isEmpty;
 
@@ -207,7 +180,6 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                       ),
                       const SizedBox(width: 8),
-                      // Mini Thumbnail Preview with Processing State
                       Container(
                         width: 32,
                         height: 48,
@@ -424,7 +396,6 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
         final doc = documents[index];
         final data = doc.data() as Map<String, dynamic>;
 
-        // IMPROVED: Multi-fallback priority logic for the curator asset grid
         final String? url = data['gridUrl'] ?? data['listUrl'] ?? data['fileUrl'];
 
         final title = data['title'] ?? data['fileName'] ?? 'untitled';
@@ -448,7 +419,6 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
               if (url == null || url.isEmpty)
                 const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey)),
 
-              // Badge Info
               Positioned(
                 top: 26, left: 4, right: 4,
                 child: Column(
@@ -486,7 +456,6 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
                       )),
                 ),
               ),
-              // Label
               Align(
                   alignment: Alignment.bottomCenter,
                   child: Container(

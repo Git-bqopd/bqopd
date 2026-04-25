@@ -172,7 +172,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'ownerId': userId,
         'editorId': userId,
         'editors': [],
-        'status': 'working',
+        'isLive': false,
         'processingStatus': 'complete',
         'creationDate': FieldValue.serverTimestamp(),
         'type': 'folio',
@@ -200,7 +200,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'ownerId': userId,
         'editorId': userId,
         'editors': [],
-        'status': 'working',
+        'isLive': false,
         'processingStatus': 'idle',
         'creationDate': FieldValue.serverTimestamp(),
         'type': 'ingested',
@@ -228,7 +228,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'ownerId': userId,
         'editorId': userId,
         'editors': [],
-        'status': 'working',
+        'isLive': false,
         'processingStatus': 'complete',
         'creationDate': FieldValue.serverTimestamp(),
         'type': 'calendar',
@@ -416,13 +416,21 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  _buildSubTab("shortcodes", 0, type: 'settings'),
-                                  const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                                  _buildSubTab("managed profiles", 1, type: 'settings'),
-                                  const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                                  _buildSubTab("permissions", 2, type: 'settings'),
-                                  const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                                  _buildSubTab("social buttons", 3, type: 'settings'),
+                                  // FIXED: Sub-tabs visibility gating based on Admin role or Ownership
+                                  if (userProvider.isAdmin) ...[
+                                    _buildSubTab("shortcodes", 0, type: 'settings'),
+                                    const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                  ],
+                                  if (isOwner || userProvider.isAdmin) ...[
+                                    _buildSubTab("managed profiles", 1, type: 'settings'),
+                                    const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                  ],
+                                  if (userProvider.isAdmin) ...[
+                                    _buildSubTab("permissions", 2, type: 'settings'),
+                                    const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                  ],
+                                  if (isOwner)
+                                    _buildSubTab("social buttons", 3, type: 'settings'),
                                 ],
                               ),
                             ),
@@ -591,13 +599,18 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         }
         final filtered = snap.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
+
+          final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
+          final bool isTargetUserItem = (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
+          if (!isTargetUserItem) return false;
+
           final hasSource = data.containsKey('sourceFile');
-          final isLive = data['status'] == 'live';
+          final isLive = data['isLive'] ?? false;
+
           if (_curatorSubTabIndex == 0) {
             return hasSource && !isLive;
           }
-          final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
-          return (!hasSource || isLive) && (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
+          return (!hasSource || isLive);
         }).toList();
         filtered.sort((a, b) => ((b.data() as Map)['creationDate'] as Timestamp? ?? Timestamp.now()).compareTo((a.data() as Map)['creationDate'] as Timestamp? ?? Timestamp.now()));
         return _buildGrid(filtered, true, isDraftView: canEdit);
@@ -621,6 +634,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   }
 
   Widget _buildSettingsSubView(String targetUserId) {
+    final userProvider = context.read<UserProvider>();
+
     if (_settingsSubTabIndex == 0) {
       return SliverToBoxAdapter(
         child: Padding(
@@ -662,7 +677,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             );
           }
       );
-    } else {
+    } else if (_settingsSubTabIndex == 2) {
+      // FIXED: Implement Permissions List with Segmented Buttons logic (only for Admins)
+      if (!userProvider.isAdmin) {
+        return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("Access restricted to Administrators."))));
+      }
+
       return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('Users').snapshots(),
           builder: (context, snapshot) {
@@ -707,21 +727,38 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                   ],
                                   selected: selectedRolesSet,
                                   onSelectionChanged: (newSelection) async {
+                                    // SECURITY: Verify viewer is still an admin before batch write
+                                    if (!context.read<UserProvider>().isAdmin) return;
+
                                     final rolesList = newSelection.toList();
                                     final bool isCurator = newSelection.contains('curator');
                                     final bool isAdmin = newSelection.contains('admin');
+                                    final bool isModerator = newSelection.contains('moderator');
+
                                     String legacyRole = 'user';
-                                    if (newSelection.contains('admin')) {
+                                    if (isAdmin) {
                                       legacyRole = 'admin';
-                                    } else if (newSelection.contains('moderator')) {
+                                    } else if (isModerator) {
                                       legacyRole = 'moderator';
-                                    } else if (newSelection.contains('curator')) {
+                                    } else if (isCurator) {
                                       legacyRole = 'curator';
                                     }
 
                                     final batch = FirebaseFirestore.instance.batch();
-                                    batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {'roles': rolesList, 'role': legacyRole, 'isCurator': isCurator || isAdmin || newSelection.contains('moderator')});
-                                    batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {'isCurator': isCurator || isAdmin || newSelection.contains('moderator'), 'isAdmin': isAdmin});
+
+                                    // 1. Update Private User Doc
+                                    batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {
+                                      'roles': rolesList,
+                                      'role': legacyRole,
+                                      'isCurator': isCurator || isAdmin || isModerator
+                                    });
+
+                                    // 2. Update Public Profile Doc
+                                    batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {
+                                      'isCurator': isCurator || isAdmin || isModerator,
+                                      'isAdmin': isAdmin
+                                    });
+
                                     await batch.commit();
                                   },
                                   multiSelectionEnabled: true,
@@ -738,6 +775,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             );
           }
       );
+    } else {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
   }
 
@@ -753,7 +792,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
   Widget _buildEntitiesSubView() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('fanzines').where('status', whereIn: ['draft', 'working']).snapshots(),
+      stream: FirebaseFirestore.instance.collection('fanzines').where('isLive', isEqualTo: false).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
@@ -873,7 +912,7 @@ class _MakerCombinedView extends StatelessWidget {
       if (owner != targetUserId) {
         continue;
       }
-      final isLive = data['status'] == 'live' || data['status'] == 'published';
+      final isLive = data['isLive'] ?? false;
       if (showDrafts ? !isLive : isLive) {
         combined.add(doc);
       }

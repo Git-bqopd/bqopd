@@ -146,7 +146,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    // FIXED: Using isCurator instead of isEditor
     if (!userProvider.isCurator) {
       return const Scaffold(body: Center(child: Text("Access Denied.")));
     }
@@ -227,9 +226,11 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
 
   Widget _buildDraftsList() {
     return StreamBuilder<QuerySnapshot>(
+      // UPDATED: No longer checking status enum.
+      // We show all works that are not yet Live.
       stream: FirebaseFirestore.instance
           .collection('fanzines')
-          .where('status', whereIn: ['draft', 'working'])
+          .where('isLive', isEqualTo: false)
           .orderBy('creationDate', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
@@ -279,7 +280,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
         final docs = snapshot.data!.docs;
         if (docs.isEmpty) {
           return const Center(
-              child: Text("No drafts to review. Upload a PDF to start."));
+              child: Text("No items to review. All works are currently Live."));
         }
 
         return SingleChildScrollView(
@@ -288,7 +289,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
             columnSpacing: 24,
             columns: const [
               DataColumn(label: Text('Fanzine Title')),
-              DataColumn(label: Text('Status')),
+              DataColumn(label: Text('Pipeline')),
               DataColumn(label: Text('Errors (OCR/Ent)')),
               DataColumn(label: Text('Actions')),
             ],
@@ -357,7 +358,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('fanzines')
-          .where('status', whereIn: ['draft', 'working']).snapshots(),
+          .where('isLive', isEqualTo: false).snapshots(),
       builder: (context, fanzineSnapshot) {
         if (fanzineSnapshot.hasError) {
           return Center(child: Text("Error: ${fanzineSnapshot.error}"));
@@ -377,7 +378,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
 
         if (entityCounts.isEmpty) {
           return const Center(
-              child: Text("No entities found in current drafts."));
+              child: Text("No entities found in current reviews."));
         }
 
         final sortedNames = entityCounts.keys.toList()

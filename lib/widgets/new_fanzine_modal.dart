@@ -67,12 +67,13 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
         await newFanzineRef.set({
           'title': title,
           'editorId': editorId,
-          'status': 'draft',
+          'ownerId': editorId,
+          'isLive': false, // REPLACED status: 'draft'
           'processingStatus': 'idle',
           'creationDate': FieldValue.serverTimestamp(),
           'shortCode': shortCode,
           'shortCodeKey': shortCode.toUpperCase(),
-          'twoPage': _twoPageView, // UPDATED: Use checkbox value
+          'twoPage': _twoPageView,
           'mentionedUsers': [],
           'draftEntities': [],
           'isSoftPublished': false,
@@ -88,7 +89,6 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
         throw Exception('Failed to generate a unique shortcode.');
       }
     } catch (e) {
-      // Changed print to debugPrint to address lint warning
       debugPrint("Error creating fanzine: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

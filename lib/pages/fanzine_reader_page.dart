@@ -3,9 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../services/view_service.dart';
+import '../services/user_provider.dart';
 import '../widgets/fanzine_widget.dart';
 import '../widgets/fanzine_layout.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
@@ -40,6 +42,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   final ViewService _viewService = ViewService();
 
   bool _isLoading = true;
+  bool _isAccessDenied = false;
   String? _resolvedFanzineId;
   String? _resolvedShortCode;
   String? _resolvedType;
@@ -86,7 +89,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   Future<void> _initData() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _isAccessDenied = false;
+    });
 
     String? targetShortCode = widget.shortCode;
     String? targetId = widget.fanzineId;
@@ -138,7 +144,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   /// Sets up real-time Firestore listeners for fanzine metadata and pages.
   void _setupListeners(String fanzineId) {
-    // 1. Listen for Fanzine Metadata changes
     _fanzineSubscription?.cancel();
     _fanzineSubscription = FirebaseFirestore.instance
         .collection('fanzines')
@@ -148,7 +153,29 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       if (!doc.exists || !mounted) return;
       final fanzineData = doc.data() ?? {};
 
+      // --- SECURITY CHECK: isLive logic for Public vs Staff ---
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final bool isLive = fanzineData['isLive'] ?? false;
+      final String ownerId = fanzineData['ownerId'] ?? fanzineData['editorId'] ?? '';
+      final List<String> editors = List<String>.from(fanzineData['editors'] ?? []);
+      final String? currentUid = userProvider.currentUserId;
+
+      // Internal Staff (Admin/Mod/Curator) or Creator (Owner/Editor) can always see it.
+      final bool isInternalStaff = userProvider.isModerator || userProvider.isAdmin || userProvider.isCurator;
+      final bool isAuthorizedCreator = currentUid != null && (currentUid == ownerId || editors.contains(currentUid));
+
+      final bool hasPermission = isLive || isInternalStaff || isAuthorizedCreator;
+
+      if (!hasPermission) {
+        setState(() {
+          _isAccessDenied = true;
+          _isLoading = false;
+        });
+        return;
+      }
+
       setState(() {
+        _isAccessDenied = false;
         _resolvedType = fanzineData['type'] ?? 'fanzine';
         _fanzineTitle = fanzineData['title'] ?? 'Untitled';
 
@@ -156,29 +183,24 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         bool newHasCover = fanzineData['hasCover'] ?? true;
         bool prefChanged = !_isLoading && (_twoPagePreference != newTwoPagePref || _hasCover != newHasCover);
 
-        // Auto-switch view modes on initial load OR if the toggle was flipped
         if (_isLoading || prefChanged) {
           _twoPagePreference = newTwoPagePref;
           _hasCover = newHasCover;
 
           bool isDesktop = MediaQuery.of(context).size.width > 900;
 
-          // Preserve deep-link behavior on initial load
           if (_isLoading && _targetIndex > 0) {
-            // Keep existing deep-link view state
+            // Keep deep-link state
           } else {
             if (_twoPagePreference) {
               if (_isEditingMode && isDesktop) {
-                // Maker View + Desktop: Show both side-by-side
                 _showGrid = true;
                 _showList = true;
               } else {
-                // Reader View or Mobile: Default to Grid
                 _showGrid = true;
                 _showList = false;
               }
             } else {
-              // Two-page off: Default to List
               _showGrid = false;
               _showList = true;
             }
@@ -187,7 +209,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       });
     });
 
-    // 2. Listen for Page subcollection changes
     _pagesSubscription?.cancel();
     _pagesSubscription = FirebaseFirestore.instance
         .collection('fanzines')
@@ -369,16 +390,39 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_isAccessDenied) {
+      return Scaffold(
+        backgroundColor: Colors.grey[200],
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text("Private Work", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text("This content has not been published yet.", style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => context.go('/'),
+                child: const Text("Go Home"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final bool isDesktop = constraints.maxWidth > 900;
-
-            if (_isLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
 
             if (!isDesktop) {
               if (!_showList) {

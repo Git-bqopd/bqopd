@@ -73,6 +73,42 @@ def generate_simple_shortcode():
     import string
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
 
+def ensure_shortcode(db, collection_name, document_id, content_type):
+    """Ensures a document has a unique shortcode in the 'shortcodes' registry."""
+    doc_ref = db.collection(collection_name).document(document_id)
+    doc_snapshot = doc_ref.get()
+
+    if not doc_snapshot.exists:
+        return None
+
+    data = doc_snapshot.to_dict()
+    if data.get('shortCode'):
+        return data.get('shortCode')
+
+    # Generate and verify uniqueness against the registry
+    is_unique = False
+    short_code = ""
+    while not is_unique:
+        short_code = generate_simple_shortcode()
+        # Check 'shortcodes' collection (UPPERCASE keys)
+        sc_ref = db.collection('shortcodes').document(short_code.upper())
+        if not sc_ref.get().exists:
+            is_unique = True
+            # Register it in the master lookup
+            sc_ref.set({
+                'type': content_type,
+                'contentId': document_id,
+                'displayCode': short_code,
+                'createdAt': firestore.SERVER_TIMESTAMP
+            })
+
+    # Update the original document with the assigned code
+    doc_ref.update({
+        'shortCode': short_code,
+        'shortCodeKey': short_code.upper()
+    })
+    return short_code
+
 # --------------------------------------------------------------------------------
 # TRAFFIC CONTROL MANAGER
 # --------------------------------------------------------------------------------
@@ -83,6 +119,12 @@ def fanzine_traffic_manager(event: firestore_fn.Event[firestore_fn.Change[firest
     fanzine_id = event.params['fanzineId']
     db = firestore.client()
     fref = db.collection('fanzines').document(fanzine_id)
+
+    # 1. Automatic Shortcode Catch-all (Fixes existing drafts missing codes)
+    if not data.get('shortCode'):
+        ensure_shortcode(db, 'fanzines', fanzine_id, 'fanzine')
+        return # The update will re-trigger the manager
+
     status = data.get('processingStatus', 'idle')
 
     if status == 'needs_ingest':
@@ -133,7 +175,6 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
 
         transcription = response.full_text_annotation.text if response.full_text_annotation else "[No text detected]"
 
-        # PDF Ingest now registers images beforehand, but we keep this for legacy/safety
         if not image_id:
             new_img_ref = db.collection('images').document()
             image_id = new_img_ref.id
@@ -257,7 +298,6 @@ def generate_thumbnails(event: firestore_fn.Event[firestore_fn.Change[firestore_
             new_blob = bucket.blob(dest_path)
             new_blob.upload_from_file(out_io, content_type="image/webp")
 
-            # Use metadata and token pattern compatible with standard web components
             new_blob.metadata = {"firebaseStorageDownloadTokens": image_id}
             new_blob.patch()
 
@@ -318,12 +358,10 @@ def _do_pdf_ingest(fanzine_id, file_path, uploader_id):
             dest = f"fanzines/{fanzine_id}/pages/page_{page_num:03d}.jpg"
             bucket.blob(dest).upload_from_string(img_bytes, content_type="image/jpeg")
 
-            # --- KEY CHANGE: REGISTER IMAGE IMMEDIATELY ---
-            # This triggers the generate_thumbnails background function
             new_img_ref = db.collection('images').document()
             batch.set(new_img_ref, {
                 'storagePath': dest,
-                'fileUrl': '', # Fallback only
+                'fileUrl': '',
                 'shortCode': generate_simple_shortcode(),
                 'status': 'approved',
                 'timestamp': firestore.SERVER_TIMESTAMP,
@@ -332,7 +370,6 @@ def _do_pdf_ingest(fanzine_id, file_path, uploader_id):
                 'usedInFanzines': [fanzine_id]
             })
 
-            # Create the Fanzine Page Document
             batch.set(fref.collection('pages').document(), {
                 'pageNumber': page_num,
                 'storagePath': dest,
@@ -341,7 +378,7 @@ def _do_pdf_ingest(fanzine_id, file_path, uploader_id):
                 'uploadedAt': firestore.SERVER_TIMESTAMP
             })
 
-            batch_count += 2 # We are adding two documents per loop
+            batch_count += 2
             if batch_count >= 400:
                 batch.commit()
                 batch = db.batch()
@@ -396,8 +433,7 @@ def _do_aggregation(fanzine_id):
             'draftEntities': list(all_ents),
             'masterCreators': creators,
             'masterIndicia': "\n\n".join(indicia),
-            'processingStatus': 'complete',
-            'status': 'working'
+            'processingStatus': 'complete'
         })
     except Exception as e:
         fref.update({'processingStatus': 'error', 'error_agg': str(e)})
@@ -407,11 +443,17 @@ def handle_pdf_upload(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]
     file_path = event.data.name
     if not file_path.endswith('.pdf') or 'uploads/raw_pdfs/' not in file_path: return
     db = firestore.client()
-    db.collection('fanzines').add({
+
+    # 1. Create the base document first
+    new_doc_ref = db.collection('fanzines').document()
+    new_doc_ref.set({
         'title': os.path.basename(file_path).replace('.pdf', '').replace('_', ' ').title(),
         'sourceFile': file_path,
         'processingStatus': 'needs_ingest',
-        'status': 'draft',
+        'isLive': False, # REPLACED status: 'draft'
         'creationDate': firestore.SERVER_TIMESTAMP,
         'uploaderId': event.data.metadata.get('uploaderId') if event.data.metadata else 'unknown'
     })
+
+    # 2. Assign the shortcode immediately
+    ensure_shortcode(db, 'fanzines', new_doc_ref.id, 'fanzine')

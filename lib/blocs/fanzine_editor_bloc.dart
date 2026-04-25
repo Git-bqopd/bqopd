@@ -102,9 +102,9 @@ class ReorderPageRequested extends FanzineEditorEvent {
   ReorderPageRequested(this.page, this.delta, this.allPages);
 }
 
-class ToggleLiveStatusRequested extends FanzineEditorEvent {
-  final String currentStatus;
-  ToggleLiveStatusRequested(this.currentStatus);
+class ToggleIsLiveRequested extends FanzineEditorEvent {
+  final bool isLive;
+  ToggleIsLiveRequested(this.isLive);
 }
 
 class SoftPublishRequested extends FanzineEditorEvent {}
@@ -182,7 +182,7 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     on<RemovePageRequested>(_onRemovePage);
     on<DeleteAssetRequested>(_onDeleteAsset);
     on<ReorderPageRequested>(_onReorderPage);
-    on<ToggleLiveStatusRequested>(_onToggleStatus);
+    on<ToggleIsLiveRequested>(_onToggleIsLive);
     on<SoftPublishRequested>(_onSoftPublish);
   }
 
@@ -358,10 +358,9 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onToggleStatus(ToggleLiveStatusRequested event, Emitter<FanzineEditorState> emit) async {
-    final newStatus = event.currentStatus == 'live' ? 'working' : 'live';
+  Future<void> _onToggleIsLive(ToggleIsLiveRequested event, Emitter<FanzineEditorState> emit) async {
     try {
-      await _repository.updateFanzine(fanzineId, {'status': newStatus});
+      await _repository.updateFanzine(fanzineId, {'isLive': event.isLive});
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     }
