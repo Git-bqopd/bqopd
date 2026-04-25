@@ -214,8 +214,8 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                         decoration: BoxDecoration(
                           color: Colors.grey[200],
                           border: Border.all(color: Colors.black12),
-                          image: !isPending
-                              ? DecorationImage(image: NetworkImage(thumbUrl!), fit: BoxFit.cover)
+                          image: (thumbUrl != null && thumbUrl.isNotEmpty)
+                              ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover)
                               : null,
                         ),
                         child: isPending
@@ -426,7 +426,6 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
 
         // IMPROVED: Multi-fallback priority logic for the curator asset grid
         final String? url = data['gridUrl'] ?? data['listUrl'] ?? data['fileUrl'];
-        final bool isPending = url == null || url.isEmpty;
 
         final title = data['title'] ?? data['fileName'] ?? 'untitled';
         final badge = _getBadgeLabel(data);
@@ -444,9 +443,9 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
                       color: Colors.grey[200],
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.black12),
-                      image: !isPending ? DecorationImage(image: NetworkImage(url!), fit: BoxFit.cover) : null)),
+                      image: (url != null && url.isNotEmpty) ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover) : null)),
 
-              if (isPending)
+              if (url == null || url.isEmpty)
                 const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey)),
 
               // Badge Info
