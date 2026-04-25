@@ -191,8 +191,9 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                 final page = pages[index];
                 final num = page.pageNumber;
 
-                // PRIORITIZE WebP Grid (450px) -> Original imageUrl
-                final thumbUrl = page.gridUrl ?? page.imageUrl;
+                // IMPROVED: Robust URL priority checking for PDF ingest scenarios
+                final String? thumbUrl = page.gridUrl ?? page.listUrl ?? page.imageUrl;
+                final bool isPending = thumbUrl == null || thumbUrl.isEmpty;
 
                 return Container(
                   padding: const EdgeInsets.symmetric(vertical: 4),
@@ -206,25 +207,25 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                       ),
                       const SizedBox(width: 8),
-                      // Mini Thumbnail Preview
+                      // Mini Thumbnail Preview with Processing State
                       Container(
                         width: 32,
                         height: 48,
                         decoration: BoxDecoration(
                           color: Colors.grey[200],
                           border: Border.all(color: Colors.black12),
-                          image: thumbUrl != null && thumbUrl.isNotEmpty
-                              ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover)
+                          image: !isPending
+                              ? DecorationImage(image: NetworkImage(thumbUrl!), fit: BoxFit.cover)
                               : null,
                         ),
-                        child: (thumbUrl == null || thumbUrl.isEmpty)
-                            ? const Center(child: Icon(Icons.image_not_supported, size: 10, color: Colors.grey))
+                        child: isPending
+                            ? const Center(child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.grey)))
                             : null,
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
-                          child: Text("Archival Page",
-                              style: TextStyle(fontSize: 11),
+                      Expanded(
+                          child: Text(isPending ? "Processing Assets..." : "Archival Page",
+                              style: TextStyle(fontSize: 11, color: isPending ? Colors.grey : Colors.black),
                               overflow: TextOverflow.ellipsis)),
                       IconButton(
                           icon: const Icon(Icons.arrow_upward, size: 14),
@@ -423,8 +424,9 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
         final doc = documents[index];
         final data = doc.data() as Map<String, dynamic>;
 
-        // PRIORITIZE WebP Grid (450px)
-        final url = data['gridUrl'] ?? data['fileUrl'];
+        // IMPROVED: Multi-fallback priority logic for the curator asset grid
+        final String? url = data['gridUrl'] ?? data['listUrl'] ?? data['fileUrl'];
+        final bool isPending = url == null || url.isEmpty;
 
         final title = data['title'] ?? data['fileName'] ?? 'untitled';
         final badge = _getBadgeLabel(data);
@@ -442,7 +444,11 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
                       color: Colors.grey[200],
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.black12),
-                      image: url != null ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover) : null)),
+                      image: !isPending ? DecorationImage(image: NetworkImage(url!), fit: BoxFit.cover) : null)),
+
+              if (isPending)
+                const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey)),
+
               // Badge Info
               Positioned(
                 top: 26, left: 4, right: 4,
@@ -540,20 +546,22 @@ class _CuratorUploadTabState extends State<_CuratorUploadTab> {
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('images').orderBy('timestamp', descending: true).snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData)
+              if (!snapshot.hasData) {
                 return const Center(
                     child: Padding(padding: EdgeInsets.all(24.0), child: CircularProgressIndicator(color: Colors.black)));
+              }
 
               final folioDocs = snapshot.data!.docs.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return data['folioContext'] == widget.fanzineId || (data['usedInFanzines'] ?? []).contains(widget.fanzineId);
               }).toList();
 
-              if (folioDocs.isEmpty)
+              if (folioDocs.isEmpty) {
                 return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 48.0),
                     child: Text("no images in this folio yet.",
                         textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)));
+              }
 
               final uploadedDocs = folioDocs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
