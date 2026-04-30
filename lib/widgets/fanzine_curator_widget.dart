@@ -27,12 +27,27 @@ class FanzineCuratorWidget extends StatefulWidget {
 
 class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _volumeController = TextEditingController();
+  final TextEditingController _issueController = TextEditingController();
+  final TextEditingController _wholeNumberController = TextEditingController();
   String? _lastSyncedTitle;
 
   @override
   void dispose() {
     _titleController.dispose();
+    _volumeController.dispose();
+    _issueController.dispose();
+    _wholeNumberController.dispose();
     super.dispose();
+  }
+
+  void _saveMeta(BuildContext tabContext) {
+    tabContext.read<FanzineEditorBloc>().add(UpdateFanzineMetadata(
+      _titleController.text,
+      _volumeController.text,
+      _issueController.text,
+      _wholeNumberController.text,
+    ));
   }
 
   @override
@@ -55,10 +70,11 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
   }
 
   Widget _buildCuratorSettingsTab(BuildContext context, Fanzine fanzine) {
-    final bloc = context.read<FanzineEditorBloc>();
-
     if (_lastSyncedTitle != fanzine.title) {
       _titleController.text = fanzine.title;
+      _volumeController.text = fanzine.volume ?? '';
+      _issueController.text = fanzine.issue ?? '';
+      _wholeNumberController.text = fanzine.wholeNumber ?? '';
       _lastSyncedTitle = fanzine.title;
     }
 
@@ -70,15 +86,42 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
         children: [
           TextField(
             controller: _titleController,
-            onSubmitted: (val) => bloc.add(UpdateFanzineTitle(val)),
+            onSubmitted: (val) => _saveMeta(context),
             decoration: const InputDecoration(
                 labelText: 'fanzine name',
                 isDense: true,
                 border: OutlineInputBorder(),
                 focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                floatingLabelStyle: TextStyle(color: Colors.black87),
-                helperText: "Press enter to save"),
+                floatingLabelStyle: TextStyle(color: Colors.black87)),
             style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _volumeController,
+                  onSubmitted: (_) => _saveMeta(context),
+                  decoration: const InputDecoration(labelText: 'Volume', isDense: true, border: OutlineInputBorder()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _issueController,
+                  onSubmitted: (_) => _saveMeta(context),
+                  decoration: const InputDecoration(labelText: 'Issue', isDense: true, border: OutlineInputBorder()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _wholeNumberController,
+                  onSubmitted: (_) => _saveMeta(context),
+                  decoration: const InputDecoration(labelText: 'Whole Number', isDense: true, border: OutlineInputBorder()),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           const Text("SHORTCODE",
@@ -112,7 +155,7 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
             Switch(
                 value: fanzine.twoPage,
                 activeColor: Colors.grey,
-                onChanged: (val) => bloc.add(ToggleTwoPageRequested(val))),
+                onChanged: (val) => context.read<FanzineEditorBloc>().add(ToggleTwoPageRequested(val))),
           ]),
           const Divider(height: 24),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -120,12 +163,12 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
             Switch(
                 value: fanzine.isLive,
                 activeColor: Colors.green,
-                onChanged: (val) => bloc.add(ToggleIsLiveRequested(val))),
+                onChanged: (val) => context.read<FanzineEditorBloc>().add(ToggleIsLiveRequested(val))),
           ]),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
-              bloc.add(UpdateFanzineTitle(_titleController.text));
+              _saveMeta(context);
               if (context.canPop()) {
                 context.pop();
               } else {
@@ -227,35 +270,68 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
       );
     }
 
-    final entities = fanzine.draftEntities;
+    return StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('images').where('usedInFanzines', arrayContains: fanzine.id).snapshots(),
+        builder: (context, snapshot) {
+          int rawDone = 0;
+          int masterVerified = 0;
+          int linkedPending = 0;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            _Counter(label: "Pages", count: pages.length, color: Colors.blue),
-            _Counter(label: "Entities", count: entities.length, color: Colors.green),
-          ]),
-          const SizedBox(height: 16),
-          const Divider(),
-          if (entities.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24.0),
-              child: Text("No entities detected yet.",
-                  style: TextStyle(color: Colors.grey, fontSize: 12)),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: entities.length,
-              separatorBuilder: (c, i) => const Divider(height: 1),
-              itemBuilder: (context, index) => _EntityRow(name: entities[index]),
+          if (snapshot.hasData) {
+            for (var doc in snapshot.data!.docs) {
+              final data = doc.data() as Map<String, dynamic>;
+              if (data['text_raw'] != null && data['text_raw'].toString().isNotEmpty) rawDone++;
+              if (data['text_corrected'] != null && data['needs_ai_cleaning'] != true) masterVerified++;
+              if (data['needs_linking'] == true) linkedPending++;
+            }
+          }
+
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _Counter(label: "Raw Done", count: rawDone, color: Colors.blue),
+                      _Counter(label: "Master Verified", count: masterVerified, color: Colors.green),
+                      _Counter(label: "Linked Pending", count: linkedPending, color: Colors.orange),
+                    ]
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                    onPressed: () => context.read<FanzineEditorBloc>().add(TriggerAiCleanRequested()),
+                    icon: const Icon(Icons.auto_fix_high),
+                    label: const Text("Step 2: AI Clean")
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                    onPressed: () => context.read<FanzineEditorBloc>().add(TriggerGenerateLinksRequested()),
+                    icon: const Icon(Icons.link),
+                    label: const Text("Step 3: Generate Links")
+                ),
+                const SizedBox(height: 24),
+                const Divider(),
+                if (fanzine.draftEntities.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24.0),
+                    child: Text("No entities detected yet.",
+                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: fanzine.draftEntities.length,
+                    separatorBuilder: (c, i) => const Divider(height: 1),
+                    itemBuilder: (context, index) => _EntityRow(name: fanzine.draftEntities[index]),
+                  ),
+              ],
             ),
-        ],
-      ),
+          );
+        }
     );
   }
 }

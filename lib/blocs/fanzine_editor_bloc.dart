@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../repositories/fanzine_repository.dart';
+import '../../repositories/pipeline_repository.dart';
 import '../../models/fanzine.dart';
 import '../../models/fanzine_page.dart';
 
@@ -33,11 +34,14 @@ class _PagesUpdated extends FanzineEditorEvent {
   List<Object?> get props => [pages];
 }
 
-class UpdateFanzineTitle extends FanzineEditorEvent {
+class UpdateFanzineMetadata extends FanzineEditorEvent {
   final String title;
-  UpdateFanzineTitle(this.title);
+  final String volume;
+  final String issue;
+  final String wholeNumber;
+  UpdateFanzineMetadata(this.title, this.volume, this.issue, this.wholeNumber);
   @override
-  List<Object?> get props => [title];
+  List<Object?> get props => [title, volume, issue, wholeNumber];
 }
 
 class ToggleTwoPageRequested extends FanzineEditorEvent {
@@ -109,6 +113,10 @@ class ToggleIsLiveRequested extends FanzineEditorEvent {
 
 class SoftPublishRequested extends FanzineEditorEvent {}
 
+// Pipeline Triggers
+class TriggerAiCleanRequested extends FanzineEditorEvent {}
+class TriggerGenerateLinksRequested extends FanzineEditorEvent {}
+
 // --- STATE ---
 
 abstract class FanzineEditorState extends Equatable {
@@ -158,6 +166,7 @@ class FanzineEditorFailure extends FanzineEditorState {
 
 class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
   final FanzineRepository _repository;
+  final PipelineRepository _pipelineRepository;
   final String fanzineId;
 
   StreamSubscription? _fanzineSub;
@@ -166,13 +175,17 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
   Fanzine? _latestFanzine;
   List<FanzinePage>? _latestPages;
 
-  FanzineEditorBloc({required FanzineRepository repository, required this.fanzineId})
-      : _repository = repository,
+  FanzineEditorBloc({
+    required FanzineRepository repository,
+    required PipelineRepository pipelineRepository,
+    required this.fanzineId
+  }) : _repository = repository,
+        _pipelineRepository = pipelineRepository,
         super(FanzineEditorInitial()) {
     on<LoadFanzineRequested>(_onLoadRequested);
     on<_FanzineUpdated>(_onFanzineUpdated);
     on<_PagesUpdated>(_onPagesUpdated);
-    on<UpdateFanzineTitle>(_onUpdateTitle);
+    on<UpdateFanzineMetadata>(_onUpdateMetadata);
     on<ToggleTwoPageRequested>(_onToggleTwoPage);
     on<ToggleHasCoverRequested>(_onToggleHasCover);
     on<AddPageRequested>(_onAddPage);
@@ -184,6 +197,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     on<ReorderPageRequested>(_onReorderPage);
     on<ToggleIsLiveRequested>(_onToggleIsLive);
     on<SoftPublishRequested>(_onSoftPublish);
+    on<TriggerAiCleanRequested>(_onTriggerAiClean);
+    on<TriggerGenerateLinksRequested>(_onTriggerGenerateLinks);
   }
 
   Future<void> _onLoadRequested(LoadFanzineRequested event, Emitter<FanzineEditorState> emit) async {
@@ -226,10 +241,15 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onUpdateTitle(UpdateFanzineTitle event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onUpdateMetadata(UpdateFanzineMetadata event, Emitter<FanzineEditorState> emit) async {
     if (state is! FanzineEditorLoaded) return;
     try {
-      await _repository.updateFanzine(fanzineId, {'title': event.title.trim()});
+      await _repository.updateFanzine(fanzineId, {
+        'title': event.title.trim(),
+        'volume': event.volume.trim(),
+        'issue': event.issue.trim(),
+        'wholeNumber': event.wholeNumber.trim(),
+      });
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     }
@@ -256,7 +276,6 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
   Future<void> _onAddPage(AddPageRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
-
     emit(current.copyWith(isProcessing: true));
     try {
       await _repository.addPageByShortcode(fanzineId, event.shortcode);
@@ -372,6 +391,36 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     emit(current.copyWith(isProcessing: true));
     try {
       await _repository.softPublish(fanzineId);
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    } finally {
+      if (state is FanzineEditorLoaded) {
+        emit((state as FanzineEditorLoaded).copyWith(isProcessing: false));
+      }
+    }
+  }
+
+  Future<void> _onTriggerAiClean(TriggerAiCleanRequested event, Emitter<FanzineEditorState> emit) async {
+    final current = state;
+    if (current is! FanzineEditorLoaded) return;
+    emit(current.copyWith(isProcessing: true));
+    try {
+      await _pipelineRepository.triggerAiClean(fanzineId);
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    } finally {
+      if (state is FanzineEditorLoaded) {
+        emit((state as FanzineEditorLoaded).copyWith(isProcessing: false));
+      }
+    }
+  }
+
+  Future<void> _onTriggerGenerateLinks(TriggerGenerateLinksRequested event, Emitter<FanzineEditorState> emit) async {
+    final current = state;
+    if (current is! FanzineEditorLoaded) return;
+    emit(current.copyWith(isProcessing: true));
+    try {
+      await _pipelineRepository.triggerGenerateLinks(fanzineId);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     } finally {

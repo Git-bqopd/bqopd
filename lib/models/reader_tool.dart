@@ -28,12 +28,13 @@ enum ToolCondition {
 /// Defines the specific widget drawer to mount when action == ToolAction.openBonusRow
 enum BonusRowType {
   textReader,
+  rawText,
+  masterText,
+  linkedText,
   comments,
   editDetails,
   tags,
-  ocr,
   entities,
-  publisher,
   views,
   credits,
   youtube,
@@ -45,7 +46,7 @@ enum BonusRowType {
 class ReaderTool {
   final String id; // e.g., 'Comment', 'Share' (matches UserProvider visibility keys)
   final String label;
-  final String description; // NEW: Brief description for the settings matrix
+  final String description; // Brief description for the settings matrix
   final IconData defaultIcon;
   final IconData? activeIcon;
   final IconData? darkIcon;

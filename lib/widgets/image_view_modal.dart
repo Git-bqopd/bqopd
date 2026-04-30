@@ -133,39 +133,67 @@ class _ImageViewModalState extends State<ImageViewModal> {
   Widget _buildDetailsArea() {
     if (_activePanel == null) return const SizedBox.shrink();
 
-    return SizedBox(
-      height: 240,
-      child: SingleChildScrollView(
-        child: PanelContainer(
-          title: '',
-          isInline: true,
-          inlineColor: PanelFactory.getInlineColor(_activePanel!),
-          child: PanelFactory.buildPanelContent(
-              PanelContext(
-                type: _activePanel!,
-                imageId: widget.imageId,
-                actualText: widget.imageText ?? '',
-                isEditingMode: false,
-                viewService: _viewService,
-                engagementService: _engagementService,
-                commentController: _commentController,
-                onSubmitComment: () async {
-                  if (_commentController.text.trim().isEmpty) return;
-                  await _engagementService.addComment(
-                    imageId: widget.imageId,
-                    fanzineId: 'image_modal',
-                    fanzineTitle: 'Image View',
-                    text: _commentController.text.trim(),
-                    displayName: null,
-                    username: null,
-                  );
-                  _commentController.clear();
-                },
-                fontSizeNotifier: _fontSizeNotifier,
-              )
-          ),
-        ),
-      ),
+    return FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance.collection('images').doc(widget.imageId).get(),
+        builder: (context, snapshot) {
+          String tLinked = "";
+          String tCorrected = "";
+          String tRaw = widget.imageText ?? '';
+          String tLinkedAi = "";
+          String tCorrectedAi = "";
+
+          if (snapshot.hasData && snapshot.data?.data() != null) {
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            tLinked = data['text_linked'] ?? '';
+            tCorrected = data['text_corrected'] ?? data['text'] ?? '';
+            tRaw = data['text_raw'] ?? tRaw;
+            tLinkedAi = data['text_linked_ai'] ?? '';
+            tCorrectedAi = data['text_corrected_ai'] ?? '';
+          }
+
+          String actualText = tLinked.trim().isNotEmpty ? tLinked
+              : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
+
+          return SizedBox(
+            height: 240,
+            child: SingleChildScrollView(
+              child: PanelContainer(
+                title: '',
+                isInline: true,
+                inlineColor: PanelFactory.getInlineColor(_activePanel!),
+                child: PanelFactory.buildPanelContent(
+                    PanelContext(
+                      type: _activePanel!,
+                      imageId: widget.imageId,
+                      actualText: actualText,
+                      textRaw: tRaw,
+                      textCorrected: tCorrected,
+                      textLinked: tLinked,
+                      textCorrectedAi: tCorrectedAi, // Added
+                      textLinkedAi: tLinkedAi,       // Added
+                      isEditingMode: false,
+                      viewService: _viewService,
+                      engagementService: _engagementService,
+                      commentController: _commentController,
+                      onSubmitComment: () async {
+                        if (_commentController.text.trim().isEmpty) return;
+                        await _engagementService.addComment(
+                          imageId: widget.imageId,
+                          fanzineId: 'image_modal',
+                          fanzineTitle: 'Image View',
+                          text: _commentController.text.trim(),
+                          displayName: null,
+                          username: null,
+                        );
+                        _commentController.clear();
+                      },
+                      fontSizeNotifier: _fontSizeNotifier,
+                    )
+                ),
+              ),
+            ),
+          );
+        }
     );
   }
 }

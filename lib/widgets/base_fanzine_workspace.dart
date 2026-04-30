@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import '../blocs/fanzine_editor_bloc.dart';
 import '../repositories/fanzine_repository.dart';
+import '../repositories/pipeline_repository.dart';
 import '../services/user_provider.dart';
 import '../models/fanzine.dart';
 import '../models/fanzine_page.dart';
@@ -61,6 +62,7 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
     return BlocProvider(
       create: (context) => FanzineEditorBloc(
         repository: RepositoryProvider.of<FanzineRepository>(context),
+        pipelineRepository: RepositoryProvider.of<PipelineRepository>(context),
         fanzineId: widget.fanzineId,
       )..add(LoadFanzineRequested(widget.fanzineId)),
       child: Builder(

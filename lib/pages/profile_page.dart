@@ -206,7 +206,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'type': 'ingested',
         'shortCode': shortCode,
         'shortCodeKey': shortCode.toUpperCase(),
-        'twoPage': false,
+        'twoPage': true,
       });
       if (mounted) {
         context.push('/editor/${fzRef.id}');
@@ -350,11 +350,16 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
           final userData = state.userData!;
           final targetUserId = userData.uid;
+
+          // Generate the exact profile name to search for in entity drafts
+          final String profileName = (userData.displayName != null && userData.displayName!.trim().isNotEmpty)
+              ? userData.displayName!
+              : userData.username;
+
           final userProvider = context.read<UserProvider>();
           final isOwner = userProvider.currentUserId == targetUserId;
           final canEditProfile = _canEdit(userData.uid, userData.isManaged, userData.managers);
 
-          // GATING: Drafts visible to Owner, Managers, Admins, and Moderators
           final bool canSeeDrafts = canEditProfile || userProvider.isAdmin || userProvider.isModerator;
 
           final activeTab = state.visibleTabs.isEmpty ? 'collection' : state.visibleTabs[state.currentTabIndex];
@@ -416,7 +421,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  // FIXED: Sub-tabs visibility gating based on Admin role or Ownership
                                   if (userProvider.isAdmin) ...[
                                     _buildSubTab("shortcodes", 0, type: 'settings'),
                                     const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
@@ -463,6 +467,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                               _buildSubTab("publisher", 1, type: 'curator'),
                               const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
                               _buildSubTab("entities", 2, type: 'curator'),
+                              const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                              _buildSubTab("ai training data", 3, type: 'curator'),
                             ],
                           ),
                         ),
@@ -516,11 +522,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildSubTab("works", 0, type: 'index'),
+                              _buildSubTab("mentions", 0, type: 'index'),
                               const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("mentions", 1, type: 'index'),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("comments", 2, type: 'index'),
+                              _buildSubTab("comments", 1, type: 'index'),
                             ],
                           ),
                         ),
@@ -528,7 +532,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                     ),
 
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  _buildContentSliver(targetUserId, isOwner, activeTab, canSeeDrafts),
+                  _buildContentSliver(targetUserId, isOwner, activeTab, canSeeDrafts, profileName),
                   const SliverToBoxAdapter(child: SizedBox(height: 64)),
                 ],
               ),
@@ -564,7 +568,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     );
   }
 
-  Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab, bool canSeeDrafts) {
+  Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab, bool canSeeDrafts, String profileName) {
     switch (activeTab) {
       case 'settings':
         if (_settingsSubTabIndex == 3) {
@@ -573,16 +577,18 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         return _buildSettingsSubView(targetUserId);
       case 'curator':
         if (_curatorSubTabIndex == 2) {
-          return _buildEntitiesSubView();
+          return _buildEntitiesSubView(targetUserId);
+        } else if (_curatorSubTabIndex == 3) {
+          return _buildAITrainingDataSubView(targetUserId);
         }
         return _buildCuratorSubView(targetUserId, canSeeDrafts);
       case 'maker':
         return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts && canSeeDrafts);
       case 'index':
-        if (_indexSubTabIndex == 2) {
+        if (_indexSubTabIndex == 1) {
           return _UserCommentsView(userId: targetUserId);
         }
-        return _buildIndexSubView(targetUserId);
+        return _buildIndexSubView(profileName);
       case 'collection':
         return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Collection Coming Soon"))));
       default:
@@ -590,10 +596,139 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     }
   }
 
+  Widget _buildAITrainingDataSubView(String targetUserId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('images')
+          .where('isTrainingData', isEqualTo: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
+        }
+        if (!snapshot.hasData) {
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        }
+
+        final docs = snapshot.data!.docs;
+        final List<Map<String, dynamic>> trainingCandidates = [];
+
+        for (var doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final int correctionScore = data['human_correction_score'] ?? 0;
+          final int linkingScore = data['human_linking_score'] ?? 0;
+
+          if (correctionScore > 0 || linkingScore > 0) {
+            String displayTitle = data['title'] ?? data['fileName'] ?? 'Untitled';
+
+            final wNum = (data['wholeNumber'] ?? '').toString().trim();
+            final iss = (data['issue'] ?? '').toString().trim();
+            if (wNum.isNotEmpty) {
+              displayTitle = "$displayTitle $wNum";
+            } else if (iss.isNotEmpty) {
+              displayTitle = "$displayTitle $iss";
+            }
+
+            trainingCandidates.add({
+              'id': doc.id,
+              'title': displayTitle,
+              'correctionScore': correctionScore,
+              'linkingScore': linkingScore,
+              'fileUrl': data['fileUrl'] ?? data['gridUrl'],
+              'folioContext': data['folioContext'], // Store this to fetch Fanzine data
+            });
+          }
+        }
+
+        if (trainingCandidates.isEmpty) {
+          return const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(48.0),
+              child: Center(
+                child: Text(
+                  "No training data yet.\n\nManually save edits in the CORRECTED TEXT or WIKI-LINK panels in the Reader to generate variance scores.",
+                  style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+
+        trainingCandidates.sort((a, b) {
+          final scoreA = (a['correctionScore'] as int) + (a['linkingScore'] as int);
+          final scoreB = (b['correctionScore'] as int) + (b['linkingScore'] as int);
+          return scoreB.compareTo(scoreA); // Descending
+        });
+
+        return SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final item = trainingCandidates[index];
+              final String? folioContext = item['folioContext'];
+
+              Widget buildCard(String title) {
+                return Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
+                  child: ListTile(
+                    leading: item['fileUrl'] != null
+                        ? Image.network(item['fileUrl'], width: 40, height: 40, fit: BoxFit.cover)
+                        : const Icon(Icons.image),
+                    title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    subtitle: Text("Correction Edits: ${item['correctionScore']} | Link Edits: ${item['linkingScore']}", style: const TextStyle(fontSize: 11)),
+                    trailing: OutlinedButton(
+                      onPressed: () {
+                        // Placeholder for future Diff Viewer
+                      },
+                      child: const Text("View Details", style: TextStyle(fontSize: 11)),
+                    ),
+                  ),
+                );
+              }
+
+              // Fetch the parent Fanzine to display "Title + Whole Number/Issue"
+              if (folioContext != null && folioContext.isNotEmpty) {
+                return FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
+                  builder: (context, fzSnap) {
+                    String finalTitle = item['title'];
+
+                    if (fzSnap.hasData && fzSnap.data!.exists) {
+                      final fzData = fzSnap.data!.data() as Map<String, dynamic>;
+                      final fzTitle = fzData['title'] ?? 'Untitled';
+                      final wNum = (fzData['wholeNumber'] ?? '').toString().trim();
+                      final iss = (fzData['issue'] ?? '').toString().trim();
+
+                      if (wNum.isNotEmpty) {
+                        finalTitle = "$fzTitle $wNum";
+                      } else if (iss.isNotEmpty) {
+                        finalTitle = "$fzTitle $iss";
+                      } else {
+                        finalTitle = fzTitle;
+                      }
+                    }
+
+                    return buildCard(finalTitle);
+                  },
+                );
+              }
+
+              return buildCard(item['title']);
+            }, childCount: trainingCandidates.length),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildCuratorSubView(String targetUserId, bool canEdit) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) {
+          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snap.error}", style: const TextStyle(color: Colors.grey))));
+        }
         if (!snap.hasData) {
           return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         }
@@ -618,17 +753,28 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     );
   }
 
-  Widget _buildIndexSubView(String targetUserId) {
-    Stream<QuerySnapshot> stream = _indexSubTabIndex == 0
-        ? context.read<UserRepository>().watchUserWorks(targetUserId)
-        : context.read<UserRepository>().watchUserMentions(targetUserId);
+  Widget _buildIndexSubView(String profileName) {
+    // Queries the draftEntities array on the Fanzines collection for mentions!
+    Stream<QuerySnapshot> stream = FirebaseFirestore.instance
+        .collection('fanzines')
+        .where('draftEntities', arrayContains: profileName)
+        .snapshots();
+
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Error loading mentions: ${snapshot.error}", style: const TextStyle(fontSize: 10, color: Colors.grey)))));
+        }
         if (!snapshot.hasData) {
           return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         }
-        return _buildGrid(snapshot.data!.docs, false);
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No mentions found.", style: TextStyle(color: Colors.grey)))));
+        }
+        // Force the grid to display only thumbnails for mentions
+        return _buildGrid(docs, false, thumbnailOnly: true);
       },
     );
   }
@@ -678,7 +824,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           }
       );
     } else if (_settingsSubTabIndex == 2) {
-      // FIXED: Implement Permissions List with Segmented Buttons logic (only for Admins)
       if (!userProvider.isAdmin) {
         return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("Access restricted to Administrators."))));
       }
@@ -727,7 +872,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                   ],
                                   selected: selectedRolesSet,
                                   onSelectionChanged: (newSelection) async {
-                                    // SECURITY: Verify viewer is still an admin before batch write
                                     if (!context.read<UserProvider>().isAdmin) return;
 
                                     final rolesList = newSelection.toList();
@@ -746,14 +890,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
                                     final batch = FirebaseFirestore.instance.batch();
 
-                                    // 1. Update Private User Doc
                                     batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {
                                       'roles': rolesList,
                                       'role': legacyRole,
                                       'isCurator': isCurator || isAdmin || isModerator
                                     });
 
-                                    // 2. Update Public Profile Doc
                                     batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {
                                       'isCurator': isCurator || isAdmin || isModerator,
                                       'isAdmin': isAdmin
@@ -780,26 +922,40 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     }
   }
 
-  Widget _buildGrid(List<dynamic> docs, bool edit, {bool isDraftView = false}) {
+  Widget _buildGrid(List<dynamic> docs, bool edit, {bool isDraftView = false, bool thumbnailOnly = false}) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
-        delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: docs[index], shouldEdit: edit, isDraftView: isDraftView), childCount: docs.length),
+        delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: docs[index], shouldEdit: edit, isDraftView: isDraftView, thumbnailOnly: thumbnailOnly), childCount: docs.length),
       ),
     );
   }
 
-  Widget _buildEntitiesSubView() {
+  Widget _buildEntitiesSubView(String targetUserId) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('fanzines').where('isLive', isEqualTo: false).snapshots(),
+      stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
+        }
         if (!snapshot.hasData) {
           return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         }
         final Map<String, int> entityCounts = {};
         for (var doc in snapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
+
+          final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
+          final bool isTargetUserItem = (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
+          if (!isTargetUserItem) continue;
+
+          final hasSource = data.containsKey('sourceFile');
+          final isLive = data['isLive'] ?? false;
+
+          // Only include entities from fanzines that would appear in the "curator" tab
+          if (!hasSource || isLive) continue;
+
           final entities = List<String>.from(data['draftEntities'] ?? []);
           for (var name in entities) {
             entityCounts[name] = (entityCounts[name] ?? 0) + 1;
@@ -834,16 +990,29 @@ class _UserCommentsView extends StatelessWidget {
           .doc('data')
           .collection('comments')
           .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
+      // Removed orderBy to prevent missing index errors and infinite spinners!
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
+        }
         if (!snapshot.hasData) {
           return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         }
-        final docs = snapshot.data!.docs;
+        final docs = snapshot.data!.docs.toList();
         if (docs.isEmpty) {
-          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found"))));
+          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
         }
+
+        // Sorting the results locally in memory to bypass the requirement for a Firestore Index
+        docs.sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final aTime = aData['createdAt'] as Timestamp?;
+          final bTime = bData['createdAt'] as Timestamp?;
+          return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+        });
+
         return SliverPadding(
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
@@ -1053,8 +1222,14 @@ class _MakerItemTile extends StatelessWidget {
   final dynamic doc;
   final bool shouldEdit;
   final bool isDraftView;
+  final bool thumbnailOnly;
 
-  const _MakerItemTile({required this.doc, this.shouldEdit = false, this.isDraftView = false});
+  const _MakerItemTile({
+    required this.doc,
+    this.shouldEdit = false,
+    this.isDraftView = false,
+    this.thumbnailOnly = false,
+  });
 
   bool _is5x8(Map<String, dynamic> data) {
     if (data['is5x8'] == true) {
@@ -1069,15 +1244,13 @@ class _MakerItemTile extends StatelessWidget {
     return false;
   }
 
-  Future<void> _confirmDelete(BuildContext context) async {
-    final data = doc.data() as Map<String, dynamic>;
+  Future<void> _confirmDelete(BuildContext context, String displayTitle) async {
     final isFanzine = doc.reference.path.startsWith('fanzines/');
-    final title = data['title'] ?? 'Untitled';
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text("Delete $title?"),
+        title: Text("Delete $displayTitle?"),
         content: Text(isFanzine
             ? "Are you sure you want to delete this folio? Direct uploads will be permanently removed. Orphan images imported from your library will be preserved."
             : "Are you sure you want to delete this image? All associated page references will be removed from all folios."),
@@ -1100,12 +1273,10 @@ class _MakerItemTile extends StatelessWidget {
     }
   }
 
-  /// Implements the priority list for Folio Thumbnails, preferring optimized WebP Grid images.
   Future<String?> _getFolioThumbnail(String fanzineId) async {
     final db = FirebaseFirestore.instance;
 
     try {
-      // STRATEGY 1: Check specifically for Page 1 (The Cover)
       final coverSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
           .where('pageNumber', isEqualTo: 1)
           .limit(1)
@@ -1117,7 +1288,6 @@ class _MakerItemTile extends StatelessWidget {
         if (url != null && url.toString().isNotEmpty) return url;
       }
 
-      // STRATEGY 2: Lowest numbered page > 0
       final pagesSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
           .where('pageNumber', isGreaterThan: 0)
           .orderBy('pageNumber')
@@ -1126,12 +1296,10 @@ class _MakerItemTile extends StatelessWidget {
 
       if (pagesSnap.docs.isNotEmpty) {
         final pageData = pagesSnap.docs.first.data();
-        // Priority: WebP Grid (450px) -> Legacy Thumb -> Original
         final url = pageData['gridUrl'] ?? pageData['thumbnailUrl'] ?? pageData['imageUrl'];
         if (url != null && url.toString().isNotEmpty) return url;
       }
 
-      // STRATEGY 3: First page found (Unordered fallback for draft states)
       final fallbackPageSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
           .limit(1)
           .get();
@@ -1142,7 +1310,6 @@ class _MakerItemTile extends StatelessWidget {
         if (url != null && url.toString().isNotEmpty) return url;
       }
 
-      // STRATEGY 4: Search Library for items with this Folio Context
       final imagesSnap = await db.collection('images')
           .where('folioContext', isEqualTo: fanzineId)
           .get();
@@ -1170,9 +1337,19 @@ class _MakerItemTile extends StatelessWidget {
     final data = doc.data() as Map<String, dynamic>;
     final isFanzine = doc.reference.path.startsWith('fanzines/');
     final title = data['title'] ?? 'Untitled';
-    final fileUrl = data['fileUrl'];
 
-    // For single images, prioritize the WebP grid thumbnail
+    String displayTitle = title;
+    if (isFanzine) {
+      final wNum = (data['wholeNumber'] ?? '').toString().trim();
+      final iss = (data['issue'] ?? '').toString().trim();
+      if (wNum.isNotEmpty) {
+        displayTitle = "$title $wNum";
+      } else if (iss.isNotEmpty) {
+        displayTitle = "$title $iss";
+      }
+    }
+
+    final fileUrl = data['fileUrl'];
     final displayUrl = data['gridUrl'] ?? data['fileUrl'];
 
     return GestureDetector(
@@ -1208,51 +1385,53 @@ class _MakerItemTile extends StatelessWidget {
                   : const Icon(Icons.image, color: Colors.black12, size: 40)),
             ),
 
-            Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                    padding: const EdgeInsets.all(8),
-                    color: Colors.black54,
-                    child: Text(
-                        title,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis
-                    )
-                )
-            ),
-
-            Positioned(
-              top: 26, left: 4, right: 4,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (isFanzine)
-                    StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('fanzines').doc(doc.id).collection('pages').where('pageNumber', isGreaterThan: 0).snapshots(),
-                      builder: (context, snap) {
-                        final count = snap.data?.docs.length ?? 0;
-                        return _Badge(label: "folio ($count)", color: Colors.grey.shade800);
-                      },
-                    )
-                  else ...[
-                    _Badge(label: _is5x8(data) ? "full page 5x8" : "image", color: Colors.grey.shade800),
-                    const SizedBox(height: 2),
-                    _Badge(label: "${data['width'] ?? '??'}x${data['height'] ?? '??'}", color: Colors.black, opacity: 0.7),
-                  ],
-                ],
+            if (!thumbnailOnly) ...[
+              Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                      padding: const EdgeInsets.all(8),
+                      color: Colors.black54,
+                      child: Text(
+                          displayTitle,
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis
+                      )
+                  )
               ),
-            ),
 
-            if (isDraftView)
+              Positioned(
+                top: 26, left: 4, right: 4,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (isFanzine)
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('fanzines').doc(doc.id).collection('pages').where('pageNumber', isGreaterThan: 0).snapshots(),
+                        builder: (context, snap) {
+                          final count = snap.data?.docs.length ?? 0;
+                          return _Badge(label: "folio ($count)", color: Colors.grey.shade800);
+                        },
+                      )
+                    else ...[
+                      _Badge(label: _is5x8(data) ? "full page 5x8" : "image", color: Colors.grey.shade800),
+                      const SizedBox(height: 2),
+                      _Badge(label: "${data['width'] ?? '??'}x${data['height'] ?? '??'}", color: Colors.black, opacity: 0.7),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
+            if (isDraftView && !thumbnailOnly)
               Positioned(
                 top: 2,
                 right: 2,
                 child: GestureDetector(
-                  onTap: () => _confirmDelete(context),
+                  onTap: () => _confirmDelete(context, displayTitle),
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),

@@ -115,11 +115,23 @@ class PanelColumnRenderer extends StatelessWidget {
             ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots()
             : null,
         builder: (context, snapshot) {
-          String actualText = "";
+          String tLinked = "";
+          String tCorrected = "";
+          String tRaw = "";
+          String tLinkedAi = "";
+          String tCorrectedAi = "";
+
           if (snapshot.hasData && snapshot.data?.data() != null) {
             final data = snapshot.data!.data() as Map<String, dynamic>;
-            actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
+            tLinked = data['text_linked'] ?? '';
+            tCorrected = data['text_corrected'] ?? data['text'] ?? '';
+            tRaw = data['text_raw'] ?? '';
+            tLinkedAi = data['text_linked_ai'] ?? '';
+            tCorrectedAi = data['text_corrected_ai'] ?? '';
           }
+
+          String actualText = tLinked.trim().isNotEmpty ? tLinked
+              : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
 
           return SingleChildScrollView(
             child: PanelContainer(
@@ -133,9 +145,14 @@ class PanelColumnRenderer extends StatelessWidget {
                     imageId: imageId,
                     fanzineId: fanzineId,
                     pageId: pageId,
-                    actualText: actualText,
                     templateId: templateId,
                     isEditingMode: isEditingMode,
+                    actualText: actualText,
+                    textRaw: tRaw,
+                    textCorrected: tCorrected,
+                    textLinked: tLinked,
+                    textCorrectedAi: tCorrectedAi, // Added
+                    textLinkedAi: tLinkedAi,       // Added
                     viewService: viewService,
                     engagementService: EngagementService(),
                     commentController: TextEditingController(),
@@ -231,11 +248,23 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('images').doc(imageId).snapshots(),
       builder: (context, snapshot) {
-        String actualText = "";
+        String tLinked = "";
+        String tCorrected = "";
+        String tRaw = "";
+        String tLinkedAi = "";
+        String tCorrectedAi = "";
+
         if (snapshot.hasData && snapshot.data?.data() != null) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
-          actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
+          tLinked = data['text_linked'] ?? '';
+          tCorrected = data['text_corrected'] ?? data['text'] ?? '';
+          tRaw = data['text_raw'] ?? '';
+          tLinkedAi = data['text_linked_ai'] ?? '';
+          tCorrectedAi = data['text_corrected_ai'] ?? '';
         }
+
+        String actualText = tLinked.trim().isNotEmpty ? tLinked
+            : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -253,9 +282,14 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
                     imageId: imageId,
                     fanzineId: widget.fanzineId,
                     pageId: pageId,
-                    actualText: actualText,
                     templateId: templateId,
                     isEditingMode: widget.isEditingMode,
+                    actualText: actualText,
+                    textRaw: tRaw,
+                    textCorrected: tCorrected,
+                    textLinked: tLinked,
+                    textCorrectedAi: tCorrectedAi, // Added
+                    textLinkedAi: tLinkedAi,       // Added
                     viewService: widget.viewService,
                     engagementService: EngagementService(),
                     commentController: _commentController,

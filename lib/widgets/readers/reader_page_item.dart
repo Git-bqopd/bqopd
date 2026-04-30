@@ -15,8 +15,6 @@ import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
 import '../auth_modal.dart';
 
-/// A unified widget representing a single page in the reader.
-/// Handles image/template rendering, social engagement, and inline panel logic.
 class ReaderPageItem extends StatefulWidget {
   final String fanzineId;
   final String fanzineTitle;
@@ -118,8 +116,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
     final String imageId = widget.pageData['imageId'] ?? '';
     final String? templateId = widget.pageData['templateId'];
 
-    // --- STRIPPED BOTTLENECK: OPTIMIZED FOR WEBP THUMBNAILS ---
-    // Prioritizing the 800px listUrl -> then falling back to the original imageUrl
     final String? optimalDisplayUrl = widget.pageData['listUrl'] ?? widget.pageData['imageUrl'];
 
     return Column(
@@ -153,14 +149,29 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
                 builder: (context, snapshot) {
                   bool isGame = false;
                   String? youtubeId;
-                  String actualText = "";
+
+                  String tLinked = "";
+                  String tCorrected = "";
+                  String tRaw = "";
+                  String tLinkedAi = "";
+                  String tCorrectedAi = "";
 
                   if (snapshot.hasData && snapshot.data?.data() != null) {
                     final data = snapshot.data!.data() as Map<String, dynamic>;
                     isGame = data['isGame'] == true;
                     youtubeId = data['youtubeId'] as String?;
-                    actualText = data['text'] ?? data['text_processed'] ?? data['text_raw'] ?? '';
+
+                    tLinked = data['text_linked'] ?? '';
+                    tCorrected = data['text_corrected'] ?? data['text'] ?? '';
+                    tRaw = data['text_raw'] ?? '';
+
+                    // Added Extraction for Scoring Math
+                    tLinkedAi = data['text_linked_ai'] ?? '';
+                    tCorrectedAi = data['text_corrected_ai'] ?? '';
                   }
+
+                  String actualText = tLinked.trim().isNotEmpty ? tLinked
+                      : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
 
                   return Column(
                     children: [
@@ -194,9 +205,14 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
                                 imageId: imageId,
                                 fanzineId: widget.fanzineId,
                                 pageId: pageId,
-                                actualText: actualText,
                                 templateId: templateId,
                                 isEditingMode: widget.isEditingMode,
+                                actualText: actualText,
+                                textRaw: tRaw,
+                                textCorrected: tCorrected,
+                                textLinked: tLinked,
+                                textCorrectedAi: tCorrectedAi, // Added
+                                textLinkedAi: tLinkedAi,       // Added
                                 viewService: _viewService,
                                 engagementService: _engagementService,
                                 commentController: _commentController,
@@ -218,7 +234,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
   }
 }
 
-/// A lightning-fast stateless image loader that removes all database queries and artificial delays
 class _PageImageLoader extends StatelessWidget {
   final String? url;
 
@@ -232,7 +247,7 @@ class _PageImageLoader extends StatelessWidget {
     return Image.network(
         url!,
         fit: BoxFit.contain,
-        gaplessPlayback: true, // Prevents flickering or fading delays
+        gaplessPlayback: true,
         errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image, color: Colors.grey))
     );
   }

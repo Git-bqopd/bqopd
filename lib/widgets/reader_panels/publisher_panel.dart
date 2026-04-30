@@ -69,11 +69,11 @@ class _InlineTextEditorState extends State<InlineTextEditor> {
     setState(() => _s = true);
     try {
       await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update({
-        'text': _c.text,
-        'text_processed': _c.text,
+        'text_corrected': _c.text,
+        'needs_linking': true,
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved Gold Master!')));
     } finally {
       if (mounted) setState(() => _s = false);
     }

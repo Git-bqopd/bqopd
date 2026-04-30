@@ -3,10 +3,9 @@ import '../../models/reader_tool.dart';
 import '../../models/panel_context.dart';
 
 import 'text_reader_panel.dart';
+import 'text_editor_panels.dart';
 import 'hashtag_panel.dart';
-import 'ocr_status_panel.dart';
 import 'entities_panel.dart';
-import 'publisher_panel.dart';
 import 'youtube_panel.dart';
 import 'comments_panel.dart';
 import 'views_panel.dart';
@@ -18,10 +17,11 @@ class PanelFactory {
   static String getTitle(BonusRowType type) {
     switch (type) {
       case BonusRowType.textReader: return "TEXT READER";
+      case BonusRowType.rawText: return "RAW OCR TEXT";
+      case BonusRowType.masterText: return "CORRECTED TEXT EDITOR";
+      case BonusRowType.linkedText: return "WIKI-LINK EDITOR";
       case BonusRowType.tags: return "HASHTAGS & VOTING";
-      case BonusRowType.ocr: return "OCR PIPELINE (EGG EDITOR)";
       case BonusRowType.entities: return "PAGE ENTITIES";
-      case BonusRowType.publisher: return "PUBLISHER (CHICKEN EDITOR)";
       case BonusRowType.comments: return "COMMENTS";
       case BonusRowType.views: return "ANALYTICS";
       case BonusRowType.credits: return "ARCHIVAL METADATA & CREDITS";
@@ -35,7 +35,7 @@ class PanelFactory {
   static Color getInlineColor(BonusRowType type) {
     switch (type) {
       case BonusRowType.textReader: return const Color(0xFFFDFBF7);
-      case BonusRowType.ocr:
+      case BonusRowType.rawText: return Colors.grey[100]!;
       case BonusRowType.views: return Colors.grey[50]!;
       case BonusRowType.youtube: return Colors.black;
       default: return Colors.white;
@@ -48,25 +48,28 @@ class PanelFactory {
         return TextReaderPanel(
           text: context.actualText,
           fontSizeNotifier: context.fontSizeNotifier,
-          isEditingMode: context.isEditingMode,
-          imageId: context.imageId,
         );
-      case BonusRowType.tags:
-        return HashtagPanel(imageId: context.imageId);
-      case BonusRowType.ocr:
-        return OcrStatusPanel(
-            fanzineId: context.fanzineId ?? '',
-            pageId: context.pageId ?? '',
-            imageId: context.imageId);
-      case BonusRowType.entities:
-        return EntitiesPanel(text: context.actualText);
-      case BonusRowType.publisher:
-        return PublisherPanel(
+      case BonusRowType.rawText:
+        return RawTextPanel(text: context.textRaw);
+      case BonusRowType.masterText:
+        return MasterTextPanel(
           imageId: context.imageId,
-          initialText: context.actualText,
+          initialText: context.textCorrected,
+          aiBaselineText: context.textCorrectedAi,
           fanzineId: context.fanzineId ?? '',
           templateId: context.templateId,
         );
+      case BonusRowType.linkedText:
+        return LinkedTextPanel(
+          imageId: context.imageId,
+          initialText: context.textLinked,
+          aiBaselineText: context.textLinkedAi,
+          fanzineId: context.fanzineId ?? '',
+        );
+      case BonusRowType.tags:
+        return HashtagPanel(imageId: context.imageId);
+      case BonusRowType.entities:
+        return EntitiesPanel(text: context.actualText);
       case BonusRowType.comments:
         return CommentsPanel(
           imageId: context.imageId,

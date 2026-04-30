@@ -7,8 +7,11 @@ enum FanzineType { ingested, folio, calendar }
 class Fanzine extends Equatable {
   final String id;
   final String title;
+  final String? volume;
+  final String? issue;
+  final String? wholeNumber;
   final FanzineType type;
-  final bool isLive; // REPLACED: FanzineStatus status
+  final bool isLive;
   final String processingStatus;
 
   /// The primary creator/uploader
@@ -33,12 +36,15 @@ class Fanzine extends Equatable {
   const Fanzine({
     required this.id,
     required this.title,
+    this.volume,
+    this.issue,
+    this.wholeNumber,
     required this.type,
     required this.isLive,
     required this.processingStatus,
     required this.ownerId,
     this.editors = const [],
-    this.twoPage = false,
+    this.twoPage = true, // Defaulting to true so the switch starts "ON"
     this.hasCover = true,
     this.shortCode,
     this.sourceFile,
@@ -64,12 +70,15 @@ class Fanzine extends Equatable {
     return Fanzine(
       id: doc.id,
       title: data['title'] ?? 'Untitled',
+      volume: data['volume'],
+      issue: data['issue'],
+      wholeNumber: data['wholeNumber'],
       type: parsedType,
       isLive: data['isLive'] ?? false,
       processingStatus: data['processingStatus'] ?? 'idle',
       ownerId: owner,
       editors: editorList,
-      twoPage: data['twoPage'] ?? false,
+      twoPage: data['twoPage'] ?? true, // Fallback to true if missing
       hasCover: data['hasCover'] ?? true,
       shortCode: data['shortCode'],
       sourceFile: data['sourceFile'],
@@ -86,5 +95,10 @@ class Fanzine extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, title, type, isLive, processingStatus, ownerId, editors, twoPage, hasCover, shortCode, sourceFile, draftEntities, masterCreators, masterIndicia, indiciaPageId, startMonth, startYear, isSoftPublished];
+  List<Object?> get props => [
+    id, title, volume, issue, wholeNumber, type, isLive, processingStatus,
+    ownerId, editors, twoPage, hasCover, shortCode, sourceFile,
+    draftEntities, masterCreators, masterIndicia, indiciaPageId,
+    startMonth, startYear, isSoftPublished
+  ];
 }

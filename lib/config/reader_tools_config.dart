@@ -15,12 +15,10 @@ class ReaderToolsConfig {
     bool canOpenGrid = false,
   }) {
     // 1. Role Gate
-    // Non-editors/admins/moderators can't see editor tools
     final bool isElevated = userRole == 'admin' || userRole == 'moderator' || userRole == 'curator';
     if (tool.role == ToolRole.editor && !isElevated) return false;
 
     // 2. Editing Mode Gate
-    // Editor tools only show up if the UI is actually in editing mode
     if (tool.role == ToolRole.editor && !isEditingMode) return false;
 
     // 3. Conditionals
@@ -35,7 +33,7 @@ class ReaderToolsConfig {
         if (!isIndiciaPage) return false;
         break;
       case ToolCondition.hideOnDesktopSplit:
-        if (!canOpenGrid) return false; // Usually only shows when looking at zine single-view
+        if (!canOpenGrid) return false;
         break;
       case ToolCondition.requiresOcrPipeline:
         if (fanzineType == 'folio' || fanzineType == 'calendar') return false;
@@ -53,7 +51,7 @@ class ReaderToolsConfig {
     ReaderTool(
       id: 'Text',
       label: 'text',
-      description: 'View the transcribed text layer for easy reading.',
+      description: 'Read the finalized text.',
       defaultIcon: Icons.article_outlined,
       activeIcon: Icons.article,
       action: ToolAction.openBonusRow,
@@ -133,25 +131,32 @@ class ReaderToolsConfig {
 
     // --- RESTRICTED EDITOR TOOLS ---
     ReaderTool(
-      id: 'Edit',
-      label: 'edit',
-      description: 'Edit page metadata and titles.',
-      defaultIcon: Icons.edit_outlined,
-      activeIcon: Icons.edit,
+      id: 'Raw',
+      label: 'raw',
+      description: 'View the raw OCR output.',
+      defaultIcon: Icons.outdoor_grill,
+      activeIcon: Icons.outdoor_grill,
       role: ToolRole.editor,
       action: ToolAction.openBonusRow,
-      bonusRow: BonusRowType.editDetails,
+      bonusRow: BonusRowType.rawText,
     ),
     ReaderTool(
-      id: 'OCR',
-      label: 'ocr',
-      description: 'Manage automated transcription status (Egg Mode).',
-      defaultIcon: Icons.document_scanner_outlined,
-      activeIcon: Icons.document_scanner,
+      id: 'Master',
+      label: 'corrected',
+      description: 'Edit the corrected master text.',
+      defaultIcon: Icons.edit_document,
       role: ToolRole.editor,
       action: ToolAction.openBonusRow,
-      condition: ToolCondition.requiresOcrPipeline,
-      bonusRow: BonusRowType.ocr,
+      bonusRow: BonusRowType.masterText,
+    ),
+    ReaderTool(
+      id: 'Linked',
+      label: 'linked',
+      description: 'Manually adjust wiki-links.',
+      defaultIcon: Icons.add_link,
+      role: ToolRole.editor,
+      action: ToolAction.openBonusRow,
+      bonusRow: BonusRowType.linkedText,
     ),
     ReaderTool(
       id: 'Entities',
@@ -163,16 +168,6 @@ class ReaderToolsConfig {
       action: ToolAction.openBonusRow,
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
-    ),
-    ReaderTool(
-      id: 'Publisher',
-      label: 'publisher',
-      description: 'Manage the layout and template (Chicken Mode).',
-      defaultIcon: Icons.publish_outlined,
-      activeIcon: Icons.publish,
-      role: ToolRole.editor,
-      action: ToolAction.openBonusRow,
-      bonusRow: BonusRowType.publisher,
     ),
     ReaderTool(
       id: 'Views',

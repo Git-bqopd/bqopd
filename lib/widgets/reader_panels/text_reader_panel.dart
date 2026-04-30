@@ -1,34 +1,28 @@
 import 'package:flutter/material.dart';
 import '../../utils/link_parser.dart';
-import 'publisher_panel.dart'; // To reuse InlineTextEditor if in editing mode
 
 class TextReaderPanel extends StatelessWidget {
   final String text;
   final ValueNotifier<double> fontSizeNotifier;
-  final bool isEditingMode;
-  final String imageId;
 
   const TextReaderPanel({
     super.key,
     required this.text,
     required this.fontSizeNotifier,
-    required this.isEditingMode,
-    required this.imageId,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (isEditingMode) {
-      return InlineTextEditor(
-        imageId: imageId,
-        initialText: text,
-        showPublisherPreview: false,
+    if (text.trim().isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text("No text available for this page.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min, // Avoid infinite height crash in ScrollablePositionedList
+      mainAxisSize: MainAxisSize.min, // Avoid infinite height crash
       children: [
         _FontSizeSlider(fontSizeNotifier: fontSizeNotifier),
         ValueListenableBuilder<double>(

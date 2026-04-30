@@ -40,7 +40,7 @@ class OcrStatusPanel extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("OCR STATUS (EGG MODE)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  const Text("PIPELINE STATUS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                   if (status == 'review_needed' || status == 'complete')
                     const Icon(Icons.check_circle, color: Colors.green, size: 14),
                 ],
@@ -73,28 +73,6 @@ class OcrStatusPanel extends StatelessWidget {
                   ),
                 )
               ],
-              const SizedBox(height: 16),
-              const Divider(),
-              const Text("RAW EXTRACTION", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-              const SizedBox(height: 8),
-              if (imageId.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
-                  child: const Text("Image not registered yet. Waiting for initial pipeline run...", style: TextStyle(fontSize: 12, fontFamily: 'Courier', color: Colors.grey)),
-                )
-              else
-                FutureBuilder<DocumentSnapshot>(
-                    future: FirebaseFirestore.instance.collection('images').doc(imageId).get(),
-                    builder: (context, imgSnap) {
-                      final raw = (imgSnap.data?.data() as Map?)?['text_raw'] ?? "Pending...";
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
-                        child: Text(raw, style: const TextStyle(fontSize: 12, fontFamily: 'Courier')),
-                      );
-                    }
-                )
             ],
           );
         }

@@ -29,6 +29,12 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
     super.dispose();
   }
 
+  void _saveMeta(BuildContext tabContext) {
+    tabContext.read<FanzineEditorBloc>().add(UpdateFanzineMetadata(
+        _titleController.text, '', '', ''
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return BaseFanzineWorkspace(
@@ -60,13 +66,12 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
         children: [
           TextField(
             controller: _titleController,
-            onSubmitted: (val) => bloc.add(UpdateFanzineTitle(val)),
             decoration: const InputDecoration(
                 labelText: 'fanzine name',
                 isDense: true,
                 border: OutlineInputBorder(),
                 focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                helperText: "Press enter to save"),
+                floatingLabelStyle: TextStyle(color: Colors.black87)),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
@@ -91,12 +96,10 @@ class _FanzineEditorWidgetState extends State<FanzineEditorWidget> {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () {
-              bloc.add(UpdateFanzineTitle(_titleController.text));
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/');
-              }
+              _saveMeta(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("settings saved."))
+              );
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.grey,

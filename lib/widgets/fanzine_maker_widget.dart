@@ -25,12 +25,27 @@ class FanzineMakerWidget extends StatefulWidget {
 
 class _FanzineMakerWidgetState extends State<FanzineMakerWidget> {
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _volumeController = TextEditingController();
+  final TextEditingController _issueController = TextEditingController();
+  final TextEditingController _wholeNumberController = TextEditingController();
   String? _lastSyncedTitle;
 
   @override
   void dispose() {
     _titleController.dispose();
+    _volumeController.dispose();
+    _issueController.dispose();
+    _wholeNumberController.dispose();
     super.dispose();
+  }
+
+  void _saveMeta(BuildContext tabContext) {
+    tabContext.read<FanzineEditorBloc>().add(UpdateFanzineMetadata(
+      _titleController.text,
+      _volumeController.text,
+      _issueController.text,
+      _wholeNumberController.text,
+    ));
   }
 
   @override
@@ -64,10 +79,11 @@ class _FanzineMakerWidgetState extends State<FanzineMakerWidget> {
   }
 
   Widget _buildMakerSettingsTab(BuildContext context, Fanzine fanzine) {
-    final bloc = context.read<FanzineEditorBloc>();
-
     if (_lastSyncedTitle != fanzine.title) {
       _titleController.text = fanzine.title;
+      _volumeController.text = fanzine.volume ?? '';
+      _issueController.text = fanzine.issue ?? '';
+      _wholeNumberController.text = fanzine.wholeNumber ?? '';
       _lastSyncedTitle = fanzine.title;
     }
 
@@ -79,7 +95,7 @@ class _FanzineMakerWidgetState extends State<FanzineMakerWidget> {
         children: [
           TextField(
             controller: _titleController,
-            onSubmitted: (val) => bloc.add(UpdateFanzineTitle(val)),
+            onSubmitted: (_) => _saveMeta(context),
             decoration: const InputDecoration(
               labelText: 'fanzine name',
               isDense: true,
@@ -89,11 +105,39 @@ class _FanzineMakerWidgetState extends State<FanzineMakerWidget> {
             ),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _volumeController,
+                  onSubmitted: (_) => _saveMeta(context),
+                  decoration: const InputDecoration(labelText: 'Volume', isDense: true, border: OutlineInputBorder()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _issueController,
+                  onSubmitted: (_) => _saveMeta(context),
+                  decoration: const InputDecoration(labelText: 'Issue', isDense: true, border: OutlineInputBorder()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _wholeNumberController,
+                  onSubmitted: (_) => _saveMeta(context),
+                  decoration: const InputDecoration(labelText: 'Whole Number', isDense: true, border: OutlineInputBorder()),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
-              bloc.add(UpdateFanzineTitle(_titleController.text));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("title updated.")));
+              _saveMeta(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("settings updated.")));
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.grey, foregroundColor: Colors.white),
             child: const Text("save folio", style: TextStyle(fontWeight: FontWeight.bold)),

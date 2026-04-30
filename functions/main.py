@@ -130,17 +130,20 @@ def fanzine_traffic_manager(event: firestore_fn.Event[firestore_fn.Change[firest
     if status == 'needs_ingest':
         fref.update({'processingStatus': 'extracting_images'})
         _do_pdf_ingest(fanzine_id, data.get('sourceFile'), data.get('uploaderId', 'system_ingest'))
-    elif status == 'processing_ocr':
-        pages_ref = fref.collection('pages')
-        pending = list(pages_ref.where(filter=firestore.FieldFilter('status', 'in', ['ready', 'queued'])).limit(1).stream())
-        if not pending:
-            fref.update({'processingStatus': 'review_needed'})
+    elif status == 'images_ready':
+        # Automatically trigger pipeline step 1
+        fref.update({'processingStatus': 'processing_ocr'})
+        pages = fref.collection('pages').stream()
+        batch = db.batch()
+        for p in pages:
+            batch.update(p.reference, {'status': 'queued'})
+        batch.commit()
     elif status == 'ready_for_agg':
         fref.update({'processingStatus': 'aggregating'})
         _do_aggregation(fanzine_id)
 
 # --------------------------------------------------------------------------------
-# WORKER 1: TRANSCRIPTION (Using Vision API)
+# WORKER 1: TRANSCRIPTION (Cloud Vision) -> writes to text_raw
 # --------------------------------------------------------------------------------
 @firestore_fn.on_document_written(document="fanzines/{fanzineId}/pages/{pageId}", memory=1024, timeout_sec=120)
 def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
@@ -185,20 +188,19 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
                 'status': 'approved',
                 'timestamp': firestore.SERVER_TIMESTAMP,
                 'uploaderId': data.get('uploaderId', 'system_ingest'),
-                'text': transcription,
                 'text_raw': transcription,
+                'needs_ai_cleaning': True,
                 'folioContext': fanzine_id,
                 'usedInFanzines': [fanzine_id]
             })
             page_ref.update({'imageId': image_id})
         else:
             db.collection('images').document(image_id).update({
-                'text': transcription,
-                'text_raw': transcription
+                'text_raw': transcription,
+                'needs_ai_cleaning': True
             })
 
         page_ref.update({
-            'text_raw': transcription,
             'status': 'transcribed',
             'processedAt': firestore.SERVER_TIMESTAMP
         })
@@ -207,53 +209,126 @@ def ocr_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Docume
         print(f"Transcription Error: {traceback.format_exc()}")
         page_ref.update({'status': 'error', 'errorLog': f"Transcription: {str(e)}"})
 
-
 # --------------------------------------------------------------------------------
-# WORKER 2: ENTITY EXTRACTION (Using Gemini)
+# WORKER 2: AI FORMATTING & CORRECTION -> writes to text_corrected
 # --------------------------------------------------------------------------------
-@firestore_fn.on_document_written(document="fanzines/{fanzineId}/pages/{pageId}", secrets=[GEMINI_API_KEY], memory=1024, timeout_sec=60)
-def entity_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
-    if not event.data.after: return
+@firestore_fn.on_document_written(document="images/{imageId}", secrets=[GEMINI_API_KEY], memory=1024, timeout_sec=120)
+def ai_cleaning_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    if not event.data.after or not event.data.after.exists: return
     data = event.data.after.to_dict()
-    if data.get('status') != 'entity_queued': return
 
-    db = firestore.client()
-    page_ref = event.data.after.reference
-    text_content = data.get('text_raw', '')
+    if not data.get('needs_ai_cleaning'): return
 
-    if not text_content or text_content == "[No text detected on this page]":
-        page_ref.update({'status': 'complete', 'detected_entities': []})
+    text_raw = data.get('text_raw', '')
+    if not text_raw or text_raw == "[No text detected]":
+        event.data.after.reference.update({
+            'needs_ai_cleaning': False,
+            'text_corrected': text_raw,
+            'text_corrected_ai': text_raw,
+            'needs_linking': True
+        })
         return
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY.value)
-        prompt = f"Identify people and groups in this text. Return a JSON array of strings: {text_content}"
+        prompt = f"Clean up the following raw OCR text from a fanzine. Fix typos, standardize headers, and format it properly as markdown. Do not add conversational filler. Output only the cleaned text.\n\nText:\n{text_raw}"
 
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-2.5-flash",
+            contents=[prompt],
+        )
+        clean_text = response.text.strip()
+
+        event.data.after.reference.update({
+            'text_corrected': clean_text,
+            'text_corrected_ai': clean_text,
+            'needs_ai_cleaning': False,
+            'needs_linking': True
+        })
+    except Exception as e:
+        print(f"AI Cleaning Error: {traceback.format_exc()}")
+        event.data.after.reference.update({'errorLog_cleaning': str(e), 'needs_ai_cleaning': False})
+
+# --------------------------------------------------------------------------------
+# WORKER 3: ENTITY LINKING -> writes to text_linked
+# --------------------------------------------------------------------------------
+@firestore_fn.on_document_written(document="images/{imageId}", secrets=[GEMINI_API_KEY], memory=1024, timeout_sec=120)
+def linking_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    if not event.data.after or not event.data.after.exists: return
+    data = event.data.after.to_dict()
+
+    if not data.get('needs_linking'): return
+
+    text_corrected = data.get('text_corrected', '')
+    if not text_corrected:
+        event.data.after.reference.update({
+            'needs_linking': False,
+            'text_linked': '',
+            'text_linked_ai': ''
+        })
+        return
+
+    db = firestore.client()
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY.value)
+        prompt = f"Identify people, groups, or entities in this text. Return a JSON array of strings containing their names exactly as they appear in the text: {text_corrected}"
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
             contents=[prompt],
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
-
         ents = extract_json_from_text(response.text)
         clean_ents = [normalize_entity(e) for e in ents if normalize_entity(e)] if isinstance(ents, list) else []
 
-        image_id = data.get('imageId')
-        if image_id:
-            db.collection('images').document(image_id).update({'detected_entities': clean_ents})
+        text_linked = text_corrected
+        clean_ents.sort(key=lambda x: len(x), reverse=True)
 
-        page_ref.update({
-            'detected_entities': clean_ents,
-            'status': 'complete',
-            'entitiesProcessedAt': firestore.SERVER_TIMESTAMP
+        for ent in clean_ents:
+            if not ent: continue
+
+            # Check database for exact handle/UID redirect
+            handle = ent.lower().replace(' ', '-')
+            handle = re.sub(r'[^a-z0-9-]', '', handle)
+            user_doc = db.collection('usernames').document(handle).get()
+
+            replacement = f"[[{ent}]]"
+            if user_doc.exists:
+                u_data = user_doc.to_dict()
+                if 'redirect' in u_data:
+                    target_handle = u_data['redirect']
+                    target_doc = db.collection('usernames').document(target_handle).get()
+                    if target_doc.exists:
+                        target_uid = target_doc.to_dict().get('uid')
+                        if target_uid: replacement = f"[[{ent}|user:{target_uid}]]"
+                elif 'uid' in u_data:
+                    replacement = f"[[{ent}|user:{u_data['uid']}]]"
+
+            escaped_name = re.escape(ent)
+            pattern = re.compile(r'(?<!\[)(' + escaped_name + r')(?!\])', re.IGNORECASE)
+            text_linked = pattern.sub(replacement, text_linked)
+
+        event.data.after.reference.update({
+            'text_linked': text_linked,
+            'text_linked_ai': text_linked,
+            'needs_linking': False,
+            'detected_entities': clean_ents
         })
 
+        # FIXED: Bubble up these extracted entities to the parent Fanzine so they instantly appear in the Profile Entities Tab!
+        used_in = data.get('usedInFanzines', [])
+        if clean_ents and used_in:
+            for fid in used_in:
+                db.collection('fanzines').document(fid).update({
+                    'draftEntities': firestore.ArrayUnion(clean_ents)
+                })
+
     except Exception as e:
-        print(f"Entity Extraction Error: {traceback.format_exc()}")
-        page_ref.update({'status': 'error', 'errorLog': f"Entities: {str(e)}"})
+        print(f"Linking Error: {traceback.format_exc()}")
+        event.data.after.reference.update({'errorLog_linking': str(e), 'needs_linking': False})
 
 # --------------------------------------------------------------------------------
-# WORKER 3: IMAGE RESIZING (THUMBNAIL GENERATOR)
+# WORKER 4: IMAGE RESIZING (THUMBNAIL GENERATOR)
 # --------------------------------------------------------------------------------
 @firestore_fn.on_document_written(document="images/{imageId}", memory=1024, timeout_sec=120)
 def generate_thumbnails(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
@@ -356,12 +431,19 @@ def _do_pdf_ingest(fanzine_id, file_path, uploader_id):
             img_bytes = pix.tobytes("jpeg")
 
             dest = f"fanzines/{fanzine_id}/pages/page_{page_num:03d}.jpg"
-            bucket.blob(dest).upload_from_string(img_bytes, content_type="image/jpeg")
+            img_blob = bucket.blob(dest)
 
             new_img_ref = db.collection('images').document()
+            token = new_img_ref.id
+            img_blob.metadata = {"firebaseStorageDownloadTokens": token}
+            img_blob.upload_from_string(img_bytes, content_type="image/jpeg")
+            img_blob.patch()
+
+            file_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{urllib.parse.quote(dest, safe='')}?alt=media&token={token}"
+
             batch.set(new_img_ref, {
                 'storagePath': dest,
-                'fileUrl': '',
+                'fileUrl': file_url,
                 'shortCode': generate_simple_shortcode(),
                 'status': 'approved',
                 'timestamp': firestore.SERVER_TIMESTAMP,
@@ -373,6 +455,7 @@ def _do_pdf_ingest(fanzine_id, file_path, uploader_id):
             batch.set(fref.collection('pages').document(), {
                 'pageNumber': page_num,
                 'storagePath': dest,
+                'imageUrl': file_url,
                 'imageId': new_img_ref.id,
                 'status': 'ready',
                 'uploadedAt': firestore.SERVER_TIMESTAMP
@@ -405,6 +488,34 @@ def trigger_batch_ocr(req: https_fn.CallableRequest):
     batch = db.batch()
     for p in pages:
         batch.update(p.reference, {'status': 'queued', 'errorLog': firestore.DELETE_FIELD})
+    batch.commit()
+    return {"success": True}
+
+@https_fn.on_call()
+def trigger_ai_clean(req: https_fn.CallableRequest):
+    fid = req.data.get('fanzineId')
+    db = firestore.client()
+    pages = db.collection('fanzines').document(fid).collection('pages').stream()
+    batch = db.batch()
+    for p in pages:
+        d = p.to_dict()
+        img_id = d.get('imageId')
+        if img_id:
+            batch.update(db.collection('images').document(img_id), {'needs_ai_cleaning': True})
+    batch.commit()
+    return {"success": True}
+
+@https_fn.on_call()
+def trigger_generate_links(req: https_fn.CallableRequest):
+    fid = req.data.get('fanzineId')
+    db = firestore.client()
+    pages = db.collection('fanzines').document(fid).collection('pages').stream()
+    batch = db.batch()
+    for p in pages:
+        d = p.to_dict()
+        img_id = d.get('imageId')
+        if img_id:
+            batch.update(db.collection('images').document(img_id), {'needs_linking': True})
     batch.commit()
     return {"success": True}
 
@@ -444,16 +555,30 @@ def handle_pdf_upload(event: storage_fn.CloudEvent[storage_fn.StorageObjectData]
     if not file_path.endswith('.pdf') or 'uploads/raw_pdfs/' not in file_path: return
     db = firestore.client()
 
-    # 1. Create the base document first
-    new_doc_ref = db.collection('fanzines').document()
-    new_doc_ref.set({
-        'title': os.path.basename(file_path).replace('.pdf', '').replace('_', ' ').title(),
-        'sourceFile': file_path,
-        'processingStatus': 'needs_ingest',
-        'isLive': False, # REPLACED status: 'draft'
-        'creationDate': firestore.SERVER_TIMESTAMP,
-        'uploaderId': event.data.metadata.get('uploaderId') if event.data.metadata else 'unknown'
-    })
+    short_code = ""
+    is_unique = False
 
-    # 2. Assign the shortcode immediately
-    ensure_shortcode(db, 'fanzines', new_doc_ref.id, 'fanzine')
+    while not is_unique:
+        short_code = generate_simple_shortcode()
+        sc_ref = db.collection('shortcodes').document(short_code.upper())
+        if not sc_ref.get().exists:
+            is_unique = True
+
+            new_doc_ref = db.collection('fanzines').document()
+            sc_ref.set({
+                'type': 'fanzine',
+                'contentId': new_doc_ref.id,
+                'displayCode': short_code,
+                'createdAt': firestore.SERVER_TIMESTAMP
+            })
+
+            new_doc_ref.set({
+                'title': os.path.basename(file_path).replace('.pdf', '').replace('_', ' ').title(),
+                'sourceFile': file_path,
+                'processingStatus': 'needs_ingest',
+                'isLive': False,
+                'creationDate': firestore.SERVER_TIMESTAMP,
+                'uploaderId': event.data.metadata.get('uploaderId') if event.data.metadata else 'unknown',
+                'shortCode': short_code,
+                'shortCodeKey': short_code.upper()
+            })

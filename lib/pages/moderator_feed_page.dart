@@ -142,7 +142,6 @@ class _ModeratorCardState extends State<_ModeratorCard> {
       fanzineId: 'moderation_queue',
       fanzineTitle: 'Moderator Feed',
       text: text,
-      // FIXED: Using dot notation for UserProfile properties
       displayName: userProvider.userProfile?.displayName,
       username: userProvider.userProfile?.username,
     );
@@ -162,6 +161,17 @@ class _ModeratorCardState extends State<_ModeratorCard> {
     final uploaderId = widget.data['uploaderId'] as String? ?? 'unknown';
 
     final bool isApproved = tags.containsKey('approved') && (tags['approved'] as List).isNotEmpty;
+
+    // Map the text layers
+    final String tLinked = widget.data['text_linked'] ?? '';
+    final String tCorrected = widget.data['text_corrected'] ?? widget.data['text'] ?? '';
+    final String tRaw = widget.data['text_raw'] ?? '';
+
+    // AI baselines (Moderation cards might not be scored, but we supply empty strings safely)
+    final String tLinkedAi = widget.data['text_linked_ai'] ?? '';
+    final String tCorrectedAi = widget.data['text_corrected_ai'] ?? '';
+
+    final String actualText = tLinked.trim().isNotEmpty ? tLinked : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
 
     return Container(
       decoration: BoxDecoration(
@@ -208,7 +218,6 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                   future: FirebaseFirestore.instance.collection('profiles').doc(uploaderId).get(),
                   builder: (context, snap) {
                     if (snap.hasData && snap.data!.exists) {
-                      // FIXED: Using UserProfile model to ensure correct property access
                       final profile = UserProfile.fromFirestore(snap.data!);
                       return Text("Uploaded by @${profile.username}", style: const TextStyle(color: Colors.grey, fontSize: 12));
                     }
@@ -223,7 +232,7 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                   imageId: widget.docId,
                   fanzineType: null,
                   isGame: false,
-                  isEditingMode: false,
+                  isEditingMode: true, // Moderation acts like an editor mode
                   activeBonusRow: _activePanel,
                   onToggleBonusRow: (rowType) {
                     setState(() {
@@ -241,8 +250,13 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                         PanelContext(
                           type: _activePanel!,
                           imageId: widget.docId,
-                          actualText: widget.data['text'] ?? widget.data['text_raw'] ?? '',
-                          isEditingMode: false,
+                          actualText: actualText,
+                          textRaw: tRaw,
+                          textCorrected: tCorrected,
+                          textLinked: tLinked,
+                          textCorrectedAi: tCorrectedAi, // Fixed: Provided AI Baseline
+                          textLinkedAi: tLinkedAi,       // Fixed: Provided AI Baseline
+                          isEditingMode: true,
                           viewService: _viewService,
                           engagementService: _engagementService,
                           commentController: _commentController,
