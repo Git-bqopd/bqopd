@@ -81,8 +81,14 @@ class EntityRow extends StatelessWidget {
   Future<void> _createProfile(BuildContext context, String name) async {
     String first = name; String last = "";
     if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    final expectedHandle = normalizeHandle(name);
     try {
-      await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
+      await createManagedProfile(
+        firstName: first,
+        lastName: last,
+        bio: "Auto-created from Editor Widget",
+        explicitHandle: expectedHandle,
+      );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
     } catch (e) {

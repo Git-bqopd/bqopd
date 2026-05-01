@@ -65,6 +65,7 @@ Future<String?> createManagedProfile({
   required String firstName,
   required String lastName,
   required String bio,
+  String? explicitHandle,
 }) async {
   final currentUser = FirebaseAuth.instance.currentUser;
   if (currentUser == null) return null;
@@ -73,7 +74,9 @@ Future<String?> createManagedProfile({
   final profileRef = db.collection('profiles').doc();
 
   final fullName = "$firstName $lastName".trim();
-  String baseHandle = fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+
+  // Use the explicit handle if provided, otherwise fallback to the old generation logic
+  String baseHandle = explicitHandle ?? fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
 
   if (baseHandle.isEmpty) {
     baseHandle = 'entity-${DateTime.now().millisecondsSinceEpoch}';

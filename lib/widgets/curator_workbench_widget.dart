@@ -5,6 +5,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../blocs/curator_workbench/curator_workbench_bloc.dart';
 import '../repositories/fanzine_repository.dart';
 import '../repositories/pipeline_repository.dart';
+import '../services/user_bootstrap.dart';
+import '../services/username_service.dart';
 
 class CuratorWorkbenchWidget extends StatelessWidget {
   final String fanzineId;
@@ -193,7 +195,11 @@ class _CuratorWorkbenchViewState extends State<_CuratorWorkbenchView>
                     separatorBuilder: (c, i) => const Divider(),
                     itemBuilder: (context, i) {
                       final e = state.detectedEntities[i];
-                      return ListTile(title: Text(e['name']), subtitle: Text(e['status']));
+                      return _EntityRow(
+                          name: e['name'],
+                          status: e['status'],
+                          redirect: e['redirect']
+                      );
                     },
                   )
                 ],
@@ -255,5 +261,73 @@ class _Counter extends StatelessWidget {
       Text("$count", style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 18)),
       Text(label, style: const TextStyle(fontSize: 10))
     ]);
+  }
+}
+
+class _EntityRow extends StatelessWidget {
+  final String name;
+  final String status;
+  final String? redirect;
+
+  const _EntityRow({required this.name, required this.status, this.redirect});
+
+  @override
+  Widget build(BuildContext context) {
+    final handle = normalizeHandle(name);
+
+    Widget statusWidget;
+    if (status == 'exists') {
+      statusWidget = Text('/$handle', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
+    } else if (status == 'alias') {
+      statusWidget = Text('/$handle -> /${redirect ?? 'unknown'}', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
+    } else {
+      statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
+        TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
+        TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
+      ]);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(children: [
+        Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
+        statusWidget,
+      ]),
+    );
+  }
+
+  Future<void> _createProfile(BuildContext context, String name) async {
+    String first = name; String last = "";
+    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    final expectedHandle = normalizeHandle(name);
+    try {
+      await createManagedProfile(
+        firstName: first,
+        lastName: last,
+        bio: "Auto-created from Editor Widget",
+        explicitHandle: expectedHandle,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
+  }
+
+  Future<void> _createAlias(BuildContext context, String name) async {
+    final target = await showDialog<String>(context: context, builder: (c) {
+      final controller = TextEditingController();
+      return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
+    });
+    if (target == null || target.isEmpty) return;
+    try {
+      await createAlias(aliasHandle: name, targetHandle: target);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 }

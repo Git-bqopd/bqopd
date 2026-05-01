@@ -157,8 +157,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     List<String> tabs = [];
 
-    // FIXED: Allow admins to see the settings tab on ANY profile for management
-    if (isMe || event.isViewerAdmin) {
+    // Only show the settings tab if the user is looking at their own profile.
+    if (isMe) {
       tabs.add('settings');
     }
 

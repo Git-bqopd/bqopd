@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
@@ -39,8 +40,24 @@ class ProfilePage extends StatelessWidget {
     final extraMap = extra is Map<String, dynamic> ? extra : null;
     final queryParams = GoRouterState.of(context).uri.queryParameters;
 
-    final initialTab = extraMap?['tab'] as String? ?? queryParams['tab'];
-    final initialDrafts = (extraMap?['drafts'] as bool?) ?? (queryParams['drafts'] == 'true');
+    final isMe = targetUserId == currentUid;
+    final prefs = userProvider.userAccount?.preferences['profile'] as Map<String, dynamic>? ?? {};
+
+    // Get explicit params if provided in route
+    String? explicitTab = extraMap?['tab'] as String? ?? queryParams['tab'];
+    bool? explicitDrafts = (extraMap?['drafts'] as bool?) ?? (queryParams['drafts'] == 'true' ? true : null);
+
+    String? initialTab = explicitTab;
+    bool initialDrafts = false;
+
+    // Apply Sticky Routing logic
+    if (isMe) {
+      initialTab ??= prefs['mainTab'] as String?;
+      initialDrafts = explicitDrafts ?? (prefs['showDrafts'] as bool? ?? false);
+    } else {
+      initialTab ??= 'maker';
+      initialDrafts = explicitDrafts ?? false;
+    }
 
     return BlocProvider(
       create: (context) => ProfileBloc(
@@ -54,14 +71,25 @@ class ProfilePage extends StatelessWidget {
         isViewerCurator: userProvider.isCurator,
         initialTab: initialTab,
       )),
-      child: _ProfilePageView(initialDrafts: initialDrafts),
+      child: _ProfilePageView(
+        initialDrafts: initialDrafts,
+        isMe: isMe,
+        prefs: prefs,
+      ),
     );
   }
 }
 
 class _ProfilePageView extends StatefulWidget {
   final bool initialDrafts;
-  const _ProfilePageView({this.initialDrafts = false});
+  final bool isMe;
+  final Map<String, dynamic> prefs;
+
+  const _ProfilePageView({
+    this.initialDrafts = false,
+    required this.isMe,
+    required this.prefs,
+  });
 
   @override
   State<_ProfilePageView> createState() => _ProfilePageViewState();
@@ -84,6 +112,11 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   void initState() {
     super.initState();
     _showDrafts = widget.initialDrafts;
+    if (widget.isMe) {
+      _curatorSubTabIndex = widget.prefs['curatorSubTab'] as int? ?? 0;
+      _indexSubTabIndex = widget.prefs['indexSubTab'] as int? ?? 0;
+      _settingsSubTabIndex = widget.prefs['settingsSubTab'] as int? ?? 0;
+    }
     _loadGlobalSettings();
   }
 
@@ -124,6 +157,47 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
       }
     }
+  }
+
+  void _savePrefs({String? newMainTab}) {
+    if (!widget.isMe) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    String mainTab = newMainTab ?? '';
+    if (mainTab.isEmpty) {
+      try {
+        final profileState = context.read<ProfileBloc>().state;
+        if (profileState.visibleTabs.isNotEmpty) {
+          mainTab = profileState.visibleTabs[profileState.currentTabIndex];
+        }
+      } catch (_) {}
+    }
+
+    if (mainTab.isEmpty) return;
+
+    FirebaseFirestore.instance.collection('Users').doc(uid).update({
+      'preferences.profile': {
+        'mainTab': mainTab,
+        'showDrafts': _showDrafts,
+        'curatorSubTab': _curatorSubTabIndex,
+        'indexSubTab': _indexSubTabIndex,
+        'settingsSubTab': _settingsSubTabIndex,
+      }
+    }).catchError((_) {
+      // Fallback if the nested map doesn't exist yet
+      FirebaseFirestore.instance.collection('Users').doc(uid).set({
+        'preferences': {
+          'profile': {
+            'mainTab': mainTab,
+            'showDrafts': _showDrafts,
+            'curatorSubTab': _curatorSubTabIndex,
+            'indexSubTab': _indexSubTabIndex,
+            'settingsSubTab': _settingsSubTabIndex,
+          }
+        }
+      }, SetOptions(merge: true));
+    });
   }
 
   bool _canEdit(String uid, bool isManaged, List<String> managers) {
@@ -393,12 +467,18 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           currentIndex: state.currentTabIndex,
                           onTabChanged: (idx) {
                             context.read<ProfileBloc>().add(ChangeTabRequested(idx));
-                            setState(() {
-                              _showDrafts = false;
-                              _curatorSubTabIndex = 0;
-                              _indexSubTabIndex = 0;
-                              _settingsSubTabIndex = 0;
-                            });
+                            if (!widget.isMe) {
+                              setState(() {
+                                _showDrafts = false;
+                                _curatorSubTabIndex = 0;
+                                _indexSubTabIndex = 0;
+                                _settingsSubTabIndex = 0;
+                              });
+                            }
+                            final tabs = context.read<ProfileBloc>().state.visibleTabs;
+                            if (idx < tabs.length) {
+                              _savePrefs(newMainTab: tabs[idx]);
+                            }
                           },
                           canEdit: canEditProfile,
                           onUploadImage: () => _showImageUpload(targetUserId),
@@ -453,15 +533,16 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              GestureDetector(
-                                onTap: () => _showCatalogModal(targetUserId),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                  decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-                                  child: Text(_isUploadingPdf ? "uploading..." : "catalog", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                              if (isOwner)
+                                GestureDetector(
+                                  onTap: () => _showCatalogModal(targetUserId),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                    decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+                                    child: Text(_isUploadingPdf ? "uploading..." : "catalog", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
+                              if (isOwner) const SizedBox(width: 12),
                               _buildSubTab("curator", 0, type: 'curator'),
                               const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
                               _buildSubTab("publisher", 1, type: 'curator'),
@@ -485,7 +566,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              if (canEditProfile)
+                              if (isOwner)
                                 GestureDetector(
                                   onTap: () => _showMakerCreateModal(targetUserId),
                                   child: Container(
@@ -494,15 +575,21 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                     child: const Text("make", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
                                   ),
                                 ),
-                              if (canEditProfile) const SizedBox(width: 12),
+                              if (isOwner) const SizedBox(width: 12),
                               GestureDetector(
-                                onTap: () => setState(() => _showDrafts = false),
+                                onTap: () {
+                                  setState(() => _showDrafts = false);
+                                  _savePrefs();
+                                },
                                 child: Text("published", style: TextStyle(color: !_showDrafts ? Colors.black : Colors.grey, fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal, decoration: !_showDrafts ? TextDecoration.underline : null)),
                               ),
                               if (canSeeDrafts) ...[
                                 const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
                                 GestureDetector(
-                                  onTap: () => setState(() => _showDrafts = true),
+                                  onTap: () {
+                                    setState(() => _showDrafts = true);
+                                    _savePrefs();
+                                  },
                                   child: Text("drafts", style: TextStyle(color: _showDrafts ? Colors.black : Colors.grey, fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal, decoration: _showDrafts ? TextDecoration.underline : null)),
                                 ),
                               ],
@@ -555,15 +642,18 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
     final isActive = currentIdx == index;
     return GestureDetector(
-      onTap: () => setState(() {
-        if (type == 'curator') {
-          _curatorSubTabIndex = index;
-        } else if (type == 'index') {
-          _indexSubTabIndex = index;
-        } else {
-          _settingsSubTabIndex = index;
-        }
-      }),
+      onTap: () {
+        setState(() {
+          if (type == 'curator') {
+            _curatorSubTabIndex = index;
+          } else if (type == 'index') {
+            _indexSubTabIndex = index;
+          } else {
+            _settingsSubTabIndex = index;
+          }
+        });
+        _savePrefs();
+      },
       child: Text(label, style: TextStyle(color: isActive ? Colors.black : Colors.grey, fontWeight: isActive ? FontWeight.bold : FontWeight.normal, decoration: isActive ? TextDecoration.underline : null)),
     );
   }
@@ -857,7 +947,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
                           child: ListTile(
                             title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            subtitle: Text("UID: $uid", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                            subtitle: Text("UID: $uid", style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'monospace')),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1171,8 +1261,14 @@ class _EntityRow extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     String first = name; String last = "";
     if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    final expectedHandle = normalizeHandle(name);
     try {
-      await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget");
+      await createManagedProfile(
+        firstName: first,
+        lastName: last,
+        bio: "Auto-created from Editor Widget",
+        explicitHandle: expectedHandle,
+      );
       if (!context.mounted) {
         return;
       }
@@ -1374,8 +1470,9 @@ class _MakerItemTile extends StatelessWidget {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
                   }
-                  if (snapshot.hasData && snapshot.data != null && snapshot.data!.isNotEmpty) {
-                    return Image.network(snapshot.data!, fit: BoxFit.cover);
+                  final thumbUrl = snapshot.data;
+                  if (thumbUrl != null && thumbUrl.isNotEmpty) {
+                    return Image.network(thumbUrl, fit: BoxFit.cover);
                   }
                   return const Icon(Icons.menu_book, color: Colors.black12, size: 40);
                 },
