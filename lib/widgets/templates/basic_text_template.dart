@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/link_parser.dart';
 
 enum BlockType { text, image }
@@ -62,6 +63,33 @@ class BasicTextTemplate extends StatelessWidget {
       safeCols.add([]);
     }
 
+    Widget content = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildColumnWidget(context, safeCols[0]),
+        _buildDivider(),
+        _buildColumnWidget(context, safeCols[1]),
+        _buildDivider(),
+        _buildColumnWidget(context, safeCols[2]),
+      ],
+    );
+
+    // RESTORED: Apply the transparent PNG overlay if requested
+    if (showOverlay) {
+      content = Stack(
+        fit: StackFit.expand,
+        children: [
+          content,
+          IgnorePointer(
+            child: Image.asset(
+              'assets/overlays/borders.png',
+              fit: BoxFit.fill,
+            ),
+          ),
+        ],
+      );
+    }
+
     return Container(
       width: targetWidth,
       height: targetHeight,
@@ -72,16 +100,7 @@ class BasicTextTemplate extends StatelessWidget {
           width: outerBorderWidth,
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildColumnWidget(context, safeCols[0]),
-          _buildDivider(),
-          _buildColumnWidget(context, safeCols[1]),
-          _buildDivider(),
-          _buildColumnWidget(context, safeCols[2]),
-        ],
-      ),
+      child: content,
     );
   }
 
@@ -89,7 +108,6 @@ class BasicTextTemplate extends StatelessWidget {
     return Container(
       width: columnWidth,
       padding: const EdgeInsets.all(innerPadding),
-      // Ensure clipping is strict to avoid overflow errors
       clipBehavior: Clip.hardEdge,
       decoration: const BoxDecoration(),
       child: Column(
@@ -109,10 +127,6 @@ class BasicTextTemplate extends StatelessWidget {
               ),
             );
           } else {
-            // Using Flexible/Expanded can sometimes cause issues if inside a scrollable view
-            // or if the parent Column isn't constrained properly.
-            // Since we know the height matches, we just render it.
-            // If overflow persists, wrapping in a SizedBox with the measured height helps.
             return SelectableText.rich(
               LinkParser.renderLinks(
                 context,
@@ -142,6 +156,7 @@ class BasicTextTemplate extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: dividerGap),
+          // We keep the black line as a fallback, but it sits under the PNG overlay now
           Expanded(child: Container(color: Colors.black)),
           const SizedBox(height: dividerGap),
         ],
@@ -209,7 +224,6 @@ class BasicTextTemplate extends StatelessWidget {
           textPainter.text = TextSpan(text: testText, style: baseTextStyle);
           textPainter.layout(maxWidth: textContentWidth);
 
-          // Use a small epsilon for floating point comparison safety
           if (currentColumnHeight + textPainter.height <= textContentHeight + 0.5) {
             pendingText = testText;
           } else {
@@ -255,5 +269,34 @@ class BasicTextTemplate extends StatelessWidget {
     }
 
     return pages;
+  }
+}
+
+class BasicTextPageRenderer extends StatelessWidget {
+  final String imageId;
+  const BasicTextPageRenderer({super.key, required this.imageId});
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageId.isEmpty) return const Center(child: Text("Missing Image ID"));
+
+    return StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('images').doc(imageId).snapshots(),
+        builder: (context, snap) {
+          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          final data = snap.data?.data() as Map<String, dynamic>? ?? {};
+          final text = data['text_corrected'] ?? data['text_raw'] ?? '';
+
+          final pagesOfBlocks = BasicTextTemplate.paginateContent(text);
+
+          // Render the first generated page layout from the content
+          final columns = pagesOfBlocks.isNotEmpty ? pagesOfBlocks[0] : <List<PageBlock>>[[], [], []];
+
+          return FittedBox(
+            fit: BoxFit.contain,
+            child: BasicTextTemplate(columns: columns, showOverlay: true),
+          );
+        }
+    );
   }
 }

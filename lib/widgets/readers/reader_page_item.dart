@@ -11,6 +11,7 @@ import '../../models/panel_context.dart';
 
 import '../../components/dynamic_social_toolbar.dart';
 import '../templates/calendar_template.dart';
+import '../templates/basic_text_template.dart';
 import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
 import '../auth_modal.dart';
@@ -129,6 +130,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
                 ? CalendarPageRenderer(isLeft: true, folioId: widget.fanzineId)
                 : templateId == 'calendar_right'
                 ? CalendarPageRenderer(isLeft: false, folioId: widget.fanzineId)
+                : templateId == 'basic_text'
+                ? BasicTextPageRenderer(imageId: imageId)
                 : _PageImageLoader(url: optimalDisplayUrl),
           ),
         ),

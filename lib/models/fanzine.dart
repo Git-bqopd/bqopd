@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
-enum FanzineType { ingested, folio, calendar }
+enum FanzineType { ingested, folio, calendar, article }
 
 /// Canonical data model for the top-level Fanzine document.
 class Fanzine extends Equatable {
@@ -63,6 +63,7 @@ class Fanzine extends Equatable {
     FanzineType parsedType = FanzineType.ingested;
     if (data['type'] == 'folio') parsedType = FanzineType.folio;
     if (data['type'] == 'calendar') parsedType = FanzineType.calendar;
+    if (data['type'] == 'article') parsedType = FanzineType.article;
 
     final String owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
     final List<String> editorList = List<String>.from(data['editors'] ?? []);

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/view_service.dart';
+import '../templates/calendar_template.dart';
+import '../templates/basic_text_template.dart';
 
 /// A single row in the Fanzine Grid (Gallery) view representing a two-page spread.
 /// Uses a Stack for the header row to layer a larger Manila Envelope over standard paper.
@@ -214,12 +216,22 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
   @override
   Widget build(BuildContext context) {
     final pageNum = widget.pageData['pageNumber'] ?? widget.index;
+    final String? templateId = widget.pageData['templateId'];
+    final String imageId = widget.pageData['imageId'] ?? '';
 
     // STRIPPED BOTTLENECK: Look exclusively to the pageData map without initiating any new database queries.
     // Prioritize gridUrl (450px) -> thumbnailUrl -> original imageUrl
     final String? url = widget.pageData['gridUrl'] ?? widget.pageData['thumbnailUrl'] ?? widget.pageData['imageUrl'];
 
-    Widget buildImage() {
+    Widget buildContent() {
+      if (templateId == 'calendar_left') {
+        return CalendarPageRenderer(isLeft: true, folioId: widget.fanzineId);
+      } else if (templateId == 'calendar_right') {
+        return CalendarPageRenderer(isLeft: false, folioId: widget.fanzineId);
+      } else if (templateId == 'basic_text') {
+        return BasicTextPageRenderer(imageId: imageId);
+      }
+
       if (url != null && url.isNotEmpty) {
         return Image.network(
           url,
@@ -243,7 +255,10 @@ class _SpreadPageItemState extends State<_SpreadPageItem> {
             borderRadius: BorderRadius.circular(1),
             border: Border.all(color: Colors.black.withValues(alpha: 0.05), width: 0.5),
           ),
-          child: buildImage(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(1),
+            child: buildContent(),
+          ),
         ),
       ),
     );

@@ -224,12 +224,14 @@ class MakerCreateModal extends StatelessWidget {
   final VoidCallback onSingleImage;
   final VoidCallback onCreateFolio;
   final VoidCallback onCreateCalendar;
+  final VoidCallback onCreateArticle;
 
   const MakerCreateModal({
     super.key,
     required this.onSingleImage,
     required this.onCreateFolio,
     required this.onCreateCalendar,
+    required this.onCreateArticle,
   });
 
   @override
@@ -301,6 +303,15 @@ class MakerCreateModal extends StatelessWidget {
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   onCreateCalendar();
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              MyButton(
+                                text: "article",
+                                color: Colors.grey,
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  onCreateArticle();
                                 },
                               ),
                             ],

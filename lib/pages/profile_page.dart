@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../blocs/profile/profile_bloc.dart';
 import '../repositories/user_repository.dart';
@@ -15,12 +16,24 @@ import '../repositories/engagement_repository.dart';
 import '../services/user_provider.dart';
 import '../services/user_bootstrap.dart';
 import '../services/username_service.dart';
+import '../services/view_service.dart';
+import '../services/engagement_service.dart';
+
 import '../widgets/profile_widget.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/image_upload_modal.dart';
 import '../widgets/image_view_modal.dart';
 import '../widgets/comment_item.dart';
+import '../widgets/hashtag_bar.dart';
+import '../widgets/auth_modal.dart';
 import '../widgets/reader_panels/social_matrix_tab.dart';
+import '../widgets/reader_panels/panel_factory.dart';
+import '../widgets/reader_panels/panel_container.dart';
+import '../components/dynamic_social_toolbar.dart';
+
+import '../models/user_profile.dart';
+import '../models/reader_tool.dart';
+import '../models/panel_context.dart';
 
 class ProfilePage extends StatelessWidget {
   final String? userId;
@@ -96,7 +109,7 @@ class _ProfilePageView extends StatefulWidget {
 }
 
 class _ProfilePageViewState extends State<_ProfilePageView> {
-  bool _showDrafts = false;
+  int _makerSubTabIndex = 0; // 0 = published, 1 = drafts, 2 = moderator
   int _curatorSubTabIndex = 0;
   int _indexSubTabIndex = 0;
   int _settingsSubTabIndex = 0;
@@ -111,7 +124,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   @override
   void initState() {
     super.initState();
-    _showDrafts = widget.initialDrafts;
+    _makerSubTabIndex = widget.initialDrafts ? 1 : 0;
     if (widget.isMe) {
       _curatorSubTabIndex = widget.prefs['curatorSubTab'] as int? ?? 0;
       _indexSubTabIndex = widget.prefs['indexSubTab'] as int? ?? 0;
@@ -179,18 +192,17 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     FirebaseFirestore.instance.collection('Users').doc(uid).update({
       'preferences.profile': {
         'mainTab': mainTab,
-        'showDrafts': _showDrafts,
+        'showDrafts': _makerSubTabIndex == 1,
         'curatorSubTab': _curatorSubTabIndex,
         'indexSubTab': _indexSubTabIndex,
         'settingsSubTab': _settingsSubTabIndex,
       }
     }).catchError((_) {
-      // Fallback if the nested map doesn't exist yet
       FirebaseFirestore.instance.collection('Users').doc(uid).set({
         'preferences': {
           'profile': {
             'mainTab': mainTab,
-            'showDrafts': _showDrafts,
+            'showDrafts': _makerSubTabIndex == 1,
             'curatorSubTab': _curatorSubTabIndex,
             'indexSubTab': _indexSubTabIndex,
             'settingsSubTab': _settingsSubTabIndex,
@@ -221,6 +233,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         onSingleImage: () => _showImageUpload(userId),
         onCreateFolio: () => _createFolio(userId, isSingleImage: false),
         onCreateCalendar: () => _createCalendarFanzine(userId),
+        onCreateArticle: () => _createArticleFanzine(userId),
       ),
     );
   }
@@ -303,7 +316,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'editorId': userId,
         'editors': [],
         'isLive': false,
-        'processingStatus': 'complete',
+        'processingStatus': 'draft_calendar', // HIDDEN FROM PROFILE UNTIL SAVED
         'creationDate': FieldValue.serverTimestamp(),
         'type': 'calendar',
         'shortCode': shortCode,
@@ -316,6 +329,57 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
       if (mounted) {
         context.push('/editor/${fanzineRef.id}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _createArticleFanzine(String userId) async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final fzRef = db.collection('fanzines').doc();
+      final shortCode = fzRef.id.substring(0, 7);
+      await fzRef.set({
+        'title': 'New Article',
+        'ownerId': userId,
+        'editorId': userId,
+        'editors': [],
+        'isLive': false,
+        'processingStatus': 'complete',
+        'creationDate': FieldValue.serverTimestamp(),
+        'type': 'article',
+        'shortCode': shortCode,
+        'shortCodeKey': shortCode.toUpperCase(),
+        'twoPage': true,
+      });
+
+      // Instead of an uploaded file, an article uses a templated "Image" document to hold its text
+      final imgRef = db.collection('images').doc();
+      await imgRef.set({
+        'uploaderId': userId,
+        'type': 'template',
+        'templateId': 'basic_text',
+        'text_corrected': '# New Article\n\nStart typing...',
+        'text_raw': '# New Article\n\nStart typing...',
+        'title': 'Article Content',
+        'timestamp': FieldValue.serverTimestamp(),
+        'isGenerated': true,
+        'folioContext': fzRef.id,
+        'usedInFanzines': [fzRef.id],
+      });
+
+      await fzRef.collection('pages').add({
+        'pageNumber': 1,
+        'templateId': 'basic_text',
+        'imageId': imgRef.id,
+        'status': 'ready',
+      });
+
+      if (mounted) {
+        context.push('/editor/${fzRef.id}');
       }
     } catch (e) {
       if (mounted) {
@@ -469,7 +533,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                             context.read<ProfileBloc>().add(ChangeTabRequested(idx));
                             if (!widget.isMe) {
                               setState(() {
-                                _showDrafts = false;
+                                _makerSubTabIndex = 0;
                                 _curatorSubTabIndex = 0;
                                 _indexSubTabIndex = 0;
                                 _settingsSubTabIndex = 0;
@@ -578,21 +642,31 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                               if (isOwner) const SizedBox(width: 12),
                               GestureDetector(
                                 onTap: () {
-                                  setState(() => _showDrafts = false);
+                                  setState(() => _makerSubTabIndex = 0);
                                   _savePrefs();
                                 },
-                                child: Text("published", style: TextStyle(color: !_showDrafts ? Colors.black : Colors.grey, fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal, decoration: !_showDrafts ? TextDecoration.underline : null)),
+                                child: Text("published", style: TextStyle(color: _makerSubTabIndex == 0 ? Colors.black : Colors.grey, fontWeight: _makerSubTabIndex == 0 ? FontWeight.bold : FontWeight.normal, decoration: _makerSubTabIndex == 0 ? TextDecoration.underline : null)),
                               ),
                               if (canSeeDrafts) ...[
                                 const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
                                 GestureDetector(
                                   onTap: () {
-                                    setState(() => _showDrafts = true);
+                                    setState(() => _makerSubTabIndex = 1);
                                     _savePrefs();
                                   },
-                                  child: Text("drafts", style: TextStyle(color: _showDrafts ? Colors.black : Colors.grey, fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal, decoration: _showDrafts ? TextDecoration.underline : null)),
+                                  child: Text("drafts", style: TextStyle(color: _makerSubTabIndex == 1 ? Colors.black : Colors.grey, fontWeight: _makerSubTabIndex == 1 ? FontWeight.bold : FontWeight.normal, decoration: _makerSubTabIndex == 1 ? TextDecoration.underline : null)),
                                 ),
                               ],
+                              if (userProvider.isModerator) ...[
+                                const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() => _makerSubTabIndex = 2);
+                                    _savePrefs();
+                                  },
+                                  child: Text("moderator", style: TextStyle(color: _makerSubTabIndex == 2 ? Colors.black : Colors.grey, fontWeight: _makerSubTabIndex == 2 ? FontWeight.bold : FontWeight.normal, decoration: _makerSubTabIndex == 2 ? TextDecoration.underline : null)),
+                                ),
+                              ]
                             ],
                           ),
                         ),
@@ -673,7 +747,10 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         }
         return _buildCuratorSubView(targetUserId, canSeeDrafts);
       case 'maker':
-        return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts && canSeeDrafts);
+        if (_makerSubTabIndex == 2) {
+          return _buildModeratorSubView();
+        }
+        return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _makerSubTabIndex == 1 && canSeeDrafts);
       case 'index':
         if (_indexSubTabIndex == 1) {
           return _UserCommentsView(userId: targetUserId);
@@ -684,6 +761,84 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       default:
         return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Coming Soon"))));
     }
+  }
+
+  Widget _buildModeratorSubView() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('images')
+          .where('status', isEqualTo: 'pending')
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          final errorMsg = snapshot.error.toString();
+          if (errorMsg.contains('failed-precondition') ||
+              errorMsg.contains('requires an index')) {
+            final urlRegex =
+            RegExp(r'https://console\.firebase\.google\.com[^\s]+');
+            final match = urlRegex.firstMatch(errorMsg);
+            final indexUrl = match?.group(0);
+
+            return SliverToBoxAdapter(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("Database Index Required",
+                          style: TextStyle(
+                              color: Colors.red, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text(
+                          "To view the feed sorted by date, a Firestore index is needed.",
+                          textAlign: TextAlign.center),
+                      if (indexUrl != null) ...[
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () => launchUrl(Uri.parse(indexUrl)),
+                          child: const Text("Create Index"),
+                        )
+                      ] else
+                        SelectableText(errorMsg,
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+          return SliverToBoxAdapter(child: Center(child: SelectableText("Error: $errorMsg")));
+        }
+
+        if (!snapshot.hasData) {
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        }
+
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Queue clear. Good job!"))));
+        }
+
+        return SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                final data = docs[index].data() as Map<String, dynamic>;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 32),
+                  child: _ModeratorCard(docId: docs[index].id, data: data),
+                );
+              },
+              childCount: docs.length,
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildAITrainingDataSubView(String targetUserId) {
@@ -777,7 +932,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                 );
               }
 
-              // Fetch the parent Fanzine to display "Title + Whole Number/Issue"
               if (folioContext != null && folioContext.isNotEmpty) {
                 return FutureBuilder<DocumentSnapshot>(
                   future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
@@ -844,7 +998,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   }
 
   Widget _buildIndexSubView(String profileName) {
-    // Queries the draftEntities array on the Fanzines collection for mentions!
     Stream<QuerySnapshot> stream = FirebaseFirestore.instance
         .collection('fanzines')
         .where('draftEntities', arrayContains: profileName)
@@ -863,7 +1016,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         if (docs.isEmpty) {
           return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No mentions found.", style: TextStyle(color: Colors.grey)))));
         }
-        // Force the grid to display only thumbnails for mentions
         return _buildGrid(docs, false, thumbnailOnly: true);
       },
     );
@@ -1080,7 +1232,6 @@ class _UserCommentsView extends StatelessWidget {
           .doc('data')
           .collection('comments')
           .where('userId', isEqualTo: userId)
-      // Removed orderBy to prevent missing index errors and infinite spinners!
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -1164,9 +1315,15 @@ class _MakerCombinedView extends StatelessWidget {
 
     for (var doc in fzSnap.docs) {
       final data = doc.data();
-      if (data['type'] != 'folio' && data['type'] != 'calendar') {
+      if (data['type'] != 'folio' && data['type'] != 'calendar' && data['type'] != 'article') {
         continue;
       }
+
+      // HIDE ABANDONED CALENDAR DRAFTS FROM THE PROFILE!
+      if (data['processingStatus'] == 'draft_calendar') {
+        continue;
+      }
+
       final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
       if (owner != targetUserId) {
         continue;
@@ -1559,6 +1716,166 @@ class _Badge extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis
+      ),
+    );
+  }
+}
+
+class _ModeratorCard extends StatefulWidget {
+  final String docId;
+  final Map<String, dynamic> data;
+
+  const _ModeratorCard({required this.docId, required this.data});
+
+  @override
+  State<_ModeratorCard> createState() => _ModeratorCardState();
+}
+
+class _ModeratorCardState extends State<_ModeratorCard> {
+  final TextEditingController _commentController = TextEditingController();
+  final EngagementService _engagementService = EngagementService();
+  final ViewService _viewService = ViewService();
+  final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
+  BonusRowType? _activePanel;
+
+  void _submitComment() async {
+    final text = _commentController.text.trim();
+    if (text.isEmpty) return;
+
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    _commentController.clear();
+
+    await _engagementService.addComment(
+      imageId: widget.docId,
+      fanzineId: 'moderation_queue',
+      fanzineTitle: 'Moderator Feed',
+      text: text,
+      displayName: userProvider.userProfile?.displayName,
+      username: userProvider.userProfile?.username,
+    );
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    _fontSizeNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = widget.data['fileUrl'] as String?;
+    final tags = widget.data['tags'] as Map<String, dynamic>? ?? {};
+    final uploaderId = widget.data['uploaderId'] as String? ?? 'unknown';
+
+    final bool isApproved = tags.containsKey('approved') && (tags['approved'] as List).isNotEmpty;
+
+    final String tLinked = widget.data['text_linked'] ?? '';
+    final String tCorrected = widget.data['text_corrected'] ?? widget.data['text'] ?? '';
+    final String tRaw = widget.data['text_raw'] ?? '';
+
+    final String tLinkedAi = widget.data['text_linked_ai'] ?? '';
+    final String tCorrectedAi = widget.data['text_corrected_ai'] ?? '';
+
+    final String actualText = tLinked.trim().isNotEmpty ? tLinked : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+        ],
+        border: isApproved
+            ? Border.all(color: Colors.green.withValues(alpha: 0.5), width: 2)
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!isApproved)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              color: Colors.amber[100],
+              child: const Text(
+                "NOT YET APPROVED",
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
+                textAlign: TextAlign.center,
+              ),
+            ),
+
+          if (imageUrl != null)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                height: 400,
+                errorBuilder: (c, e, s) => const SizedBox(height: 200, child: Center(child: Icon(Icons.broken_image))),
+              ),
+            ),
+
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance.collection('profiles').doc(uploaderId).get(),
+                  builder: (context, snap) {
+                    if (snap.hasData && snap.data!.exists) {
+                      final profile = UserProfile.fromFirestore(snap.data!);
+                      return Text("Uploaded by @${profile.username}", style: const TextStyle(color: Colors.grey, fontSize: 12));
+                    }
+                    return Text("Uploaded by @$uploaderId", style: const TextStyle(color: Colors.grey, fontSize: 12));
+                  },
+                ),
+                const SizedBox(height: 8),
+                HashtagBar(imageId: widget.docId, tags: tags),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                DynamicSocialToolbar(
+                  imageId: widget.docId,
+                  fanzineType: null,
+                  isGame: false,
+                  isEditingMode: true,
+                  activeBonusRow: _activePanel,
+                  onToggleBonusRow: (rowType) {
+                    setState(() {
+                      _activePanel = _activePanel == rowType ? null : rowType;
+                    });
+                  },
+                ),
+                if (_activePanel != null) ...[
+                  const Divider(height: 1),
+                  PanelContainer(
+                    title: '',
+                    isInline: true,
+                    inlineColor: PanelFactory.getInlineColor(_activePanel!),
+                    child: PanelFactory.buildPanelContent(
+                        PanelContext(
+                          type: _activePanel!,
+                          imageId: widget.docId,
+                          actualText: actualText,
+                          textRaw: tRaw,
+                          textCorrected: tCorrected,
+                          textLinked: tLinked,
+                          textCorrectedAi: tCorrectedAi,
+                          textLinkedAi: tLinkedAi,
+                          isEditingMode: true,
+                          viewService: _viewService,
+                          engagementService: _engagementService,
+                          commentController: _commentController,
+                          onSubmitComment: _submitComment,
+                          fontSizeNotifier: _fontSizeNotifier,
+                        )
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

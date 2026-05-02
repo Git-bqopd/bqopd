@@ -368,7 +368,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: _resolvedType == 'calendar'
                 ? CalendarEditorWidget(folioId: _resolvedFanzineId!)
-                : _resolvedType == 'folio'
+                : (_resolvedType == 'folio' || _resolvedType == 'article')
                 ? FanzineMakerWidget(fanzineId: _resolvedFanzineId!)
                 : FanzineCuratorWidget(fanzineId: _resolvedFanzineId!),
           ),

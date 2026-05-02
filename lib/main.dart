@@ -30,19 +30,12 @@ import 'pages/profile_page.dart';
 import 'pages/short_link_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/settings_page.dart';
-import 'pages/curator_dashboard_page.dart';
-import 'pages/curator_workbench_page.dart';
 import 'pages/fanzine_reader_page.dart';
 import 'pages/publisher_page.dart';
-import 'pages/moderator_feed_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Env.load();
-
-  // FIXED: Removed loadGoogleMapsScript() from here.
-  // It is now lazily loaded inside EditInfoWidget to prevent
-  // unnecessary API calls for guests/readers.
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   usePathUrlStrategy();
@@ -108,10 +101,7 @@ class _MyAppState extends State<MyApp> {
         final isProtected = path == '/profile' ||
             path == '/settings' ||
             path == '/edit-info' ||
-            path == '/dashboard' ||
-            path == '/moderator' ||
-            (routePattern != null && routePattern.startsWith('/editor')) ||
-            (routePattern != null && routePattern.startsWith('/workbench'));
+            (routePattern != null && routePattern.startsWith('/editor'));
 
         if (!isLoggedIn && isProtected) {
           return '/login';
@@ -142,24 +132,6 @@ class _MyAppState extends State<MyApp> {
             path: '/profile',
             name: 'profile',
             builder: (context, state) => const ProfilePage()),
-        GoRoute(
-          path: '/dashboard',
-          name: 'curatorDashboard',
-          builder: (context, state) => const CuratorDashboardPage(),
-        ),
-        GoRoute(
-          path: '/moderator',
-          name: 'moderatorFeed',
-          builder: (context, state) => const ModeratorFeedPage(),
-        ),
-        GoRoute(
-          path: '/workbench/:fanzineId',
-          name: 'curatorWorkbench',
-          builder: (context, state) {
-            final fanzineId = state.pathParameters['fanzineId']!;
-            return CuratorWorkbenchPage(fanzineId: fanzineId);
-          },
-        ),
         GoRoute(
           path: '/reader/:fanzineId',
           name: 'reader',
