@@ -168,6 +168,7 @@ class _MyAppState extends State<MyApp> {
             );
           },
         ),
+        // FIXED: Using nested routes to reliably handle both /CODE and /CODE/PAGE
         GoRoute(
           path: '/:code',
           name: 'shortlink',
@@ -175,6 +176,16 @@ class _MyAppState extends State<MyApp> {
             final code = state.pathParameters['code']!;
             return ShortLinkPage(code: code);
           },
+          routes: [
+            GoRoute(
+              path: ':page',
+              builder: (context, state) {
+                final code = state.pathParameters['code']!;
+                final page = state.pathParameters['page'];
+                return ShortLinkPage(code: code, pageNumber: page);
+              },
+            ),
+          ],
         ),
       ],
       errorBuilder: (context, state) =>

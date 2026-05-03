@@ -6,7 +6,13 @@ import 'fanzine_reader_page.dart';
 
 class ShortLinkPage extends StatefulWidget {
   final String code;
-  const ShortLinkPage({super.key, required this.code});
+  final String? pageNumber; // NEW: Capture the optional sub-path page parameter
+
+  const ShortLinkPage({
+    super.key,
+    required this.code,
+    this.pageNumber,
+  });
 
   @override
   State<ShortLinkPage> createState() => _ShortLinkPageState();
@@ -18,8 +24,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
   @override
   void initState() {
     super.initState();
-    // Cache the resolution future to prevent "amnesia" when popping
-    // back to this page from an editor or modal.
     _resolveFuture = _resolveShortcode(widget.code);
   }
 
@@ -71,7 +75,11 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
 
             if (result.startsWith('fanzine:')) {
               final fanzineCode = result.substring(8);
-              return FanzineReaderPage(shortCode: fanzineCode);
+              // Pass the pageNumber sub-path down to the reader
+              return FanzineReaderPage(
+                shortCode: fanzineCode,
+                initialPageNumber: widget.pageNumber,
+              );
             }
 
             return const Center(child: Text('Unknown content type.'));
@@ -117,7 +125,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
         .get();
     if (fz.docs.isNotEmpty) return 'fanzine:$cleanCode';
 
-    // Fallback check redirected to 'profiles'
     final profilesByUsername = await db.collection('profiles')
         .where('username', isEqualTo: cleanCode.toLowerCase())
         .limit(1)

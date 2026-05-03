@@ -52,14 +52,16 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   int _likeCount = 0;
   int _commentCount = 0;
   int _viewCount = 0;
-  int _tagCount = 0; // NEW: Track unique hashtags
+  int _tagCount = 0;
 
   StreamSubscription? _imageSub;
+  String? _fanzineShortCode;
 
   @override
   void initState() {
     super.initState();
     _listenToStats();
+    _fetchFanzineShortcode();
   }
 
   @override
@@ -69,6 +71,27 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
       _imageSub?.cancel();
       _listenToStats();
     }
+    if (oldWidget.fanzineId != widget.fanzineId) {
+      _fetchFanzineShortcode();
+    }
+  }
+
+  /// Fetches the readable shortcode for the fanzine to generate clean URLs.
+  Future<void> _fetchFanzineShortcode() async {
+    if (widget.fanzineId == null || widget.fanzineId!.isEmpty) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('fanzines')
+          .doc(widget.fanzineId)
+          .get();
+
+      if (doc.exists && mounted) {
+        setState(() {
+          _fanzineShortCode = doc.data()?['shortCode'];
+        });
+      }
+    } catch (_) {}
   }
 
   void _listenToStats() {
@@ -89,7 +112,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
                 (data['anonListCount'] ?? 0) +
                 (data['regGridCount'] ?? 0) +
                 (data['anonGridCount'] ?? 0);
-            _tagCount = tags.keys.length; // Count unique map keys
+            _tagCount = tags.keys.length;
           });
         }
       });
@@ -131,11 +154,20 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
 
       case ToolAction.copyShareLink:
         if (widget.fanzineId == null) return;
-        final link = 'https://bqopd.com/fanzine/${widget.fanzineId}?p=${widget.pageNumber ?? 1}';
+
+        // NEW URL SCHEMA: Priority 1: Shortcode based path (bqopd.com/CODE/PAGE)
+        // Priority 2: Fallback to old query path using IDs
+        String link;
+        if (_fanzineShortCode != null) {
+          link = 'https://bqopd.com/$_fanzineShortCode/${widget.pageNumber ?? 1}';
+        } else {
+          link = 'https://bqopd.com/reader/${widget.fanzineId}?p=${widget.pageNumber ?? 1}';
+        }
+
         await Clipboard.setData(ClipboardData(text: link));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Link copied to clipboard: $link')),
+            SnackBar(content: Text('Clean link copied: $link')),
           );
         }
         break;
@@ -202,7 +234,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           int? count;
           if (tool.id == 'Comment') count = _commentCount;
           if (tool.id == 'Views') count = _viewCount;
-          if (tool.id == 'Tags') count = _tagCount; // Display tag count
+          if (tool.id == 'Tags') count = _tagCount;
 
           return DynamicToolbarButton(
             tool: tool,

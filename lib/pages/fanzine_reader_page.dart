@@ -24,12 +24,14 @@ class FanzineReaderPage extends StatefulWidget {
   final String? fanzineId;
   final String? shortCode;
   final bool isEditingMode;
+  final String? initialPageNumber; // Passed from ShortLinkPage sub-path resolution
 
   const FanzineReaderPage({
     super.key,
     this.fanzineId,
     this.shortCode,
     this.isEditingMode = false,
+    this.initialPageNumber,
   });
 
   @override
@@ -60,7 +62,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     super.initState();
     _readerBloc = FanzineReaderBloc();
 
-    // Delay initialization until the tree is built so we can read the UserProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initReader();
     });
@@ -85,21 +86,43 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     super.dispose();
   }
 
+  /// Processes legacy deep links (query params) AND new sub-path links.
   void _processDeepLink() {
-    try {
-      final router = GoRouter.of(context);
-      final pQuery = router.routerDelegate.currentConfiguration.uri.queryParameters['p'];
-      if (pQuery != null) {
-        final pageNum = int.tryParse(pQuery);
-        if (pageNum != null && pageNum > 0) {
-          setState(() {
-            _targetIndex = pageNum;
-            _showGrid = false;
-            _showList = true;
-          });
+    int? requestedPage;
+
+    // 1. Check for modern sub-path parameter (/SHORTCODE/5)
+    if (widget.initialPageNumber != null) {
+      requestedPage = int.tryParse(widget.initialPageNumber!);
+    }
+
+    // 2. Fallback to legacy query parameter (?p=5)
+    if (requestedPage == null) {
+      try {
+        final router = GoRouter.of(context);
+        final pQuery = router.routerDelegate.currentConfiguration.uri.queryParameters['p'];
+        if (pQuery != null) {
+          requestedPage = int.tryParse(pQuery);
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
+
+    if (requestedPage != null && requestedPage > 0) {
+      setState(() {
+        _targetIndex = requestedPage! - 1; // Normalize to zero-based index
+        _showGrid = true; // Keep grid in background/sidebar
+        _showList = true; // Auto-trigger the Reader/List view
+      });
+
+      // Allow one frame for build, then sync controllers
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_desktopListScrollController.isAttached) {
+          _desktopListScrollController.jumpTo(index: _targetIndex);
+        }
+        if (_mobileListScrollController.isAttached) {
+          _mobileListScrollController.jumpTo(index: _targetIndex);
+        }
+      });
+    }
   }
 
   void _updateUrlIfNeeded(String? resolvedShortCode) {
@@ -108,8 +131,11 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
+
           if (!currentLoc.contains(resolvedShortCode) && !widget.isEditingMode) {
-            context.go('/$resolvedShortCode');
+            if (!currentLoc.contains('/reader/')) {
+              context.go('/$resolvedShortCode');
+            }
           }
         } catch (_) {}
       });
@@ -242,15 +268,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         body: SafeArea(
           child: BlocConsumer<FanzineReaderBloc, FanzineReaderState>(
             listener: (context, state) {
-              // Once loading completes, process deep links and layout rules
               if (!state.isLoading && !state.isAccessDenied) {
                 _processDeepLink();
                 _updateUrlIfNeeded(state.resolvedShortCode);
 
                 bool isDesktop = MediaQuery.of(context).size.width > 900;
 
-                // Only override layout logic if we didn't just deep link straight to a page
-                if (_targetIndex == 0) {
+                if (_targetIndex == 0 && !_showList) {
                   setState(() {
                     if (state.twoPagePreference) {
                       if (widget.isEditingMode && isDesktop) {
@@ -297,7 +321,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                 builder: (context, constraints) {
                   final bool isDesktop = constraints.maxWidth > 900;
 
-                  // --- MOBILE LAYOUT ---
                   if (!isDesktop) {
                     if (!_showList) {
                       return FanzineGridRenderer(
@@ -340,7 +363,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                     }
                   }
 
-                  // --- DESKTOP LAYOUT ---
                   final double availableWidth = constraints.maxWidth;
                   final bool isPanelOpen = _showList && _activeGlobalPanel != null;
 
