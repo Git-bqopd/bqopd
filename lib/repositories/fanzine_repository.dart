@@ -37,6 +37,23 @@ class FanzineRepository {
         .map((snap) => snap.docs.map((d) => FanzinePage.fromFirestore(d)).toList());
   }
 
+  // --- SERIES MANAGEMENT ---
+
+  Stream<QuerySnapshot> watchSeries() {
+    return _db.collection('series').orderBy('name').snapshots();
+  }
+
+  Future<void> createSeries(String name) async {
+    await _db.collection('series').add({
+      'name': name,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteSeries(String seriesId) async {
+    await _db.collection('series').doc(seriesId).delete();
+  }
+
   // --- OPERATIONS ---
 
   Future<void> updateFanzine(String fanzineId, Map<String, dynamic> data) async {
@@ -62,13 +79,12 @@ class FanzineRepository {
       linkedSpread = 'start';
       linkedSide = 'left';
     } else if (spreadPosition == null) {
-      // If the user unlinks an image, automatically unlink its previously paired image
       if (page.spreadPosition == 'start') {
         linkedPage = allPages.where((p) => p.pageNumber == page.pageNumber + 1).firstOrNull;
         if (linkedPage != null && linkedPage.spreadPosition == 'end') {
           linkedSpread = null;
         } else {
-          linkedPage = null; // Pair broken elsewhere, don't modify it
+          linkedPage = null;
         }
       } else if (page.spreadPosition == 'end') {
         linkedPage = allPages.where((p) => p.pageNumber == page.pageNumber - 1).firstOrNull;

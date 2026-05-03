@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import '../models/fanzine.dart';
 import '../models/fanzine_page.dart';
 import '../services/username_service.dart';
@@ -39,7 +40,6 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> with Single
   @override
   void initState() {
     super.initState();
-    // Curator has 4 tabs
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging && _scrollController.hasClients) {
@@ -67,6 +67,33 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> with Single
       _issueController.text,
       _wholeNumberController.text,
     ));
+  }
+
+  void _showAddSeriesDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Create New Series", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: "Series Name (e.g. The Comet)"),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                context.read<FanzineRepository>().createSeries(controller.text.trim());
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text("CREATE"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -199,12 +226,67 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> with Single
       _lastSyncedTitle = fanzine.title;
     }
 
+    final fzRepo = context.read<FanzineRepository>();
+    final editorBloc = context.read<FanzineEditorBloc>();
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // --- SERIES SELECTION ---
+          const Text("SERIES ASSIGNMENT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+          StreamBuilder<QuerySnapshot>(
+            stream: fzRepo.watchSeries(),
+            builder: (context, snapshot) {
+              final docs = snapshot.data?.docs ?? [];
+              final String? currentSeriesValue = docs.any((d) => d.id == fanzine.seriesId)
+                  ? fanzine.seriesId
+                  : null;
+
+              return Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: currentSeriesValue,
+                      decoration: const InputDecoration(
+                        labelText: "part of a series",
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text("None (Standalone)")),
+                        ...docs.map((d) => DropdownMenuItem(value: d.id, child: Text(d['name'])))
+                      ],
+                      onChanged: (val) {
+                        String seriesName = "";
+                        if (val != null) {
+                          seriesName = docs.firstWhere((d) => d.id == val)['name'];
+                        }
+                        editorBloc.add(UpdateFanzineSeries(val, seriesName));
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, color: Colors.indigo),
+                    onPressed: () => _showAddSeriesDialog(context),
+                    tooltip: "Add New Series",
+                  ),
+                  if (fanzine.seriesId != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () => fzRepo.deleteSeries(fanzine.seriesId!),
+                      tooltip: "Delete Selected Series",
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+
           TextField(
             controller: _titleController,
             onSubmitted: (val) => _saveMeta(context),
@@ -244,6 +326,103 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> with Single
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          // --- granular published date & display options ---
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.black12),
+            ),
+            child: Row(
+              children: [
+                // 1. DATE PICKER SECTION
+                Expanded(
+                  flex: 3,
+                  child: InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: fanzine.publishedDate ?? DateTime.now(),
+                        firstDate: DateTime(1900),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null && context.mounted) {
+                        editorBloc.add(UpdateFanzineDate(picked));
+                      }
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("published date", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_month, size: 16, color: Colors.black54),
+                            const SizedBox(width: 6),
+                            Text(
+                              fanzine.publishedDate != null
+                                  ? DateFormat('MMMM d, yyyy').format(fanzine.publishedDate!)
+                                  : "set date",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // 2. DISPLAY FORMAT SEGMENTED BUTTON
+                Expanded(
+                  flex: 4,
+                  child: Column(
+                    children: [
+                      const Text("display precision", style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      const SizedBox(height: 4),
+                      SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        style: SegmentedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                        segments: const [
+                          ButtonSegment(value: 'day', label: Text('day')),
+                          ButtonSegment(value: 'month', label: Text('month')),
+                          ButtonSegment(value: 'year', label: Text('year')),
+                        ],
+                        selected: {fanzine.datePrecision},
+                        onSelectionChanged: (val) => editorBloc.add(UpdateFanzineDateOptions(datePrecision: val.first)),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // 3. GUESS CHECKBOX
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    children: [
+                      const Text("guess?", style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      Transform.scale(
+                        scale: 0.9,
+                        child: Checkbox(
+                          value: fanzine.dateIsGuess,
+                          onChanged: (val) => editorBloc.add(UpdateFanzineDateOptions(dateIsGuess: val)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 20),
           const Text("SHORTCODE",
               style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
@@ -276,7 +455,7 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> with Single
             Switch(
                 value: fanzine.twoPage,
                 activeColor: Colors.grey,
-                onChanged: (val) => context.read<FanzineEditorBloc>().add(ToggleTwoPageRequested(val))),
+                onChanged: (val) => editorBloc.add(ToggleTwoPageRequested(val))),
           ]),
           const Divider(height: 24),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -284,7 +463,7 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> with Single
             Switch(
                 value: fanzine.isLive,
                 activeColor: Colors.green,
-                onChanged: (val) => context.read<FanzineEditorBloc>().add(ToggleIsLiveRequested(val))),
+                onChanged: (val) => editorBloc.add(ToggleIsLiveRequested(val))),
           ]),
           const SizedBox(height: 16),
           ElevatedButton(

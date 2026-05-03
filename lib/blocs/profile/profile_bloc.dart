@@ -157,11 +157,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     List<String> tabs = [];
 
-    // Only show the settings tab if the user is looking at their own profile.
+    // 1. Settings Tab: Me only
     if (isMe) {
       tabs.add('settings');
     }
 
+    // 2. Curator Tab: Elevated staff access or Owner is Curator
     final bool viewerHasAccess = event.isViewerCurator || event.isViewerModerator || event.isViewerAdmin;
     final bool ownerIsCurator = profile.isCurator;
 
@@ -171,11 +172,20 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       tabs.add('curator');
     }
 
-    tabs.add('maker');
-    tabs.add('index');
-    tabs.add('collection');
+    // 3. Maker Tab: Human only for now (Managed profiles can't make yet)
+    if (!profile.isManaged) {
+      tabs.add('maker');
+    }
 
-    int startTab = tabs.indexOf('maker');
+    // 4. Index Tab: Everyone (Includes Mentions)
+    tabs.add('index');
+
+    // 5. Collection Tab: Human only (Managed profiles hide empty placeholders)
+    if (!profile.isManaged) {
+      tabs.add('collection');
+    }
+
+    int startTab = tabs.contains('maker') ? tabs.indexOf('maker') : tabs.indexOf('index');
     if (startTab == -1) startTab = 0;
 
     if (event.initialTab != null && tabs.contains(event.initialTab)) {

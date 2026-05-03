@@ -9,6 +9,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 
 import '../blocs/profile/profile_bloc.dart';
 import '../repositories/user_repository.dart';
@@ -241,8 +242,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       if (!mounted) return;
       try {
         final currentUri = GoRouterState.of(context).uri;
-        // Force the URL to reflect the profile's canonical username if it doesn't already,
-        // unless they are explicitly at the base /profile route.
         if (currentUri.path != '/$username' && currentUri.path != '/profile') {
           context.replace('/$username${currentUri.hasQuery ? '?${currentUri.query}' : ''}');
         }
@@ -283,6 +282,101 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       builder: (_) => CatalogModal(
         onUploadPdf: () => _handlePdfUpload(userId),
         onUploadImages: () => _createArchivalFanzine(userId),
+      ),
+    );
+  }
+
+  Future<void> _handlePdfUpload(String userId) async {
+    if (_isUploadingPdf) return;
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+          type: FileType.custom, allowedExtensions: ['pdf'], withData: true);
+      if (result != null) {
+        setState(() => _isUploadingPdf = true);
+        PlatformFile file = result.files.first;
+        Uint8List? fileBytes = file.bytes;
+        if (fileBytes != null) {
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('uploads/raw_pdfs/${file.name}');
+          final metadata = SettableMetadata(
+              contentType: 'application/pdf',
+              customMetadata: {
+                'uploaderId': userId,
+                'originalName': file.name
+              });
+          await storageRef.putData(fileBytes, metadata);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(
+                    'Uploaded "${file.name}". Curator processing started.')));
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Upload Error: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPdf = false);
+      }
+    }
+  }
+
+  Future<void> _handleCreateManagedProfile() async {
+    if (_firstNameController.text.isEmpty || _lastNameController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a First and Last Name')));
+      return;
+    }
+    try {
+      await createManagedProfile(
+          firstName: _firstNameController.text,
+          lastName: _lastNameController.text,
+          bio: _bioController.text);
+      _firstNameController.clear();
+      _lastNameController.clear();
+      _bioController.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Managed Profile Created!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error creating profile: $e')));
+      }
+    }
+  }
+
+  void _showCreateManagedProfileDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Create Managed Profile"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Create a profile for a historical figure or estate that you will manage."),
+              const SizedBox(height: 16),
+              TextField(controller: _firstNameController, decoration: const InputDecoration(labelText: "First Name", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _lastNameController, decoration: const InputDecoration(labelText: "Last Name", border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              TextField(controller: _bioController, decoration: const InputDecoration(labelText: "Bio (Optional)", border: OutlineInputBorder()), maxLines: 2),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () {
+            Navigator.pop(context);
+            _handleCreateManagedProfile();
+          }, child: const Text("Create")),
+        ],
       ),
     );
   }
@@ -354,7 +448,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'editorId': userId,
         'editors': [],
         'isLive': false,
-        'processingStatus': 'draft_calendar', // HIDDEN FROM PROFILE UNTIL SAVED
+        'processingStatus': 'draft_calendar',
         'creationDate': FieldValue.serverTimestamp(),
         'type': 'calendar',
         'shortCode': shortCode,
@@ -394,7 +488,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'twoPage': true,
       });
 
-      // Instead of an uploaded file, an article uses a templated "Image" document to hold its text
       final imgRef = db.collection('images').doc();
       await imgRef.set({
         'uploaderId': userId,
@@ -424,86 +517,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
-  }
-
-  Future<void> _handlePdfUpload(String userId) async {
-    if (_isUploadingPdf) {
-      return;
-    }
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf'], withData: true);
-      if (result != null) {
-        setState(() => _isUploadingPdf = true);
-        PlatformFile file = result.files.first;
-        Uint8List? fileBytes = file.bytes;
-        if (fileBytes != null) {
-          final storageRef = FirebaseStorage.instance.ref().child('uploads/raw_pdfs/${file.name}');
-          final metadata = SettableMetadata(contentType: 'application/pdf', customMetadata: {'uploaderId': userId, 'originalName': file.name});
-          await storageRef.putData(fileBytes, metadata);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Uploaded "${file.name}". Curator processing started.')));
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload Error: $e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isUploadingPdf = false);
-      }
-    }
-  }
-
-  Future<void> _handleCreateManagedProfile() async {
-    if (_firstNameController.text.isEmpty || _lastNameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a First and Last Name')));
-      return;
-    }
-    try {
-      await createManagedProfile(firstName: _firstNameController.text, lastName: _lastNameController.text, bio: _bioController.text);
-      _firstNameController.clear();
-      _lastNameController.clear();
-      _bioController.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Managed Profile Created!')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error creating profile: $e')));
-      }
-    }
-  }
-
-  void _showCreateManagedProfileDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Create Managed Profile"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text("Create a profile for a historical figure or estate that you will manage."),
-              const SizedBox(height: 16),
-              TextField(controller: _firstNameController, decoration: const InputDecoration(labelText: "First Name", border: OutlineInputBorder())),
-              const SizedBox(height: 8),
-              TextField(controller: _lastNameController, decoration: const InputDecoration(labelText: "Last Name", border: OutlineInputBorder())),
-              const SizedBox(height: 8),
-              TextField(controller: _bioController, decoration: const InputDecoration(labelText: "Bio (Optional)", border: OutlineInputBorder()), maxLines: 2),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(onPressed: () {
-            Navigator.pop(context);
-            _handleCreateManagedProfile();
-          }, child: const Text("Create")),
-        ],
-      ),
-    );
   }
 
   @override
@@ -540,8 +553,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           if (currentIndex >= state.visibleTabs.length) currentIndex = 0;
 
           final activeTab = state.visibleTabs.isEmpty ? 'collection' : state.visibleTabs[currentIndex];
-
-          // Determine if we should format the profile as a hashtag
           final bool showAsHashtag = activeTab == 'index' && _indexSubTabIndex == 0;
 
           return SafeArea(
@@ -578,7 +589,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                               setState(() {
                                 _makerSubTabIndex = 0;
                                 _curatorSubTabIndex = 0;
-                                _indexSubTabIndex = 0;
+                                _indexSubTabIndex = userData.isManaged ? 1 : 0;
                                 _settingsSubTabIndex = 0;
                               });
                             }
@@ -699,7 +710,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                   child: Text("drafts", style: TextStyle(color: _makerSubTabIndex == 1 ? Colors.black : Colors.grey, fontWeight: _makerSubTabIndex == 1 ? FontWeight.bold : FontWeight.normal, decoration: _makerSubTabIndex == 1 ? TextDecoration.underline : null)),
                                 ),
                               ],
-                              if (userProvider.isModerator) ...[
+                              if (userProvider.isModerator && isOwner) ...[
                                 const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
                                 GestureDetector(
                                   onTap: () {
@@ -725,11 +736,15 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildSubTab("#hashtags", 0, type: 'index'),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                              if (!userData.isManaged) ...[
+                                _buildSubTab("#hashtags", 0, type: 'index'),
+                                const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                              ],
                               _buildSubTab("mentions", 1, type: 'index'),
-                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("comments", 2, type: 'index'),
+                              if (!userData.isManaged) ...[
+                                const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                                _buildSubTab("comments", 2, type: 'index'),
+                              ],
                             ],
                           ),
                         ),
@@ -813,10 +828,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   }
 
   List<Widget> _buildTagsSubView(UserProfile userData) {
-    // Generate valid tags based on username and display name
     final cleanUsername = userData.username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '');
     final cleanDisplay = userData.displayName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '');
-
     final Set<String> targetTags = {cleanUsername};
     if (cleanDisplay.isNotEmpty) targetTags.add(cleanDisplay);
 
@@ -872,25 +885,14 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           if (!snapshot.hasData) {
             return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
           }
-
           final docs = snapshot.data!.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final tags = data['tags'] as Map<String, dynamic>? ?? {};
-            // Accept the image if it contains ANY of the valid profile tags
             return targetTags.any((t) => tags.containsKey(t));
           }).toList();
-
           if (docs.isEmpty) {
-            return const SliverToBoxAdapter(
-                child: SizedBox(
-                    height: 100,
-                    child: Center(
-                        child: Text("No items tagged yet.", style: TextStyle(color: Colors.grey))
-                    )
-                )
-            );
+            return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items tagged yet.", style: TextStyle(color: Colors.grey)))));
           }
-
           return SliverPadding(
             padding: const EdgeInsets.all(8.0),
             sliver: SliverGrid(
@@ -920,56 +922,15 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          final errorMsg = snapshot.error.toString();
-          if (errorMsg.contains('failed-precondition') ||
-              errorMsg.contains('requires an index')) {
-            final urlRegex =
-            RegExp(r'https://console\.firebase\.google\.com[^\s]+');
-            final match = urlRegex.firstMatch(errorMsg);
-            final indexUrl = match?.group(0);
-
-            return SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text("Database Index Required",
-                          style: TextStyle(
-                              color: Colors.red, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      const Text(
-                          "To view the feed sorted by date, a Firestore index is needed.",
-                          textAlign: TextAlign.center),
-                      if (indexUrl != null) ...[
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: () => launchUrl(Uri.parse(indexUrl)),
-                          child: const Text("Create Index"),
-                        )
-                      ] else
-                        SelectableText(errorMsg,
-                            style: const TextStyle(
-                                fontSize: 10, color: Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
-          return SliverToBoxAdapter(child: Center(child: SelectableText("Error: $errorMsg")));
+          return SliverToBoxAdapter(child: Center(child: SelectableText("Error: ${snapshot.error}")));
         }
-
         if (!snapshot.hasData) {
           return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         }
-
         final docs = snapshot.data!.docs;
         if (docs.isEmpty) {
           return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Queue clear. Good job!"))));
         }
-
         return SliverPadding(
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
@@ -1001,18 +962,14 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         if (!snapshot.hasData) {
           return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         }
-
         final docs = snapshot.data!.docs;
         final List<Map<String, dynamic>> trainingCandidates = [];
-
         for (var doc in docs) {
           final data = doc.data() as Map<String, dynamic>;
           final int correctionScore = data['human_correction_score'] ?? 0;
           final int linkingScore = data['human_linking_score'] ?? 0;
-
           if (correctionScore > 0 || linkingScore > 0) {
             String displayTitle = data['title'] ?? data['fileName'] ?? 'Untitled';
-
             final wNum = (data['wholeNumber'] ?? '').toString().trim();
             final iss = (data['issue'] ?? '').toString().trim();
             if (wNum.isNotEmpty) {
@@ -1020,92 +977,59 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             } else if (iss.isNotEmpty) {
               displayTitle = "$displayTitle $iss";
             }
-
             trainingCandidates.add({
               'id': doc.id,
               'title': displayTitle,
               'correctionScore': correctionScore,
               'linkingScore': linkingScore,
               'fileUrl': data['fileUrl'] ?? data['gridUrl'],
-              'folioContext': data['folioContext'], // Store this to fetch Fanzine data
+              'folioContext': data['folioContext'],
             });
           }
         }
-
         if (trainingCandidates.isEmpty) {
-          return const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(48.0),
-              child: Center(
-                child: Text(
-                  "No training data yet.\n\nManually save edits in the CORRECTED TEXT or WIKI-LINK panels in the Reader to generate variance scores.",
-                  style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          );
+          return const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(48.0), child: Center(child: Text("No training data yet.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic), textAlign: TextAlign.center))));
         }
-
         trainingCandidates.sort((a, b) {
           final scoreA = (a['correctionScore'] as int) + (a['linkingScore'] as int);
           final scoreB = (b['correctionScore'] as int) + (b['linkingScore'] as int);
-          return scoreB.compareTo(scoreA); // Descending
+          return scoreB.compareTo(scoreA);
         });
-
         return SliverPadding(
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = trainingCandidates[index];
               final String? folioContext = item['folioContext'];
-
               Widget buildCard(String title) {
                 return Card(
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
                   child: ListTile(
-                    leading: item['fileUrl'] != null
-                        ? Image.network(item['fileUrl'], width: 40, height: 40, fit: BoxFit.cover)
-                        : const Icon(Icons.image),
+                    leading: item['fileUrl'] != null ? Image.network(item['fileUrl'], width: 40, height: 40, fit: BoxFit.cover) : const Icon(Icons.image),
                     title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     subtitle: Text("Correction Edits: ${item['correctionScore']} | Link Edits: ${item['linkingScore']}", style: const TextStyle(fontSize: 11)),
-                    trailing: OutlinedButton(
-                      onPressed: () {
-                        // Placeholder for future Diff Viewer
-                      },
-                      child: const Text("View Details", style: TextStyle(fontSize: 11)),
-                    ),
                   ),
                 );
               }
-
               if (folioContext != null && folioContext.isNotEmpty) {
                 return FutureBuilder<DocumentSnapshot>(
                   future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
                   builder: (context, fzSnap) {
                     String finalTitle = item['title'];
-
                     if (fzSnap.hasData && fzSnap.data!.exists) {
                       final fzData = fzSnap.data!.data() as Map<String, dynamic>;
                       final fzTitle = fzData['title'] ?? 'Untitled';
                       final wNum = (fzData['wholeNumber'] ?? '').toString().trim();
                       final iss = (fzData['issue'] ?? '').toString().trim();
-
-                      if (wNum.isNotEmpty) {
-                        finalTitle = "$fzTitle $wNum";
-                      } else if (iss.isNotEmpty) {
-                        finalTitle = "$fzTitle $iss";
-                      } else {
-                        finalTitle = fzTitle;
-                      }
+                      if (wNum.isNotEmpty) finalTitle = "$fzTitle $wNum";
+                      else if (iss.isNotEmpty) finalTitle = "$fzTitle $iss";
+                      else finalTitle = fzTitle;
                     }
-
                     return buildCard(finalTitle);
                   },
                 );
               }
-
               return buildCard(item['title']);
             }, childCount: trainingCandidates.length),
           ),
@@ -1114,56 +1038,53 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     );
   }
 
+  int _canonicalFanzineSort(DocumentSnapshot a, DocumentSnapshot b) {
+    final aData = a.data() as Map<String, dynamic>;
+    final bData = b.data() as Map<String, dynamic>;
+    final Timestamp? aPubTs = aData['publishedDate'] as Timestamp?;
+    final Timestamp? bPubTs = bData['publishedDate'] as Timestamp?;
+    if (aPubTs != null && bPubTs == null) return -1;
+    if (aPubTs == null && bPubTs != null) return 1;
+    if (aPubTs != null && bPubTs != null) return bPubTs.compareTo(aPubTs);
+    final String aTitle = (aData['title'] ?? '').toString().toLowerCase();
+    final String bTitle = (bData['title'] ?? '').toString().toLowerCase();
+    if (aTitle != bTitle) return bTitle.compareTo(aTitle);
+    final int aVal = int.tryParse((aData['wholeNumber'] ?? aData['issue'] ?? '0').toString()) ?? 0;
+    final int bVal = int.tryParse((bData['wholeNumber'] ?? bData['issue'] ?? '0').toString()) ?? 0;
+    return bVal.compareTo(aVal);
+  }
+
   Widget _buildCuratorSubView(String targetUserId, bool canEdit) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
       builder: (context, snap) {
-        if (snap.hasError) {
-          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snap.error}", style: const TextStyle(color: Colors.grey))));
-        }
-        if (!snap.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
+        if (snap.hasError) return SliverToBoxAdapter(child: Center(child: Text("Error: ${snap.error}", style: const TextStyle(color: Colors.grey))));
+        if (!snap.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         final filtered = snap.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-
           final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
           final bool isTargetUserItem = (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
           if (!isTargetUserItem) return false;
-
           final hasSource = data.containsKey('sourceFile');
           final isLive = data['isLive'] ?? false;
-
-          if (_curatorSubTabIndex == 0) {
-            return hasSource && !isLive;
-          }
+          if (_curatorSubTabIndex == 0) return hasSource && !isLive;
           return (!hasSource || isLive);
         }).toList();
-        filtered.sort((a, b) => ((b.data() as Map)['creationDate'] as Timestamp? ?? Timestamp.now()).compareTo((a.data() as Map)['creationDate'] as Timestamp? ?? Timestamp.now()));
+        filtered.sort(_canonicalFanzineSort);
         return _buildGrid(filtered, true, isDraftView: canEdit);
       },
     );
   }
 
   Widget _buildMentionsSubView(String profileName) {
-    Stream<QuerySnapshot> stream = FirebaseFirestore.instance
-        .collection('fanzines')
-        .where('draftEntities', arrayContains: profileName)
-        .snapshots();
-
     return StreamBuilder<QuerySnapshot>(
-      stream: stream,
+      stream: FirebaseFirestore.instance.collection('fanzines').where('draftEntities', arrayContains: profileName).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Error loading mentions: ${snapshot.error}", style: const TextStyle(fontSize: 10, color: Colors.grey)))));
-        }
-        if (!snapshot.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
-        final docs = snapshot.data!.docs;
-        if (docs.isEmpty) {
-          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No mentions found.", style: TextStyle(color: Colors.grey)))));
-        }
+        if (snapshot.hasError) return SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Error loading mentions: ${snapshot.error}", style: const TextStyle(fontSize: 10, color: Colors.grey)))));
+        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        final docs = snapshot.data!.docs.toList();
+        if (docs.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No mentions found.", style: TextStyle(color: Colors.grey)))));
+        docs.sort(_canonicalFanzineSort);
         return _buildGrid(docs, false, thumbnailOnly: true);
       },
     );
@@ -1171,7 +1092,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 
   Widget _buildSettingsSubView(String targetUserId) {
     final userProvider = context.read<UserProvider>();
-
     if (_settingsSubTabIndex == 0) {
       return SliverToBoxAdapter(
         child: Padding(
@@ -1195,18 +1115,14 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           stream: FirebaseFirestore.instance.collection('profiles').where('isManaged', isEqualTo: true).where('managers', arrayContains: targetUserId).snapshots(),
           builder: (context, snapshot) {
             final List<Widget> buttons = [_QuickActionTile(label: "+ managed profile", color: Colors.grey.shade800, onTap: _showCreateManagedProfileDialog)];
-            if (!snapshot.hasData) {
-              return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-            }
+            if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
             final docs = snapshot.data!.docs;
             return SliverPadding(
               padding: const EdgeInsets.all(8.0),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
                 delegate: SliverChildBuilderDelegate((context, index) {
-                  if (index < buttons.length) {
-                    return buttons[index];
-                  }
+                  if (index < buttons.length) return buttons[index];
                   return _MakerItemTile(doc: docs[index - buttons.length], shouldEdit: true);
                 }, childCount: docs.length + buttons.length),
               ),
@@ -1214,16 +1130,11 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           }
       );
     } else if (_settingsSubTabIndex == 2) {
-      if (!userProvider.isAdmin) {
-        return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("Access restricted to Administrators."))));
-      }
-
+      if (!userProvider.isAdmin) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("Access restricted to Administrators."))));
       return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('Users').snapshots(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-            }
+            if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
             final docs = snapshot.data!.docs;
             return SliverPadding(
               padding: const EdgeInsets.all(16),
@@ -1233,14 +1144,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                   final userData = docs[index].data() as Map<String, dynamic>;
                   final dynamic rolesData = userData['roles'];
                   final Set<String> selectedRolesSet = rolesData != null ? Set<String>.from(rolesData) : (userData['role'] != null && userData['role'] != 'user' ? {userData['role']} : <String>{});
-
                   return FutureBuilder<DocumentSnapshot>(
                       future: FirebaseFirestore.instance.collection('profiles').doc(uid).get(),
                       builder: (context, profileSnap) {
                         final pData = profileSnap.data?.data() as Map?;
                         final name = pData?['displayName'] ?? pData?['username'] ?? 'unknown';
                         final username = pData?['username'] ?? 'unknown';
-
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
                           elevation: 0,
@@ -1263,34 +1172,15 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                   selected: selectedRolesSet,
                                   onSelectionChanged: (newSelection) async {
                                     if (!context.read<UserProvider>().isAdmin) return;
-
                                     final rolesList = newSelection.toList();
                                     final bool isCurator = newSelection.contains('curator');
                                     final bool isAdmin = newSelection.contains('admin');
                                     final bool isModerator = newSelection.contains('moderator');
-
                                     String legacyRole = 'user';
-                                    if (isAdmin) {
-                                      legacyRole = 'admin';
-                                    } else if (isModerator) {
-                                      legacyRole = 'moderator';
-                                    } else if (isCurator) {
-                                      legacyRole = 'curator';
-                                    }
-
+                                    if (isAdmin) legacyRole = 'admin'; else if (isModerator) legacyRole = 'moderator'; else if (isCurator) legacyRole = 'curator';
                                     final batch = FirebaseFirestore.instance.batch();
-
-                                    batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {
-                                      'roles': rolesList,
-                                      'role': legacyRole,
-                                      'isCurator': isCurator || isAdmin || isModerator
-                                    });
-
-                                    batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {
-                                      'isCurator': isCurator || isAdmin || isModerator,
-                                      'isAdmin': isAdmin
-                                    });
-
+                                    batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {'roles': rolesList, 'role': legacyRole, 'isCurator': isCurator || isAdmin || isModerator});
+                                    batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {'isCurator': isCurator || isAdmin || isModerator, 'isAdmin': isAdmin});
                                     await batch.commit();
                                   },
                                   multiSelectionEnabled: true,
@@ -1307,9 +1197,34 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             );
           }
       );
-    } else {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-    }
+    } else return const SliverToBoxAdapter(child: SizedBox.shrink());
+  }
+
+  Widget _buildEntitiesSubView(String targetUserId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
+        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        final Map<String, int> entityCounts = {};
+        for (var doc in snapshot.data!.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
+          final bool isTargetUserItem = (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
+          if (!isTargetUserItem) continue;
+          final hasSource = data.containsKey('sourceFile');
+          final isLive = data['isLive'] ?? false;
+          if (!hasSource || isLive) continue;
+          final entities = List<String>.from(data['draftEntities'] ?? []);
+          for (var name in entities) {
+            entityCounts[name] = (entityCounts[name] ?? 0) + 1;
+          }
+        }
+        if (entityCounts.isEmpty) return const SliverToBoxAdapter(child: Center(child: Text("No entities found.")));
+        final sortedNames = entityCounts.keys.toList()..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
+        return SliverPadding(padding: const EdgeInsets.all(16), sliver: SliverList(delegate: SliverChildBuilderDelegate((context, index) => _EntityRow(name: sortedNames[index], count: entityCounts[sortedNames[index]]!), childCount: sortedNames.length)));
+      },
+    );
   }
 
   Widget _buildGrid(List<dynamic> docs, bool edit, {bool isDraftView = false, bool thumbnailOnly = false}) {
@@ -1321,79 +1236,20 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
       ),
     );
   }
-
-  Widget _buildEntitiesSubView(String targetUserId) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
-        }
-        if (!snapshot.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
-        final Map<String, int> entityCounts = {};
-        for (var doc in snapshot.data!.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-
-          final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
-          final bool isTargetUserItem = (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
-          if (!isTargetUserItem) continue;
-
-          final hasSource = data.containsKey('sourceFile');
-          final isLive = data['isLive'] ?? false;
-
-          // Only include entities from fanzines that would appear in the "curator" tab
-          if (!hasSource || isLive) continue;
-
-          final entities = List<String>.from(data['draftEntities'] ?? []);
-          for (var name in entities) {
-            entityCounts[name] = (entityCounts[name] ?? 0) + 1;
-          }
-        }
-        if (entityCounts.isEmpty) {
-          return const SliverToBoxAdapter(child: Center(child: Text("No entities found.")));
-        }
-        final sortedNames = entityCounts.keys.toList()..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
-        return SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) => _EntityRow(name: sortedNames[index], count: entityCounts[sortedNames[index]]!), childCount: sortedNames.length),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _UserCommentsView extends StatelessWidget {
   final String userId;
   const _UserCommentsView({required this.userId});
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('artifacts')
-          .doc('bqopd')
-          .collection('public')
-          .doc('data')
-          .collection('comments')
-          .where('userId', isEqualTo: userId)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('artifacts').doc('bqopd').collection('public').doc('data').collection('comments').where('userId', isEqualTo: userId).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
-        }
-        if (!snapshot.hasData) {
-          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        }
+        if (snapshot.hasError) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
+        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
         final docs = snapshot.data!.docs.toList();
-        if (docs.isEmpty) {
-          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
-        }
-
-        // Sorting the results locally in memory to bypass the requirement for a Firestore Index
+        if (docs.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
         docs.sort((a, b) {
           final aData = a.data() as Map<String, dynamic>;
           final bData = b.data() as Map<String, dynamic>;
@@ -1401,20 +1257,13 @@ class _UserCommentsView extends StatelessWidget {
           final bTime = bData['createdAt'] as Timestamp?;
           return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
         });
-
         return SliverPadding(
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
               data['_id'] = docs[index].id;
-
-              // NEW: Pass isProfileView: true to trigger dual thumbnails
-              return CommentItem(
-                key: ValueKey(docs[index].id),
-                data: data,
-                isProfileView: true,
-              );
+              return CommentItem(key: ValueKey(docs[index].id), data: data, isProfileView: true);
             }, childCount: docs.length),
           ),
         );
@@ -1426,21 +1275,15 @@ class _UserCommentsView extends StatelessWidget {
 class _MakerCombinedView extends StatelessWidget {
   final String targetUserId;
   final bool showDrafts;
-
   const _MakerCombinedView({required this.targetUserId, required this.showDrafts});
-
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<dynamic>>(
         future: _getCombinedData(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-          }
+          if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
           final items = snapshot.data!;
-          if (items.isEmpty) {
-            return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
-          }
+          if (items.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
           return SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             sliver: SliverGrid(
@@ -1451,50 +1294,39 @@ class _MakerCombinedView extends StatelessWidget {
         }
     );
   }
-
   Future<List<dynamic>> _getCombinedData() async {
     final fzSnap = await FirebaseFirestore.instance.collection('fanzines').get();
     final imgSnap = await FirebaseFirestore.instance.collection('images').get();
     final List<dynamic> combined = [];
-
     for (var doc in fzSnap.docs) {
       final data = doc.data();
-      if (data['type'] != 'folio' && data['type'] != 'calendar' && data['type'] != 'article') {
-        continue;
-      }
-
-      // HIDE ABANDONED CALENDAR DRAFTS FROM THE PROFILE!
-      if (data['processingStatus'] == 'draft_calendar') {
-        continue;
-      }
-
+      if (data['type'] != 'folio' && data['type'] != 'calendar' && data['type'] != 'article') continue;
+      if (data['processingStatus'] == 'draft_calendar') continue;
       final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
-      if (owner != targetUserId) {
-        continue;
-      }
+      if (owner != targetUserId) continue;
       final isLive = data['isLive'] ?? false;
-      if (showDrafts ? !isLive : isLive) {
-        combined.add(doc);
-      }
+      if (showDrafts ? !isLive : isLive) combined.add(doc);
     }
-
     for (var doc in imgSnap.docs) {
       final data = doc.data();
-      if (data['uploaderId'] != targetUserId) {
-        continue;
-      }
+      if (data['uploaderId'] != targetUserId) continue;
       final isPending = data['status'] == 'pending';
-      if (showDrafts ? isPending : !isPending) {
-        combined.add(doc);
-      }
+      if (showDrafts ? isPending : !isPending) combined.add(doc);
     }
-
     combined.sort((a, b) {
       final aData = a.data() as Map<String, dynamic>;
       final bData = b.data() as Map<String, dynamic>;
-      final aTime = aData['creationDate'] ?? aData['timestamp'] as Timestamp?;
-      final bTime = bData['creationDate'] ?? bData['timestamp'] as Timestamp?;
-      return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+      final Timestamp? aPubTs = aData['publishedDate'] as Timestamp?;
+      final Timestamp? bPubTs = bData['publishedDate'] as Timestamp?;
+      if (aPubTs != null && bPubTs == null) return -1;
+      if (aPubTs == null && bPubTs != null) return 1;
+      if (aPubTs != null && bPubTs != null) return bPubTs.compareTo(aPubTs);
+      final String aTitle = (aData['title'] ?? '').toString().toLowerCase();
+      final String bTitle = (bData['title'] ?? '').toString().toLowerCase();
+      if (aTitle != bTitle) return bTitle.compareTo(aTitle);
+      final int aVal = int.tryParse((aData['wholeNumber'] ?? aData['issue'] ?? '0').toString()) ?? 0;
+      final int bVal = int.tryParse((bData['wholeNumber'] ?? bData['issue'] ?? '0').toString()) ?? 0;
+      return bVal.compareTo(aVal);
     });
     return combined;
   }
@@ -1502,41 +1334,21 @@ class _MakerCombinedView extends StatelessWidget {
 
 class _HashtagItemTile extends StatelessWidget {
   final DocumentSnapshot imageDoc;
-
   const _HashtagItemTile({required this.imageDoc});
-
   @override
   Widget build(BuildContext context) {
     final data = imageDoc.data() as Map<String, dynamic>;
-
-    // We try to pull the contextual folio to display its cover and handle the backlink properly.
-    final String? folioContext = data['folioContext'] ??
-        (data['usedInFanzines'] != null && data['usedInFanzines'].isNotEmpty
-            ? data['usedInFanzines'][0]
-            : null);
-
+    final String? folioContext = data['folioContext'] ?? (data['usedInFanzines'] != null && data['usedInFanzines'].isNotEmpty ? data['usedInFanzines'][0] : null);
     if (folioContext != null && folioContext.isNotEmpty) {
       return FutureBuilder<DocumentSnapshot>(
           future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
           builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return Container(
-                  decoration: BoxDecoration(border: Border.all(color: Colors.black12)),
-                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2))
-              );
-            }
-            if (snap.hasData && snap.data != null && snap.data!.exists) {
-              // Hand the fanzine doc over to _MakerItemTile, it naturally handles covers and backlinks!
-              return _MakerItemTile(doc: snap.data!, shouldEdit: false);
-            }
-
-            // Fallback to image if folio fails to load
+            if (snap.connectionState == ConnectionState.waiting) return Container(decoration: BoxDecoration(border: Border.all(color: Colors.black12)), child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+            if (snap.hasData && snap.data != null && snap.data!.exists) return _MakerItemTile(doc: snap.data!, shouldEdit: false);
             return _MakerItemTile(doc: imageDoc, shouldEdit: false);
           }
       );
     }
-
-    // If it's a standalone image with no folio
     return _MakerItemTile(doc: imageDoc, shouldEdit: false);
   }
 }
@@ -1546,17 +1358,9 @@ class _QuickActionTile extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
   const _QuickActionTile({required this.label, required this.color, required this.onTap});
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        color: color,
-        padding: const EdgeInsets.all(8),
-        child: Center(child: Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
-      ),
-    );
+    return GestureDetector(onTap: onTap, child: Container(color: color, padding: const EdgeInsets.all(8), child: Center(child: Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)))));
   }
 }
 
@@ -1564,7 +1368,6 @@ class _EntityRow extends StatelessWidget {
   final String name;
   final int count;
   const _EntityRow({required this.name, required this.count});
-
   @override
   Widget build(BuildContext context) {
     final handle = normalizeHandle(name);
@@ -1572,14 +1375,11 @@ class _EntityRow extends StatelessWidget {
       stream: FirebaseFirestore.instance.collection('usernames').doc(handle).snapshots(),
       builder: (context, snapshot) {
         Widget statusWidget;
-        if (!snapshot.hasData) {
-          statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
-        } else if (snapshot.data!.exists) {
+        if (!snapshot.hasData) statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
+        else if (snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           String linkText = '/$handle';
-          if (data['isAlias'] == true) {
-            linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
-          }
+          if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
           statusWidget = InkWell(onTap: () => context.go('/$handle'), child: Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline)));
         } else {
           statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1587,61 +1387,37 @@ class _EntityRow extends StatelessWidget {
             TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
           ]);
         }
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Row(children: [
-            SizedBox(width: 30, child: Text("$count", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
-            Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
-            statusWidget,
-          ]),
-        );
+        return Padding(padding: const EdgeInsets.symmetric(vertical: 4.0), child: Row(children: [SizedBox(width: 30, child: Text("$count", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))), Expanded(child: Text(name, style: const TextStyle(fontSize: 13))), statusWidget]));
       },
     );
   }
-
   Future<void> _createProfile(BuildContext context, String name) async {
     final messenger = ScaffoldMessenger.of(context);
     String first = name; String last = "";
     if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
     final expectedHandle = normalizeHandle(name);
     try {
-      await createManagedProfile(
-        firstName: first,
-        lastName: last,
-        bio: "Auto-created from Editor Widget",
-        explicitHandle: expectedHandle,
-      );
-      if (!context.mounted) {
-        return;
-      }
+      await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from Editor Widget", explicitHandle: expectedHandle);
+      if (!context.mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text("Profile Created!")));
     } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
-
   Future<void> _createAlias(BuildContext context, String name) async {
     final messenger = ScaffoldMessenger.of(context);
     final target = await showDialog<String>(context: context, builder: (c) {
       final controller = TextEditingController();
       return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
     });
-    if (target == null || target.isEmpty) {
-      return;
-    }
+    if (target == null || target.isEmpty) return;
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text("Alias Created!")));
     } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
@@ -1662,111 +1438,52 @@ class _MakerItemTile extends StatelessWidget {
   final bool isDraftView;
   final bool thumbnailOnly;
 
-  const _MakerItemTile({
-    required this.doc,
-    this.shouldEdit = false,
-    this.isDraftView = false,
-    this.thumbnailOnly = false,
-  });
+  const _MakerItemTile({required this.doc, this.shouldEdit = false, this.isDraftView = false, this.thumbnailOnly = false});
 
   bool _is5x8(Map<String, dynamic> data) {
-    if (data['is5x8'] == true) {
-      return true;
-    }
+    if (data['is5x8'] == true) return true;
     final w = data['width'] as num?;
     final h = data['height'] as num?;
-    if (w != null && h != null) {
-      final ratio = w / h;
-      return ratio >= 0.58 && ratio <= 0.67;
-    }
+    if (w != null && h != null) { final ratio = w / h; return ratio >= 0.58 && ratio <= 0.67; }
     return false;
   }
 
   Future<void> _confirmDelete(BuildContext context, String displayTitle) async {
     final isFanzine = doc.reference.path.startsWith('fanzines/');
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text("Delete $displayTitle?"),
-        content: Text(isFanzine
-            ? "Are you sure you want to delete this folio? Direct uploads will be permanently removed. Orphan images imported from your library will be preserved."
-            : "Are you sure you want to delete this image? All associated page references will be removed from all folios."),
+        content: Text(isFanzine ? "Are you sure?" : "Are you sure you want to delete this image?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
         ],
       ),
     );
-
     if (confirm == true) {
-      if (!context.mounted) {
-        return;
-      }
-      if (isFanzine) {
-        context.read<ProfileBloc>().add(DeleteFolioRequested(doc.id));
-      } else {
-        context.read<ProfileBloc>().add(DeleteImageRequested(doc.id));
-      }
+      if (!context.mounted) return;
+      if (isFanzine) context.read<ProfileBloc>().add(DeleteFolioRequested(doc.id));
+      else context.read<ProfileBloc>().add(DeleteImageRequested(doc.id));
     }
   }
 
   Future<String?> _getFolioThumbnail(String fanzineId) async {
     final db = FirebaseFirestore.instance;
-
     try {
-      final coverSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
-          .where('pageNumber', isEqualTo: 1)
-          .limit(1)
-          .get();
-
+      final coverSnap = await db.collection('fanzines').doc(fanzineId).collection('pages').where('pageNumber', isEqualTo: 1).limit(1).get();
       if (coverSnap.docs.isNotEmpty) {
         final d = coverSnap.docs.first.data();
         final url = d['gridUrl'] ?? d['thumbnailUrl'] ?? d['imageUrl'];
         if (url != null && url.toString().isNotEmpty) return url;
       }
-
-      final pagesSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
-          .where('pageNumber', isGreaterThan: 0)
-          .orderBy('pageNumber')
-          .limit(1)
-          .get();
-
+      final pagesSnap = await db.collection('fanzines').doc(fanzineId).collection('pages').where('pageNumber', isGreaterThan: 0).orderBy('pageNumber').limit(1).get();
       if (pagesSnap.docs.isNotEmpty) {
         final pageData = pagesSnap.docs.first.data();
         final url = pageData['gridUrl'] ?? pageData['thumbnailUrl'] ?? pageData['imageUrl'];
         if (url != null && url.toString().isNotEmpty) return url;
       }
-
-      final fallbackPageSnap = await db.collection('fanzines').doc(fanzineId).collection('pages')
-          .limit(1)
-          .get();
-
-      if (fallbackPageSnap.docs.isNotEmpty) {
-        final d = fallbackPageSnap.docs.first.data();
-        final url = d['gridUrl'] ?? d['thumbnailUrl'] ?? d['imageUrl'];
-        if (url != null && url.toString().isNotEmpty) return url;
-      }
-
-      final imagesSnap = await db.collection('images')
-          .where('folioContext', isEqualTo: fanzineId)
-          .get();
-
-      if (imagesSnap.docs.isNotEmpty) {
-        final docs = imagesSnap.docs.toList();
-        docs.sort((a, b) {
-          final aTime = (a.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-          final bTime = (b.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
-          return bTime.compareTo(aTime);
-        });
-
-        final imgData = docs.first.data();
-        return imgData['gridUrl'] ?? imgData['fileUrl'];
-      }
-    } catch (e) {
-      debugPrint("Error fetching folio thumbnail: $e");
-    }
-
+    } catch (e) { debugPrint("Error fetching folio thumbnail: $e"); }
     return null;
   }
 
@@ -1775,28 +1492,22 @@ class _MakerItemTile extends StatelessWidget {
     final data = doc.data() as Map<String, dynamic>;
     final isFanzine = doc.reference.path.startsWith('fanzines/');
     final title = data['title'] ?? 'Untitled';
-
     String displayTitle = title;
     if (isFanzine) {
       final wNum = (data['wholeNumber'] ?? '').toString().trim();
       final iss = (data['issue'] ?? '').toString().trim();
-      if (wNum.isNotEmpty) {
-        displayTitle = "$title $wNum";
-      } else if (iss.isNotEmpty) {
-        displayTitle = "$title $iss";
-      }
+      if (wNum.isNotEmpty) displayTitle = "$title $wNum"; else if (iss.isNotEmpty) displayTitle = "$title $iss";
     }
-
     final fileUrl = data['fileUrl'];
     final displayUrl = data['gridUrl'] ?? data['fileUrl'];
+    final Timestamp? publishedTs = data['publishedDate'] as Timestamp?;
+    final int pageCount = data['pageCount'] ?? 0;
+    final String datePrecision = data['datePrecision'] ?? 'month';
 
     return GestureDetector(
       onTap: () {
-        if (!isFanzine) {
-          showDialog(context: context, builder: (_) => ImageViewModal(imageUrl: fileUrl ?? '', imageId: doc.id, imageText: data['text'] ?? data['text_raw']));
-        } else {
-          context.push(shouldEdit ? '/editor/${doc.id}' : '/reader/${doc.id}');
-        }
+        if (!isFanzine) showDialog(context: context, builder: (_) => ImageViewModal(imageUrl: fileUrl ?? '', imageId: doc.id, imageText: data['text'] ?? data['text_raw']));
+        else context.push(shouldEdit ? '/editor/${doc.id}' : '/reader/${doc.id}');
       },
       child: Container(
         decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black12)),
@@ -1809,57 +1520,35 @@ class _MakerItemTile extends StatelessWidget {
                   ? FutureBuilder<String?>(
                 future: _getFolioThumbnail(doc.id),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
-                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
                   final thumbUrl = snapshot.data;
-                  if (thumbUrl != null && thumbUrl.isNotEmpty) {
-                    return Image.network(thumbUrl, fit: BoxFit.cover);
-                  }
+                  if (thumbUrl != null && thumbUrl.isNotEmpty) return Image.network(thumbUrl, fit: BoxFit.cover);
                   return const Icon(Icons.menu_book, color: Colors.black12, size: 40);
                 },
-              )
-                  : (displayUrl != null
-                  ? Image.network(displayUrl, fit: BoxFit.cover)
-                  : const Icon(Icons.image, color: Colors.black12, size: 40)),
+              ) : (displayUrl != null ? Image.network(displayUrl, fit: BoxFit.cover) : const Icon(Icons.image, color: Colors.black12, size: 40)),
             ),
-
             if (!thumbnailOnly) ...[
+              Positioned(bottom: 0, left: 0, right: 0, child: Container(padding: const EdgeInsets.all(8), color: Colors.black54, child: Text(displayTitle, style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis))),
               Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.black54,
-                      child: Text(
-                          displayTitle,
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis
-                      )
-                  )
+                top: 44, left: 4, right: 4,
+                child: _Badge(label: isFanzine ? "folio • $pageCount pages" : (_is5x8(data) ? "full page 5x8" : "image"), color: Colors.grey.shade800),
               ),
-
-              Positioned(
-                top: 26, left: 4, right: 4,
-                child: _Badge(label: isFanzine ? "folio" : (_is5x8(data) ? "full page 5x8" : "image"), color: Colors.grey.shade800),
-              ),
-            ],
-
-            if (isDraftView && !thumbnailOnly)
-              Positioned(
-                top: 2,
-                right: 2,
-                child: GestureDetector(
-                  onTap: () => _confirmDelete(context, displayTitle),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
-                    child: const Icon(Icons.close, size: 14, color: Colors.white),
+              if (isFanzine && publishedTs != null)
+                Positioned(
+                  top: 66, left: 4, right: 4,
+                  child: _Badge(
+                    label: () {
+                      final date = publishedTs.toDate();
+                      if (datePrecision == 'day') return DateFormat('MMMM d, yyyy').format(date).toLowerCase();
+                      if (datePrecision == 'year') return DateFormat('yyyy').format(date);
+                      return DateFormat('MMMM yyyy').format(date).toLowerCase();
+                    }(),
+                    color: Colors.grey.shade800,
                   ),
                 ),
-              ),
+            ],
+            if (isDraftView && !thumbnailOnly)
+              Positioned(top: 2, right: 2, child: GestureDetector(onTap: () => _confirmDelete(context, displayTitle), child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle), child: const Icon(Icons.close, size: 14, color: Colors.white)))),
           ],
         ),
       ),
@@ -1874,15 +1563,9 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(color: color.withOpacity(0.8), borderRadius: BorderRadius.circular(4)),
-      child: Text(
-          label.toLowerCase(),
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: color.withOpacity(0.9), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5)),
+      child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 }
@@ -1890,9 +1573,7 @@ class _Badge extends StatelessWidget {
 class _ModeratorCard extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;
-
   const _ModeratorCard({required this.docId, required this.data});
-
   @override
   State<_ModeratorCard> createState() => _ModeratorCardState();
 }
@@ -1903,60 +1584,25 @@ class _ModeratorCardState extends State<_ModeratorCard> {
   final ViewService _viewService = ViewService();
   final ValueNotifier<double> _fontSizeNotifier = ValueNotifier(16.0);
   BonusRowType? _activePanel;
-
   void _submitComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
-
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     _commentController.clear();
-
-    await _engagementService.addComment(
-      imageId: widget.docId,
-      fanzineId: 'moderation_queue',
-      fanzineTitle: 'Moderator Feed',
-      text: text,
-      displayName: userProvider.userProfile?.displayName,
-      username: userProvider.userProfile?.username,
-    );
+    await _engagementService.addComment(imageId: widget.docId, fanzineId: 'moderation_queue', fanzineTitle: 'Moderator Feed', text: text, displayName: userProvider.userProfile?.displayName, username: userProvider.userProfile?.username);
   }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    _fontSizeNotifier.dispose();
-    super.dispose();
-  }
-
+  @override void dispose() { _commentController.dispose(); _fontSizeNotifier.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
     final imageUrl = widget.data['fileUrl'] as String?;
     final uploaderId = widget.data['uploaderId'] as String? ?? 'unknown';
-
     final String actualText = widget.data['text_linked'] ?? widget.data['text_corrected'] ?? widget.data['text_raw'] ?? '';
-
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (imageUrl != null)
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                height: 400,
-                errorBuilder: (c, e, s) => const SizedBox(height: 200, child: Center(child: Icon(Icons.broken_image))),
-              ),
-            ),
-
+          if (imageUrl != null) ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(12)), child: Image.network(imageUrl, fit: BoxFit.cover, height: 400, errorBuilder: (c, e, s) => const SizedBox(height: 200, child: Center(child: Icon(Icons.broken_image))))),
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
@@ -1967,43 +1613,10 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                 HashtagBar(imageId: widget.docId, tags: widget.data['tags'] as Map<String, dynamic>? ?? {}),
                 const SizedBox(height: 12),
                 const Divider(height: 1),
-                DynamicSocialToolbar(
-                  imageId: widget.docId,
-                  fanzineType: null,
-                  isGame: false,
-                  isEditingMode: true,
-                  activeBonusRow: _activePanel,
-                  onToggleBonusRow: (rowType) {
-                    setState(() {
-                      _activePanel = _activePanel == rowType ? null : rowType;
-                    });
-                  },
-                ),
+                DynamicSocialToolbar(imageId: widget.docId, fanzineType: null, isGame: false, isEditingMode: true, activeBonusRow: _activePanel, onToggleBonusRow: (rowType) { setState(() { _activePanel = _activePanel == rowType ? null : rowType; }); }),
                 if (_activePanel != null) ...[
                   const Divider(height: 1),
-                  PanelContainer(
-                    title: '',
-                    isInline: true,
-                    inlineColor: PanelFactory.getInlineColor(_activePanel!),
-                    child: PanelFactory.buildPanelContent(
-                        PanelContext(
-                          type: _activePanel!,
-                          imageId: widget.docId,
-                          actualText: actualText,
-                          textRaw: widget.data['text_raw'] ?? '',
-                          textCorrected: widget.data['text_corrected'] ?? '',
-                          textLinked: widget.data['text_linked'] ?? '',
-                          textCorrectedAi: widget.data['text_corrected_ai'] ?? '',
-                          textLinkedAi: widget.data['text_linked_ai'] ?? '',
-                          isEditingMode: true,
-                          viewService: _viewService,
-                          engagementService: _engagementService,
-                          commentController: _commentController,
-                          onSubmitComment: _submitComment,
-                          fontSizeNotifier: _fontSizeNotifier,
-                        )
-                    ),
-                  ),
+                  PanelContainer(title: '', isInline: true, inlineColor: PanelFactory.getInlineColor(_activePanel!), child: PanelFactory.buildPanelContent(PanelContext(type: _activePanel!, imageId: widget.docId, actualText: actualText, textRaw: widget.data['text_raw'] ?? '', textCorrected: widget.data['text_corrected'] ?? '', textLinked: widget.data['text_linked'] ?? '', textCorrectedAi: widget.data['text_corrected_ai'] ?? '', textLinkedAi: widget.data['text_linked_ai'] ?? '', isEditingMode: true, viewService: _viewService, engagementService: _engagementService, commentController: _commentController, onSubmitComment: _submitComment, fontSizeNotifier: _fontSizeNotifier))),
                 ],
               ],
             ),

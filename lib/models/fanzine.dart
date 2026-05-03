@@ -33,6 +33,13 @@ class Fanzine extends Equatable {
   final int? startYear;
   final bool isSoftPublished;
 
+  final String? seriesId;
+  final DateTime? publishedDate;
+
+  // Updated fields for granular date control
+  final String datePrecision; // 'day', 'month', 'year'
+  final bool dateIsGuess;
+
   const Fanzine({
     required this.id,
     required this.title,
@@ -44,7 +51,7 @@ class Fanzine extends Equatable {
     required this.processingStatus,
     required this.ownerId,
     this.editors = const [],
-    this.twoPage = true, // Defaulting to true so the switch starts "ON"
+    this.twoPage = true,
     this.hasCover = true,
     this.shortCode,
     this.sourceFile,
@@ -55,6 +62,10 @@ class Fanzine extends Equatable {
     this.startMonth,
     this.startYear,
     this.isSoftPublished = false,
+    this.seriesId,
+    this.publishedDate,
+    this.datePrecision = 'month',
+    this.dateIsGuess = false,
   });
 
   factory Fanzine.fromFirestore(DocumentSnapshot doc) {
@@ -79,7 +90,7 @@ class Fanzine extends Equatable {
       processingStatus: data['processingStatus'] ?? 'idle',
       ownerId: owner,
       editors: editorList,
-      twoPage: data['twoPage'] ?? true, // Fallback to true if missing
+      twoPage: data['twoPage'] ?? true,
       hasCover: data['hasCover'] ?? true,
       shortCode: data['shortCode'],
       sourceFile: data['sourceFile'],
@@ -92,6 +103,10 @@ class Fanzine extends Equatable {
       startMonth: data['startMonth'],
       startYear: data['startYear'],
       isSoftPublished: data['isSoftPublished'] ?? false,
+      seriesId: data['seriesId'],
+      publishedDate: (data['publishedDate'] as Timestamp?)?.toDate(),
+      datePrecision: data['datePrecision'] ?? 'month',
+      dateIsGuess: data['dateIsGuess'] ?? false,
     );
   }
 
@@ -100,6 +115,7 @@ class Fanzine extends Equatable {
     id, title, volume, issue, wholeNumber, type, isLive, processingStatus,
     ownerId, editors, twoPage, hasCover, shortCode, sourceFile,
     draftEntities, masterCreators, masterIndicia, indiciaPageId,
-    startMonth, startYear, isSoftPublished
+    startMonth, startYear, isSoftPublished, seriesId, publishedDate,
+    datePrecision, dateIsGuess
   ];
 }

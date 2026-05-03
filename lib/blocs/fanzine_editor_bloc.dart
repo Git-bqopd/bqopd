@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../repositories/fanzine_repository.dart';
 import '../../repositories/pipeline_repository.dart';
 import '../../models/fanzine.dart';
@@ -42,6 +43,29 @@ class UpdateFanzineMetadata extends FanzineEditorEvent {
   UpdateFanzineMetadata(this.title, this.volume, this.issue, this.wholeNumber);
   @override
   List<Object?> get props => [title, volume, issue, wholeNumber];
+}
+
+class UpdateFanzineSeries extends FanzineEditorEvent {
+  final String? seriesId;
+  final String seriesName;
+  UpdateFanzineSeries(this.seriesId, this.seriesName);
+  @override
+  List<Object?> get props => [seriesId, seriesName];
+}
+
+class UpdateFanzineDate extends FanzineEditorEvent {
+  final DateTime date;
+  UpdateFanzineDate(this.date);
+  @override
+  List<Object?> get props => [date];
+}
+
+class UpdateFanzineDateOptions extends FanzineEditorEvent {
+  final String? datePrecision;
+  final bool? dateIsGuess;
+  UpdateFanzineDateOptions({this.datePrecision, this.dateIsGuess});
+  @override
+  List<Object?> get props => [datePrecision, dateIsGuess];
 }
 
 class ToggleTwoPageRequested extends FanzineEditorEvent {
@@ -113,7 +137,6 @@ class ToggleIsLiveRequested extends FanzineEditorEvent {
 
 class SoftPublishRequested extends FanzineEditorEvent {}
 
-// Pipeline Triggers
 class TriggerAiCleanRequested extends FanzineEditorEvent {}
 class TriggerGenerateLinksRequested extends FanzineEditorEvent {}
 
@@ -186,6 +209,9 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     on<_FanzineUpdated>(_onFanzineUpdated);
     on<_PagesUpdated>(_onPagesUpdated);
     on<UpdateFanzineMetadata>(_onUpdateMetadata);
+    on<UpdateFanzineSeries>(_onUpdateSeries);
+    on<UpdateFanzineDate>(_onUpdateDate);
+    on<UpdateFanzineDateOptions>(_onUpdateDateOptions);
     on<ToggleTwoPageRequested>(_onToggleTwoPage);
     on<ToggleHasCoverRequested>(_onToggleHasCover);
     on<AddPageRequested>(_onAddPage);
@@ -250,6 +276,44 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
         'issue': event.issue.trim(),
         'wholeNumber': event.wholeNumber.trim(),
       });
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    }
+  }
+
+  Future<void> _onUpdateSeries(UpdateFanzineSeries event, Emitter<FanzineEditorState> emit) async {
+    if (state is! FanzineEditorLoaded) return;
+    try {
+      final updates = <String, dynamic>{
+        'seriesId': event.seriesId,
+      };
+      if (event.seriesName.isNotEmpty) {
+        updates['title'] = event.seriesName;
+      }
+      await _repository.updateFanzine(fanzineId, updates);
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    }
+  }
+
+  Future<void> _onUpdateDate(UpdateFanzineDate event, Emitter<FanzineEditorState> emit) async {
+    if (state is! FanzineEditorLoaded) return;
+    try {
+      await _repository.updateFanzine(fanzineId, {
+        'publishedDate': event.date,
+      });
+    } catch (e) {
+      emit(FanzineEditorFailure(e.toString()));
+    }
+  }
+
+  Future<void> _onUpdateDateOptions(UpdateFanzineDateOptions event, Emitter<FanzineEditorState> emit) async {
+    if (state is! FanzineEditorLoaded) return;
+    try {
+      final updates = <String, dynamic>{};
+      if (event.datePrecision != null) updates['datePrecision'] = event.datePrecision;
+      if (event.dateIsGuess != null) updates['dateIsGuess'] = event.dateIsGuess;
+      await _repository.updateFanzine(fanzineId, updates);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     }
