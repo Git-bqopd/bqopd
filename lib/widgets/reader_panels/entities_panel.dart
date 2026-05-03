@@ -186,7 +186,7 @@ class EntityRow extends StatelessWidget {
       await createManagedProfile(
         firstName: first,
         lastName: last,
-        bio: "Auto-created from Editor Widget",
+        bio: "Profile bio coming soon.",
         explicitHandle: expectedHandle,
       );
       if (!context.mounted) return;
