@@ -52,6 +52,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   int _likeCount = 0;
   int _commentCount = 0;
   int _viewCount = 0;
+  int _tagCount = 0; // NEW: Track unique hashtags
 
   StreamSubscription? _imageSub;
 
@@ -79,10 +80,16 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           .listen((doc) {
         if (doc.exists && mounted) {
           final data = doc.data() as Map<String, dynamic>;
+          final tags = data['tags'] as Map<String, dynamic>? ?? {};
+
           setState(() {
             _likeCount = data['likeCount'] ?? 0;
             _commentCount = data['commentCount'] ?? 0;
-            _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) + (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
+            _viewCount = (data['regListCount'] ?? 0) +
+                (data['anonListCount'] ?? 0) +
+                (data['regGridCount'] ?? 0) +
+                (data['anonGridCount'] ?? 0);
+            _tagCount = tags.keys.length; // Count unique map keys
           });
         }
       });
@@ -146,9 +153,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
     final userProvider = Provider.of<UserProvider>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    // Use CENTRALIZED LOGIC to filter tools
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
-      // 1. Check logical visibility based on environment/context
       bool isContextuallyVisible = ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
         userRole: userProvider.userAccount?.role ?? 'user',
@@ -162,7 +167,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
 
       if (!isContextuallyVisible) return false;
 
-      // 2. Check personal visibility preferences set by the user
       final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
       return isVisibleByUser;
     }).toList();
@@ -198,6 +202,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           int? count;
           if (tool.id == 'Comment') count = _commentCount;
           if (tool.id == 'Views') count = _viewCount;
+          if (tool.id == 'Tags') count = _tagCount; // Display tag count
 
           return DynamicToolbarButton(
             tool: tool,

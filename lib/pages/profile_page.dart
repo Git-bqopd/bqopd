@@ -891,7 +891,21 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             );
           }
 
-          return _buildGrid(docs, false, thumbnailOnly: false);
+          return SliverPadding(
+            padding: const EdgeInsets.all(8.0),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 5 / 8,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8
+              ),
+              delegate: SliverChildBuilderDelegate(
+                      (context, index) => _HashtagItemTile(imageDoc: docs[index]),
+                  childCount: docs.length
+              ),
+            ),
+          );
         },
       ),
     ];
@@ -1352,47 +1366,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   }
 }
 
-class _HashtagItemTile extends StatelessWidget {
-  final DocumentSnapshot imageDoc;
-
-  const _HashtagItemTile({required this.imageDoc});
-
-  @override
-  Widget build(BuildContext context) {
-    final data = imageDoc.data() as Map<String, dynamic>;
-
-    // We try to pull the contextual folio to display its cover and handle the backlink properly.
-    final String? folioContext = data['folioContext'] ??
-        (data['usedInFanzines'] != null && data['usedInFanzines'].isNotEmpty
-            ? data['usedInFanzines'][0]
-            : null);
-
-    if (folioContext != null && folioContext.isNotEmpty) {
-      return FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return Container(
-                  decoration: BoxDecoration(border: Border.all(color: Colors.black12)),
-                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2))
-              );
-            }
-            if (snap.hasData && snap.data != null && snap.data!.exists) {
-              // Hand the fanzine doc over to _MakerItemTile, it naturally handles covers and backlinks!
-              return _MakerItemTile(doc: snap.data!, shouldEdit: false);
-            }
-
-            // Fallback to image if folio fails to load
-            return _MakerItemTile(doc: imageDoc, shouldEdit: false);
-          }
-      );
-    }
-
-    // If it's a standalone image with no folio
-    return _MakerItemTile(doc: imageDoc, shouldEdit: false);
-  }
-}
-
 class _UserCommentsView extends StatelessWidget {
   final String userId;
   const _UserCommentsView({required this.userId});
@@ -1452,32 +1425,22 @@ class _MakerCombinedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder(
-        stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
-        builder: (context, _) {
-          return StreamBuilder(
-              stream: FirebaseFirestore.instance.collection('images').snapshots(),
-              builder: (context, _) {
-                return FutureBuilder<List<dynamic>>(
-                    future: _getCombinedData(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-                      }
-                      final items = snapshot.data!;
-                      if (items.isEmpty) {
-                        return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
-                      }
-                      return SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
-                          delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: items[index], shouldEdit: true, isDraftView: showDrafts), childCount: items.length),
-                        ),
-                      );
-                    }
-                );
-              }
+    return FutureBuilder<List<dynamic>>(
+        future: _getCombinedData(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+          }
+          final items = snapshot.data!;
+          if (items.isEmpty) {
+            return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
+          }
+          return SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
+              delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: items[index], shouldEdit: true, isDraftView: showDrafts), childCount: items.length),
+            ),
           );
         }
     );
@@ -1528,6 +1491,47 @@ class _MakerCombinedView extends StatelessWidget {
       return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
     });
     return combined;
+  }
+}
+
+class _HashtagItemTile extends StatelessWidget {
+  final DocumentSnapshot imageDoc;
+
+  const _HashtagItemTile({required this.imageDoc});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = imageDoc.data() as Map<String, dynamic>;
+
+    // We try to pull the contextual folio to display its cover and handle the backlink properly.
+    final String? folioContext = data['folioContext'] ??
+        (data['usedInFanzines'] != null && data['usedInFanzines'].isNotEmpty
+            ? data['usedInFanzines'][0]
+            : null);
+
+    if (folioContext != null && folioContext.isNotEmpty) {
+      return FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return Container(
+                  decoration: BoxDecoration(border: Border.all(color: Colors.black12)),
+                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              );
+            }
+            if (snap.hasData && snap.data != null && snap.data!.exists) {
+              // Hand the fanzine doc over to _MakerItemTile, it naturally handles covers and backlinks!
+              return _MakerItemTile(doc: snap.data!, shouldEdit: false);
+            }
+
+            // Fallback to image if folio fails to load
+            return _MakerItemTile(doc: imageDoc, shouldEdit: false);
+          }
+      );
+    }
+
+    // If it's a standalone image with no folio
+    return _MakerItemTile(doc: imageDoc, shouldEdit: false);
   }
 }
 
@@ -1833,25 +1837,7 @@ class _MakerItemTile extends StatelessWidget {
 
               Positioned(
                 top: 26, left: 4, right: 4,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (isFanzine)
-                      StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance.collection('fanzines').doc(doc.id).collection('pages').where('pageNumber', isGreaterThan: 0).snapshots(),
-                        builder: (context, snap) {
-                          final count = snap.data?.docs.length ?? 0;
-                          return _Badge(label: "folio ($count)", color: Colors.grey.shade800);
-                        },
-                      )
-                    else ...[
-                      _Badge(label: _is5x8(data) ? "full page 5x8" : "image", color: Colors.grey.shade800),
-                      const SizedBox(height: 2),
-                      _Badge(label: "${data['width'] ?? '??'}x${data['height'] ?? '??'}", color: Colors.black, opacity: 0.7),
-                    ],
-                  ],
-                ),
+                child: _Badge(label: isFanzine ? "folio" : (_is5x8(data) ? "full page 5x8" : "image"), color: Colors.grey.shade800),
               ),
             ],
 
@@ -1863,7 +1849,7 @@ class _MakerItemTile extends StatelessWidget {
                   onTap: () => _confirmDelete(context, displayTitle),
                   child: Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
                     child: const Icon(Icons.close, size: 14, color: Colors.white),
                   ),
                 ),
@@ -1878,16 +1864,15 @@ class _MakerItemTile extends StatelessWidget {
 class _Badge extends StatelessWidget {
   final String label;
   final Color color;
-  final double opacity;
-  const _Badge({required this.label, required this.color, this.opacity = 0.8});
+  const _Badge({required this.label, required this.color});
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: opacity), borderRadius: BorderRadius.circular(4)),
+      decoration: BoxDecoration(color: color.withOpacity(0.8), borderRadius: BorderRadius.circular(4)),
       child: Text(
           label.toLowerCase(),
-          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.normal),
+          style: const TextStyle(color: Colors.white, fontSize: 12),
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis
@@ -1940,19 +1925,9 @@ class _ModeratorCardState extends State<_ModeratorCard> {
   @override
   Widget build(BuildContext context) {
     final imageUrl = widget.data['fileUrl'] as String?;
-    final tags = widget.data['tags'] as Map<String, dynamic>? ?? {};
     final uploaderId = widget.data['uploaderId'] as String? ?? 'unknown';
 
-    final bool isApproved = tags.containsKey('approved') && (tags['approved'] as List).isNotEmpty;
-
-    final String tLinked = widget.data['text_linked'] ?? '';
-    final String tCorrected = widget.data['text_corrected'] ?? widget.data['text'] ?? '';
-    final String tRaw = widget.data['text_raw'] ?? '';
-
-    final String tLinkedAi = widget.data['text_linked_ai'] ?? '';
-    final String tCorrectedAi = widget.data['text_corrected_ai'] ?? '';
-
-    final String actualText = tLinked.trim().isNotEmpty ? tLinked : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
+    final String actualText = widget.data['text_linked'] ?? widget.data['text_corrected'] ?? widget.data['text_raw'] ?? '';
 
     return Container(
       decoration: BoxDecoration(
@@ -1961,24 +1936,10 @@ class _ModeratorCardState extends State<_ModeratorCard> {
         boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
         ],
-        border: isApproved
-            ? Border.all(color: Colors.green.withValues(alpha: 0.5), width: 2)
-            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!isApproved)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-              color: Colors.amber[100],
-              child: const Text(
-                "NOT YET APPROVED",
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
-                textAlign: TextAlign.center,
-              ),
-            ),
-
           if (imageUrl != null)
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
@@ -1995,18 +1956,9 @@ class _ModeratorCardState extends State<_ModeratorCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FutureBuilder<DocumentSnapshot>(
-                  future: FirebaseFirestore.instance.collection('profiles').doc(uploaderId).get(),
-                  builder: (context, snap) {
-                    if (snap.hasData && snap.data!.exists) {
-                      final profile = UserProfile.fromFirestore(snap.data!);
-                      return Text("Uploaded by @${profile.username}", style: const TextStyle(color: Colors.grey, fontSize: 12));
-                    }
-                    return Text("Uploaded by @$uploaderId", style: const TextStyle(color: Colors.grey, fontSize: 12));
-                  },
-                ),
+                Text("Uploaded by @$uploaderId", style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 const SizedBox(height: 8),
-                HashtagBar(imageId: widget.docId, tags: tags),
+                HashtagBar(imageId: widget.docId, tags: widget.data['tags'] as Map<String, dynamic>? ?? {}),
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 DynamicSocialToolbar(
@@ -2032,11 +1984,11 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                           type: _activePanel!,
                           imageId: widget.docId,
                           actualText: actualText,
-                          textRaw: tRaw,
-                          textCorrected: tCorrected,
-                          textLinked: tLinked,
-                          textCorrectedAi: tCorrectedAi,
-                          textLinkedAi: tLinkedAi,
+                          textRaw: widget.data['text_raw'] ?? '',
+                          textCorrected: widget.data['text_corrected'] ?? '',
+                          textLinked: widget.data['text_linked'] ?? '',
+                          textCorrectedAi: widget.data['text_corrected_ai'] ?? '',
+                          textLinkedAi: widget.data['text_linked_ai'] ?? '',
                           isEditingMode: true,
                           viewService: _viewService,
                           engagementService: _engagementService,
