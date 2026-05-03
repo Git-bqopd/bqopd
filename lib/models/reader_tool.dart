@@ -40,6 +40,7 @@ enum BonusRowType {
   youtube,
   indicia,
   settings,
+  terminal, // NEW: Added for the game
 }
 
 /// The core data model for a dynamic toolbar button

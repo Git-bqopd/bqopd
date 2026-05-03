@@ -7,6 +7,7 @@ import 'text_editor_panels.dart';
 import 'hashtag_panel.dart';
 import 'entities_panel.dart';
 import 'youtube_panel.dart';
+import 'terminal_panel.dart'; // NEW
 import 'comments_panel.dart';
 import 'views_panel.dart';
 import 'Credits_panel.dart';
@@ -26,6 +27,7 @@ class PanelFactory {
       case BonusRowType.views: return "ANALYTICS";
       case BonusRowType.credits: return "ARCHIVAL METADATA & CREDITS";
       case BonusRowType.youtube: return "VIDEO";
+      case BonusRowType.terminal: return "TERMINAL, CA"; // NEW
       case BonusRowType.indicia: return "ISSUE INDICIA";
       case BonusRowType.settings: return "SETTINGS";
       case BonusRowType.editDetails: return "EDIT DETAILS";
@@ -38,6 +40,7 @@ class PanelFactory {
       case BonusRowType.rawText: return Colors.grey[100]!;
       case BonusRowType.views: return Colors.grey[50]!;
       case BonusRowType.youtube: return Colors.black;
+      case BonusRowType.terminal: return const Color(0xFF0D0D0D); // NEW
       default: return Colors.white;
     }
   }
@@ -87,6 +90,8 @@ class PanelFactory {
         return CreditsPanel(imageId: context.imageId);
       case BonusRowType.youtube:
         return YoutubePanel(imageId: context.imageId);
+      case BonusRowType.terminal: // NEW
+        return const TerminalPanel();
       case BonusRowType.indicia:
         return IndiciaPanel(
             fanzineId: context.fanzineId ?? '',

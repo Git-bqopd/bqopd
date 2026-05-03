@@ -4,10 +4,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/user_provider.dart';
 import 'game_models.dart';
 import 'game_service.dart';
-import 'combat_terminal.dart';
+
+enum LobbyView { main, create, logs }
 
 class GameLobby extends StatefulWidget {
-  const GameLobby({super.key});
+  final Function(GameCharacter me, GameCharacter enemy) onStartCombat;
+  final Function(List<String> logs) onWatchPlayback;
+
+  const GameLobby({
+    super.key,
+    required this.onStartCombat,
+    required this.onWatchPlayback,
+  });
 
   @override
   State<GameLobby> createState() => _GameLobbyState();
@@ -17,74 +25,15 @@ class _GameLobbyState extends State<GameLobby> {
   final GameService _service = GameService();
   GameCharacter? _selectedMyChar;
 
-  void _showCreateDialog(String userId) {
-    final controller = TextEditingController();
+  LobbyView _currentView = LobbyView.main;
+  GameCharacter? _logTarget;
+  bool _isCreating = false;
+  final TextEditingController _createController = TextEditingController();
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        bool isCreating = false;
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            backgroundColor: Colors.grey[900],
-            title: const Text("New Persona",
-                style: TextStyle(color: Colors.green, fontFamily: 'Courier')),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: "Enter character name",
-                    hintStyle: TextStyle(color: Colors.grey),
-                    enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.green)),
-                  ),
-                ),
-                if (isCreating)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 16.0),
-                    child: LinearProgressIndicator(
-                        color: Colors.green, backgroundColor: Colors.black),
-                  ),
-              ],
-            ),
-            actions: [
-              if (!isCreating)
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("CANCEL",
-                      style: TextStyle(color: Colors.grey)),
-                ),
-              if (!isCreating)
-                TextButton(
-                  onPressed: () async {
-                    if (controller.text.trim().isNotEmpty) {
-                      setState(() => isCreating = true);
-                      try {
-                        await _service.createCharacter(
-                            userId, controller.text.trim());
-                        if (context.mounted) Navigator.pop(context);
-                      } catch (e) {
-                        setState(() => isCreating = false);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Error: $e")));
-                        }
-                      }
-                    }
-                  },
-                  child: const Text("INITIALIZE",
-                      style: TextStyle(
-                          color: Colors.green, fontWeight: FontWeight.bold)),
-                )
-            ],
-          ),
-        );
-      },
-    );
+  @override
+  void dispose() {
+    _createController.dispose();
+    super.dispose();
   }
 
   void _startCombat(GameCharacter enemy) {
@@ -94,60 +43,13 @@ class _GameLobbyState extends State<GameLobby> {
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (context) => CombatTerminal(
-          playerChar: _selectedMyChar,
-          enemyChar: enemy,
-        ),
-      ),
-    );
+    // Call the parent panel to swap views
+    widget.onStartCombat(_selectedMyChar!, enemy);
   }
 
   void _watchPlayback(BattleLog log) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (context) => CombatTerminal(
-          playbackLogs: List<String>.from(log.logs),
-        ),
-      ),
-    );
-  }
-
-  /// Shows logs Head-to-Head for the selected target.
-  void _showLogsModal({required GameCharacter target}) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.black,
-      isScrollControlled: true, // Allow it to take more height if needed
-      builder: (context) {
-        return FractionallySizedBox(
-          heightFactor: 0.8,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                    "${_selectedMyChar?.name ?? 'YOU'} vs ${target.name}",
-                    style: const TextStyle(
-                        color: Colors.green,
-                        fontFamily: 'Courier',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-              ),
-              const Divider(color: Colors.green, height: 1),
-              Expanded(
-                child: _buildHeadToHeadList(target),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    // Call the parent panel to swap views
+    widget.onWatchPlayback(List<String>.from(log.logs));
   }
 
   Widget _buildHeadToHeadList(GameCharacter target) {
@@ -174,7 +76,7 @@ class _GameLobbyState extends State<GameLobby> {
 
         return ListView.separated(
           separatorBuilder: (c, i) =>
-              const Divider(height: 1, color: Colors.white24),
+          const Divider(height: 1, color: Colors.white24),
           itemCount: logs.length,
           itemBuilder: (context, index) {
             final log = logs[index];
@@ -252,209 +154,360 @@ class _GameLobbyState extends State<GameLobby> {
 
     if (userId == null) {
       return const Center(
-          child: Text("Authentication required for Terminal access."));
+          child: Text("Authentication required for Terminal access.",
+              style: TextStyle(color: Colors.white)));
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1a1a1a),
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text("TERMINAL, CA // LOBBY",
-            style: TextStyle(color: Colors.white, fontFamily: 'Courier')),
-        // Actions removed
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. My Characters Section
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: Colors.black54,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("MY PERSONAS",
-                    style: TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Courier')),
-                GestureDetector(
-                  onTap: () => _showCreateDialog(userId),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration:
-                        BoxDecoration(border: Border.all(color: Colors.green)),
-                    child: const Text("+ CREATE",
-                        style: TextStyle(color: Colors.green, fontSize: 12)),
-                  ),
+    return Container(
+      color: const Color(0xFF1a1a1a),
+      child: _buildCurrentView(userId),
+    );
+  }
+
+  Widget _buildCurrentView(String userId) {
+    switch (_currentView) {
+      case LobbyView.create:
+        return _buildCreateView(userId);
+      case LobbyView.logs:
+        return _buildLogsView();
+      case LobbyView.main:
+      default:
+        return _buildMainLobby(userId);
+    }
+  }
+
+  Widget _buildCreateView(String userId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Colors.black54,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.green, size: 20),
+                onPressed: () {
+                  _createController.clear();
+                  setState(() => _currentView = LobbyView.main);
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 12),
+              const Text("INITIALIZE NEW PERSONA",
+                  style: TextStyle(
+                      color: Colors.green,
+                      fontFamily: 'Courier',
+                      fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _createController,
+                style: const TextStyle(color: Colors.white, fontFamily: 'Courier'),
+                decoration: const InputDecoration(
+                  hintText: "Enter character name...",
+                  hintStyle: TextStyle(color: Colors.grey),
+                  enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.green)),
+                  focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.greenAccent)),
                 ),
-              ],
-            ),
-          ),
-
-          SizedBox(
-            height: 120,
-            child: StreamBuilder<List<GameCharacter>>(
-              stream: _service.getMyCharacters(userId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                      child: CircularProgressIndicator(color: Colors.green));
-                }
-
-                final chars = snapshot.data ?? [];
-
-                if (chars.isEmpty) {
-                  return const Center(
-                      child: Text("No personas found. Initialize one.",
-                          style: TextStyle(color: Colors.grey)));
-                }
-
-                if (_selectedMyChar == null && chars.isNotEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => _selectedMyChar = chars.first);
-                  });
-                }
-
-                return ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  itemCount: chars.length,
-                  itemBuilder: (context, index) {
-                    final c = chars[index];
-                    final isSelected = _selectedMyChar?.id == c.id;
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedMyChar = c),
-                      child: Container(
-                        width: 140,
-                        margin: const EdgeInsets.all(8),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.green.withValues(alpha: 0.2)
-                              : Colors.black,
-                          border: Border.all(
-                              color: isSelected ? Colors.green : Colors.grey),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(c.name,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'Courier'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 4),
-                            Text("HP: ${c.maxHp}",
-                                style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 10,
-                                    fontFamily: 'Courier')),
-                            Text("W:${c.wins} L:${c.losses}",
-                                style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 10,
-                                    fontFamily: 'Courier')),
-                          ],
-                        ),
-                      ),
-                    );
+              ),
+              const SizedBox(height: 32),
+              if (_isCreating)
+                const LinearProgressIndicator(
+                    color: Colors.green, backgroundColor: Colors.black)
+              else
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.green,
+                    side: const BorderSide(color: Colors.green),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: () async {
+                    if (_createController.text.trim().isNotEmpty) {
+                      setState(() => _isCreating = true);
+                      try {
+                        await _service.createCharacter(
+                            userId, _createController.text.trim());
+                        _createController.clear();
+                        if (mounted) {
+                          setState(() {
+                            _isCreating = false;
+                            _currentView = LobbyView.main;
+                          });
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          setState(() => _isCreating = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("Error: $e")));
+                        }
+                      }
+                    }
                   },
-                );
-              },
-            ),
+                  child: const Text("INITIALIZE",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Courier',
+                          fontSize: 16)),
+                )
+            ],
           ),
+        ),
+      ],
+    );
+  }
 
-          const Divider(color: Colors.green),
-
-          // 2. Public List Header (Removed Global Feed Button)
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: Colors.black54,
-            child: const Text("DETECTED SIGNALS (TARGETS)",
-                style: TextStyle(
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Courier')),
+  Widget _buildLogsView() {
+    if (_logTarget == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Colors.black54,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.green, size: 20),
+                onPressed: () => setState(() {
+                  _logTarget = null;
+                  _currentView = LobbyView.main;
+                }),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                  "${_selectedMyChar?.name ?? 'YOU'} vs ${_logTarget!.name}",
+                  style: const TextStyle(
+                      color: Colors.green,
+                      fontFamily: 'Courier',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold)),
+            ],
           ),
+        ),
+        const Divider(color: Colors.green, height: 1),
+        Expanded(
+          child: _buildHeadToHeadList(_logTarget!),
+        ),
+      ],
+    );
+  }
 
-          Expanded(
-            child: StreamBuilder<List<GameCharacter>>(
-              stream: _service.getPublicCharacters(userId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                      child: CircularProgressIndicator(color: Colors.green));
-                }
-                final chars = snapshot.data ?? [];
+  Widget _buildMainLobby(String userId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. My Characters Section
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Colors.black54,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("MY PERSONAS",
+                  style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Courier')),
+              GestureDetector(
+                onTap: () => setState(() => _currentView = LobbyView.create),
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration:
+                  BoxDecoration(border: Border.all(color: Colors.green)),
+                  child: const Text("+ CREATE",
+                      style: TextStyle(color: Colors.green, fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+        ),
 
-                return ListView.separated(
-                  itemCount: chars.length,
-                  separatorBuilder: (c, i) =>
-                      const Divider(height: 1, color: Colors.grey),
-                  itemBuilder: (context, index) {
-                    final enemy = chars[index];
-                    return ListTile(
-                      tileColor: Colors.black,
-                      leading:
-                          const Icon(Icons.person_outline, color: Colors.green),
-                      title: Text(enemy.name,
-                          style: const TextStyle(
-                              color: Colors.white, fontFamily: 'Courier')),
-                      subtitle: Text("Str: ${enemy.str} | HP: ${enemy.maxHp}",
-                          style: const TextStyle(
-                              color: Colors.grey,
-                              fontFamily: 'Courier',
-                              fontSize: 12)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+        SizedBox(
+          height: 120,
+          child: StreamBuilder<List<GameCharacter>>(
+            stream: _service.getMyCharacters(userId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(color: Colors.green));
+              }
+
+              final chars = snapshot.data ?? [];
+
+              if (chars.isEmpty) {
+                return const Center(
+                    child: Text("No personas found. Initialize one.",
+                        style: TextStyle(color: Colors.grey)));
+              }
+
+              if (_selectedMyChar == null && chars.isNotEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() => _selectedMyChar = chars.first);
+                });
+              }
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: chars.length,
+                itemBuilder: (context, index) {
+                  final c = chars[index];
+                  final isSelected = _selectedMyChar?.id == c.id;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedMyChar = c),
+                    child: Container(
+                      width: 140,
+                      margin: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.green.withValues(alpha: 0.2)
+                            : Colors.black,
+                        border: Border.all(
+                            color: isSelected ? Colors.green : Colors.grey),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // LOGS Button (Specific)
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.green,
-                              side: const BorderSide(color: Colors.green),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                            ),
-                            onPressed: () => _showLogsModal(target: enemy),
-                            child: const Text("LOGS",
-                                style: TextStyle(
-                                    fontFamily: 'Courier',
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12)),
-                          ),
-                          const SizedBox(width: 8),
-                          // ATTACK Button
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent,
-                              foregroundColor: Colors.black,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                            ),
-                            onPressed: () => _startCombat(enemy),
-                            child: const Text("ATTACK",
-                                style: TextStyle(
-                                    fontFamily: 'Courier',
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12)),
-                          ),
+                          Text(c.name,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Courier'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 4),
+                          Text("HP: ${c.maxHp}",
+                              style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 10,
+                                  fontFamily: 'Courier')),
+                          Text("W:${c.wins} L:${c.losses}",
+                              style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 10,
+                                  fontFamily: 'Courier')),
                         ],
                       ),
-                    );
-                  },
-                );
-              },
-            ),
+                    ),
+                  );
+                },
+              );
+            },
           ),
-        ],
-      ),
+        ),
+
+        const Divider(color: Colors.green, height: 1),
+
+        // 2. Public List Header
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Colors.black54,
+          child: const Text("DETECTED SIGNALS (TARGETS)",
+              style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Courier')),
+        ),
+
+        Expanded(
+          child: StreamBuilder<List<GameCharacter>>(
+            stream: _service.getPublicCharacters(userId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(color: Colors.green));
+              }
+              final chars = snapshot.data ?? [];
+
+              if (chars.isEmpty) {
+                return const Center(
+                    child: Text("No targets online.",
+                        style: TextStyle(color: Colors.grey)));
+              }
+
+              return ListView.separated(
+                itemCount: chars.length,
+                separatorBuilder: (c, i) =>
+                const Divider(height: 1, color: Colors.grey),
+                itemBuilder: (context, index) {
+                  final enemy = chars[index];
+                  return ListTile(
+                    tileColor: Colors.black,
+                    leading:
+                    const Icon(Icons.person_outline, color: Colors.green),
+                    title: Text(enemy.name,
+                        style: const TextStyle(
+                            color: Colors.white, fontFamily: 'Courier')),
+                    subtitle: Text("Str: ${enemy.str} | HP: ${enemy.maxHp}",
+                        style: const TextStyle(
+                            color: Colors.grey,
+                            fontFamily: 'Courier',
+                            fontSize: 12)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // LOGS Button
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.green,
+                            side: const BorderSide(color: Colors.green),
+                            padding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                            minimumSize: const Size(60, 32),
+                          ),
+                          onPressed: () => setState(() {
+                            _logTarget = enemy;
+                            _currentView = LobbyView.logs;
+                          }),
+                          child: const Text("LOGS",
+                              style: TextStyle(
+                                  fontFamily: 'Courier',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11)),
+                        ),
+                        const SizedBox(width: 8),
+                        // ATTACK Button
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.black,
+                            padding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                            minimumSize: const Size(60, 32),
+                          ),
+                          onPressed: () => _startCombat(enemy),
+                          child: const Text("ATTACK",
+                              style: TextStyle(
+                                  fontFamily: 'Courier',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

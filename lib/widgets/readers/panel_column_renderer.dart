@@ -41,7 +41,10 @@ class PanelColumnRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isSingleton = activePanel == BonusRowType.settings || activePanel == BonusRowType.youtube;
+    // FIXED: Added BonusRowType.terminal to the singleton check
+    final bool isSingleton = activePanel == BonusRowType.settings ||
+        activePanel == BonusRowType.youtube ||
+        activePanel == BonusRowType.terminal;
 
     return Column(
       children: [
@@ -151,8 +154,8 @@ class PanelColumnRenderer extends StatelessWidget {
                     textRaw: tRaw,
                     textCorrected: tCorrected,
                     textLinked: tLinked,
-                    textCorrectedAi: tCorrectedAi, // Added
-                    textLinkedAi: tLinkedAi,       // Added
+                    textCorrectedAi: tCorrectedAi,
+                    textLinkedAi: tLinkedAi,
                     viewService: viewService,
                     engagementService: EngagementService(),
                     commentController: TextEditingController(),
@@ -288,8 +291,8 @@ class _PanelColumnItemState extends State<_PanelColumnItem> with AutomaticKeepAl
                     textRaw: tRaw,
                     textCorrected: tCorrected,
                     textLinked: tLinked,
-                    textCorrectedAi: tCorrectedAi, // Added
-                    textLinkedAi: tLinkedAi,       // Added
+                    textCorrectedAi: tCorrectedAi,
+                    textLinkedAi: tLinkedAi,
                     viewService: widget.viewService,
                     engagementService: EngagementService(),
                     commentController: _commentController,

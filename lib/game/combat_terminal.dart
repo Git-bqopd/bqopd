@@ -8,12 +8,14 @@ class CombatTerminal extends StatefulWidget {
   final GameCharacter? playerChar;
   final GameCharacter? enemyChar;
   final List<String>? playbackLogs; // If provided, we are in playback mode
+  final VoidCallback onExit; // Replaces Navigator.pop
 
   const CombatTerminal({
     super.key,
     this.playerChar,
     this.enemyChar,
     this.playbackLogs,
+    required this.onExit,
   });
 
   @override
@@ -33,6 +35,11 @@ class _CombatTerminalState extends State<CombatTerminal> {
   // Local combat stats (mutable)
   late int _playerHp;
   late int _enemyHp;
+
+  // Cyberpunk Theme Colors
+  static const Color bgColor = Color(0xFF0D0D0D); // Almost black
+  static const Color terminalGreen = Color(0xFF00FF41);
+  static const Color cursorColor = Color(0xFF008F11);
 
   @override
   void initState() {
@@ -63,6 +70,9 @@ class _CombatTerminalState extends State<CombatTerminal> {
       _print(line);
     }
     _print("--- END OF TRANSMISSION ---");
+    setState(() {
+      _isGameOver = true;
+    });
   }
 
   void _print(String text) {
@@ -223,39 +233,47 @@ class _CombatTerminalState extends State<CombatTerminal> {
 
   @override
   Widget build(BuildContext context) {
-    // Cyberpunk Theme Colors
-    const bgColor = Color(0xFF0D0D0D); // Almost black
-    const terminalGreen = Color(0xFF00FF41);
-    const cursorColor = Color(0xFF008F11);
-
-    return Scaffold(
-      backgroundColor: bgColor,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text("TERMINAL, CA",
-            style: TextStyle(
-                fontFamily: 'Courier',
-                color: terminalGreen,
-                fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: terminalGreen),
-        elevation: 0,
-      ),
-      body: Column(
+    return Container(
+      color: bgColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Replaces the old AppBar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: Colors.black,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("TERMINAL, CA",
+                    style: TextStyle(
+                        fontFamily: 'Courier',
+                        color: terminalGreen,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
+                IconButton(
+                  icon: const Icon(Icons.close, color: terminalGreen, size: 20),
+                  onPressed: widget.onExit,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                )
+              ],
+            ),
+          ),
+
           // CRT Screen Effect Container
           Expanded(
             child: Container(
-              width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 border: Border.all(
                     color: terminalGreen.withValues(alpha: 0.3), width: 2),
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
                     bgColor,
-                    const Color(0xFF112211), // Subtle scanline hint
+                    Color(0xFF112211), // Subtle scanline hint
                   ],
                 ),
               ),
@@ -317,11 +335,29 @@ class _CombatTerminalState extends State<CombatTerminal> {
                   ),
                   if (_isGameOver)
                     TextButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: widget.onExit,
                       child: const Text("EXIT",
                           style: TextStyle(
                               color: Colors.red, fontFamily: 'Courier')),
                     )
+                ],
+              ),
+            ),
+
+          // In Playback Mode, we still want a clear exit button at the bottom once it's done
+          if (_isPlayback && _isGameOver)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.black,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: widget.onExit,
+                    child: const Text("RETURN TO LOBBY",
+                        style: TextStyle(
+                            color: Colors.red, fontFamily: 'Courier', fontWeight: FontWeight.bold)),
+                  )
                 ],
               ),
             ),

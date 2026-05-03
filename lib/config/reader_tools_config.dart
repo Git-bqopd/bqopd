@@ -111,6 +111,16 @@ class ReaderToolsConfig {
       bonusRow: BonusRowType.youtube,
     ),
     ReaderTool(
+      id: 'Terminal',
+      label: 'terminal',
+      description: 'Access the interactive combat terminal.',
+      defaultIcon: Icons.terminal_outlined,
+      activeIcon: Icons.terminal,
+      action: ToolAction.openBonusRow,
+      condition: ToolCondition.requiresGame,
+      bonusRow: BonusRowType.terminal,
+    ),
+    ReaderTool(
       id: 'Tags',
       label: 'tags',
       description: 'Vote on hashtags and metadata.',
