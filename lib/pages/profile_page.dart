@@ -25,7 +25,6 @@ import '../widgets/image_upload_modal.dart';
 import '../widgets/image_view_modal.dart';
 import '../widgets/comment_item.dart';
 import '../widgets/hashtag_bar.dart';
-import '../widgets/auth_modal.dart';
 import '../widgets/reader_panels/social_matrix_tab.dart';
 import '../widgets/reader_panels/panel_factory.dart';
 import '../widgets/reader_panels/panel_container.dart';
@@ -490,8 +489,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           final targetUserId = userData.uid;
 
           // Generate the exact profile name to search for in entity drafts
-          final String profileName = (userData.displayName != null && userData.displayName!.trim().isNotEmpty)
-              ? userData.displayName!
+          final String profileName = userData.displayName.trim().isNotEmpty
+              ? userData.displayName
               : userData.username;
 
           final userProvider = context.read<UserProvider>();

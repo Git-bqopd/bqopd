@@ -109,6 +109,24 @@ def ensure_shortcode(db, collection_name, document_id, content_type):
     })
     return short_code
 
+def calculate_levenshtein_distance(s1, s2):
+    """Calculates the edit distance between two strings to generate a training variance score."""
+    if s1 == s2: return 0
+    if not s1: return len(s2)
+    if not s2: return len(s1)
+
+    v0 = list(range(len(s2) + 1))
+    v1 = [0] * (len(s2) + 1)
+
+    for i in range(len(s1)):
+        v1[0] = i + 1
+        for j in range(len(s2)):
+            cost = 0 if s1[i] == s2[j] else 1
+            v1[j + 1] = min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost)
+        for j in range(len(s2) + 1):
+            v0[j] = v1[j]
+    return v1[len(s2)]
+
 # --------------------------------------------------------------------------------
 # TRAFFIC CONTROL MANAGER
 # --------------------------------------------------------------------------------
@@ -247,7 +265,14 @@ def ai_cleaning_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_f
         })
     except Exception as e:
         print(f"AI Cleaning Error: {traceback.format_exc()}")
-        event.data.after.reference.update({'errorLog_cleaning': str(e), 'needs_ai_cleaning': False})
+        # FALLBACK: If Gemini fails, push the raw text down the pipeline so the UI still updates
+        event.data.after.reference.update({
+            'text_corrected': text_raw,
+            'text_corrected_ai': text_raw,
+            'needs_ai_cleaning': False,
+            'needs_linking': True,
+            'errorLog_cleaning': str(e)
+        })
 
 # --------------------------------------------------------------------------------
 # WORKER 3: ENTITY LINKING -> writes to text_linked
@@ -315,7 +340,6 @@ def linking_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Do
             'detected_entities': clean_ents
         })
 
-        # FIXED: Bubble up these extracted entities to the parent Fanzine so they instantly appear in the Profile Entities Tab!
         used_in = data.get('usedInFanzines', [])
         if clean_ents and used_in:
             for fid in used_in:
@@ -325,7 +349,13 @@ def linking_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.Do
 
     except Exception as e:
         print(f"Linking Error: {traceback.format_exc()}")
-        event.data.after.reference.update({'errorLog_linking': str(e), 'needs_linking': False})
+        # FALLBACK: If Gemini fails, copy the corrected text to linked text so the UI displays the edits
+        event.data.after.reference.update({
+            'text_linked': text_corrected,
+            'text_linked_ai': text_corrected,
+            'needs_linking': False,
+            'errorLog_linking': str(e)
+        })
 
 # --------------------------------------------------------------------------------
 # WORKER 4: IMAGE RESIZING (THUMBNAIL GENERATOR)
@@ -399,6 +429,51 @@ def generate_thumbnails(event: firestore_fn.Event[firestore_fn.Change[firestore_
     except Exception as e:
         print(f"Thumbnail Error: {traceback.format_exc()}")
         img_ref.update({'thumbnail_error': str(e), 'processing_thumbnails': firestore.DELETE_FIELD})
+
+# --------------------------------------------------------------------------------
+# WORKER 5: SCORING (EDIT DISTANCE)
+# --------------------------------------------------------------------------------
+@firestore_fn.on_document_written(document="images/{imageId}", memory=256, timeout_sec=60)
+def calculate_edit_distance_worker(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    """Calculates the string mutation delta when a user manually fixes AI-generated text."""
+    if not event.data.before or not event.data.after or not event.data.after.exists: return
+
+    before_data = event.data.before.to_dict() or {}
+    after_data = event.data.after.to_dict() or {}
+
+    updates = {}
+
+    # 1. Corrected Text Score
+    text_corrected_before = before_data.get('text_corrected') or ''
+    text_corrected_after = after_data.get('text_corrected') or ''
+
+    # Fallback to text_raw if text_corrected_ai is missing (e.g. older ingested fanzines)
+    ai_corrected = after_data.get('text_corrected_ai') or after_data.get('text_raw') or ''
+
+    if text_corrected_before != text_corrected_after and ai_corrected:
+        score = calculate_levenshtein_distance(ai_corrected, text_corrected_after)
+        updates['human_correction_score'] = score
+        if score > 0:
+            updates['isTrainingData'] = True
+
+    # 2. Linked Text Score
+    text_linked_before = before_data.get('text_linked') or ''
+    text_linked_after = after_data.get('text_linked') or ''
+
+    # Fallback to text_corrected if text_linked_ai is missing
+    ai_linked = after_data.get('text_linked_ai') or after_data.get('text_corrected') or ''
+
+    if text_linked_before != text_linked_after and ai_linked:
+        score = calculate_levenshtein_distance(ai_linked, text_linked_after)
+        updates['human_linking_score'] = score
+        if score > 0:
+            updates['isTrainingData'] = True
+
+    if updates:
+        try:
+            event.data.after.reference.update(updates)
+        except Exception as e:
+            print(f"Scoring Error: {traceback.format_exc()}")
 
 # --------------------------------------------------------------------------------
 # PDF INGEST LOGIC

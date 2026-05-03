@@ -1,11 +1,9 @@
-import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
+import '../blocs/reader/fanzine_reader_bloc.dart';
 import '../services/view_service.dart';
 import '../services/user_provider.dart';
 import '../widgets/fanzine_widget.dart';
@@ -40,29 +38,14 @@ class FanzineReaderPage extends StatefulWidget {
 
 class _FanzineReaderPageState extends State<FanzineReaderPage> {
   final ViewService _viewService = ViewService();
+  late final FanzineReaderBloc _readerBloc;
 
-  bool _isLoading = true;
-  bool _isAccessDenied = false;
-  String? _resolvedFanzineId;
-  String? _resolvedShortCode;
-  String? _resolvedType;
-  String _fanzineTitle = 'Untitled';
-  List<Map<String, dynamic>> _pages = [];
-
-  bool _twoPagePreference = true;
-  bool _hasCover = true;
-  bool _isEditingMode = false;
   HeaderMode _headerMode = HeaderMode.fanzine;
   int _targetIndex = 0;
-
   bool _showGrid = true;
   bool _showList = false;
 
   BonusRowType? _activeGlobalPanel;
-
-  // Stream subscriptions for real-time updates
-  StreamSubscription? _fanzineSubscription;
-  StreamSubscription? _pagesSubscription;
 
   final ItemScrollController _mobileListScrollController = ItemScrollController();
   ScrollController? _desktopGridScrollController;
@@ -75,162 +58,31 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   @override
   void initState() {
     super.initState();
-    _isEditingMode = widget.isEditingMode;
-    _initData();
+    _readerBloc = FanzineReaderBloc();
+
+    // Delay initialization until the tree is built so we can read the UserProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initReader();
+    });
+  }
+
+  void _initReader() {
+    final userProvider = context.read<UserProvider>();
+    final isInternalStaff = userProvider.isAdmin || userProvider.isModerator || userProvider.isCurator;
+
+    _readerBloc.add(InitializeReaderRequested(
+      fanzineId: widget.fanzineId,
+      shortCode: widget.shortCode,
+      currentUserId: userProvider.currentUserId,
+      isInternalStaff: isInternalStaff,
+    ));
   }
 
   @override
   void dispose() {
-    _fanzineSubscription?.cancel();
-    _pagesSubscription?.cancel();
+    _readerBloc.close();
     _desktopGridScrollController?.dispose();
     super.dispose();
-  }
-
-  Future<void> _initData() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _isAccessDenied = false;
-    });
-
-    String? targetShortCode = widget.shortCode;
-    String? targetId = widget.fanzineId;
-
-    if (targetShortCode == null && targetId == null) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null && !user.isAnonymous) {
-        final userDoc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
-        if (userDoc.exists) {
-          targetShortCode = userDoc.data()?['newFanzine'];
-        }
-      }
-      if (targetShortCode == null) {
-        final settings = await FirebaseFirestore.instance.collection('app_settings').doc('main_settings').get();
-        if (settings.exists) {
-          targetShortCode = settings.data()?['login_zine_shortcode'];
-        }
-      }
-    }
-
-    if (targetId == null && targetShortCode != null) {
-      final fanzineQuery = await FirebaseFirestore.instance
-          .collection('fanzines')
-          .where('shortCode', isEqualTo: targetShortCode)
-          .limit(1)
-          .get();
-
-      if (fanzineQuery.docs.isNotEmpty) {
-        targetId = fanzineQuery.docs.first.id;
-      } else {
-        final scDoc = await FirebaseFirestore.instance.collection('shortcodes').doc(targetShortCode.toUpperCase()).get();
-        if (scDoc.exists && scDoc.data()?['type'] == 'fanzine') {
-          targetId = scDoc.data()?['contentId'];
-        }
-      }
-    }
-
-    _resolvedFanzineId = targetId;
-    _resolvedShortCode = targetShortCode;
-
-    if (_resolvedFanzineId != null) {
-      _processDeepLink();
-      _setupListeners(_resolvedFanzineId!);
-      _updateUrlIfNeeded();
-    } else {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  /// Sets up real-time Firestore listeners for fanzine metadata and pages.
-  void _setupListeners(String fanzineId) {
-    _fanzineSubscription?.cancel();
-    _fanzineSubscription = FirebaseFirestore.instance
-        .collection('fanzines')
-        .doc(fanzineId)
-        .snapshots()
-        .listen((doc) {
-      if (!doc.exists || !mounted) return;
-      final fanzineData = doc.data() ?? {};
-
-      // --- SECURITY CHECK: isLive logic for Public vs Staff ---
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final bool isLive = fanzineData['isLive'] ?? false;
-      final String ownerId = fanzineData['ownerId'] ?? fanzineData['editorId'] ?? '';
-      final List<String> editors = List<String>.from(fanzineData['editors'] ?? []);
-      final String? currentUid = userProvider.currentUserId;
-
-      // Internal Staff (Admin/Mod/Curator) or Creator (Owner/Editor) can always see it.
-      final bool isInternalStaff = userProvider.isModerator || userProvider.isAdmin || userProvider.isCurator;
-      final bool isAuthorizedCreator = currentUid != null && (currentUid == ownerId || editors.contains(currentUid));
-
-      final bool hasPermission = isLive || isInternalStaff || isAuthorizedCreator;
-
-      if (!hasPermission) {
-        setState(() {
-          _isAccessDenied = true;
-          _isLoading = false;
-        });
-        return;
-      }
-
-      setState(() {
-        _isAccessDenied = false;
-        _resolvedType = fanzineData['type'] ?? 'fanzine';
-        _fanzineTitle = fanzineData['title'] ?? 'Untitled';
-
-        bool newTwoPagePref = fanzineData['twoPage'] ?? true;
-        bool newHasCover = fanzineData['hasCover'] ?? true;
-        bool prefChanged = !_isLoading && (_twoPagePreference != newTwoPagePref || _hasCover != newHasCover);
-
-        if (_isLoading || prefChanged) {
-          _twoPagePreference = newTwoPagePref;
-          _hasCover = newHasCover;
-
-          bool isDesktop = MediaQuery.of(context).size.width > 900;
-
-          if (_isLoading && _targetIndex > 0) {
-            // Keep deep-link state
-          } else {
-            if (_twoPagePreference) {
-              if (_isEditingMode && isDesktop) {
-                _showGrid = true;
-                _showList = true;
-              } else {
-                _showGrid = true;
-                _showList = false;
-              }
-            } else {
-              _showGrid = false;
-              _showList = true;
-            }
-          }
-        }
-      });
-    });
-
-    _pagesSubscription?.cancel();
-    _pagesSubscription = FirebaseFirestore.instance
-        .collection('fanzines')
-        .doc(fanzineId)
-        .collection('pages')
-        .orderBy('pageNumber')
-        .snapshots()
-        .listen((snapshot) {
-      if (!mounted) return;
-
-      final docs = snapshot.docs.map((d) {
-        final data = d.data();
-        data['__id'] = d.id;
-        return data;
-      }).toList();
-
-      setState(() {
-        _pages = docs;
-        if (_targetIndex > _pages.length) _targetIndex = _pages.length;
-        _isLoading = false;
-      });
-    });
   }
 
   void _processDeepLink() {
@@ -244,21 +96,20 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             _targetIndex = pageNum;
             _showGrid = false;
             _showList = true;
-            _twoPagePreference = false;
           });
         }
       }
     } catch (_) {}
   }
 
-  void _updateUrlIfNeeded() {
-    if (_resolvedShortCode != null && mounted) {
+  void _updateUrlIfNeeded(String? resolvedShortCode) {
+    if (resolvedShortCode != null && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
           final router = GoRouter.of(context);
           final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-          if (!currentLoc.contains(_resolvedShortCode!) && !_isEditingMode) {
-            context.go('/$_resolvedShortCode');
+          if (!currentLoc.contains(resolvedShortCode) && !widget.isEditingMode) {
+            context.go('/$resolvedShortCode');
           }
         } catch (_) {}
       });
@@ -298,27 +149,21 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   }
 
   void _showLoginHeader() {
-    setState(() {
-      _headerMode = HeaderMode.login;
-    });
+    setState(() => _headerMode = HeaderMode.login);
   }
 
   void _onAuthSuccess() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.isAnonymous) return;
-    setState(() {
-      _headerMode = HeaderMode.fanzine;
-    });
-    _initData();
+    setState(() => _headerMode = HeaderMode.fanzine);
+    _initReader();
   }
 
-  Widget _buildHeader({bool isStickerOnly = false}) {
+  Widget _buildHeader(FanzineReaderState state, {bool isStickerOnly = false}) {
     if (isStickerOnly) {
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 450),
           child: FanzineWidget(
-            fanzineShortCode: _resolvedShortCode,
+            fanzineShortCode: state.resolvedShortCode,
             isStickerOnly: true,
             onLoginRequested: _showLoginHeader,
           ),
@@ -360,17 +205,17 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       );
     }
 
-    if (_isEditingMode && _resolvedFanzineId != null) {
+    if (widget.isEditingMode && state.resolvedFanzineId != null) {
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 800),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: _resolvedType == 'calendar'
-                ? CalendarEditorWidget(folioId: _resolvedFanzineId!)
-                : (_resolvedType == 'folio' || _resolvedType == 'article')
-                ? FanzineMakerWidget(fanzineId: _resolvedFanzineId!)
-                : FanzineCuratorWidget(fanzineId: _resolvedFanzineId!),
+            child: state.resolvedType == 'calendar'
+                ? CalendarEditorWidget(folioId: state.resolvedFanzineId!)
+                : (state.resolvedType == 'folio' || state.resolvedType == 'article')
+                ? FanzineMakerWidget(fanzineId: state.resolvedFanzineId!)
+                : FanzineCuratorWidget(fanzineId: state.resolvedFanzineId!),
           ),
         ),
       );
@@ -380,7 +225,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 450),
         child: FanzineWidget(
-          fanzineShortCode: _resolvedShortCode,
+          fanzineShortCode: state.resolvedShortCode,
           isStickerOnly: false,
           onLoginRequested: _showLoginHeader,
         ),
@@ -390,181 +235,214 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (_isAccessDenied) {
-      return Scaffold(
+    return BlocProvider.value(
+      value: _readerBloc,
+      child: Scaffold(
         backgroundColor: Colors.grey[200],
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.lock_outline, size: 64, color: Colors.grey),
-              const SizedBox(height: 16),
-              const Text("Private Work", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text("This content has not been published yet.", style: TextStyle(color: Colors.grey)),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => context.go('/'),
-                child: const Text("Go Home"),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+        body: SafeArea(
+          child: BlocConsumer<FanzineReaderBloc, FanzineReaderState>(
+            listener: (context, state) {
+              // Once loading completes, process deep links and layout rules
+              if (!state.isLoading && !state.isAccessDenied) {
+                _processDeepLink();
+                _updateUrlIfNeeded(state.resolvedShortCode);
 
-    return Scaffold(
-      backgroundColor: Colors.grey[200],
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final bool isDesktop = constraints.maxWidth > 900;
+                bool isDesktop = MediaQuery.of(context).size.width > 900;
 
-            if (!isDesktop) {
-              if (!_showList) {
-                return FanzineGridRenderer(
-                  pages: _pages,
-                  headerWidget: _isEditingMode
-                      ? GestureDetector(
-                    onTap: () {
-                      setState(() {
+                // Only override layout logic if we didn't just deep link straight to a page
+                if (_targetIndex == 0) {
+                  setState(() {
+                    if (state.twoPagePreference) {
+                      if (widget.isEditingMode && isDesktop) {
+                        _showGrid = true;
                         _showList = true;
-                        _targetIndex = 0;
-                      });
-                    },
-                    child: AbsorbPointer(
-                      child: _buildHeader(isStickerOnly: true),
-                    ),
-                  )
-                      : _buildHeader(isStickerOnly: false),
-                  scrollController: ScrollController(),
-                  viewService: _viewService,
-                  hasCover: _hasCover,
-                  onPageTap: _handlePageTap,
-                );
-              } else {
-                return FanzineLayout(
-                  viewMode: FanzineViewMode.single,
-                  pages: _pages,
-                  fanzineId: _resolvedFanzineId ?? '',
-                  fanzineType: _resolvedType,
-                  headerWidget: _buildHeader(),
-                  gridScrollController: ScrollController(),
-                  listScrollController: _mobileListScrollController,
-                  initialIndex: _targetIndex,
-                  viewService: _viewService,
-                  isEditingMode: _isEditingMode,
-                  activeGlobalPanel: _activeGlobalPanel,
-                  onTogglePanel: _handlePanelToggle,
-                  onSwitchToSingle: (idx) { setState(() => _targetIndex = idx); },
-                  onOpenGrid: _handleCloseList,
+                      } else {
+                        _showGrid = true;
+                        _showList = false;
+                      }
+                    } else {
+                      _showGrid = false;
+                      _showList = true;
+                    }
+                  });
+                }
+              }
+            },
+            builder: (context, state) {
+              if (state.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (state.isAccessDenied) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.lock_outline, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      const Text("Private Work", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text("This content has not been published yet.", style: TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () => context.go('/'),
+                        child: const Text("Go Home"),
+                      ),
+                    ],
+                  ),
                 );
               }
-            }
 
-            final double availableWidth = constraints.maxWidth;
-            final bool isPanelOpen = _showList && _activeGlobalPanel != null;
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final bool isDesktop = constraints.maxWidth > 900;
 
-            double gridWidth = 0;
-            double listWidth = 0;
+                  // --- MOBILE LAYOUT ---
+                  if (!isDesktop) {
+                    if (!_showList) {
+                      return FanzineGridRenderer(
+                        pages: state.pages,
+                        headerWidget: widget.isEditingMode
+                            ? GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _showList = true;
+                              _targetIndex = 0;
+                            });
+                          },
+                          child: AbsorbPointer(
+                            child: _buildHeader(state, isStickerOnly: true),
+                          ),
+                        )
+                            : _buildHeader(state, isStickerOnly: false),
+                        scrollController: ScrollController(),
+                        viewService: _viewService,
+                        hasCover: state.hasCover,
+                        onPageTap: _handlePageTap,
+                      );
+                    } else {
+                      return FanzineLayout(
+                        viewMode: FanzineViewMode.single,
+                        pages: state.pages,
+                        fanzineId: state.resolvedFanzineId ?? '',
+                        fanzineType: state.resolvedType,
+                        headerWidget: _buildHeader(state),
+                        gridScrollController: ScrollController(),
+                        listScrollController: _mobileListScrollController,
+                        initialIndex: _targetIndex,
+                        viewService: _viewService,
+                        isEditingMode: widget.isEditingMode,
+                        activeGlobalPanel: _activeGlobalPanel,
+                        onTogglePanel: _handlePanelToggle,
+                        onSwitchToSingle: (idx) { setState(() => _targetIndex = idx); },
+                        onOpenGrid: _handleCloseList,
+                      );
+                    }
+                  }
 
-            if (_showGrid && !_showList) {
-              gridWidth = availableWidth.clamp(0.0, kMaxGridWidth * 1.5);
-            } else if (_showGrid && _showList) {
-              gridWidth = (availableWidth * 0.3).clamp(300.0, 500.0);
-              listWidth = (availableWidth * 0.45).clamp(400.0, 800.0);
-            } else if (!_showGrid && _showList) {
-              listWidth = (availableWidth * 0.6).clamp(600.0, kMaxReaderWidth);
-            }
+                  // --- DESKTOP LAYOUT ---
+                  final double availableWidth = constraints.maxWidth;
+                  final bool isPanelOpen = _showList && _activeGlobalPanel != null;
 
-            return Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_showGrid)
-                    SizedBox(
-                      width: gridWidth,
-                      child: Container(
-                        color: Colors.grey[200],
-                        child: FanzineGridRenderer(
-                          pages: _pages,
-                          headerWidget: _buildHeader(isStickerOnly: _showList),
-                          scrollController: _desktopGridScrollController ??= ScrollController(),
-                          viewService: _viewService,
-                          hasCover: _hasCover,
-                          onPageTap: _handlePageTap,
-                        ),
-                      ),
-                    ),
+                  double gridWidth = 0;
+                  double listWidth = 0;
 
-                  if (_showList)
-                    SizedBox(
-                      width: listWidth,
-                      child: Container(
-                        color: Colors.white,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: FanzineListRenderer(
-                                fanzineId: _resolvedFanzineId ?? '',
-                                fanzineType: _resolvedType,
-                                pages: _pages,
-                                headerWidget: _buildHeader(isStickerOnly: false),
-                                itemScrollController: _desktopListScrollController,
-                                initialIndex: _targetIndex,
+                  if (_showGrid && !_showList) {
+                    gridWidth = availableWidth.clamp(0.0, kMaxGridWidth * 1.5);
+                  } else if (_showGrid && _showList) {
+                    gridWidth = (availableWidth * 0.3).clamp(300.0, 500.0);
+                    listWidth = (availableWidth * 0.45).clamp(400.0, 800.0);
+                  } else if (!_showGrid && _showList) {
+                    listWidth = (availableWidth * 0.6).clamp(600.0, kMaxReaderWidth);
+                  }
+
+                  return Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_showGrid)
+                          SizedBox(
+                            width: gridWidth,
+                            child: Container(
+                              color: Colors.grey[200],
+                              child: FanzineGridRenderer(
+                                pages: state.pages,
+                                headerWidget: _buildHeader(state, isStickerOnly: _showList),
+                                scrollController: _desktopGridScrollController ??= ScrollController(),
                                 viewService: _viewService,
-                                isEditingMode: _isEditingMode,
-                                isDesktopLayout: true,
-                                activeGlobalPanel: _activeGlobalPanel,
-                                onTogglePanel: _handlePanelToggle,
-                                onOpenGrid: _handleCloseList,
+                                hasCover: state.hasCover,
+                                onPageTap: _handlePageTap,
                               ),
                             ),
-                            if (_showList && _showGrid)
-                              Positioned(
-                                top: 8, right: 8,
-                                child: FloatingActionButton.small(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.black,
-                                  elevation: 4,
-                                  onPressed: _handleCloseList,
-                                  child: const Icon(Icons.close),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
+                          ),
 
-                  if (isPanelOpen)
-                    Expanded(
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          border: Border(left: BorderSide(color: Colors.black12)),
-                        ),
-                        child: PanelColumnRenderer(
-                          fanzineId: _resolvedFanzineId ?? '',
-                          fanzineTitle: _fanzineTitle,
-                          pages: _pages,
-                          activePanel: _activeGlobalPanel!,
-                          viewService: _viewService,
-                          isEditingMode: _isEditingMode,
-                          itemScrollController: _desktopPanelScrollController,
-                          onClose: () => setState(() => _activeGlobalPanel = null),
-                          initialIndex: _targetIndex,
-                        ),
-                      ),
+                        if (_showList)
+                          SizedBox(
+                            width: listWidth,
+                            child: Container(
+                              color: Colors.white,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: FanzineListRenderer(
+                                      fanzineId: state.resolvedFanzineId ?? '',
+                                      fanzineType: state.resolvedType,
+                                      pages: state.pages,
+                                      headerWidget: _buildHeader(state, isStickerOnly: false),
+                                      itemScrollController: _desktopListScrollController,
+                                      initialIndex: _targetIndex,
+                                      viewService: _viewService,
+                                      isEditingMode: widget.isEditingMode,
+                                      isDesktopLayout: true,
+                                      activeGlobalPanel: _activeGlobalPanel,
+                                      onTogglePanel: _handlePanelToggle,
+                                      onOpenGrid: _handleCloseList,
+                                    ),
+                                  ),
+                                  if (_showList && _showGrid)
+                                    Positioned(
+                                      top: 8, right: 8,
+                                      child: FloatingActionButton.small(
+                                        backgroundColor: Colors.white,
+                                        foregroundColor: Colors.black,
+                                        elevation: 4,
+                                        onPressed: _handleCloseList,
+                                        child: const Icon(Icons.close),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                        if (isPanelOpen)
+                          Expanded(
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                border: Border(left: BorderSide(color: Colors.black12)),
+                              ),
+                              child: PanelColumnRenderer(
+                                fanzineId: state.resolvedFanzineId ?? '',
+                                fanzineTitle: state.fanzineTitle,
+                                pages: state.pages,
+                                activePanel: _activeGlobalPanel!,
+                                viewService: _viewService,
+                                isEditingMode: widget.isEditingMode,
+                                itemScrollController: _desktopPanelScrollController,
+                                onClose: () => setState(() => _activeGlobalPanel = null),
+                                initialIndex: _targetIndex,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-            );
-          },
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );

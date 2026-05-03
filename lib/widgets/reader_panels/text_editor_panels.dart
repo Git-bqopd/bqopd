@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../calendar_editor_widget.dart';
@@ -128,28 +127,6 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
     super.dispose();
   }
 
-  /// Calculates the "Mutation Weight" between the AI's guess and the human's fix.
-  int _calculateEditDistance(String s1, String s2) {
-    if (s1 == s2) return 0;
-    if (s1.isEmpty) return s2.length;
-    if (s2.isEmpty) return s1.length;
-
-    List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
-    List<int> v1 = List<int>.filled(s2.length + 1, 0);
-
-    for (int i = 0; i < s1.length; i++) {
-      v1[0] = i + 1;
-      for (int j = 0; j < s2.length; j++) {
-        int cost = (s1[i] == s2[j]) ? 0 : 1;
-        v1[j + 1] = math.min(v1[j] + 1, math.min(v0[j + 1] + 1, v0[j] + cost));
-      }
-      for (int j = 0; j <= s2.length; j++) {
-        v0[j] = v1[j];
-      }
-    }
-    return v1[s2.length];
-  }
-
   Future<void> _save() async {
     if (widget.imageId.isEmpty) return;
     setState(() => _s = true);
@@ -157,24 +134,13 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
     try {
       final Map<String, dynamic> updates = {};
 
-      // Calculate how much work the human had to do
-      int score = _calculateEditDistance(widget.aiBaselineText, _c.text);
-
       if (widget.mode == 'master') {
         updates['text_corrected'] = _c.text;
         updates['needs_linking'] = true;
-        if (widget.aiBaselineText.isNotEmpty) {
-          updates['human_correction_score'] = score;
-          if (score > 0) updates['isTrainingData'] = true;
-        }
       } else {
         updates['text_linked'] = _c.text;
-        if (widget.aiBaselineText.isNotEmpty) {
-          updates['human_linking_score'] = score;
-          if (score > 0) updates['isTrainingData'] = true;
-        }
 
-        // FIXED: Parse manual [[Entity]] brackets and instantly bubble them up to the Fanzine!
+        // Parse manual [[Entity]] brackets and instantly bubble them up to the Fanzine!
         final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
         final matches = regex.allMatches(_c.text);
         final List<String> manualEntities = [];
@@ -196,7 +162,13 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
       await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update(updates);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved! (Score: $score)')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error saving: $e'),
+        backgroundColor: Colors.red,
+      ));
     } finally {
       if (mounted) setState(() => _s = false);
     }

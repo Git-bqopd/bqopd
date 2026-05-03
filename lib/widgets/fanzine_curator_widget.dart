@@ -13,7 +13,8 @@ import '../services/username_service.dart';
 import '../services/user_bootstrap.dart';
 import '../services/user_provider.dart';
 import '../blocs/fanzine_editor_bloc.dart';
-import 'base_fanzine_workspace.dart';
+import '../repositories/fanzine_repository.dart';
+import '../repositories/pipeline_repository.dart';
 import 'folio_image_selector_modal.dart';
 import 'reader_panels/credits_panel.dart';
 
@@ -25,12 +26,28 @@ class FanzineCuratorWidget extends StatefulWidget {
   State<FanzineCuratorWidget> createState() => _FanzineCuratorWidgetState();
 }
 
-class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
+class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> with SingleTickerProviderStateMixin {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _volumeController = TextEditingController();
   final TextEditingController _issueController = TextEditingController();
   final TextEditingController _wholeNumberController = TextEditingController();
   String? _lastSyncedTitle;
+
+  late TabController _tabController;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Curator has 4 tabs
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging && _scrollController.hasClients) {
+        _scrollController.jumpTo(0.0);
+      }
+      if (!_tabController.indexIsChanging) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
@@ -38,6 +55,8 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
     _volumeController.dispose();
     _issueController.dispose();
     _wholeNumberController.dispose();
+    _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -52,21 +71,123 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return BaseFanzineWorkspace(
-      fanzineId: widget.fanzineId,
-      tabs: const [
-        Tab(text: "settings", icon: Icon(Icons.settings, size: 20)),
-        Tab(text: "order", icon: Icon(Icons.format_list_numbered, size: 20)),
-        Tab(text: "upload", icon: Icon(Icons.upload, size: 20)),
-        Tab(text: "OCR / Ent", icon: Icon(Icons.auto_awesome, size: 20)),
-      ],
-      tabViews: [
-            (context, fanzine, pages) => _buildCuratorSettingsTab(context, fanzine),
-            (context, fanzine, pages) => _buildCuratorOrderTab(context, pages),
-            (context, fanzine, pages) => _CuratorUploadTab(fanzineId: widget.fanzineId, folioTitle: fanzine.title),
-            (context, fanzine, pages) => _buildOCREntitiesTab(context, fanzine, pages),
-      ],
+    final userProvider = Provider.of<UserProvider>(context);
+
+    return BlocProvider(
+      create: (context) => FanzineEditorBloc(
+        repository: RepositoryProvider.of<FanzineRepository>(context),
+        pipelineRepository: RepositoryProvider.of<PipelineRepository>(context),
+        fanzineId: widget.fanzineId,
+      )..add(LoadFanzineRequested(widget.fanzineId)),
+      child: Builder(
+          builder: (context) {
+            return BlocConsumer<FanzineEditorBloc, FanzineEditorState>(
+              listener: (context, state) {
+                if (state is FanzineEditorFailure) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(state.message), backgroundColor: Colors.black87),
+                  );
+                }
+              },
+              builder: (context, state) {
+                if (state is FanzineEditorLoading || state is FanzineEditorInitial) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (state is FanzineEditorLoaded) {
+                  final fanzine = state.fanzine;
+                  final pages = state.pages;
+
+                  if (!userProvider.canEditFanzine(fanzine)) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24.0),
+                        child: Text("you do not have permission to edit this work."),
+                      ),
+                    );
+                  }
+
+                  return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final bool isGridView = constraints.maxHeight != double.infinity;
+
+                        Widget mainContent = Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.black12),
+                                boxShadow: const [
+                                  BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+                                ],
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: SingleChildScrollView(
+                                controller: _scrollController,
+                                physics: isGridView ? const NeverScrollableScrollPhysics() : null,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TabBar(
+                                      controller: _tabController,
+                                      labelColor: Colors.black,
+                                      unselectedLabelColor: Colors.grey,
+                                      indicatorColor: Colors.black,
+                                      tabs: const [
+                                        Tab(text: "settings", icon: Icon(Icons.settings, size: 20)),
+                                        Tab(text: "order", icon: Icon(Icons.format_list_numbered, size: 20)),
+                                        Tab(text: "upload", icon: Icon(Icons.upload, size: 20)),
+                                        Tab(text: "OCR / Ent", icon: Icon(Icons.auto_awesome, size: 20)),
+                                      ],
+                                    ),
+                                    _buildActiveTab(context, fanzine, pages),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (state.isProcessing)
+                              Positioned.fill(
+                                child: Container(
+                                  color: Colors.white60,
+                                  child: const Center(child: CircularProgressIndicator(color: Colors.black)),
+                                ),
+                              ),
+                          ],
+                        );
+
+                        if (isGridView) {
+                          return mainContent;
+                        } else {
+                          return Container(
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF1B255),
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            padding: const EdgeInsets.all(10.0),
+                            child: mainContent,
+                          );
+                        }
+                      }
+                  );
+                }
+
+                return const Center(child: Text("error loading workspace."));
+              },
+            );
+          }
+      ),
     );
+  }
+
+  Widget _buildActiveTab(BuildContext context, Fanzine fanzine, List<FanzinePage> pages) {
+    switch (_tabController.index) {
+      case 0: return _buildCuratorSettingsTab(context, fanzine);
+      case 1: return _buildCuratorOrderTab(context, pages);
+      case 2: return _CuratorUploadTab(fanzineId: widget.fanzineId, folioTitle: fanzine.title);
+      case 3: return _buildOCREntitiesTab(context, fanzine, pages);
+      default: return const SizedBox.shrink();
+    }
   }
 
   Widget _buildCuratorSettingsTab(BuildContext context, Fanzine fanzine) {
@@ -78,7 +199,7 @@ class _FanzineCuratorWidgetState extends State<FanzineCuratorWidget> {
       _lastSyncedTitle = fanzine.title;
     }
 
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
