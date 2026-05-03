@@ -1408,7 +1408,13 @@ class _UserCommentsView extends StatelessWidget {
             delegate: SliverChildBuilderDelegate((context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
               data['_id'] = docs[index].id;
-              return CommentItem(data: data);
+
+              // NEW: Pass isProfileView: true to trigger dual thumbnails
+              return CommentItem(
+                key: ValueKey(docs[index].id),
+                data: data,
+                isProfileView: true,
+              );
             }, childCount: docs.length),
           ),
         );

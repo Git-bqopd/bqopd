@@ -9,7 +9,6 @@ import '../comment_item.dart';
 import '../auth_modal.dart';
 
 /// A panel for reading and adding thoughts (comments) to a page.
-/// Refactored to use a direct Stream for the list to prevent race conditions in ListViews.
 class CommentsPanel extends StatefulWidget {
   final String imageId;
   final String? fanzineId;
@@ -83,7 +82,7 @@ class _CommentsPanelState extends State<CommentsPanel> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              "THOUGHTS",
+              "COMMENTS",
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w900,
@@ -104,9 +103,8 @@ class _CommentsPanelState extends State<CommentsPanel> {
             ),
           ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
-        // Refactored to direct stream to avoid singleton Bloc state fighting in lists
         StreamBuilder<QuerySnapshot>(
           stream: _engagementService.getCommentsStream(widget.imageId),
           builder: (context, snapshot) {
@@ -136,20 +134,20 @@ class _CommentList extends StatelessWidget {
     if (comments.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
-        margin: const EdgeInsets.only(bottom: 20),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: const Color(0xFFF9F9F9),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
         ),
         child: Column(
           children: [
-            Icon(Icons.chat_bubble_outline, size: 24, color: Colors.grey.withValues(alpha: 0.3)),
+            Icon(Icons.chat_bubble_outline, size: 24, color: Colors.grey.withOpacity(0.3)),
             const SizedBox(height: 12),
             const Text(
               "the margins are empty.\nwrite something.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.5, fontFamily: 'Georgia', fontStyle: FontStyle.italic),
+              style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5, fontStyle: FontStyle.italic),
             ),
           ],
         ),
@@ -171,9 +169,15 @@ class _CommentList extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: sorted.length,
       itemBuilder: (c, i) {
-        final data = sorted[i].data() as Map<String, dynamic>;
+        // Create a new Map to avoid mutating the SDK's cached snapshot reference
+        final data = Map<String, dynamic>.from(sorted[i].data() as Map);
         data['_id'] = sorted[i].id;
-        return CommentItem(data: data);
+
+        // ValueKey ensures the state updates distinctly when scrolling out of bounds
+        return CommentItem(
+            key: ValueKey(sorted[i].id),
+            data: data
+        );
       },
     );
   }
@@ -191,11 +195,15 @@ class _CommentInput extends StatelessWidget {
     final isGuest = user == null || user.isAnonymous;
 
     return Container(
-      margin: const EdgeInsets.only(top: 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.black12, width: 0.5)),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: TextField(
@@ -206,21 +214,33 @@ class _CommentInput extends StatelessWidget {
                   showDialog(context: context, builder: (c) => const AuthModal());
                 }
               },
-              style: const TextStyle(fontSize: 14, fontFamily: 'Georgia'),
+              style: const TextStyle(fontSize: 14),
               maxLines: null,
+              minLines: 1,
+              textInputAction: TextInputAction.newline,
               decoration: const InputDecoration(
-                hintText: "Append a thought...",
-                hintStyle: TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic),
+                hintText: "leave a comment...",
+                hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
                 isDense: true,
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 16),
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
               ),
-              onSubmitted: (_) => onSend(),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.north_east_rounded, color: Colors.black, size: 20),
-            onPressed: onSend,
+          const SizedBox(width: 12),
+          Container(
+            margin: const EdgeInsets.only(bottom: 2),
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_upward, color: Colors.white, size: 18),
+              onPressed: onSend,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+              splashRadius: 18,
+            ),
           )
         ],
       ),
