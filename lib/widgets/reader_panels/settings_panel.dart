@@ -12,9 +12,14 @@ class SettingsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
 
-    // Grab all public tools so the user can toggle them on/off, excluding the Settings button itself
+    // Grab all public tools so the user can toggle them on/off.
+    // Excludes 'Settings', 'Grid' (Open), and 'Like' so they can never be hidden.
     final togglableTools = ReaderToolsConfig.tools
-        .where((t) => t.id != 'Settings' && t.role == ToolRole.public)
+        .where((t) =>
+    t.id != 'Settings' &&
+        t.id != 'Grid' &&
+        t.id != 'Like' &&
+        t.role == ToolRole.public)
         .toList();
 
     return Column(

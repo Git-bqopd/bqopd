@@ -13,6 +13,7 @@ class ReaderToolsConfig {
     bool isGame = false,
     bool isIndiciaPage = false,
     bool canOpenGrid = false,
+    bool isTwoPage = true, // Passed to determine if fanzine allows grid rendering
   }) {
     // 1. Role Gate
     final bool isElevated = userRole == 'admin' || userRole == 'moderator' || userRole == 'curator';
@@ -33,7 +34,8 @@ class ReaderToolsConfig {
         if (!isIndiciaPage) return false;
         break;
       case ToolCondition.hideOnDesktopSplit:
-        if (!canOpenGrid) return false;
+        if (!isTwoPage) return false; // Hidden if the fanzine is list-only
+        if (!canOpenGrid) return false; // Hidden if already on desktop split or grid unavailable
         break;
       case ToolCondition.requiresOcrPipeline:
         if (fanzineType == 'folio' || fanzineType == 'calendar') return false;
@@ -47,7 +49,25 @@ class ReaderToolsConfig {
   }
 
   static const List<ReaderTool> tools = [
-    // --- PUBLIC TOOLS ---
+    // --- CORE PUBLIC TOOLS (Locked Order & Always Visible) ---
+    ReaderTool(
+      id: 'Grid',
+      label: 'open',
+      description: 'Return to the grid navigation view.',
+      defaultIcon: Icons.import_contacts,
+      action: ToolAction.switchToGridView,
+      condition: ToolCondition.hideOnDesktopSplit,
+    ),
+    ReaderTool(
+      id: 'Like',
+      label: 'like',
+      description: 'Show appreciation for the work.',
+      defaultIcon: Icons.favorite_border,
+      activeIcon: Icons.favorite,
+      action: ToolAction.toggleLike,
+    ),
+
+    // --- STANDARD PUBLIC TOOLS ---
     ReaderTool(
       id: 'Text',
       label: 'text',
@@ -67,36 +87,11 @@ class ReaderToolsConfig {
       bonusRow: BonusRowType.comments,
     ),
     ReaderTool(
-      id: 'Like',
-      label: 'like',
-      description: 'Show appreciation for the work.',
-      defaultIcon: Icons.favorite_border,
-      activeIcon: Icons.favorite,
-      action: ToolAction.toggleLike,
-    ),
-    ReaderTool(
       id: 'Share',
       label: 'share',
       description: 'Copy a deep-link to this specific page.',
       defaultIcon: Icons.share_outlined,
       action: ToolAction.copyShareLink,
-    ),
-    ReaderTool(
-      id: 'Grid',
-      label: 'open',
-      description: 'Return to the grid navigation view.',
-      defaultIcon: Icons.grid_view,
-      action: ToolAction.switchToGridView,
-      condition: ToolCondition.hideOnDesktopSplit,
-    ),
-    ReaderTool(
-      id: 'Settings',
-      label: 'buttons',
-      description: 'Customize which buttons appear on your toolbar.',
-      defaultIcon: Icons.settings_outlined,
-      activeIcon: Icons.settings,
-      action: ToolAction.openBonusRow,
-      bonusRow: BonusRowType.settings,
     ),
 
     // --- CONDITIONAL PUBLIC TOOLS ---
@@ -142,8 +137,8 @@ class ReaderToolsConfig {
       id: 'Entities',
       label: 'entities',
       description: 'View the people and subjects mentioned on this page.',
-      defaultIcon: Icons.link_outlined,
-      activeIcon: Icons.link,
+      defaultIcon: Icons.smart_toy_outlined, // Replaced Icon
+      activeIcon: Icons.smart_toy, // Replaced Icon
       action: ToolAction.openBonusRow,
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
@@ -197,6 +192,17 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       action: ToolAction.openBonusRow,
       bonusRow: BonusRowType.credits,
+    ),
+
+    // --- SETTINGS TOOL (Absolute Last) ---
+    ReaderTool(
+      id: 'Settings',
+      label: 'buttons',
+      description: 'Customize which buttons appear on your toolbar.',
+      defaultIcon: Icons.all_inclusive, // Changed to all_inclusive
+      activeIcon: Icons.all_inclusive,  // Changed to all_inclusive
+      action: ToolAction.openBonusRow,
+      bonusRow: BonusRowType.settings,
     ),
   ];
 }

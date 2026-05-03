@@ -113,13 +113,20 @@ class _HashtagBarState extends State<HashtagBar> {
                   borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 10, right: 6, top: 4, bottom: 4),
-                    child: Text(
-                      "#${item.name}",
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: color,
-                        fontWeight: item.hasVoted ? FontWeight.bold : FontWeight.normal,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.tag, size: 10, color: color), // Keeping hashtag icon here as requested
+                        const SizedBox(width: 2),
+                        Text(
+                          item.name,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: color,
+                            fontWeight: item.hasVoted ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -131,7 +138,7 @@ class _HashtagBarState extends State<HashtagBar> {
                   color: color.withValues(alpha: 0.3),
                 ),
 
-                // RIGHT SIDE: Vote Action (Now using Icons.tag)
+                // RIGHT SIDE: Vote Action (Now using Star/StarBorder)
                 InkWell(
                   onTap: () => _handleVote(item.name, item.hasVoted),
                   borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
@@ -141,8 +148,8 @@ class _HashtagBarState extends State<HashtagBar> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                            Icons.tag,
-                            size: 12,
+                            item.hasVoted ? Icons.star : Icons.star_border,
+                            size: 14,
                             color: color
                         ),
                         const SizedBox(width: 4),

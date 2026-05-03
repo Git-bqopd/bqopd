@@ -56,12 +56,13 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
 
   StreamSubscription? _imageSub;
   String? _fanzineShortCode;
+  bool _isTwoPage = true; // NEW: Pulled from Fanzine database record
 
   @override
   void initState() {
     super.initState();
     _listenToStats();
-    _fetchFanzineShortcode();
+    _fetchFanzineData();
   }
 
   @override
@@ -72,12 +73,12 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
       _listenToStats();
     }
     if (oldWidget.fanzineId != widget.fanzineId) {
-      _fetchFanzineShortcode();
+      _fetchFanzineData();
     }
   }
 
-  /// Fetches the readable shortcode for the fanzine to generate clean URLs.
-  Future<void> _fetchFanzineShortcode() async {
+  /// Fetches the readable shortcode and format variables (like twoPage) for the fanzine.
+  Future<void> _fetchFanzineData() async {
     if (widget.fanzineId == null || widget.fanzineId!.isEmpty) return;
 
     try {
@@ -89,6 +90,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
       if (doc.exists && mounted) {
         setState(() {
           _fanzineShortCode = doc.data()?['shortCode'];
+          _isTwoPage = doc.data()?['twoPage'] ?? true;
         });
       }
     } catch (_) {}
@@ -195,11 +197,16 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         isGame: widget.isGame,
         isIndiciaPage: widget.isIndiciaPage,
         canOpenGrid: widget.onOpenGrid != null,
+        isTwoPage: _isTwoPage, // Passing the format control downstream
       );
 
       if (!isContextuallyVisible) return false;
 
-      final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
+      // Ensure Core Tools bypass the user preferences so they can never be hidden
+      final isVisibleByUser = (tool.id == 'Settings' || tool.id == 'Grid' || tool.id == 'Like')
+          ? true
+          : (userProvider.socialButtonVisibility[tool.id] ?? true);
+
       return isVisibleByUser;
     }).toList();
 
