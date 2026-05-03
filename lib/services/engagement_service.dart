@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 /// Handles persistence for Likes, Comments, Follows, and Hashtags.
 class EngagementService {
@@ -222,20 +223,43 @@ class EngagementService {
     final cleanTag = tag.toLowerCase().replaceAll('#', '').trim();
     if (cleanTag.isEmpty) return;
 
-    final Map<String, dynamic> updateData = {};
-
     if (isVoting) {
+      final Map<String, dynamic> updateData = {};
       updateData['tags.$cleanTag'] = FieldValue.arrayUnion([user.uid]);
       if (cleanTag == 'approved') {
         updateData['status'] = 'approved';
       }
+      await imageRef.update(updateData);
     } else {
-      updateData['tags.$cleanTag'] = FieldValue.arrayRemove([user.uid]);
-      if (cleanTag == 'approved') {
-        updateData['status'] = 'pending';
+      // Unvoting Logic using a Transaction to ensure safe deletion of empty tags
+      try {
+        await _db.runTransaction((transaction) async {
+          final snapshot = await transaction.get(imageRef);
+          if (!snapshot.exists) return;
+
+          final data = snapshot.data()!;
+          final tagsMap = data['tags'] as Map<String, dynamic>? ?? {};
+          final voters = tagsMap[cleanTag] as List<dynamic>? ?? [];
+
+          final Map<String, dynamic> updateData = {};
+
+          if (voters.length <= 1 && voters.contains(user.uid)) {
+            // User is the last/only voter. Safe to delete the tag key completely.
+            updateData['tags.$cleanTag'] = FieldValue.delete();
+          } else {
+            // There are other voters. Just pull the user's ID out.
+            updateData['tags.$cleanTag'] = FieldValue.arrayRemove([user.uid]);
+          }
+
+          if (cleanTag == 'approved') {
+            updateData['status'] = 'pending';
+          }
+
+          transaction.update(imageRef, updateData);
+        });
+      } catch (e) {
+        debugPrint("Error removing hashtag: $e");
       }
     }
-
-    await imageRef.update(updateData);
   }
 }

@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/user_bootstrap.dart';
 import '../../services/username_service.dart';
 
 class EntitiesPanel extends StatelessWidget {
   final String text;
+  final bool isEditingMode;
 
-  const EntitiesPanel({super.key, required this.text});
+  const EntitiesPanel({
+    super.key,
+    required this.text,
+    this.isEditingMode = false,
+  });
 
   List<String> _parseEntities(String content) {
     final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
@@ -26,7 +32,7 @@ class EntitiesPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("DETECTED ENTITIES", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const Text("PAGE ENTITIES", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
         const SizedBox(height: 8),
         if (entities.isEmpty)
           const Text("No entity links found in page text.", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey))
@@ -35,8 +41,8 @@ class EntitiesPanel extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: entities.length,
-            separatorBuilder: (c, i) => const Divider(height: 1),
-            itemBuilder: (c, i) => EntityRow(name: entities[i]),
+            separatorBuilder: (c, i) => const SizedBox(height: 8),
+            itemBuilder: (c, i) => EntityRow(name: entities[i], isEditingMode: isEditingMode),
           ),
       ],
     );
@@ -45,42 +51,136 @@ class EntitiesPanel extends StatelessWidget {
 
 class EntityRow extends StatelessWidget {
   final String name;
-  const EntityRow({super.key, required this.name});
+  final bool isEditingMode;
+
+  const EntityRow({
+    super.key,
+    required this.name,
+    this.isEditingMode = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final handle = normalizeHandle(name);
+
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('usernames').doc(handle).snapshots(),
+      // We look up the exact handle to get the unified profile data
+      stream: FirebaseFirestore.instance.collection('profiles').doc(handle).snapshots(),
       builder: (context, snapshot) {
-        Widget statusWidget;
-        if (!snapshot.hasData) {
-          statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
-        } else if (snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          String linkText = '/$handle';
-          if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
-          statusWidget = Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
-        } else {
-          statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
-            TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
-            TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
-          ]);
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return const Card(
+              elevation: 0,
+              child: ListTile(
+                leading: CircularProgressIndicator(),
+                title: Text("Loading..."),
+              )
+          );
         }
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Row(children: [
-            Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
-            statusWidget,
-          ]),
+
+        final bool exists = snapshot.hasData && snapshot.data!.exists;
+        final data = exists ? snapshot.data!.data() as Map<String, dynamic> : null;
+
+        // If it doesn't exist and we are just reading, hide it.
+        if (!exists && !isEditingMode) {
+          return const SizedBox.shrink();
+        }
+
+        final displayName = data?['displayName'] ?? name;
+        final bio = data?['bio'] ?? '';
+        final photoUrl = data?['photoUrl'] ?? '';
+
+        return Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: Colors.black.withValues(alpha: 0.1))
+          ),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.grey[200],
+              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+              child: photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.grey) : null,
+            ),
+            title: Row(
+              children: [
+                Expanded(child: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold))),
+                if (!exists && isEditingMode)
+                  const Text("UNREGISTERED", style: TextStyle(fontSize: 9, color: Colors.red, fontWeight: FontWeight.bold))
+              ],
+            ),
+            subtitle: Text(
+                exists ? (bio.isNotEmpty ? bio : 'No bio available.') : 'This entity does not have a profile yet.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600])
+            ),
+            trailing: isEditingMode
+                ? const Icon(Icons.edit_note, color: Colors.indigo)
+                : const Icon(Icons.chevron_right),
+            onTap: () {
+              if (isEditingMode) {
+                _showEditorOptions(context, name, exists);
+              } else {
+                context.push('/$handle');
+              }
+            },
+          ),
         );
       },
     );
   }
 
+  void _showEditorOptions(BuildContext context, String entityName, bool exists) {
+    showModalBottomSheet(
+        context: context,
+        builder: (context) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                      "Editor Options: $entityName",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                  ),
+                ),
+                const Divider(height: 1),
+                if (!exists)
+                  ListTile(
+                    leading: const Icon(Icons.person_add, color: Colors.green),
+                    title: const Text("Create Managed Profile"),
+                    subtitle: const Text("Generate a blank archival profile for this entity."),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _createProfile(context, entityName);
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.link, color: Colors.orange),
+                  title: const Text("Create Redirection Alias"),
+                  subtitle: const Text("Point this name to a different, existing profile."),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _createAlias(context, entityName);
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          );
+        }
+    );
+  }
+
   Future<void> _createProfile(BuildContext context, String name) async {
-    String first = name; String last = "";
-    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    String first = name;
+    String last = "";
+    if (name.contains(' ')) {
+      final parts = name.split(' ');
+      first = parts.first;
+      last = parts.sublist(1).join(' ');
+    }
     final expectedHandle = normalizeHandle(name);
     try {
       await createManagedProfile(
@@ -100,9 +200,24 @@ class EntityRow extends StatelessWidget {
   Future<void> _createAlias(BuildContext context, String name) async {
     final target = await showDialog<String>(context: context, builder: (c) {
       final controller = TextEditingController();
-      return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
+      return AlertDialog(
+          title: Text("Create Alias for '$name'"),
+          content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("Enter EXISTING username (target):"),
+                TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))
+              ]
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+            TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))
+          ]
+      );
     });
+
     if (target == null || target.isEmpty) return;
+
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
       if (!context.mounted) return;

@@ -16,6 +16,7 @@ class ProfileHeader extends StatefulWidget {
   final bool isMe;
   final bool isFollowing;
   final VoidCallback onFollowToggle;
+  final bool showAsHashtag; // Controls hashtag display logic based purely on active tab
 
   const ProfileHeader({
     super.key,
@@ -24,6 +25,7 @@ class ProfileHeader extends StatefulWidget {
     required this.isMe,
     required this.isFollowing,
     required this.onFollowToggle,
+    this.showAsHashtag = false,
   });
 
   @override
@@ -140,12 +142,17 @@ class _ProfileHeaderState extends State<ProfileHeader> {
   }
 
   Widget _buildProfileInfoContent() {
-    final String displayName = widget.userData.displayName;
+    String displayTitle = widget.userData.displayName;
     final String username = widget.userData.username;
     final String bio = widget.userData.bio;
     final String photoUrl = widget.userData.photoUrl;
 
-    final String displayTitle = displayName.isNotEmpty ? displayName : 'User';
+    // Apply Hashtag Formatting Logic purely based on what we are currently looking at
+    if (widget.showAsHashtag) {
+      displayTitle = "#${username.replaceAll('-', '_')}";
+    } else if (displayTitle.isEmpty) {
+      displayTitle = 'User';
+    }
 
     int followers = widget.userData.followerCount;
     int following = widget.userData.followingCount;
@@ -232,9 +239,12 @@ class _ProfileHeaderState extends State<ProfileHeader> {
             Text(displayTitle,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-            Text('@$username',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: Colors.black54)),
+
+            // Hide the redundant @handle if we are viewing this as a hashtag feed
+            if (!widget.showAsHashtag)
+              Text('@$username',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Colors.black54)),
 
             if (_isManaged) ...[
               const SizedBox(height: 16),

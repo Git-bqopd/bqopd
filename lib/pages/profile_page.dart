@@ -57,6 +57,7 @@ class ProfilePage extends StatelessWidget {
 
     // Get explicit params if provided in route
     String? explicitTab = extraMap?['tab'] as String? ?? queryParams['tab'];
+    String? explicitSub = extraMap?['sub'] as String? ?? queryParams['sub'];
     bool? explicitDrafts = (extraMap?['drafts'] as bool?) ?? (queryParams['drafts'] == 'true' ? true : null);
 
     String? initialTab = explicitTab;
@@ -87,6 +88,7 @@ class ProfilePage extends StatelessWidget {
         initialDrafts: initialDrafts,
         isMe: isMe,
         prefs: prefs,
+        explicitSub: explicitSub,
       ),
     );
   }
@@ -96,11 +98,13 @@ class _ProfilePageView extends StatefulWidget {
   final bool initialDrafts;
   final bool isMe;
   final Map<String, dynamic> prefs;
+  final String? explicitSub;
 
   const _ProfilePageView({
     this.initialDrafts = false,
     required this.isMe,
     required this.prefs,
+    this.explicitSub,
   });
 
   @override
@@ -110,7 +114,7 @@ class _ProfilePageView extends StatefulWidget {
 class _ProfilePageViewState extends State<_ProfilePageView> {
   int _makerSubTabIndex = 0; // 0 = published, 1 = drafts, 2 = moderator
   int _curatorSubTabIndex = 0;
-  int _indexSubTabIndex = 0;
+  int _indexSubTabIndex = 0; // 0 = #hashtags, 1 = mentions, 2 = comments
   int _settingsSubTabIndex = 0;
   bool _isUploadingPdf = false;
 
@@ -124,12 +128,33 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   void initState() {
     super.initState();
     _makerSubTabIndex = widget.initialDrafts ? 1 : 0;
-    if (widget.isMe) {
+
+    // Parse the explicit sub-tab routing for the index tab
+    if (widget.explicitSub == 'hashtags') {
+      _indexSubTabIndex = 0;
+    } else if (widget.explicitSub == 'mentions') {
+      _indexSubTabIndex = 1;
+    } else if (widget.explicitSub == 'comments') {
+      _indexSubTabIndex = 2;
+    } else if (widget.isMe) {
       _curatorSubTabIndex = widget.prefs['curatorSubTab'] as int? ?? 0;
       _indexSubTabIndex = widget.prefs['indexSubTab'] as int? ?? 0;
       _settingsSubTabIndex = widget.prefs['settingsSubTab'] as int? ?? 0;
     }
+
     _loadGlobalSettings();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfilePageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.explicitSub != oldWidget.explicitSub && widget.explicitSub != null) {
+      setState(() {
+        if (widget.explicitSub == 'hashtags') _indexSubTabIndex = 0;
+        if (widget.explicitSub == 'mentions') _indexSubTabIndex = 1;
+        if (widget.explicitSub == 'comments') _indexSubTabIndex = 2;
+      });
+    }
   }
 
   @override
@@ -208,6 +233,20 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           }
         }
       }, SetOptions(merge: true));
+    });
+  }
+
+  void _updateUrlIfNeeded(String username) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        final currentUri = GoRouterState.of(context).uri;
+        // Force the URL to reflect the profile's canonical username if it doesn't already,
+        // unless they are explicitly at the base /profile route.
+        if (currentUri.path != '/$username' && currentUri.path != '/profile') {
+          context.replace('/$username${currentUri.hasQuery ? '?${currentUri.query}' : ''}');
+        }
+      } catch (_) {}
     });
   }
 
@@ -476,6 +515,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           if (state.errorMessage != null) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.errorMessage!), backgroundColor: Colors.red));
           }
+          if (state.userData != null) {
+            _updateUrlIfNeeded(state.userData!.username);
+          }
         },
         builder: (context, state) {
           if (state.isLoading) {
@@ -488,18 +530,19 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           final userData = state.userData!;
           final targetUserId = userData.uid;
 
-          // Generate the exact profile name to search for in entity drafts
-          final String profileName = userData.displayName.trim().isNotEmpty
-              ? userData.displayName
-              : userData.username;
-
           final userProvider = context.read<UserProvider>();
           final isOwner = userProvider.currentUserId == targetUserId;
           final canEditProfile = _canEdit(userData.uid, userData.isManaged, userData.managers);
 
           final bool canSeeDrafts = canEditProfile || userProvider.isAdmin || userProvider.isModerator;
 
-          final activeTab = state.visibleTabs.isEmpty ? 'collection' : state.visibleTabs[state.currentTabIndex];
+          int currentIndex = state.currentTabIndex;
+          if (currentIndex >= state.visibleTabs.length) currentIndex = 0;
+
+          final activeTab = state.visibleTabs.isEmpty ? 'collection' : state.visibleTabs[currentIndex];
+
+          // Determine if we should format the profile as a hashtag
+          final bool showAsHashtag = activeTab == 'index' && _indexSubTabIndex == 0;
 
           return SafeArea(
             child: PageWrapper(
@@ -517,6 +560,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                         isMe: isOwner,
                         isFollowing: state.isFollowing,
                         onFollowToggle: () => context.read<ProfileBloc>().add(ToggleFollowRequested()),
+                        showAsHashtag: showAsHashtag,
                       ),
                     ),
                   ),
@@ -527,7 +571,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                         height: 50,
                         child: ProfileNavBar(
                           tabTitles: state.visibleTabs,
-                          currentIndex: state.currentTabIndex,
+                          currentIndex: currentIndex,
                           onTabChanged: (idx) {
                             context.read<ProfileBloc>().add(ChangeTabRequested(idx));
                             if (!widget.isMe) {
@@ -538,9 +582,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                 _settingsSubTabIndex = 0;
                               });
                             }
-                            final tabs = context.read<ProfileBloc>().state.visibleTabs;
-                            if (idx < tabs.length) {
-                              _savePrefs(newMainTab: tabs[idx]);
+                            if (idx < state.visibleTabs.length) {
+                              _savePrefs(newMainTab: state.visibleTabs[idx]);
                             }
                           },
                           canEdit: canEditProfile,
@@ -682,17 +725,18 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildSubTab("mentions", 0, type: 'index'),
+                              _buildSubTab("#hashtags", 0, type: 'index'),
                               const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
-                              _buildSubTab("comments", 1, type: 'index'),
+                              _buildSubTab("mentions", 1, type: 'index'),
+                              const Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text("|", style: TextStyle(color: Colors.grey))),
+                              _buildSubTab("comments", 2, type: 'index'),
                             ],
                           ),
                         ),
                       ),
                     ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  _buildContentSliver(targetUserId, isOwner, activeTab, canSeeDrafts, profileName),
+                  ..._buildContentSlivers(targetUserId, isOwner, activeTab, canSeeDrafts, userData),
                   const SliverToBoxAdapter(child: SizedBox(height: 64)),
                 ],
               ),
@@ -731,35 +775,126 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     );
   }
 
-  Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab, bool canSeeDrafts, String profileName) {
+  List<Widget> _buildContentSlivers(String targetUserId, bool isOwner, String activeTab, bool canSeeDrafts, UserProfile userData) {
+    final String profileName = userData.displayName.trim().isNotEmpty ? userData.displayName : userData.username;
+
     switch (activeTab) {
       case 'settings':
         if (_settingsSubTabIndex == 3) {
-          return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: SocialMatrixTab())));
+          return [const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: SocialMatrixTab())))];
         }
-        return _buildSettingsSubView(targetUserId);
+        return [_buildSettingsSubView(targetUserId)];
       case 'curator':
         if (_curatorSubTabIndex == 2) {
-          return _buildEntitiesSubView(targetUserId);
+          return [_buildEntitiesSubView(targetUserId)];
         } else if (_curatorSubTabIndex == 3) {
-          return _buildAITrainingDataSubView(targetUserId);
+          return [_buildAITrainingDataSubView(targetUserId)];
         }
-        return _buildCuratorSubView(targetUserId, canSeeDrafts);
+        return [_buildCuratorSubView(targetUserId, canSeeDrafts)];
       case 'maker':
         if (_makerSubTabIndex == 2) {
-          return _buildModeratorSubView();
+          return [_buildModeratorSubView()];
         }
-        return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _makerSubTabIndex == 1 && canSeeDrafts);
+        return [_MakerCombinedView(targetUserId: targetUserId, showDrafts: _makerSubTabIndex == 1 && canSeeDrafts)];
       case 'index':
-        if (_indexSubTabIndex == 1) {
-          return _UserCommentsView(userId: targetUserId);
+        if (_indexSubTabIndex == 0) {
+          return _buildTagsSubView(userData);
+        } else if (_indexSubTabIndex == 1) {
+          return [_buildMentionsSubView(profileName)];
+        } else if (_indexSubTabIndex == 2) {
+          return [_UserCommentsView(userId: targetUserId)];
         }
-        return _buildIndexSubView(profileName);
+        return [const SliverToBoxAdapter(child: SizedBox.shrink())];
       case 'collection':
-        return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Collection Coming Soon"))));
+        return [const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Collection Coming Soon"))))];
       default:
-        return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Coming Soon"))));
+        return [const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Coming Soon"))))];
     }
+  }
+
+  List<Widget> _buildTagsSubView(UserProfile userData) {
+    // Generate valid tags based on username and display name
+    final cleanUsername = userData.username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+    final cleanDisplay = userData.displayName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+
+    final Set<String> targetTags = {cleanUsername};
+    if (cleanDisplay.isNotEmpty) targetTags.add(cleanDisplay);
+
+    return [
+      SliverPersistentHeader(
+        pinned: true,
+        delegate: _ProfileTabsDelegate(
+          child: Container(
+            height: 50,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.black12)),
+            ),
+            child: Center(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: targetTags.map((t) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.black54),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.tag, size: 12, color: Colors.black87),
+                          const SizedBox(width: 2),
+                          Text(t, style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  )).toList(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('images')
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
+          }
+          if (!snapshot.hasData) {
+            return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+          }
+
+          final docs = snapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final tags = data['tags'] as Map<String, dynamic>? ?? {};
+            // Accept the image if it contains ANY of the valid profile tags
+            return targetTags.any((t) => tags.containsKey(t));
+          }).toList();
+
+          if (docs.isEmpty) {
+            return const SliverToBoxAdapter(
+                child: SizedBox(
+                    height: 100,
+                    child: Center(
+                        child: Text("No items tagged yet.", style: TextStyle(color: Colors.grey))
+                    )
+                )
+            );
+          }
+
+          return _buildGrid(docs, false, thumbnailOnly: false);
+        },
+      ),
+    ];
   }
 
   Widget _buildModeratorSubView() {
@@ -996,7 +1131,7 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     );
   }
 
-  Widget _buildIndexSubView(String profileName) {
+  Widget _buildMentionsSubView(String profileName) {
     Stream<QuerySnapshot> stream = FirebaseFirestore.instance
         .collection('fanzines')
         .where('draftEntities', arrayContains: profileName)
@@ -1214,6 +1349,47 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         );
       },
     );
+  }
+}
+
+class _HashtagItemTile extends StatelessWidget {
+  final DocumentSnapshot imageDoc;
+
+  const _HashtagItemTile({required this.imageDoc});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = imageDoc.data() as Map<String, dynamic>;
+
+    // We try to pull the contextual folio to display its cover and handle the backlink properly.
+    final String? folioContext = data['folioContext'] ??
+        (data['usedInFanzines'] != null && data['usedInFanzines'].isNotEmpty
+            ? data['usedInFanzines'][0]
+            : null);
+
+    if (folioContext != null && folioContext.isNotEmpty) {
+      return FutureBuilder<DocumentSnapshot>(
+          future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return Container(
+                  decoration: BoxDecoration(border: Border.all(color: Colors.black12)),
+                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              );
+            }
+            if (snap.hasData && snap.data != null && snap.data!.exists) {
+              // Hand the fanzine doc over to _MakerItemTile, it naturally handles covers and backlinks!
+              return _MakerItemTile(doc: snap.data!, shouldEdit: false);
+            }
+
+            // Fallback to image if folio fails to load
+            return _MakerItemTile(doc: imageDoc, shouldEdit: false);
+          }
+      );
+    }
+
+    // If it's a standalone image with no folio
+    return _MakerItemTile(doc: imageDoc, shouldEdit: false);
   }
 }
 

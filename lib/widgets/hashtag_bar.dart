@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import '../services/engagement_service.dart';
 import 'auth_modal.dart';
 
@@ -79,33 +80,85 @@ class _HashtagBarState extends State<HashtagBar> {
 
     return Wrap(
       spacing: 8.0,
-      runSpacing: 4.0,
+      runSpacing: 8.0,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         ...tagItems.map((item) {
           final isApproved = item.name == 'approved';
+
           final color = isApproved
               ? (item.count > 0 ? Colors.green : Colors.grey)
               : (item.hasVoted ? Colors.blue : Colors.grey[700]);
+
           final bgColor = isApproved
-              ? (item.count > 0 ? Colors.green.withValues(alpha: 0.1) : Colors.grey[200])
+              ? (item.count > 0 ? Colors.green.withValues(alpha: 0.1) : Colors.transparent)
               : (item.hasVoted ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent);
 
-          return GestureDetector(
-            onTap: () => _handleVote(item.name, item.hasVoted),
-            child: Chip(
-              label: Text(
-                "#${item.name} (${item.count})",
-                style: TextStyle(
-                  fontSize: 11,
-                  color: color,
-                  fontWeight: item.hasVoted ? FontWeight.bold : FontWeight.normal,
+          // The New Split Button Layout
+          return Container(
+            decoration: BoxDecoration(
+              // Outline dynamically deepens when voted
+              border: Border.all(color: color!.withValues(alpha: item.hasVoted ? 1.0 : 0.5)),
+              borderRadius: BorderRadius.circular(20),
+              color: bgColor, // Transitions to tonal when voted
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // LEFT SIDE: Navigate to Profile -> Index Tab -> Hashtags SubTab
+                InkWell(
+                  onTap: () {
+                    context.push('/${item.name}?tab=index&sub=hashtags');
+                  },
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 10, right: 6, top: 4, bottom: 4),
+                    child: Text(
+                      "#${item.name}",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: color,
+                        fontWeight: item.hasVoted ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              backgroundColor: bgColor,
-              shape: StadiumBorder(side: BorderSide(color: color!.withValues(alpha: 0.5))),
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
+
+                // DIVIDER
+                Container(
+                  width: 1,
+                  height: 14,
+                  color: color.withValues(alpha: 0.3),
+                ),
+
+                // RIGHT SIDE: Vote Action (Now using Icons.tag)
+                InkWell(
+                  onTap: () => _handleVote(item.name, item.hasVoted),
+                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 6, right: 10, top: 4, bottom: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                            Icons.tag,
+                            size: 12,
+                            color: color
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          "${item.count}",
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: color,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
         }),
@@ -130,7 +183,6 @@ class _HashtagBarState extends State<HashtagBar> {
         else
           GestureDetector(
             onTap: () {
-              // Intercept click on the '+' button before showing the input
               if (currentUser == null || currentUser!.isAnonymous) {
                 showDialog(context: context, builder: (c) => const AuthModal());
                 return;

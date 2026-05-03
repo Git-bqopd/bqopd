@@ -128,6 +128,16 @@ class ReaderToolsConfig {
       condition: ToolCondition.requiresIndicia,
       bonusRow: BonusRowType.indicia,
     ),
+    ReaderTool(
+      id: 'Entities',
+      label: 'entities',
+      description: 'View the people and subjects mentioned on this page.',
+      defaultIcon: Icons.link_outlined,
+      activeIcon: Icons.link,
+      action: ToolAction.openBonusRow,
+      condition: ToolCondition.requiresOcrPipeline,
+      bonusRow: BonusRowType.entities,
+    ),
 
     // --- RESTRICTED EDITOR TOOLS ---
     ReaderTool(
@@ -157,17 +167,6 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       action: ToolAction.openBonusRow,
       bonusRow: BonusRowType.linkedText,
-    ),
-    ReaderTool(
-      id: 'Entities',
-      label: 'entities',
-      description: 'Link detected names to internal profiles.',
-      defaultIcon: Icons.link_outlined,
-      activeIcon: Icons.link,
-      role: ToolRole.editor,
-      action: ToolAction.openBonusRow,
-      condition: ToolCondition.requiresOcrPipeline,
-      bonusRow: BonusRowType.entities,
     ),
     ReaderTool(
       id: 'Views',

@@ -69,7 +69,10 @@ class PanelFactory {
       case BonusRowType.tags:
         return HashtagPanel(imageId: context.imageId);
       case BonusRowType.entities:
-        return EntitiesPanel(text: context.actualText);
+        return EntitiesPanel(
+          text: context.actualText,
+          isEditingMode: context.isEditingMode,
+        );
       case BonusRowType.comments:
         return CommentsPanel(
           imageId: context.imageId,
