@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../utils/con_week.dart';
 import '../models/page_event.dart';
+import '../repositories/fanzine_repository.dart';
+import '../blocs/calendar/calendar_editor_bloc.dart';
 
 /// The editor settings widget for Calendar "Folios".
 /// Sits in the sidebar drawer or "Settings" tab of the Fanzine View Editor.
@@ -15,7 +18,6 @@ class CalendarEditorWidget extends StatefulWidget {
 }
 
 class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with SingleTickerProviderStateMixin {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final TextEditingController _titleController = TextEditingController();
 
   late TabController _tabController;
@@ -50,7 +52,10 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
       if (mounted) setState(() {});
     });
 
-    _loadFolioData();
+    // Post frame to ensure context is available for reading the repository
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadFolioData();
+    });
   }
 
   @override
@@ -61,7 +66,9 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
   }
 
   Future<void> _loadFolioData() async {
-    final doc = await _db.collection('fanzines').doc(widget.folioId).get();
+    final repo = context.read<FanzineRepository>();
+    final doc = await repo.watchFanzine(widget.folioId).first;
+
     if (doc.exists && mounted) {
       final data = doc.data() as Map<String, dynamic>;
       setState(() {
@@ -85,25 +92,24 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
     });
   }
 
-  Future<void> _updateSettings() async {
-    await _db.collection('fanzines').doc(widget.folioId).update({
-      'title': _titleController.text.trim(),
-      'startMonth': _startMonth,
-      'startYear': _startYear,
-      'processingStatus': 'complete', // UN-HIDES IT FROM THE PROFILE
-    });
-
-    // Refresh weeks if the start date changed
+  void _updateSettings(BuildContext innerContext) {
+    innerContext.read<CalendarEditorBloc>().add(
+      UpdateCalendarSettingsRequested(
+        widget.folioId,
+        _titleController.text.trim(),
+        _startMonth,
+        _startYear,
+      ),
+    );
     _initializeWeeks();
-
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Calendar Saved!")));
   }
 
   /// Phase 4: Save Mapping
   /// Maps the selected PageEvent and ConWeek into the 'conventions' collection format.
-  Future<void> _addEvent() async {
+  void _addEvent(BuildContext innerContext) {
     if (_selectedEvent == null || _selectedWeek == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a week and an event card first.")));
+      ScaffoldMessenger.of(innerContext).showSnackBar(
+          const SnackBar(content: Text("Please select a week and an event card first.")));
       return;
     }
 
@@ -111,8 +117,8 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
     final monthName = _months[_selectedWeek!.startDate.month - 1];
     final startDay = _selectedWeek!.startDate.day.toString();
 
-    // Map community PageEvent fields to the internal Convention schema
-    await _db.collection('conventions').add({
+    // Pass data through BLoC
+    innerContext.read<CalendarEditorBloc>().add(AddConventionRequested({
       'name': _selectedEvent!.eventName,
       'handle': '@${_selectedEvent!.username}',
       'location': '${_selectedEvent!.city}, ${_selectedEvent!.state}',
@@ -121,32 +127,26 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
       'isHighlighted': _isHighlighted,
       'bqopdAttending': _bqopdAttending,
       'folioId': widget.folioId,
-      'timestamp': FieldValue.serverTimestamp(),
-      'originalEventId': _selectedEvent!.id, // Reference to original community event
-    });
+      'originalEventId': _selectedEvent!.id,
+    }));
 
-    if (mounted) {
-      setState(() {
-        // Reset selection state after committing
-        _selectedEvent = null;
-        _isHighlighted = false;
-        _bqopdAttending = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Convention added to Folio!")));
-    }
-  }
-
-  Future<void> _deleteEvent(String id) async {
-    await _db.collection('conventions').doc(id).delete();
-  }
-
-  Future<void> _toggleSpread(String pageId, bool val) async {
-    await _db.collection('fanzines').doc(widget.folioId).collection('pages').doc(pageId).update({
-      'isSpread': val,
+    setState(() {
+      // Reset selection state after committing
+      _selectedEvent = null;
+      _isHighlighted = false;
+      _bqopdAttending = false;
     });
   }
 
-  Widget _buildSettingsTab() {
+  void _deleteEvent(BuildContext innerContext, String id) {
+    innerContext.read<CalendarEditorBloc>().add(DeleteConventionRequested(id));
+  }
+
+  void _toggleSpread(BuildContext innerContext, String pageId, bool val) {
+    innerContext.read<CalendarEditorBloc>().add(ToggleSpreadRequested(widget.folioId, pageId, val));
+  }
+
+  Widget _buildSettingsTab(BuildContext innerContext) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -185,7 +185,7 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
           ),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: _updateSettings,
+            onPressed: () => _updateSettings(innerContext),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
@@ -197,7 +197,9 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
     );
   }
 
-  Widget _buildDatabaseTab() {
+  Widget _buildDatabaseTab(BuildContext innerContext) {
+    final repo = innerContext.read<FanzineRepository>();
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -237,10 +239,7 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
             child: _selectedWeek == null
                 ? const Center(child: Text("Select a week to search", style: TextStyle(fontSize: 11, color: Colors.grey)))
                 : StreamBuilder<QuerySnapshot>(
-              stream: _db.collection('page_events')
-                  .where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedWeek!.startDate))
-                  .where('startDate', isLessThanOrEqualTo: Timestamp.fromDate(_selectedWeek!.endDate))
-                  .snapshots(),
+              stream: repo.watchPageEventsByDate(_selectedWeek!.startDate, _selectedWeek!.endDate),
               builder: (context, snapshot) {
                 if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 10)));
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
@@ -323,16 +322,13 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
             contentPadding: EdgeInsets.zero,
           ),
           ElevatedButton(
-              onPressed: _selectedEvent == null ? null : _addEvent,
+              onPressed: _selectedEvent == null ? null : () => _addEvent(innerContext),
               child: const Text("Commit to Database")
           ),
           const Divider(height: 32),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('conventions')
-                    .where('folioId', isEqualTo: widget.folioId)
-                    .orderBy('timestamp', descending: true)
-                    .snapshots(),
+                stream: repo.watchConventionsForFolio(widget.folioId),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final docs = snapshot.data!.docs;
@@ -350,7 +346,7 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
                         subtitle: Text("${data['month']} ${data['startDay']}"),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                          onPressed: () => _deleteEvent(docs[i].id),
+                          onPressed: () => _deleteEvent(innerContext, docs[i].id),
                         ),
                       );
                     },
@@ -363,7 +359,9 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
     );
   }
 
-  Widget _buildPagesTab() {
+  Widget _buildPagesTab(BuildContext innerContext) {
+    final repo = innerContext.read<FanzineRepository>();
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -373,7 +371,7 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
           const SizedBox(height: 12),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('fanzines').doc(widget.folioId).collection('pages').orderBy('pageNumber').snapshots(),
+                stream: repo.watchPages(widget.folioId),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final docs = snapshot.data!.docs;
@@ -391,7 +389,7 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
                         title: const Text("Two Page Spread", style: TextStyle(fontSize: 13)),
                         trailing: Switch(
                           value: isSpread,
-                          onChanged: (v) => _toggleSpread(docs[i].id, v),
+                          onChanged: (v) => _toggleSpread(innerContext, docs[i].id, v),
                         ),
                       );
                     },
@@ -406,40 +404,59 @@ class _CalendarEditorWidgetState extends State<CalendarEditorWidget> with Single
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 600, // Provides explicit bound to prevent infinite-height hitTest crash in Lists
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black12),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            labelColor: Colors.black,
-            indicatorColor: Colors.black,
-            labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-            tabs: const [
-              Tab(text: "Settings", icon: Icon(Icons.settings, size: 18)),
-              Tab(text: "Database", icon: Icon(Icons.calendar_month, size: 18)),
-              Tab(text: "Pages", icon: Icon(Icons.auto_awesome_motion, size: 18)),
-            ],
-          ),
+    return BlocProvider(
+      create: (context) => CalendarEditorBloc(repository: context.read<FanzineRepository>()),
+      child: Builder(
+          builder: (innerContext) {
+            return BlocListener<CalendarEditorBloc, CalendarEditorState>(
+              listener: (context, state) {
+                if (state.status == CalendarEditorStatus.success && state.message != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message!)));
+                } else if (state.status == CalendarEditorStatus.failure && state.message != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text("Error: ${state.message}"),
+                    backgroundColor: Colors.red,
+                  ));
+                }
+              },
+              child: Container(
+                height: 600, // Provides explicit bound to prevent infinite-height hitTest crash in Lists
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black12),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    TabBar(
+                      controller: _tabController,
+                      labelColor: Colors.black,
+                      indicatorColor: Colors.black,
+                      labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      tabs: const [
+                        Tab(text: "Settings", icon: Icon(Icons.settings, size: 18)),
+                        Tab(text: "Database", icon: Icon(Icons.calendar_month, size: 18)),
+                        Tab(text: "Pages", icon: Icon(Icons.auto_awesome_motion, size: 18)),
+                      ],
+                    ),
 
-          // Replaced TabBarView with Expanded & Conditional logic to fix the hitTest exception
-          Expanded(
-            child: _tabController.index == 0
-                ? _buildSettingsTab()
-                : _tabController.index == 1
-                ? _buildDatabaseTab()
-                : _buildPagesTab(),
-          ),
-        ],
+                    // Replaced TabBarView with Expanded & Conditional logic to fix the hitTest exception
+                    Expanded(
+                      child: _tabController.index == 0
+                          ? _buildSettingsTab(innerContext)
+                          : _tabController.index == 1
+                          ? _buildDatabaseTab(innerContext)
+                          : _buildPagesTab(innerContext),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
       ),
     );
   }

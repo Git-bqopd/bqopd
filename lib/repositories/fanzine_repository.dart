@@ -37,6 +37,46 @@ class FanzineRepository {
         .map((snap) => snap.docs.map((d) => FanzinePage.fromFirestore(d)).toList());
   }
 
+  // --- CALENDAR STREAMS & OPERATIONS ---
+
+  Stream<QuerySnapshot> watchPageEventsByDate(DateTime start, DateTime end) {
+    return _db.collection('page_events')
+        .where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('startDate', isLessThanOrEqualTo: Timestamp.fromDate(end))
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot> watchConventionsForFolio(String folioId) {
+    return _db.collection('conventions')
+        .where('folioId', isEqualTo: folioId)
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
+  Future<void> updateCalendarSettings(String folioId, String title, int startMonth, int startYear) async {
+    await _db.collection('fanzines').doc(folioId).update({
+      'title': title,
+      'startMonth': startMonth,
+      'startYear': startYear,
+      'processingStatus': 'complete',
+    });
+  }
+
+  Future<void> addConvention(Map<String, dynamic> conventionData) async {
+    conventionData['timestamp'] = FieldValue.serverTimestamp();
+    await _db.collection('conventions').add(conventionData);
+  }
+
+  Future<void> deleteConvention(String id) async {
+    await _db.collection('conventions').doc(id).delete();
+  }
+
+  Future<void> togglePageSpread(String folioId, String pageId, bool isSpread) async {
+    await _db.collection('fanzines').doc(folioId).collection('pages').doc(pageId).update({
+      'isSpread': isSpread,
+    });
+  }
+
   // --- SERIES MANAGEMENT ---
 
   Stream<QuerySnapshot> watchSeries() {
