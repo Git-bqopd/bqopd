@@ -44,8 +44,24 @@ class SubmitUploadRequested extends UploadEvent {
   });
 }
 
+class UploadFolioAssetRequested extends UploadEvent {
+  final Uint8List bytes;
+  final String fileName;
+  final String fanzineId;
+  final String userId;
+
+  UploadFolioAssetRequested({
+    required this.bytes,
+    required this.fileName,
+    required this.fanzineId,
+    required this.userId,
+  });
+}
+
+class ResetUploadState extends UploadEvent {}
+
 // --- STATE ---
-enum UploadStatus { initial, ready, submitting, success, failure }
+enum UploadStatus { initial, ready, submitting, success, failure, folioAssetSubmitting, folioAssetSuccess }
 
 class UploadState extends Equatable {
   final UploadStatus status;
@@ -54,12 +70,24 @@ class UploadState extends Equatable {
   final List<Map<String, dynamic>> creators;
   final String? errorMessage;
 
+  // Fields for folio asset upload results
+  final String? uploadedImageId;
+  final String? uploadedImageUrl;
+  final bool? is5x8;
+  final int? width;
+  final int? height;
+
   const UploadState({
     this.status = UploadStatus.initial,
     this.imageBytes,
     this.fileName,
     this.creators = const [],
     this.errorMessage,
+    this.uploadedImageId,
+    this.uploadedImageUrl,
+    this.is5x8,
+    this.width,
+    this.height,
   });
 
   UploadState copyWith({
@@ -68,6 +96,11 @@ class UploadState extends Equatable {
     String? fileName,
     List<Map<String, dynamic>>? creators,
     String? errorMessage,
+    String? uploadedImageId,
+    String? uploadedImageUrl,
+    bool? is5x8,
+    int? width,
+    int? height,
   }) {
     return UploadState(
       status: status ?? this.status,
@@ -75,11 +108,19 @@ class UploadState extends Equatable {
       fileName: fileName ?? this.fileName,
       creators: creators ?? this.creators,
       errorMessage: errorMessage,
+      uploadedImageId: uploadedImageId ?? this.uploadedImageId,
+      uploadedImageUrl: uploadedImageUrl ?? this.uploadedImageUrl,
+      is5x8: is5x8 ?? this.is5x8,
+      width: width ?? this.width,
+      height: height ?? this.height,
     );
   }
 
   @override
-  List<Object?> get props => [status, imageBytes, fileName, creators, errorMessage];
+  List<Object?> get props => [
+    status, imageBytes, fileName, creators, errorMessage,
+    uploadedImageId, uploadedImageUrl, is5x8, width, height
+  ];
 }
 
 // --- BLOC ---
@@ -102,6 +143,8 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     });
 
     on<SubmitUploadRequested>(_onSubmitUpload);
+    on<UploadFolioAssetRequested>(_onUploadFolioAsset);
+    on<ResetUploadState>((event, emit) => emit(const UploadState()));
   }
 
   Future<void> _onAddCreator(AddCreatorRequested event, Emitter<UploadState> emit) async {
@@ -123,7 +166,6 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
 
       final url = await _repository.uploadBytes(state.imageBytes!, path, 'image/jpeg');
 
-      // --- FIX: Measure image dimensions before saving ---
       final decodedImage = await decodeImageFromList(state.imageBytes!);
       final int width = decodedImage.width;
       final int height = decodedImage.height;
@@ -141,7 +183,6 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         'tags': {},
         'indicia': event.indicia,
         'creators': event.creators,
-        // --- FIX: Save dimensions to metadata ---
         'width': width,
         'height': height,
         'aspectRatio': ratio,
@@ -149,6 +190,49 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       });
 
       emit(state.copyWith(status: UploadStatus.success));
+    } catch (e) {
+      emit(state.copyWith(status: UploadStatus.failure, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onUploadFolioAsset(UploadFolioAssetRequested event, Emitter<UploadState> emit) async {
+    emit(state.copyWith(status: UploadStatus.folioAssetSubmitting));
+
+    try {
+      final decodedImage = await decodeImageFromList(event.bytes);
+      final int width = decodedImage.width;
+      final int height = decodedImage.height;
+      final double ratio = width / height;
+      final bool is5x8 = (ratio >= 0.58 && ratio <= 0.67);
+
+      final String path = 'uploads/${event.userId}/folio_assets/${event.fanzineId}/${DateTime.now().millisecondsSinceEpoch}_${event.fileName}';
+
+      final url = await _repository.uploadBytes(event.bytes, path, 'image/jpeg');
+
+      final imageDocId = await _repository.saveFolioAssetMetadata({
+        'uploaderId': event.userId,
+        'folioContext': event.fanzineId,
+        'usedInFanzines': [event.fanzineId],
+        'fileUrl': url,
+        'fileName': event.fileName,
+        'title': event.fileName,
+        'status': 'approved',
+        'isFolioAsset': true,
+        'width': width,
+        'height': height,
+        'aspectRatio': ratio,
+        'is5x8': is5x8,
+        'storagePath': path,
+      });
+
+      emit(state.copyWith(
+        status: UploadStatus.folioAssetSuccess,
+        uploadedImageId: imageDocId,
+        uploadedImageUrl: url,
+        is5x8: is5x8,
+        width: width,
+        height: height,
+      ));
     } catch (e) {
       emit(state.copyWith(status: UploadStatus.failure, errorMessage: e.toString()));
     }

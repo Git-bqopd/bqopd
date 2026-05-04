@@ -22,9 +22,17 @@ class UploadRepository {
     });
   }
 
+  Future<String> saveFolioAssetMetadata(Map<String, dynamic> data) async {
+    final docRef = _db.collection('images').doc();
+    await docRef.set({
+      ...data,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    return docRef.id;
+  }
+
   Future<Map<String, dynamic>?> lookupUserByHandle(String handle) async {
     final cleanHandle = handle.toLowerCase().replaceAll('@', '');
-    // FIXED: Lookup redirected to the unified 'profiles' collection
     final query = await _db
         .collection('profiles')
         .where('username', isEqualTo: cleanHandle)
