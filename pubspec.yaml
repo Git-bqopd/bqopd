@@ -1,0 +1,13 @@
+name: bqopd_workspace
+description: "Root workspace for the bqopd monorepo."
+
+environment:
+  sdk: ^3.11.0
+
+workspace:
+  - apps/bqopd_flutter
+  - packages/bqopd_models
+  - packages/bqopd_core
+  - packages/bqopd_terminal
+  - packages/bqopd_ui
+  - packages/bqopd_state

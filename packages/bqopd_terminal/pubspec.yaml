@@ -1,0 +1,19 @@
+name: bqopd_terminal
+description: "The cyberpunk combat terminal mini-game."
+version: 1.0.0
+publish_to: 'none'
+resolution: workspace
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- Inter-Package Dependencies ---
+  bqopd_core: any
+
+  # --- External Dependencies ---
+  cloud_firestore: ^5.4.3
+  provider: ^6.1.2

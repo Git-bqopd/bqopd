@@ -1,0 +1,12 @@
+name: bqopd_ui
+description: "Generic UI components and design system for bqopd."
+version: 1.0.0
+publish_to: 'none'
+resolution: workspace
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter

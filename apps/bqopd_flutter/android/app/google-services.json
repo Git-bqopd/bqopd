@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "17060476719",
+    "project_id": "bqopd-9ce06",
+    "storage_bucket": "bqopd-9ce06.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:17060476719:android:a82e45697659ecc7e2d3da",
+        "android_client_info": {
+          "package_name": "com.bqopd.bqopd"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIPR_mAKZeTc3GRgvvaF9JNNebZHpLECQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
