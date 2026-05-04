@@ -69,4 +69,38 @@ class UserRepository {
   Future<String?> claimHandleForUser(String handle) async {
     return await claimHandle(handle);
   }
+
+  // --- NEW METHODS FOR EDIT INFO REFACTOR ---
+
+  /// Fetches both the public profile and private user data
+  Future<Map<String, dynamic>> fetchFullUserProfile(String uid) async {
+    final userDoc = await _db.collection('Users').doc(uid).get();
+    final profileDoc = await _db.collection('profiles').doc(uid).get();
+
+    return {
+      'user': userDoc.exists ? userDoc.data() : {},
+      'profile': profileDoc.exists ? profileDoc.data() : {},
+    };
+  }
+
+  /// Performs a batch write to save public and private identity data
+  Future<void> saveFullUserProfile({
+    required String uid,
+    required Map<String, dynamic> publicData,
+    required Map<String, dynamic> privateData,
+    required String initialUsername,
+    required String finalUsername,
+  }) async {
+    final batch = _db.batch();
+
+    batch.set(_db.collection('profiles').doc(uid), publicData, SetOptions(merge: true));
+    batch.set(_db.collection('Users').doc(uid), privateData, SetOptions(merge: true));
+
+    await batch.commit();
+
+    // Claim the new handle if it has changed
+    if (finalUsername.isNotEmpty && finalUsername != initialUsername) {
+      await claimHandle(finalUsername);
+    }
+  }
 }
