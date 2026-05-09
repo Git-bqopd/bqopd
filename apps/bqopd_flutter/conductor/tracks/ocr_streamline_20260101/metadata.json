@@ -1,0 +1,8 @@
+{
+  "track_id": "ocr_streamline_20260101",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-01T12:00:00Z",
+  "updated_at": "2026-01-01T12:00:00Z",
+  "description": "Streamline the OCR process in the Curator Dashboard and Curator Workbench."
+}

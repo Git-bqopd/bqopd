@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "staging": "bqopd-9ce06",
+    "default": "bqopd-9ce06"
+  },
+  "targets": {},
+  "etags": {}
+}
