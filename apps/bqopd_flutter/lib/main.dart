@@ -9,6 +9,9 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'env.dart';
 
+// Import from bqopd_core
+import 'package:bqopd_core/bqopd_core.dart';
+
 // Services & Repositories
 import 'services/user_provider.dart';
 import 'repositories/user_repository.dart';
@@ -40,14 +43,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Env.load();
 
-  // FIXED: Removed loadGoogleMapsScript() from here.
-  // It is now lazily loaded inside EditInfoWidget to prevent
-  // unnecessary API calls for guests/readers.
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   usePathUrlStrategy();
 
-  // Initialize Repositories
   final authRepository = AuthRepository();
   final uploadRepository = UploadRepository();
   final engagementRepository = EngagementRepository();
