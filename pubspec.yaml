@@ -3,3 +3,4 @@ environment:
   sdk: ^3.11.0
 workspace:
   - apps/bqopd_flutter
+  - apps/bqopd_web

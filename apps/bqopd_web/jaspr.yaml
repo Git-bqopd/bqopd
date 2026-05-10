@@ -1,0 +1,2 @@
+# We use client mode (SPA) to make it easy to host on Firebase alongside Flutter
+mode: client

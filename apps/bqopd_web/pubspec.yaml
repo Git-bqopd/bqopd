@@ -1,0 +1,19 @@
+name: bqopd_web
+description: The bqopd fanzine platform - Jaspr Web App.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  jaspr: ^0.23.1
+  jaspr_router: ^0.8.2
+  # Link the shared business logic
+  bqopd_core:
+    path: ../../packages/bqopd_core
+
+dev_dependencies:
+  jaspr_builder: ^0.23.1
+  build_runner: ^2.4.13
+  lints: ^5.0.0
