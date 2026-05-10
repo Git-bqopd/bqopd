@@ -1,7 +1,9 @@
 import 'dart:js_interop';
+
+import 'package:flutter/foundation.dart';
 // ignore: depend_on_referenced_packages
 import 'package:web/web.dart' as web;
-import 'package:flutter/foundation.dart';
+
 import '../env.dart';
 
 /// Global setter for the Maps initialization callback using modern JS interop.

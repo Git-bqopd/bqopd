@@ -1,7 +1,7 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
-import '../models/page_event.dart';
+import 'package:intl/intl.dart';
 
 class EventReaderView extends StatelessWidget {
   final List<PageEvent> events;

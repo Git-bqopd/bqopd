@@ -1,11 +1,12 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../components/dynamic_social_toolbar.dart';
 import '../widgets/page_wrapper.dart';
 import '../widgets/templates/basic_text_template.dart';
 import '../widgets/templates/calendar_template.dart';
-import '../models/reader_tool.dart';
 
 class PublisherPage extends StatefulWidget {
   const PublisherPage({super.key});

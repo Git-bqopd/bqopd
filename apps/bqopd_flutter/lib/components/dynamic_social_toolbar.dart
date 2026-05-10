@@ -4,11 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 
-import '../models/reader_tool.dart';
-import '../config/reader_tools_config.dart';
 import '../services/user_provider.dart';
-import '../services/engagement_service.dart';
 import 'dynamic_toolbar_button.dart';
 import '../widgets/auth_modal.dart';
 
@@ -48,11 +46,9 @@ class DynamicSocialToolbar extends StatefulWidget {
 
 class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
   final EngagementService _engagementService = EngagementService();
-
   int _likeCount = 0;
   int _commentCount = 0;
   int _viewCount = 0;
-
   StreamSubscription? _imageSub;
 
   @override
@@ -109,7 +105,6 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           widget.onToggleBonusRow(tool.bonusRow!);
         }
         break;
-
       case ToolAction.toggleLike:
         if (isGuest) {
           showDialog(context: context, builder: (c) => const AuthModal());
@@ -121,22 +116,16 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
           isCurrentlyLiked: isCurrentlyLiked,
         );
         break;
-
       case ToolAction.copyShareLink:
         if (widget.fanzineId == null) return;
         final link = 'https://bqopd.com/fanzine/${widget.fanzineId}?p=${widget.pageNumber ?? 1}';
         await Clipboard.setData(ClipboardData(text: link));
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Link copied to clipboard: $link')),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Link copied to clipboard: $link')));
         }
         break;
-
       case ToolAction.switchToGridView:
-        if (widget.onOpenGrid != null) {
-          widget.onOpenGrid!();
-        }
+        if (widget.onOpenGrid != null) widget.onOpenGrid!();
         break;
     }
   }
@@ -146,9 +135,7 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
     final userProvider = Provider.of<UserProvider>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    // Use CENTRALIZED LOGIC to filter tools
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
-      // 1. Check logical visibility based on environment/context
       bool isContextuallyVisible = ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
         userRole: userProvider.userAccount?.role ?? 'user',
@@ -159,12 +146,8 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
         isIndiciaPage: widget.isIndiciaPage,
         canOpenGrid: widget.onOpenGrid != null,
       );
-
       if (!isContextuallyVisible) return false;
-
-      // 2. Check personal visibility preferences set by the user
-      final isVisibleByUser = userProvider.socialButtonVisibility[tool.id] ?? true;
-      return isVisibleByUser;
+      return userProvider.socialButtonVisibility[tool.id] ?? true;
     }).toList();
 
     return Container(
@@ -190,22 +173,11 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
               },
             );
           }
-
-          bool isActive = (tool.action == ToolAction.openBonusRow)
-              ? widget.activeBonusRow == tool.bonusRow
-              : false;
-
+          bool isActive = (tool.action == ToolAction.openBonusRow) ? widget.activeBonusRow == tool.bonusRow : false;
           int? count;
           if (tool.id == 'Comment') count = _commentCount;
           if (tool.id == 'Views') count = _viewCount;
-
-          return DynamicToolbarButton(
-            tool: tool,
-            isActive: isActive,
-            isDarkMode: isDarkMode,
-            count: count,
-            onPressed: () => _handleToolAction(tool, false),
-          );
+          return DynamicToolbarButton(tool: tool, isActive: isActive, isDarkMode: isDarkMode, count: count, onPressed: () => _handleToolAction(tool, false));
         }).toList(),
       ),
     );

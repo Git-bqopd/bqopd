@@ -1,18 +1,15 @@
+import 'package:bqopd_core/bqopd_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
-import '../models/fanzine.dart';
-import '../models/fanzine_page.dart';
-import '../services/username_service.dart';
-import '../services/user_bootstrap.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+
 import '../services/user_provider.dart';
-import '../blocs/fanzine_editor_bloc.dart';
 import 'base_fanzine_workspace.dart';
 import 'folio_image_selector_modal.dart';
 import 'reader_panels/credits_panel.dart';

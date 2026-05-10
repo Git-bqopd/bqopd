@@ -1,7 +1,7 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
-import '../services/view_service.dart';
-import '../models/reader_tool.dart';
+
 import 'readers/fanzine_grid_renderer.dart';
 import 'readers/fanzine_list_renderer.dart';
 

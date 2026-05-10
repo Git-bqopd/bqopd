@@ -1,5 +1,6 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
-import '../../services/view_service.dart';
+
 import '../stats_table.dart';
 
 class ViewsPanel extends StatelessWidget {

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+
 import '../calendar_editor_widget.dart';
 import '../templates/basic_text_template.dart';
 

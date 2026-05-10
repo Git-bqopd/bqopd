@@ -1,7 +1,8 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
-import '../blocs/upload/upload_bloc.dart';
+
 import '../components/button.dart';
 
 class ImageUploadModal extends StatefulWidget {

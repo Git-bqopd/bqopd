@@ -1,6 +1,6 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
-import '../../config/reader_tools_config.dart';
-import '../../models/reader_tool.dart';
+
 import '../../components/dynamic_toolbar_button.dart';
 
 class SocialMatrixTab extends StatefulWidget {

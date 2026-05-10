@@ -1,13 +1,13 @@
+import 'package:bqopd_core/bqopd_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/user_provider.dart';
-import '../models/user_profile.dart';
-import 'image_upload_modal.dart';
 import 'follow_list_modal.dart';
+import 'image_upload_modal.dart';
 
 /// Renders the top section of a unified profile.
 class ProfileHeader extends StatefulWidget {

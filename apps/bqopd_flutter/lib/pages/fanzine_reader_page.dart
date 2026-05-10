@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -6,19 +8,17 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
-import '../services/view_service.dart';
 import '../services/user_provider.dart';
-import '../widgets/fanzine_widget.dart';
+import '../widgets/calendar_editor_widget.dart';
+import '../widgets/fanzine_curator_widget.dart';
 import '../widgets/fanzine_layout.dart';
+import '../widgets/fanzine_maker_widget.dart';
+import '../widgets/fanzine_widget.dart';
+import '../widgets/login_widget.dart';
 import '../widgets/readers/fanzine_grid_renderer.dart';
 import '../widgets/readers/fanzine_list_renderer.dart';
 import '../widgets/readers/panel_column_renderer.dart';
-import '../widgets/fanzine_curator_widget.dart';
-import '../widgets/fanzine_maker_widget.dart';
-import '../widgets/calendar_editor_widget.dart';
-import '../widgets/login_widget.dart';
 import '../widgets/register_widget.dart';
-import '../models/reader_tool.dart';
 
 enum HeaderMode { fanzine, login, register }
 

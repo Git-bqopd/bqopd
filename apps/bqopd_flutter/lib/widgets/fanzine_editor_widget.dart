@@ -1,10 +1,8 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../models/fanzine.dart';
-import '../models/fanzine_page.dart';
-import '../blocs/fanzine_editor_bloc.dart';
+
 import 'base_fanzine_workspace.dart';
 
 /// Legacy Editor Widget mapped to the exact same logic as the Curator view.

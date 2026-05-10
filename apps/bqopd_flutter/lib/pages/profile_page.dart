@@ -1,25 +1,22 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:provider/provider.dart';
+
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
 
-import '../blocs/profile/profile_bloc.dart';
-import '../repositories/user_repository.dart';
-import '../repositories/engagement_repository.dart';
 import '../services/user_provider.dart';
-import '../services/user_bootstrap.dart';
-import '../services/username_service.dart';
-import '../widgets/profile_widget.dart';
-import '../widgets/page_wrapper.dart';
+import '../widgets/comment_item.dart';
 import '../widgets/image_upload_modal.dart';
 import '../widgets/image_view_modal.dart';
-import '../widgets/comment_item.dart';
+import '../widgets/page_wrapper.dart';
+import '../widgets/profile_widget.dart';
 import '../widgets/reader_panels/social_matrix_tab.dart';
 
 class ProfilePage extends StatelessWidget {

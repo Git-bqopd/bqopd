@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/fanzine.dart';
-import '../models/user_profile.dart';
-import '../models/user_account.dart';
+import 'package:bqopd_core/bqopd_core.dart'; // Import models from core
 
 class UserProvider with ChangeNotifier {
   User? _user;

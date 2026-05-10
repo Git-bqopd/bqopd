@@ -1,5 +1,5 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
-import '../../services/view_service.dart';
 
 /// A single row in the Fanzine Grid (Gallery) view representing a two-page spread.
 /// Uses a Stack for the header row to layer a larger Manila Envelope over standard paper.

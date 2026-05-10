@@ -1,6 +1,7 @@
 import 'package:bqopd/widgets/page_wrapper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../widgets/fanzine_curator_widget.dart';
 
 class FanzineEditorPage extends StatefulWidget {

@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
-import '../../services/view_service.dart';
-import '../../models/reader_tool.dart';
 import 'reader_page_item.dart';
 
 class FanzineListRenderer extends StatefulWidget {

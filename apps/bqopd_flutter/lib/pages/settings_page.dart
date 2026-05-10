@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/user_bootstrap.dart';
+import 'package:flutter/material.dart';
+
 import '../widgets/reader_panels/social_matrix_tab.dart'; // NEW
 
 class SettingsPage extends StatefulWidget {

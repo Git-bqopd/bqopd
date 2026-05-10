@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../utils/link_parser.dart';
 
 class TextReaderPanel extends StatelessWidget {

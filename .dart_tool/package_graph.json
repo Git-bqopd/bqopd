@@ -334,8 +334,13 @@
       "name": "bqopd_core",
       "version": "1.0.0",
       "dependencies": [
+        "bloc",
         "cloud_firestore",
+        "cloud_functions",
         "equatable",
+        "firebase_auth",
+        "firebase_storage",
+        "image",
         "meta"
       ]
     },

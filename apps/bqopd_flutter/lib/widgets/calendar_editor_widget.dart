@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../utils/con_week.dart';
-import '../models/page_event.dart';
+import 'package:flutter/material.dart';
 
 /// The editor settings widget for Calendar "Folios".
 /// Sits in the sidebar drawer or "Settings" tab of the Fanzine View Editor.

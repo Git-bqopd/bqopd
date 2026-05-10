@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/reader_tool.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 
 class DynamicToolbarButton extends StatelessWidget {
   final ReaderTool tool;
@@ -17,15 +17,50 @@ class DynamicToolbarButton extends StatelessWidget {
     this.count,
   });
 
+  /// Maps string identifiers from the core package to Flutter IconData.
+  IconData _getIcon(String? id) {
+    if (id == null) return Icons.help_outline;
+    switch (id) {
+      case 'article_outlined': return Icons.article_outlined;
+      case 'article': return Icons.article;
+      case 'chat_bubble_outline': return Icons.chat_bubble_outline;
+      case 'chat_bubble': return Icons.chat_bubble;
+      case 'favorite_border': return Icons.favorite_border;
+      case 'favorite': return Icons.favorite;
+      case 'share_outlined': return Icons.share_outlined;
+      case 'grid_view': return Icons.grid_view;
+      case 'settings_outlined': return Icons.settings_outlined;
+      case 'settings': return Icons.settings;
+      case 'play_circle_outline': return Icons.play_circle_outline;
+      case 'play_circle_filled': return Icons.play_circle_filled;
+      case 'tag': return Icons.tag;
+      case 'info_outline': return Icons.info_outline;
+      case 'info': return Icons.info;
+      case 'outdoor_grill': return Icons.outdoor_grill;
+      case 'edit_document': return Icons.edit_document;
+      case 'add_link': return Icons.add_link;
+      case 'link_outlined': return Icons.link_outlined;
+      case 'link': return Icons.link;
+      case 'bar_chart_outlined': return Icons.bar_chart_outlined;
+      case 'bar_chart': return Icons.bar_chart;
+      case 'manage_accounts_outlined': return Icons.manage_accounts_outlined;
+      case 'manage_accounts': return Icons.manage_accounts;
+      default: return Icons.help_outline;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    IconData currentIcon = tool.defaultIcon;
-
+    // Resolve which string ID to use based on state
+    String iconId = tool.defaultIcon;
     if (isActive && tool.activeIcon != null) {
-      currentIcon = tool.activeIcon!;
+      iconId = tool.activeIcon!;
     } else if (isDarkMode && tool.darkIcon != null) {
-      currentIcon = tool.darkIcon!;
+      iconId = tool.darkIcon!;
     }
+
+    // Convert string ID to Flutter IconData
+    final IconData currentIcon = _getIcon(iconId);
 
     // Match the _DrawerItem style from the old SocialToolbar
     Color color = Colors.black;

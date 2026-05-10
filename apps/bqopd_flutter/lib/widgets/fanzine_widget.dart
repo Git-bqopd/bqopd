@@ -1,10 +1,11 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../services/view_service.dart';
-import 'stats_table.dart';
+
 import 'login_widget.dart';
+import 'stats_table.dart';
 
 class FanzineWidget extends StatefulWidget {
   final String? fanzineShortCode;

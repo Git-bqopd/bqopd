@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import 'profile_page.dart';
 import 'fanzine_reader_page.dart';
+import 'profile_page.dart';
 
 class ShortLinkPage extends StatefulWidget {
   final String code;

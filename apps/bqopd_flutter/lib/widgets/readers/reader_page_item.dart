@@ -1,19 +1,15 @@
-import 'package:flutter/material.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-import '../../services/view_service.dart';
-import '../../services/engagement_service.dart';
-import '../../services/user_provider.dart';
-import '../../models/reader_tool.dart';
-import '../../models/panel_context.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../components/dynamic_social_toolbar.dart';
-import '../templates/calendar_template.dart';
+import '../../services/user_provider.dart';
+import '../auth_modal.dart';
 import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
-import '../auth_modal.dart';
+import '../templates/calendar_template.dart';
 
 class ReaderPageItem extends StatefulWidget {
   final String fanzineId;

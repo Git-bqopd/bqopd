@@ -1,12 +1,10 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../components/dynamic_social_toolbar.dart';
-import '../models/reader_tool.dart';
-import '../models/panel_context.dart';
-import '../widgets/reader_panels/panel_factory.dart';
 import '../widgets/reader_panels/panel_container.dart';
-import '../services/engagement_service.dart';
-import '../services/view_service.dart';
+import '../widgets/reader_panels/panel_factory.dart';
 
 class ImageViewModal extends StatefulWidget {
   final String imageUrl;

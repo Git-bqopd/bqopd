@@ -1,16 +1,18 @@
 import 'dart:typed_data';
-import 'package:file_picker/file_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:bqopd/widgets/page_wrapper.dart';
+
+// Import core logic
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+// Import local services that stayed in the Flutter app
 import '../services/user_provider.dart';
-import '../services/user_bootstrap.dart';
-import '../services/username_service.dart';
+import '../widgets/page_wrapper.dart';
 
 class CuratorDashboardPage extends StatefulWidget {
   const CuratorDashboardPage({super.key});
@@ -62,9 +64,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
             contentType: 'application/pdf',
             customMetadata: {
               'uploaderId': mounted
-                  ? Provider.of<UserProvider>(context, listen: false)
-                  .currentUserId ??
-                  'unknown'
+                  ? Provider.of<UserProvider>(context, listen: false).currentUserId ?? 'unknown'
                   : 'unknown',
               'originalName': fileName,
             },
@@ -74,8 +74,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text('Uploaded "$fileName". Processing started...')),
+              SnackBar(content: Text('Uploaded "$fileName". Processing started...')),
             );
           }
         }
@@ -102,8 +101,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     }
   }
@@ -115,12 +113,8 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
         title: const Text("Delete Fanzine?"),
         content: const Text("This will remove all images and data."),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text("Cancel")),
-          TextButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text("Delete", style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -132,13 +126,11 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           .httpsCallable('delete_fanzine')
           .call({'fanzineId': fanzineId});
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Deleted.")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Deleted.")));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     }
   }
@@ -194,17 +186,12 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
               ElevatedButton.icon(
                 onPressed: _isUploading ? null : _uploadPdf,
                 style: ElevatedButton.styleFrom(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
                 ),
                 icon: _isUploading
-                    ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.upload_file),
                 label: Text(_isUploading ? "Uploading..." : "Upload PDF"),
               ),
@@ -226,8 +213,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
 
   Widget _buildDraftsList() {
     return StreamBuilder<QuerySnapshot>(
-      // UPDATED: No longer checking status enum.
-      // We show all works that are not yet Live.
       stream: FirebaseFirestore.instance
           .collection('fanzines')
           .where('isLive', isEqualTo: false)
@@ -235,43 +220,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          final errorMsg = snapshot.error.toString();
-          if (errorMsg.contains('failed-precondition') ||
-              errorMsg.contains('requires an index')) {
-            final urlRegex =
-            RegExp(r'https://console\.firebase\.google\.com[^\s]+');
-            final match = urlRegex.firstMatch(errorMsg);
-            final indexUrl = match?.group(0);
-
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text("Database Index Required",
-                        style: TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text(
-                        "To view this list sorted by date, a Firestore index is needed.",
-                        textAlign: TextAlign.center),
-                    if (indexUrl != null) ...[
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => launchUrl(Uri.parse(indexUrl)),
-                        child: const Text("Create Index"),
-                      )
-                    ] else
-                      SelectableText(errorMsg,
-                          style: const TextStyle(
-                              fontSize: 10, color: Colors.grey)),
-                  ],
-                ),
-              ),
-            );
-          }
-          return Center(child: SelectableText('Error: $errorMsg'));
+          return Center(child: SelectableText('Error: ${snapshot.error}'));
         }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -279,8 +228,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
 
         final docs = snapshot.data!.docs;
         if (docs.isEmpty) {
-          return const Center(
-              child: Text("No items to review. All works are currently Live."));
+          return const Center(child: Text("No items to review. All works are currently Live."));
         }
 
         return SingleChildScrollView(
@@ -304,46 +252,24 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(data['title'] ?? 'Untitled',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis),
-                      Text("ID: $id",
-                          style: const TextStyle(
-                              fontSize: 10,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.grey)),
+                      Text(data['title'] ?? 'Untitled', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                      Text("ID: $id", style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey)),
                     ],
                   ),
                 )),
                 DataCell(Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(data['processingStatus'] ?? 'idle',
-                      style: const TextStyle(fontSize: 12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                  child: Text(data['processingStatus'] ?? 'idle', style: const TextStyle(fontSize: 12)),
                 )),
                 DataCell(_ErrorCounter(fanzineId: id)),
                 DataCell(Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.blue),
-                      tooltip: "Rescan",
-                      onPressed: () => _rescanFanzine(id),
-                    ),
+                    IconButton(icon: const Icon(Icons.refresh, color: Colors.blue), tooltip: "Rescan", onPressed: () => _rescanFanzine(id)),
                     const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => context.push('/workbench/$id'),
-                      child: const Text("Workbench"),
-                    ),
+                    ElevatedButton(onPressed: () => context.push('/workbench/$id'), child: const Text("Workbench")),
                     const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      tooltip: "Delete",
-                      onPressed: () => _deleteFanzine(id),
-                    ),
+                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), tooltip: "Delete", onPressed: () => _deleteFanzine(id)),
                   ],
                 )),
               ]);
@@ -360,12 +286,7 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           .collection('fanzines')
           .where('isLive', isEqualTo: false).snapshots(),
       builder: (context, fanzineSnapshot) {
-        if (fanzineSnapshot.hasError) {
-          return Center(child: Text("Error: ${fanzineSnapshot.error}"));
-        }
-        if (!fanzineSnapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+        if (!fanzineSnapshot.hasData) return const Center(child: CircularProgressIndicator());
 
         final Map<String, int> entityCounts = {};
         for (var doc in fanzineSnapshot.data!.docs) {
@@ -376,17 +297,10 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           }
         }
 
-        if (entityCounts.isEmpty) {
-          return const Center(
-              child: Text("No entities found in current reviews."));
-        }
+        if (entityCounts.isEmpty) return const Center(child: Text("No entities found in current reviews."));
 
         final sortedNames = entityCounts.keys.toList()
-          ..sort((a, b) {
-            int countCompare = entityCounts[b]!.compareTo(entityCounts[a]!);
-            if (countCompare != 0) return countCompare;
-            return a.compareTo(b);
-          });
+          ..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
 
         return ListView.separated(
           padding: const EdgeInsets.all(16),
@@ -395,7 +309,6 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
           itemBuilder: (context, index) {
             final name = sortedNames[index];
             final count = entityCounts[name]!;
-
             return _EntityRow(name: name, count: count);
           },
         );
@@ -407,190 +320,79 @@ class _CuratorDashboardPageState extends State<CuratorDashboardPage>
 class _EntityRow extends StatelessWidget {
   final String name;
   final int count;
-
   const _EntityRow({required this.name, required this.count});
 
   @override
   Widget build(BuildContext context) {
     final handle = normalizeHandle(name);
-
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('usernames')
-          .doc(handle)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('usernames').doc(handle).snapshots(),
       builder: (context, snapshot) {
         Widget statusWidget;
-
         if (!snapshot.hasData) {
-          statusWidget = const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2));
+          statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
         } else if (snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           String linkText = '/$handle';
-
-          if (data['isAlias'] == true) {
-            final redirect = data['redirect'] ?? 'unknown';
-            linkText = '/$handle -> /$redirect';
-          }
-
+          if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
           statusWidget = InkWell(
             onTap: () => context.go('/$handle'),
-            borderRadius: BorderRadius.circular(4),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(
-                linkText,
-                style: const TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
-                    decoration: TextDecoration.underline),
-              ),
-            ),
+            child: Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
           );
         } else {
           statusWidget = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextButton(
-                onPressed: () => _createProfile(context, name),
-                child:
-                const Text("Create", style: TextStyle(color: Colors.green)),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => _createAlias(context, name),
-                child:
-                const Text("Alias", style: TextStyle(color: Colors.orange)),
-              ),
+              TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green))),
+              TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange))),
             ],
           );
         }
-
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 40,
-                child: Text(count.toString(),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: Colors.grey)),
-              ),
-              Expanded(
-                child: Text(name, style: const TextStyle(fontSize: 16)),
-              ),
-              statusWidget,
-            ],
-          ),
+          child: Row(children: [
+            SizedBox(width: 40, child: Text(count.toString(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
+            Expanded(child: Text(name, style: const TextStyle(fontSize: 16))),
+            statusWidget,
+          ]),
         );
       },
     );
   }
 
   Future<void> _createProfile(BuildContext context, String name) async {
-    String first = name;
-    String last = "";
-
-    if (name.contains(' ')) {
-      final parts = name.split(' ');
-      first = parts.first;
-      last = parts.sublist(1).join(' ');
-    }
-
-    try {
-      await createManagedProfile(
-          firstName: first, lastName: last, bio: "Auto-created from dashboard");
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Profile Created!")));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
-    }
+    String first = name; String last = "";
+    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    try { await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from dashboard"); if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!"))); } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
   }
 
   Future<void> _createAlias(BuildContext context, String name) async {
-    final target = await showDialog<String>(
-        context: context,
-        builder: (c) {
-          final controller = TextEditingController();
-          return AlertDialog(
-            title: Text("Create Alias for '$name'"),
-            content: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text("Enter EXISTING username (target):"),
-              TextField(
-                  controller: controller,
-                  decoration:
-                  const InputDecoration(hintText: "e.g. julius-schwartz"))
-            ]),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(c),
-                  child: const Text("Cancel")),
-              TextButton(
-                  onPressed: () => Navigator.pop(c, controller.text.trim()),
-                  child: const Text("Create Alias")),
-            ],
-          );
-        });
-
+    final target = await showDialog<String>(context: context, builder: (c) {
+      final ctrl = TextEditingController();
+      return AlertDialog(title: Text("Alias for '$name'"), content: TextField(controller: ctrl, decoration: const InputDecoration(hintText: "Target handle...")), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text("Create"))]);
+    });
     if (target == null || target.isEmpty) return;
-
-    try {
-      await createAlias(aliasHandle: name, targetHandle: target);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Alias Created!")));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
-    }
+    try { await createAlias(aliasHandle: name, targetHandle: target); if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!"))); } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"))); }
   }
 }
 
 class _ErrorCounter extends StatelessWidget {
   final String fanzineId;
-
   const _ErrorCounter({required this.fanzineId});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('fanzines')
-          .doc(fanzineId)
-          .collection('pages')
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('fanzines').doc(fanzineId).collection('pages').snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) return const Center(child: Text("-"));
-
-        int ocrErrors = 0;
-        int entErrors = 0;
-
+        int ocrErrors = 0; int entErrors = 0;
         for (var doc in snap.data!.docs) {
           final d = doc.data() as Map<String, dynamic>;
-          if (d['status'] == 'error' || (d['error_ocr'] ?? 0) > 0) ocrErrors++;
-          if ((d['error_entity_id'] ?? 0) > 0) entErrors++;
+          if (d['status'] == 'error') ocrErrors++;
         }
-
-        if (ocrErrors == 0 && entErrors == 0) {
-          return const Text("OK",
-              style:
-              TextStyle(color: Colors.green, fontWeight: FontWeight.bold));
-        }
-
-        return Text("OCR: $ocrErrors | Ent: $entErrors",
-            style: const TextStyle(
-                color: Colors.red, fontWeight: FontWeight.bold));
+        if (ocrErrors == 0 && entErrors == 0) return const Text("OK", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold));
+        return Text("OCR: $ocrErrors", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold));
       },
     );
   }

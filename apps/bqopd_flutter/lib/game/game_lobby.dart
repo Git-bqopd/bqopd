@@ -1,9 +1,9 @@
+import 'package:bqopd_core/bqopd_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../services/user_provider.dart';
-import 'game_models.dart';
-import 'game_service.dart';
 import 'combat_terminal.dart';
 
 class GameLobby extends StatefulWidget {
@@ -68,7 +68,7 @@ class _GameLobbyState extends State<GameLobby> {
                             userId, controller.text.trim());
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
-                        setState(() => isCreating = false);
+                        if (mounted) setState(() => isCreating = false);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text("Error: $e")));
@@ -118,12 +118,11 @@ class _GameLobbyState extends State<GameLobby> {
     );
   }
 
-  /// Shows logs Head-to-Head for the selected target.
   void _showLogsModal({required GameCharacter target}) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.black,
-      isScrollControlled: true, // Allow it to take more height if needed
+      isScrollControlled: true,
       builder: (context) {
         return FractionallySizedBox(
           heightFactor: 0.8,
@@ -174,7 +173,7 @@ class _GameLobbyState extends State<GameLobby> {
 
         return ListView.separated(
           separatorBuilder: (c, i) =>
-              const Divider(height: 1, color: Colors.white24),
+          const Divider(height: 1, color: Colors.white24),
           itemCount: logs.length,
           itemBuilder: (context, index) {
             final log = logs[index];
@@ -199,19 +198,6 @@ class _GameLobbyState extends State<GameLobby> {
     );
   }
 
-  BattleLog _mapToLog(String id, Map<String, dynamic> data) {
-    return BattleLog(
-      id: id,
-      attackerId: data['attackerId'],
-      defenderId: data['defenderId'],
-      attackerName: data['attackerName'] ?? 'Unknown',
-      defenderName: data['defenderName'] ?? 'Unknown',
-      logs: List<String>.from(data['logs'] ?? []),
-      winnerId: data['winnerId'],
-      timestamp: (data['timestamp'] as Timestamp).toDate(),
-    );
-  }
-
   Future<List<BattleLog>> _fetchHeadToHeadLogs(
       String myId, String enemyId) async {
     final db = FirebaseFirestore.instance;
@@ -222,16 +208,11 @@ class _GameLobbyState extends State<GameLobby> {
         .doc('data')
         .collection('game_battles');
 
-    // NOTE: Removed .orderBy() to avoid needing composite indexes on the server.
-    // We sort in memory instead.
-
-    // 1. Battles where I attacked them
     final q1 = await colRef
         .where('attackerId', isEqualTo: myId)
         .where('defenderId', isEqualTo: enemyId)
         .get();
 
-    // 2. Battles where they attacked me
     final q2 = await colRef
         .where('attackerId', isEqualTo: enemyId)
         .where('defenderId', isEqualTo: myId)
@@ -239,8 +220,20 @@ class _GameLobbyState extends State<GameLobby> {
 
     final allDocs = [...q1.docs, ...q2.docs];
 
-    final logs = allDocs.map((d) => _mapToLog(d.id, d.data())).toList();
-    // Sort descending by timestamp
+    final logs = allDocs.map((d) {
+      final data = d.data();
+      return BattleLog(
+        id: d.id,
+        attackerId: data['attackerId'],
+        defenderId: data['defenderId'],
+        attackerName: data['attackerName'] ?? 'Unknown',
+        defenderName: data['defenderName'] ?? 'Unknown',
+        logs: List<String>.from(data['logs'] ?? []),
+        winnerId: data['winnerId'],
+        timestamp: (data['timestamp'] as Timestamp).toDate(),
+      );
+    }).toList();
+
     logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return logs;
   }
@@ -261,12 +254,10 @@ class _GameLobbyState extends State<GameLobby> {
         backgroundColor: Colors.black,
         title: const Text("TERMINAL, CA // LOBBY",
             style: TextStyle(color: Colors.white, fontFamily: 'Courier')),
-        // Actions removed
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. My Characters Section
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.black54,
@@ -282,9 +273,9 @@ class _GameLobbyState extends State<GameLobby> {
                   onTap: () => _showCreateDialog(userId),
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration:
-                        BoxDecoration(border: Border.all(color: Colors.green)),
+                    BoxDecoration(border: Border.all(color: Colors.green)),
                     child: const Text("+ CREATE",
                         style: TextStyle(color: Colors.green, fontSize: 12)),
                   ),
@@ -371,7 +362,6 @@ class _GameLobbyState extends State<GameLobby> {
 
           const Divider(color: Colors.green),
 
-          // 2. Public List Header (Removed Global Feed Button)
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.black54,
@@ -395,13 +385,13 @@ class _GameLobbyState extends State<GameLobby> {
                 return ListView.separated(
                   itemCount: chars.length,
                   separatorBuilder: (c, i) =>
-                      const Divider(height: 1, color: Colors.grey),
+                  const Divider(height: 1, color: Colors.grey),
                   itemBuilder: (context, index) {
                     final enemy = chars[index];
                     return ListTile(
                       tileColor: Colors.black,
                       leading:
-                          const Icon(Icons.person_outline, color: Colors.green),
+                      const Icon(Icons.person_outline, color: Colors.green),
                       title: Text(enemy.name,
                           style: const TextStyle(
                               color: Colors.white, fontFamily: 'Courier')),
@@ -413,14 +403,13 @@ class _GameLobbyState extends State<GameLobby> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // LOGS Button (Specific)
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               foregroundColor: Colors.green,
                               side: const BorderSide(color: Colors.green),
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                              const EdgeInsets.symmetric(horizontal: 12),
                             ),
                             onPressed: () => _showLogsModal(target: enemy),
                             child: const Text("LOGS",
@@ -430,13 +419,12 @@ class _GameLobbyState extends State<GameLobby> {
                                     fontSize: 12)),
                           ),
                           const SizedBox(width: 8),
-                          // ATTACK Button
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.redAccent,
                               foregroundColor: Colors.black,
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                              const EdgeInsets.symmetric(horizontal: 12),
                             ),
                             onPressed: () => _startCombat(enemy),
                             child: const Text("ATTACK",

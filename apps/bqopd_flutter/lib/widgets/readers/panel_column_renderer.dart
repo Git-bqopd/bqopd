@@ -1,19 +1,14 @@
-import 'package:flutter/material.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
-import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
-import '../../services/view_service.dart';
-import '../../services/engagement_service.dart';
 import '../../services/user_provider.dart';
-import '../../models/reader_tool.dart';
-import '../../models/panel_context.dart';
-import '../../blocs/interaction/interaction_bloc.dart';
-
+import '../auth_modal.dart';
 import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
-import '../auth_modal.dart';
 
 class PanelColumnRenderer extends StatelessWidget {
   final String fanzineId;

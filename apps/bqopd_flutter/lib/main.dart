@@ -9,22 +9,11 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'env.dart';
 
-// Import from bqopd_core
+// Import all shared logic from our core package!
 import 'package:bqopd_core/bqopd_core.dart';
 
-// Services & Repositories
+// Services (Keep Flutter-specific providers in the app)
 import 'services/user_provider.dart';
-import 'repositories/user_repository.dart';
-import 'repositories/fanzine_repository.dart';
-import 'repositories/pipeline_repository.dart';
-import 'repositories/engagement_repository.dart';
-import 'repositories/auth_repository.dart';
-import 'repositories/upload_repository.dart';
-
-// BLoCs
-import 'blocs/auth/auth_bloc.dart';
-import 'blocs/upload/upload_bloc.dart';
-import 'blocs/interaction/interaction_bloc.dart';
 
 // Pages
 import 'pages/login_page.dart';
@@ -34,7 +23,6 @@ import 'pages/short_link_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/curator_dashboard_page.dart';
-import 'pages/curator_workbench_page.dart';
 import 'pages/fanzine_reader_page.dart';
 import 'pages/publisher_page.dart';
 import 'pages/moderator_feed_page.dart';
@@ -149,14 +137,6 @@ class _MyAppState extends State<MyApp> {
           path: '/moderator',
           name: 'moderatorFeed',
           builder: (context, state) => const ModeratorFeedPage(),
-        ),
-        GoRoute(
-          path: '/workbench/:fanzineId',
-          name: 'curatorWorkbench',
-          builder: (context, state) {
-            final fanzineId = state.pathParameters['fanzineId']!;
-            return CuratorWorkbenchPage(fanzineId: fanzineId);
-          },
         ),
         GoRoute(
           path: '/reader/:fanzineId',

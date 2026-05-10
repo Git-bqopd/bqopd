@@ -1,18 +1,16 @@
-import 'package:flutter/material.dart';
+// Core package provides logic and shared models
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../services/user_provider.dart';
-import '../widgets/page_wrapper.dart';
-import '../widgets/hashtag_bar.dart';
+
 import '../components/dynamic_social_toolbar.dart';
-import '../models/reader_tool.dart';
-import '../models/panel_context.dart';
-import '../widgets/reader_panels/panel_factory.dart';
+// Local app imports
+import '../services/user_provider.dart';
+import '../widgets/hashtag_bar.dart';
+import '../widgets/page_wrapper.dart';
 import '../widgets/reader_panels/panel_container.dart';
-import '../services/engagement_service.dart';
-import '../services/view_service.dart';
-import '../models/user_profile.dart';
+import '../widgets/reader_panels/panel_factory.dart';
 
 class ModeratorFeedPage extends StatefulWidget {
   const ModeratorFeedPage({super.key});
@@ -22,13 +20,12 @@ class ModeratorFeedPage extends StatefulWidget {
 }
 
 class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
-
   @override
   Widget build(BuildContext context) {
-    // Security Gate: Using isModerator from the refactored UserProvider
     final userProvider = Provider.of<UserProvider>(context);
     if (!userProvider.isModerator) {
-      return const Scaffold(body: Center(child: Text("Restricted Area. Authorized Personnel Only.")));
+      return const Scaffold(
+          body: Center(child: Text("Restricted Area. Authorized Personnel Only.")));
     }
 
     return Scaffold(
@@ -49,43 +46,7 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              final errorMsg = snapshot.error.toString();
-              if (errorMsg.contains('failed-precondition') ||
-                  errorMsg.contains('requires an index')) {
-                final urlRegex =
-                RegExp(r'https://console\.firebase\.google\.com[^\s]+');
-                final match = urlRegex.firstMatch(errorMsg);
-                final indexUrl = match?.group(0);
-
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text("Database Index Required",
-                            style: TextStyle(
-                                color: Colors.red, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        const Text(
-                            "To view the feed sorted by date, a Firestore index is needed.",
-                            textAlign: TextAlign.center),
-                        if (indexUrl != null) ...[
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: () => launchUrl(Uri.parse(indexUrl)),
-                            child: const Text("Create Index"),
-                          )
-                        ] else
-                          SelectableText(errorMsg,
-                              style: const TextStyle(
-                                  fontSize: 10, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              return Center(child: SelectableText("Error: $errorMsg"));
+              return Center(child: SelectableText("Error: ${snapshot.error}"));
             }
 
             if (!snapshot.hasData) {
@@ -160,18 +121,16 @@ class _ModeratorCardState extends State<_ModeratorCard> {
     final tags = widget.data['tags'] as Map<String, dynamic>? ?? {};
     final uploaderId = widget.data['uploaderId'] as String? ?? 'unknown';
 
-    final bool isApproved = tags.containsKey('approved') && (tags['approved'] as List).isNotEmpty;
+    final bool isApproved =
+        tags.containsKey('approved') && (tags['approved'] as List).isNotEmpty;
 
-    // Map the text layers
     final String tLinked = widget.data['text_linked'] ?? '';
     final String tCorrected = widget.data['text_corrected'] ?? widget.data['text'] ?? '';
     final String tRaw = widget.data['text_raw'] ?? '';
 
-    // AI baselines (Moderation cards might not be scored, but we supply empty strings safely)
-    final String tLinkedAi = widget.data['text_linked_ai'] ?? '';
-    final String tCorrectedAi = widget.data['text_corrected_ai'] ?? '';
-
-    final String actualText = tLinked.trim().isNotEmpty ? tLinked : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
+    final String actualText = tLinked.trim().isNotEmpty
+        ? tLinked
+        : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
 
     return Container(
       decoration: BoxDecoration(
@@ -181,7 +140,7 @@ class _ModeratorCardState extends State<_ModeratorCard> {
           BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
         ],
         border: isApproved
-            ? Border.all(color: Colors.green.withValues(alpha: 0.5), width: 2)
+            ? Border.all(color: Colors.green.withOpacity(0.5), width: 2)
             : null,
       ),
       child: Column(
@@ -193,11 +152,11 @@ class _ModeratorCardState extends State<_ModeratorCard> {
               color: Colors.amber[100],
               child: const Text(
                 "NOT YET APPROVED",
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
+                style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
                 textAlign: TextAlign.center,
               ),
             ),
-
           if (imageUrl != null)
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
@@ -205,23 +164,28 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                 imageUrl,
                 fit: BoxFit.cover,
                 height: 400,
-                errorBuilder: (c, e, s) => const SizedBox(height: 200, child: Center(child: Icon(Icons.broken_image))),
+                errorBuilder: (c, e, s) => const SizedBox(
+                    height: 200, child: Center(child: Icon(Icons.broken_image))),
               ),
             ),
-
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 FutureBuilder<DocumentSnapshot>(
-                  future: FirebaseFirestore.instance.collection('profiles').doc(uploaderId).get(),
+                  future: FirebaseFirestore.instance
+                      .collection('profiles')
+                      .doc(uploaderId)
+                      .get(),
                   builder: (context, snap) {
                     if (snap.hasData && snap.data!.exists) {
                       final profile = UserProfile.fromFirestore(snap.data!);
-                      return Text("Uploaded by @${profile.username}", style: const TextStyle(color: Colors.grey, fontSize: 12));
+                      return Text("Uploaded by @${profile.username}",
+                          style: const TextStyle(color: Colors.grey, fontSize: 12));
                     }
-                    return Text("Uploaded by @$uploaderId", style: const TextStyle(color: Colors.grey, fontSize: 12));
+                    return Text("Uploaded by @$uploaderId",
+                        style: const TextStyle(color: Colors.grey, fontSize: 12));
                   },
                 ),
                 const SizedBox(height: 8),
@@ -232,7 +196,7 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                   imageId: widget.docId,
                   fanzineType: null,
                   isGame: false,
-                  isEditingMode: true, // Moderation acts like an editor mode
+                  isEditingMode: true,
                   activeBonusRow: _activePanel,
                   onToggleBonusRow: (rowType) {
                     setState(() {
@@ -246,24 +210,22 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                     title: '',
                     isInline: true,
                     inlineColor: PanelFactory.getInlineColor(_activePanel!),
-                    child: PanelFactory.buildPanelContent(
-                        PanelContext(
-                          type: _activePanel!,
-                          imageId: widget.docId,
-                          actualText: actualText,
-                          textRaw: tRaw,
-                          textCorrected: tCorrected,
-                          textLinked: tLinked,
-                          textCorrectedAi: tCorrectedAi, // Fixed: Provided AI Baseline
-                          textLinkedAi: tLinkedAi,       // Fixed: Provided AI Baseline
-                          isEditingMode: true,
-                          viewService: _viewService,
-                          engagementService: _engagementService,
-                          commentController: _commentController,
-                          onSubmitComment: _submitComment,
-                          fontSizeNotifier: _fontSizeNotifier,
-                        )
-                    ),
+                    child: PanelFactory.buildPanelContent(PanelContext(
+                      type: _activePanel!,
+                      imageId: widget.docId,
+                      actualText: actualText,
+                      textRaw: tRaw,
+                      textCorrected: tCorrected,
+                      textLinked: tLinked,
+                      textCorrectedAi: widget.data['text_corrected_ai'] ?? '',
+                      textLinkedAi: widget.data['text_linked_ai'] ?? '',
+                      isEditingMode: true,
+                      viewService: _viewService,
+                      engagementService: _engagementService,
+                      commentController: _commentController,
+                      onSubmitComment: _submitComment,
+                      fontSizeNotifier: _fontSizeNotifier,
+                    )),
                   ),
                 ],
               ],

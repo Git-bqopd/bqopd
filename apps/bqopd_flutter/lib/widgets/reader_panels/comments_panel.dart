@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../blocs/interaction/interaction_bloc.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../services/user_provider.dart';
-import '../comment_item.dart';
 import '../auth_modal.dart';
+import '../comment_item.dart';
 
 class CommentsPanel extends StatefulWidget {
   final String imageId;

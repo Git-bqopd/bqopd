@@ -1,12 +1,9 @@
+import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
-import '../blocs/fanzine_editor_bloc.dart';
-import '../repositories/fanzine_repository.dart';
-import '../repositories/pipeline_repository.dart';
+
 import '../services/user_provider.dart';
-import '../models/fanzine.dart';
-import '../models/fanzine_page.dart';
 
 /// A universal UI shell for Fanzine Editor configurations (Curator, Maker, Editor).
 /// This widget provides the Manila Envelope container and TabBar structure,
