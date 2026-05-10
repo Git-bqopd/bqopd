@@ -30,17 +30,49 @@
         window.loginWithFirebase = function(email, password) {
             return firebase.auth().signInWithEmailAndPassword(email, password);
         };
+
+        window.registerWithFirebase = function(email, password, username) {
+            return firebase.auth().createUserWithEmailAndPassword(email, password).then(function(userCredential) {
+                var user = userCredential.user;
+                var db = firebase.firestore();
+                var batch = db.batch();
+
+                // Mirror the Flutter registration behavior
+                batch.set(db.collection('Users').doc(user.uid), {
+                    uid: user.uid,
+                    email: user.email,
+                    username: username,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    Editor: false,
+                    bio: '',
+                    firstName: '',
+                    lastName: ''
+                });
+
+                batch.set(db.collection('usernames').doc(username.toLowerCase()), {
+                    uid: user.uid,
+                    email: user.email,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                return batch.commit();
+            });
+        };
+
         window.logoutFromFirebase = function() {
             return firebase.auth().signOut();
         };
+
         window.getCurrentUserId = function() {
             var user = firebase.auth().currentUser;
             return user ? user.uid : null;
         };
+
         window.getCurrentUserEmail = function() {
             var user = firebase.auth().currentUser;
             return user ? user.email : null;
         };
+
         window.onAuthStateChangedListener = function(callback) {
             firebase.auth().onAuthStateChanged(function(user) {
                 callback(user ? user.uid : null, user ? user.email : null);

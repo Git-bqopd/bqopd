@@ -7,6 +7,9 @@ import 'package:bqopd_core/src/models/auth_user.dart';
 @JS('window.loginWithFirebase')
 external JSPromise _loginWithFirebase(JSString email, JSString password);
 
+@JS('window.registerWithFirebase')
+external JSPromise _registerWithFirebase(JSString email, JSString password, JSString username);
+
 @JS('window.logoutFromFirebase')
 external JSPromise _logoutFromFirebase();
 
@@ -46,7 +49,7 @@ class WebAuthRepository implements IAuthRepository {
 
   @override
   Future<void> register({required String email, required String password, required String username}) async {
-    throw UnimplementedError('Registration via Jaspr not fully implemented yet.');
+    await _registerWithFirebase(email.toJS, password.toJS, username.toJS).toDart;
   }
 
   @override
