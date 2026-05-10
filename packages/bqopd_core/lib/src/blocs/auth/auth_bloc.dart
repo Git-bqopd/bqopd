@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:bqopd_core/bqopd_core.dart';
+
+// Use relative imports to avoid pulling in the master bqopd_core.dart
+// which contains Flutter-dependent exports.
+import '../../interfaces/auth_repository_interface.dart';
+import '../../models/auth_user.dart';
 
 abstract class AuthEvent extends Equatable {
   @override
@@ -12,7 +15,7 @@ abstract class AuthEvent extends Equatable {
 class AuthSubscriptionRequested extends AuthEvent {}
 
 class AuthUserChanged extends AuthEvent {
-  final User? user;
+  final AuthUser? user;
   AuthUserChanged(this.user);
   @override
   List<Object?> get props => [user];
@@ -39,7 +42,7 @@ enum AuthStatus { initial, loading, authenticated, unauthenticated, failure }
 
 class AuthState extends Equatable {
   final AuthStatus status;
-  final User? user;
+  final AuthUser? user;
   final String? errorMessage;
 
   const AuthState({
@@ -53,10 +56,10 @@ class AuthState extends Equatable {
 }
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  final AuthRepository _repository;
-  StreamSubscription<User?>? _userSubscription;
+  final IAuthRepository _repository;
+  StreamSubscription<AuthUser?>? _userSubscription;
 
-  AuthBloc({required AuthRepository repository})
+  AuthBloc({required IAuthRepository repository})
       : _repository = repository,
         super(const AuthState()) {
     on<AuthSubscriptionRequested>(_onSubscriptionRequested);

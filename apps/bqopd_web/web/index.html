@@ -25,6 +25,29 @@
         firebase.initializeApp(firebaseConfig);
     </script>
 
+    <!-- Firebase Auth JS Bridge for pure Dart interop -->
+    <script>
+        window.loginWithFirebase = function(email, password) {
+            return firebase.auth().signInWithEmailAndPassword(email, password);
+        };
+        window.logoutFromFirebase = function() {
+            return firebase.auth().signOut();
+        };
+        window.getCurrentUserId = function() {
+            var user = firebase.auth().currentUser;
+            return user ? user.uid : null;
+        };
+        window.getCurrentUserEmail = function() {
+            var user = firebase.auth().currentUser;
+            return user ? user.email : null;
+        };
+        window.onAuthStateChangedListener = function(callback) {
+            firebase.auth().onAuthStateChanged(function(user) {
+                callback(user ? user.uid : null, user ? user.email : null);
+            });
+        };
+    </script>
+
     <!-- Jaspr compiles main.dart to main.dart.js -->
     <script src="main.dart.js" defer></script>
 </head>

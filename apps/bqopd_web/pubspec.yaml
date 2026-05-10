@@ -12,8 +12,9 @@ jaspr:
 dependencies:
   jaspr: ^0.23.1
   jaspr_router: ^0.8.2
-  # Temporarily removed bqopd_core and firebase_core
-  # to prevent dart:ui compile/runtime crashes
+  bloc: ^8.1.4
+  bqopd_core:
+    path: ../../packages/bqopd_core
 
 dev_dependencies:
   jaspr_builder: ^0.23.1

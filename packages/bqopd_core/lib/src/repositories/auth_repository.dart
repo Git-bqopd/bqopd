@@ -1,22 +1,29 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:bqopd_core/bqopd_core.dart';
+import 'package:bqopd_core/bqopd_core.dart'; // Retained for ensureUserDocument()
 
-class AuthRepository {
+import '../interfaces/auth_repository_interface.dart';
+import '../models/auth_user.dart';
+
+class AuthRepository implements IAuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  @override
+  Stream<AuthUser?> get authStateChanges => _auth.authStateChanges().map((u) {
+    return u != null ? AuthUser(uid: u.uid, email: u.email) : null;
+  });
 
-  Future<UserCredential> login(String email, String password) async {
-    final cred = await _auth.signInWithEmailAndPassword(
+  @override
+  Future<void> login(String email, String password) async {
+    await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
     await ensureUserDocument();
-    return cred;
   }
 
+  @override
   Future<void> register({
     required String email,
     required String password,
@@ -46,9 +53,14 @@ class AuthRepository {
     }
   }
 
+  @override
   Future<void> logout() async {
     await _auth.signOut();
   }
 
-  User? get currentUser => _auth.currentUser;
+  @override
+  AuthUser? get currentUser {
+    final u = _auth.currentUser;
+    return u != null ? AuthUser(uid: u.uid, email: u.email) : null;
+  }
 }

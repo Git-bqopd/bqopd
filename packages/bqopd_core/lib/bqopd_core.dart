@@ -6,15 +6,19 @@ export 'src/config/reader_tools_config.dart';
 
 // Models
 export 'src/models/article.dart';
+export 'src/models/auth_user.dart';
 export 'src/models/fanzine.dart';
 export 'src/models/fanzine_page.dart';
 export 'src/models/page_event.dart';
 export 'src/models/reader_tool.dart';
-export 'src/models/panel_context.dart'; // Ensure this file exists in src/models
+export 'src/models/panel_context.dart';
 export 'src/models/game_models.dart';
 export 'src/models/static_page.dart';
 export 'src/models/user_account.dart';
 export 'src/models/user_profile.dart';
+
+// Interfaces
+export 'src/interfaces/auth_repository_interface.dart';
 
 // Utils
 export 'src/utils/con_week.dart';
