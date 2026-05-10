@@ -1,14 +1,14 @@
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr/html.dart'; // Modern import for div, text, h1, etc.
+import 'package:jaspr/dom.dart'; // REQUIRED in 0.23.1+ for div, p, h1, text
 import 'package:bqopd_core/bqopd_core.dart';
 
 class App extends StatelessComponent {
   @override
-  Iterable<Component> build(BuildContext context) sync* {
+  Component build(BuildContext context) {
     // Generate test data from our core package utility
     final testWeeks = generateConWeeks("February", "2026");
 
-    yield div(classes: 'app-container', [
+    return div(classes: 'app-container', [
       h1([text('bqopd Jaspr Web App')]),
       p([text('Hello world! The Jaspr app is successfully running in the workspace.')]),
 

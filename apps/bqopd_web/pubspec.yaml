@@ -6,6 +6,10 @@ resolution: workspace
 environment:
   sdk: ^3.11.0
 
+# Added the required Jaspr CLI options here
+jaspr:
+  mode: client
+
 dependencies:
   jaspr: ^0.23.1
   jaspr_router: ^0.8.2

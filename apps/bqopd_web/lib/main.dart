@@ -1,4 +1,4 @@
-import 'package:jaspr/client.dart'; // 0.x entrypoint for client apps
+import 'package:jaspr/client.dart';
 import 'app.dart';
 
 void main() {
