@@ -5,8 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>bqopd Web</title>
     <link rel="stylesheet" href="styles.css">
+
+    <!-- Firebase SDK (Compat libraries required to interop with FlutterFire on Web) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+    <!-- Initialize Firebase via JS so the Dart core plugins can automatically hook into the [DEFAULT] app -->
+    <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g",
+          authDomain: "bqopd-9ce06.firebaseapp.com",
+          projectId: "bqopd-9ce06",
+          storageBucket: "bqopd-9ce06.appspot.com",
+          messagingSenderId: "17060476719",
+          appId: "1:17060476719:web:9c7e201c50938561e2d3da"
+        };
+        firebase.initializeApp(firebaseConfig);
+    </script>
+
     <!-- Jaspr compiles main.dart to main.dart.js -->
-    <script src="main.dart.js"></script>
+    <script src="main.dart.js" defer></script>
 </head>
 <body>
 <!-- Jaspr will mount the App component to the body -->

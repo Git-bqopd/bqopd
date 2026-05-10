@@ -6,16 +6,14 @@ resolution: workspace
 environment:
   sdk: ^3.11.0
 
-# Added the required Jaspr CLI options here
 jaspr:
   mode: client
 
 dependencies:
   jaspr: ^0.23.1
   jaspr_router: ^0.8.2
-  # Link the shared business logic
-  bqopd_core:
-    path: ../../packages/bqopd_core
+  # Temporarily removed bqopd_core and firebase_core
+  # to prevent dart:ui compile/runtime crashes
 
 dev_dependencies:
   jaspr_builder: ^0.23.1
