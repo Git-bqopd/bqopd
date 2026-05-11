@@ -1,73 +1,105 @@
 body {
     font-family: Arial, sans-serif;
-    background-color: #F1B255; /* Manila Envelope Color */
+    background-color: #e5e5e5;
     margin: 0;
-    padding: 40px 20px;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
 }
 
-.app-container {
-    background-color: white; /* White Sticker */
-    padding: 32px;
-    border-radius: 12px;
-    max-width: 800px;
-    margin: 0 auto;
+/* Manila Envelope Aesthetic */
+.manila-envelope {
+    background-color: #F1B255;
+    padding: 10px;
+    width: 100%;
+    max-width: 450px;
+    aspect-ratio: 5 / 8;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-h1 {
-    color: #333;
-    margin-top: 0;
-}
-
-.core-test {
-    margin-top: 24px;
-    padding: 16px;
-    background-color: #f5f5f5;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-}
-
-.auth-form {
+/* White Sticker Aesthetic */
+.white-sticker {
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    flex: 1;
+    padding: 32px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-width: 300px;
-    margin-top: 20px;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
 }
 
-.auth-form input {
-    padding: 10px;
+/* Utility Classes */
+.flex-col { display: flex; flex-direction: column; }
+.flex-row { display: flex; flex-direction: row; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.w-full { width: 100%; }
+.gap-2 { gap: 8px; }
+.gap-4 { gap: 16px; }
+.mt-4 { margin-top: 16px; }
+.font-bold { font-weight: bold; }
+.text-center { text-align: center; }
+.text-lg { font-size: 20px; }
+
+/* Form Elements */
+input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 12px;
     border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 14px;
+    border-radius: 12px;
+    box-sizing: border-box;
+    font-size: 16px;
 }
 
-button {
-    padding: 12px 16px;
-    background-color: #333;
+button.btn-primary {
+    width: 100%;
+    padding: 16px;
+    background-color: #808080;
     color: white;
     border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
+    border-radius: 12px;
+    font-size: 16px;
     font-weight: bold;
+    cursor: pointer;
 }
 
-button:hover {
-    background-color: #555;
+button.btn-primary:hover {
+    background-color: #666;
 }
 
-.logout-btn {
-    margin-top: 20px;
-    background-color: #d9534f;
+button.btn-logout {
+    padding: 8px 16px;
+    background-color: transparent;
+    color: black;
+    text-decoration: underline;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
 }
 
-.logout-btn:hover {
-    background-color: #c9302c;
+a {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+a:hover {
+    text-decoration: underline;
 }
 
 .error-msg {
     color: #d9534f;
-    margin-top: 16px;
     font-weight: bold;
+    margin-top: 8px;
+    text-align: center;
 }

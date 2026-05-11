@@ -52,6 +52,8 @@
       "name": "bqopd_web",
       "version": "0.0.0",
       "dependencies": [
+        "bloc",
+        "bqopd_core",
         "jaspr",
         "jaspr_router"
       ],
@@ -115,6 +117,27 @@
         "path",
         "source_gen",
         "yaml"
+      ]
+    },
+    {
+      "name": "bqopd_core",
+      "version": "1.0.0",
+      "dependencies": [
+        "bloc",
+        "cloud_firestore",
+        "cloud_functions",
+        "equatable",
+        "firebase_auth",
+        "firebase_storage",
+        "image",
+        "meta"
+      ]
+    },
+    {
+      "name": "bloc",
+      "version": "8.1.4",
+      "dependencies": [
+        "meta"
       ]
     },
     {
@@ -425,20 +448,6 @@
       "dependencies": []
     },
     {
-      "name": "bqopd_core",
-      "version": "1.0.0",
-      "dependencies": [
-        "bloc",
-        "cloud_firestore",
-        "cloud_functions",
-        "equatable",
-        "firebase_auth",
-        "firebase_storage",
-        "image",
-        "meta"
-      ]
-    },
-    {
       "name": "flutter",
       "version": "0.0.0",
       "dependencies": [
@@ -717,6 +726,15 @@
       ]
     },
     {
+      "name": "image",
+      "version": "4.8.0",
+      "dependencies": [
+        "archive",
+        "meta",
+        "xml"
+      ]
+    },
+    {
       "name": "web",
       "version": "1.1.1",
       "dependencies": []
@@ -772,15 +790,6 @@
         "stream_transform",
         "vm_service",
         "watcher"
-      ]
-    },
-    {
-      "name": "image",
-      "version": "4.8.0",
-      "dependencies": [
-        "archive",
-        "meta",
-        "xml"
       ]
     },
     {
@@ -867,13 +876,6 @@
         "stream_channel",
         "string_scanner",
         "term_glyph"
-      ]
-    },
-    {
-      "name": "bloc",
-      "version": "8.1.4",
-      "dependencies": [
-        "meta"
       ]
     },
     {
@@ -1438,18 +1440,6 @@
       ]
     },
     {
-      "name": "csslib",
-      "version": "1.0.2",
-      "dependencies": [
-        "source_span"
-      ]
-    },
-    {
-      "name": "vm_service",
-      "version": "15.2.0",
-      "dependencies": []
-    },
-    {
       "name": "xml",
       "version": "6.6.1",
       "dependencies": [
@@ -1465,6 +1455,18 @@
         "path",
         "posix"
       ]
+    },
+    {
+      "name": "csslib",
+      "version": "1.0.2",
+      "dependencies": [
+        "source_span"
+      ]
+    },
+    {
+      "name": "vm_service",
+      "version": "15.2.0",
+      "dependencies": []
     },
     {
       "name": "leak_tracker_testing",

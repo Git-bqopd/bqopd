@@ -1,10 +1,17 @@
 import 'dart:async';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr/dom.dart'; // REQUIRED for Jaspr 0.23.x
+import 'package:jaspr/dom.dart';
+import 'package:jaspr_router/jaspr_router.dart'; // Restored: Required for Router and Route components
 
-// Targeted imports to completely bypass the master bqopd_core.dart (which houses Flutter imports)
+// BLoC & Firebase Repository from the shared core
 import 'package:bqopd_core/src/blocs/auth/auth_bloc.dart';
 import 'repositories/web_auth_repository.dart';
+
+// UI Pages
+import 'pages/home_page.dart';
+import 'pages/login_page.dart';
+import 'pages/register_page.dart';
+import 'pages/profile_page.dart';
 
 class App extends StatefulComponent {
   const App({super.key});
@@ -19,81 +26,79 @@ class _AppState extends State<App> {
   AuthState? authState;
   StreamSubscription? _sub;
 
-  String _email = '';
-  String _password = '';
+  bool _hasError = false;
+  String _errorMsg = '';
 
   @override
   void initState() {
     super.initState();
-    // 1. Initialize our JS Interop Auth Repository
-    authRepository = WebAuthRepository();
+    try {
+      // Initialize our JS Interop Auth Repository
+      authRepository = WebAuthRepository();
 
-    // 2. Inject it into our shared Core BLoC
-    authBloc = AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested());
-    authState = authBloc.state;
+      // Inject it into our shared Core BLoC
+      authBloc = AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested());
+      authState = authBloc.state;
 
-    // 3. Listen to state changes and rebuild the Jaspr UI
-    _sub = authBloc.stream.listen((state) {
-      setState(() {
-        authState = state;
+      // Listen to state changes to rebuild the Routing layer
+      _sub = authBloc.stream.listen((state) {
+        setState(() {
+          authState = state;
+        });
       });
-    });
+    } catch (e) {
+      // Catch initialization errors (like JS interop issues) to prevent a blank white screen
+      _hasError = true;
+      _errorMsg = e.toString();
+      print("App Initialization Error: $e");
+    }
   }
 
   @override
   void dispose() {
     _sub?.cancel();
-    authBloc.close();
+    if (!_hasError) {
+      authBloc.close();
+    }
     super.dispose();
   }
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'app-container', [
-      h1([text('bqopd Jaspr Web App')]),
-      p([text('System Stable. UI Rendering successfully!')]),
+    if (_hasError) {
+      return div(classes: 'error-msg', [
+        text('Error loading app: $_errorMsg. Please check the console.')
+      ]);
+    }
 
-      div(classes: 'core-test', [
-        h3([text('Phase 5 Complete:')]),
-        p([text('Firebase and Auth BLoC successfully integrated into Jaspr using Interface Abstraction!')]),
-
-        div(classes: 'auth-status', [
-          p([text('Auth Status: ${authState?.status.name ?? "unknown"}')]),
-          p([text('User Email: ${authState?.user?.email ?? "none"}')]),
-        ]),
-
-        // Interactive HTML to test the BLoC integration
-        if (authState?.status == AuthStatus.authenticated)
-          button(
-              classes: 'logout-btn',
-              events: {'click': (e) {
-                authBloc.add(LogoutRequested());
-              }},
-              [text('Logout')]
-          )
-        else
-          div(classes: 'auth-form', [
-            input(
-              attributes: {'type': 'email', 'placeholder': 'Email'},
-              events: {'input': (e) => _email = (e.target as dynamic).value},
-            ),
-            input(
-              attributes: {'type': 'password', 'placeholder': 'Password'},
-              events: {'input': (e) => _password = (e.target as dynamic).value},
-            ),
-            button(
-                events: {'click': (e) {
-                  if (_email.isNotEmpty && _password.isNotEmpty) {
-                    authBloc.add(LoginRequested(_email, _password));
-                  }
-                }},
-                [text('Login')]
-            ),
-
-            if (authState?.status == AuthStatus.failure)
-              p(classes: 'error-msg', [text(authState?.errorMessage ?? 'Login failed.')])
-          ])
-      ])
+    // Wrap the router in a standard div to ensure stable DOM mounting
+    return div(id: 'app-root', [
+      Router(
+        routes: [
+          Route(
+            path: '/',
+            builder: (context, state) => HomePage(authState: authState, authBloc: authBloc),
+          ),
+          Route(
+            path: '/login',
+            builder: (context, state) => LoginPage(authState: authState, authBloc: authBloc),
+          ),
+          Route(
+            path: '/register',
+            builder: (context, state) => RegisterPage(authState: authState, authBloc: authBloc),
+          ),
+          Route(
+            path: '/profile',
+            builder: (context, state) {
+              // Protected Route Logic
+              if (authState?.status != AuthStatus.authenticated) {
+                return LoginPage(authState: authState, authBloc: authBloc);
+              }
+              return ProfilePage(authState: authState, authBloc: authBloc);
+            },
+          ),
+        ],
+      )
     ]);
   }
 }
