@@ -1,7 +1,12 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:bqopd_core/bqopd_core.dart';
+
+// Relative imports for purity
+import '../models/fanzine.dart';
+import '../models/fanzine_page.dart';
+import '../interfaces/fanzine_repository_interface.dart';
+import '../interfaces/pipeline_repository_interface.dart';
 
 abstract class FanzineEditorEvent extends Equatable {
   @override
@@ -35,29 +40,21 @@ class UpdateFanzineMetadata extends FanzineEditorEvent {
   final String issue;
   final String wholeNumber;
   UpdateFanzineMetadata(this.title, this.volume, this.issue, this.wholeNumber);
-  @override
-  List<Object?> get props => [title, volume, issue, wholeNumber];
 }
 
 class ToggleTwoPageRequested extends FanzineEditorEvent {
   final bool twoPage;
   ToggleTwoPageRequested(this.twoPage);
-  @override
-  List<Object?> get props => [twoPage];
 }
 
 class ToggleHasCoverRequested extends FanzineEditorEvent {
   final bool hasCover;
   ToggleHasCoverRequested(this.hasCover);
-  @override
-  List<Object?> get props => [hasCover];
 }
 
 class AddPageRequested extends FanzineEditorEvent {
   final String shortcode;
   AddPageRequested(this.shortcode);
-  @override
-  List<Object?> get props => [shortcode];
 }
 
 class AddExistingImageRequested extends FanzineEditorEvent {
@@ -153,8 +150,8 @@ class FanzineEditorFailure extends FanzineEditorState {
 }
 
 class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
-  final FanzineRepository _repository;
-  final PipelineRepository _pipelineRepository;
+  final IFanzineRepository _repository;
+  final IPipelineRepository _pipelineRepository;
   final String fanzineId;
 
   StreamSubscription? _fanzineSub;
@@ -164,8 +161,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
   List<FanzinePage>? _latestPages;
 
   FanzineEditorBloc({
-    required FanzineRepository repository,
-    required PipelineRepository pipelineRepository,
+    required IFanzineRepository repository,
+    required IPipelineRepository pipelineRepository,
     required this.fanzineId
   }) : _repository = repository,
         _pipelineRepository = pipelineRepository,

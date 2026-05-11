@@ -1,5 +1,4 @@
 import 'package:bqopd_core/bqopd_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -86,7 +85,8 @@ class _CommentsPanelState extends State<CommentsPanel> {
 }
 
 class _CommentList extends StatelessWidget {
-  final List<DocumentSnapshot> comments;
+  // FIXED: Changed type from List<DocumentSnapshot> to List<Map<String, dynamic>>
+  final List<Map<String, dynamic>> comments;
   final String imageId;
 
   const _CommentList({required this.comments, required this.imageId});
@@ -103,12 +103,14 @@ class _CommentList extends StatelessWidget {
     }
 
     // Sort locally by creation date
-    final sorted = List<DocumentSnapshot>.from(comments);
+    final sorted = List<Map<String, dynamic>>.from(comments);
     sorted.sort((a, b) {
-      final aT = (a.data() as Map?)?['createdAt'] as Timestamp?;
-      final bT = (b.data() as Map?)?['createdAt'] as Timestamp?;
+      final aT = a['createdAt'];
+      final bT = b['createdAt'];
       if (aT == null) return 1;
       if (bT == null) return -1;
+      // Note: Map version of Timestamp behaves slightly differently depending on source,
+      // but standard Firestore Timestamps in maps compare correctly.
       return aT.compareTo(bT);
     });
 
@@ -118,9 +120,8 @@ class _CommentList extends StatelessWidget {
       itemCount: sorted.length,
       separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12),
       itemBuilder: (c, i) {
-        final data = sorted[i].data() as Map<String, dynamic>;
-        data['_id'] = sorted[i].id;
-        return CommentItem(data: data);
+        // Data is already a map
+        return CommentItem(data: sorted[i]);
       },
     );
   }

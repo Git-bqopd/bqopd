@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:image/image.dart' as img; // Used pure Dart instead of flutter/material.dart
-import 'package:bqopd_core/bqopd_core.dart';
+import 'package:image/image.dart' as img;
+
+// Use interface instead of concrete repository
+import '../../interfaces/upload_repository_interface.dart';
 
 abstract class UploadEvent extends Equatable {
   @override
@@ -13,8 +15,6 @@ class ImagePicked extends UploadEvent {
   final Uint8List bytes;
   final String fileName;
   ImagePicked(this.bytes, this.fileName);
-  @override
-  List<Object?> get props => [bytes, fileName];
 }
 
 class AddCreatorRequested extends UploadEvent {
@@ -81,9 +81,9 @@ class UploadState extends Equatable {
 }
 
 class UploadBloc extends Bloc<UploadEvent, UploadState> {
-  final UploadRepository _repository;
+  final IUploadRepository _repository; // FIXED: Using Interface
 
-  UploadBloc({required UploadRepository repository})
+  UploadBloc({required IUploadRepository repository})
       : _repository = repository,
         super(const UploadState()) {
     on<ImagePicked>((event, emit) => emit(state.copyWith(
@@ -117,10 +117,8 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
 
     try {
       final String path = 'uploads/${event.userId}/${DateTime.now().millisecondsSinceEpoch}_${state.fileName}';
-
       final url = await _repository.uploadBytes(state.imageBytes!, path, 'image/jpeg');
 
-      // Use pure Dart image package instead of decodeImageFromList (Flutter)
       final decodedImage = img.decodeImage(state.imageBytes!);
       final int width = decodedImage?.width ?? 0;
       final int height = decodedImage?.height ?? 0;

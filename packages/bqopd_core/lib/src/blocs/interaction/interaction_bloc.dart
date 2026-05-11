@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:bqopd_core/bqopd_core.dart';
+
+import '../../interfaces/engagement_repository_interface.dart';
 
 abstract class InteractionEvent extends Equatable {
   @override
@@ -22,7 +22,7 @@ class LoadCommentsRequested extends InteractionEvent {
 }
 
 class _CommentsUpdated extends InteractionEvent {
-  final List<DocumentSnapshot> comments;
+  final List<Map<String, dynamic>> comments;
   _CommentsUpdated(this.comments);
 }
 
@@ -49,7 +49,7 @@ class ToggleCommentLikeRequested extends InteractionEvent {
 }
 
 class InteractionState extends Equatable {
-  final List<DocumentSnapshot> comments;
+  final List<Map<String, dynamic>> comments;
   final bool isLoadingComments;
   final String? errorMessage;
 
@@ -60,7 +60,7 @@ class InteractionState extends Equatable {
   });
 
   InteractionState copyWith({
-    List<DocumentSnapshot>? comments,
+    List<Map<String, dynamic>>? comments,
     bool? isLoadingComments,
     String? errorMessage,
   }) {
@@ -76,10 +76,10 @@ class InteractionState extends Equatable {
 }
 
 class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
-  final EngagementRepository _repository;
+  final IEngagementRepository _repository;
   StreamSubscription? _commentsSub;
 
-  InteractionBloc({required EngagementRepository repository})
+  InteractionBloc({required IEngagementRepository repository})
       : _repository = repository,
         super(const InteractionState()) {
     on<ToggleImageLikeRequested>(_onToggleImageLike);
@@ -104,11 +104,9 @@ class InteractionBloc extends Bloc<InteractionEvent, InteractionState> {
 
   Future<void> _onLoadComments(LoadCommentsRequested event, Emitter<InteractionState> emit) async {
     emit(state.copyWith(isLoadingComments: true));
-
     await _commentsSub?.cancel();
-
-    _commentsSub = _repository.watchImageComments(event.imageId).listen((snapshot) {
-      add(_CommentsUpdated(snapshot.docs));
+    _commentsSub = _repository.watchImageComments(event.imageId).listen((list) {
+      add(_CommentsUpdated(list));
     });
   }
 

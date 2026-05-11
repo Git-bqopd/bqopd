@@ -58,8 +58,9 @@ class _BaseFanzineWorkspaceState extends State<BaseFanzineWorkspace> with Single
 
     return BlocProvider(
       create: (context) => FanzineEditorBloc(
-        repository: RepositoryProvider.of<FanzineRepository>(context),
-        pipelineRepository: RepositoryProvider.of<PipelineRepository>(context),
+        // Use Interfaces for lookup
+        repository: RepositoryProvider.of<IFanzineRepository>(context),
+        pipelineRepository: RepositoryProvider.of<IPipelineRepository>(context),
         fanzineId: widget.fanzineId,
       )..add(LoadFanzineRequested(widget.fanzineId)),
       child: Builder(

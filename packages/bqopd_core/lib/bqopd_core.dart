@@ -17,21 +17,18 @@ export 'src/models/static_page.dart';
 export 'src/models/user_account.dart';
 export 'src/models/user_profile.dart';
 
-// Interfaces
+// Interfaces (Required for lookup in main.dart and UI)
 export 'src/interfaces/auth_repository_interface.dart';
+export 'src/interfaces/user_repository_interface.dart';
+export 'src/interfaces/fanzine_repository_interface.dart';
+export 'src/interfaces/engagement_repository_interface.dart';
+export 'src/interfaces/upload_repository_interface.dart';
+export 'src/interfaces/pipeline_repository_interface.dart';
 
 // Utils
 export 'src/utils/con_week.dart';
 export 'src/utils/shortcode_generator.dart';
 export 'src/utils/mention_parser.dart';
-
-// Repositories
-export 'src/repositories/auth_repository.dart';
-export 'src/repositories/engagement_repository.dart';
-export 'src/repositories/fanzine_repository.dart';
-export 'src/repositories/pipeline_repository.dart';
-export 'src/repositories/upload_repository.dart';
-export 'src/repositories/user_repository.dart';
 
 // Services
 export 'src/services/engagement_service.dart';
@@ -43,7 +40,6 @@ export 'src/services/view_service.dart';
 
 // Blocs
 export 'src/blocs/auth/auth_bloc.dart';
-export 'src/blocs/curator_workbench/curator_workbench_bloc.dart';
 export 'src/blocs/fanzine_editor_bloc.dart';
 export 'src/blocs/interaction/interaction_bloc.dart';
 export 'src/blocs/profile/profile_bloc.dart';

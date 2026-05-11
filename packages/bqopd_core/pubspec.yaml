@@ -1,5 +1,5 @@
 name: bqopd_core
-description: Shared pure Dart models and utilities for the bqopd platform.
+description: Shared pure Dart models, interfaces, and BLoCs for the bqopd platform.
 version: 1.0.0
 repository: https://github.com/Git-bqopd/bqopd
 
@@ -7,14 +7,12 @@ environment:
   sdk: ^3.11.0
 
 dependencies:
-  cloud_firestore: ^5.4.3
+  # Standard Dart Packages
   equatable: ^2.0.5
   meta: ^1.11.0
   bloc: ^8.1.4
-  firebase_auth: ^5.3.1
-  firebase_storage: ^12.3.4
-  cloud_functions: ^5.1.0
   image: ^4.8.0
+  # No Firebase or Flutter dependencies allowed here!
 
 dev_dependencies:
   lints: ^3.0.0

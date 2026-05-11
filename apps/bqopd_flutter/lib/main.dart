@@ -9,10 +9,18 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'env.dart';
 
-// Import all shared logic from our core package!
+// Import Concrete Firebase Repository Implementations
+import 'repositories/firebase_auth_repository.dart';
+import 'repositories/firebase_user_repository.dart';
+import 'repositories/firebase_engagement_repository.dart';
+import 'repositories/firebase_upload_repository.dart';
+import 'repositories/firebase_fanzine_repository.dart';
+import 'repositories/firebase_pipeline_repository.dart';
+
+// Import shared logic from core
 import 'package:bqopd_core/bqopd_core.dart';
 
-// Services (Keep Flutter-specific providers in the app)
+// Services
 import 'services/user_provider.dart';
 
 // Pages
@@ -34,30 +42,41 @@ Future<void> main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   usePathUrlStrategy();
 
-  final authRepository = AuthRepository();
-  final uploadRepository = UploadRepository();
-  final engagementRepository = EngagementRepository();
+  // Initialize concrete implementations
+  final authRepo = FirebaseAuthRepository();
+  final userRepo = FirebaseUserRepository();
+  final engagementRepo = FirebaseEngagementRepository();
+  final uploadRepo = FirebaseUploadRepository();
+  final fanzineRepo = FirebaseFanzineRepository();
+  final pipelineRepo = FirebasePipelineRepository();
 
   runApp(
     MultiRepositoryProvider(
       providers: [
-        RepositoryProvider.value(value: authRepository),
-        RepositoryProvider.value(value: uploadRepository),
-        RepositoryProvider.value(value: engagementRepository),
-        RepositoryProvider(create: (_) => UserRepository()),
-        RepositoryProvider(create: (_) => FanzineRepository()),
-        RepositoryProvider(create: (_) => PipelineRepository()),
+        // Register using Interfaces defined in Core
+        RepositoryProvider<IAuthRepository>.value(value: authRepo),
+        RepositoryProvider<IUserRepository>.value(value: userRepo),
+        RepositoryProvider<IEngagementRepository>.value(value: engagementRepo),
+        RepositoryProvider<IUploadRepository>.value(value: uploadRepo),
+        RepositoryProvider<IFanzineRepository>.value(value: fanzineRepo),
+        RepositoryProvider<IPipelineRepository>.value(value: pipelineRepo),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider(
-            create: (context) => AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested()),
+            create: (context) => AuthBloc(
+              repository: context.read<IAuthRepository>(),
+            )..add(AuthSubscriptionRequested()),
           ),
           BlocProvider(
-            create: (context) => UploadBloc(repository: uploadRepository),
+            create: (context) => UploadBloc(
+              repository: context.read<IUploadRepository>(),
+            ),
           ),
           BlocProvider(
-            create: (context) => InteractionBloc(repository: engagementRepository),
+            create: (context) => InteractionBloc(
+              repository: context.read<IEngagementRepository>(),
+            ),
           ),
         ],
         child: ChangeNotifierProvider(
