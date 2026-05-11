@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:jaspr_router/jaspr_router.dart'; // Restored: Required for Router and Route components
+import 'package:jaspr_router/jaspr_router.dart';
 
-// BLoC & Firebase Repository from the shared core
-import 'package:bqopd_core/src/blocs/auth/auth_bloc.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import 'repositories/web_auth_repository.dart';
+import 'repositories/web_engagement_repository.dart';
+import 'repositories/web_fanzine_repository.dart';
+import 'repositories/web_pipeline_repository.dart';
+import 'repositories/web_upload_repository.dart';
+import 'repositories/web_user_repository.dart';
 
-// UI Pages
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
@@ -21,8 +24,19 @@ class App extends StatefulComponent {
 }
 
 class _AppState extends State<App> {
+  // --- Repositories ---
   late final WebAuthRepository authRepository;
+  late final WebFanzineRepository fanzineRepository;
+  late final WebEngagementRepository engagementRepository;
+  late final WebPipelineRepository pipelineRepository;
+  late final WebUploadRepository uploadRepository;
+  late final WebUserRepository userRepository;
+
+  // --- BLoCs ---
   late final AuthBloc authBloc;
+  late final UploadBloc uploadBloc;
+  late final InteractionBloc interactionBloc;
+
   AuthState? authState;
   StreamSubscription? _sub;
 
@@ -33,21 +47,28 @@ class _AppState extends State<App> {
   void initState() {
     super.initState();
     try {
-      // Initialize our JS Interop Auth Repository
+      // 1. Initialize Repositories via Web JS Interop
       authRepository = WebAuthRepository();
+      fanzineRepository = WebFanzineRepository();
+      engagementRepository = WebEngagementRepository();
+      pipelineRepository = WebPipelineRepository();
+      uploadRepository = WebUploadRepository();
+      userRepository = WebUserRepository();
 
-      // Inject it into our shared Core BLoC
+      // 2. Initialize Shared BLoCs
+      uploadBloc = UploadBloc(repository: uploadRepository);
+      interactionBloc = InteractionBloc(repository: engagementRepository);
+
       authBloc = AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested());
       authState = authBloc.state;
 
-      // Listen to state changes to rebuild the Routing layer
+      // 3. Listen to state changes to rebuild the Routing layer
       _sub = authBloc.stream.listen((state) {
         setState(() {
           authState = state;
         });
       });
     } catch (e) {
-      // Catch initialization errors (like JS interop issues) to prevent a blank white screen
       _hasError = true;
       _errorMsg = e.toString();
       print("App Initialization Error: $e");
@@ -59,6 +80,8 @@ class _AppState extends State<App> {
     _sub?.cancel();
     if (!_hasError) {
       authBloc.close();
+      uploadBloc.close();
+      interactionBloc.close();
     }
     super.dispose();
   }
@@ -71,7 +94,6 @@ class _AppState extends State<App> {
       ]);
     }
 
-    // Wrap the router in a standard div to ensure stable DOM mounting
     return div(id: 'app-root', [
       Router(
         routes: [
@@ -90,7 +112,6 @@ class _AppState extends State<App> {
           Route(
             path: '/profile',
             builder: (context, state) {
-              // Protected Route Logic
               if (authState?.status != AuthStatus.authenticated) {
                 return LoginPage(authState: authState, authBloc: authBloc);
               }
