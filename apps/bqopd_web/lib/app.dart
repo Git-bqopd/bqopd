@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr/dom.dart';
+import 'package:jaspr/dom.dart'; // REQUIRED for Jaspr 0.23.x
 
 // Targeted imports to completely bypass the master bqopd_core.dart (which houses Flutter imports)
 import 'package:bqopd_core/src/blocs/auth/auth_bloc.dart';
@@ -18,6 +18,9 @@ class _AppState extends State<App> {
   late final AuthBloc authBloc;
   AuthState? authState;
   StreamSubscription? _sub;
+
+  String _email = '';
+  String _password = '';
 
   @override
   void initState() {
@@ -58,6 +61,38 @@ class _AppState extends State<App> {
           p([text('Auth Status: ${authState?.status.name ?? "unknown"}')]),
           p([text('User Email: ${authState?.user?.email ?? "none"}')]),
         ]),
+
+        // Interactive HTML to test the BLoC integration
+        if (authState?.status == AuthStatus.authenticated)
+          button(
+              classes: 'logout-btn',
+              events: {'click': (e) {
+                authBloc.add(LogoutRequested());
+              }},
+              [text('Logout')]
+          )
+        else
+          div(classes: 'auth-form', [
+            input(
+              attributes: {'type': 'email', 'placeholder': 'Email'},
+              events: {'input': (e) => _email = (e.target as dynamic).value},
+            ),
+            input(
+              attributes: {'type': 'password', 'placeholder': 'Password'},
+              events: {'input': (e) => _password = (e.target as dynamic).value},
+            ),
+            button(
+                events: {'click': (e) {
+                  if (_email.isNotEmpty && _password.isNotEmpty) {
+                    authBloc.add(LoginRequested(_email, _password));
+                  }
+                }},
+                [text('Login')]
+            ),
+
+            if (authState?.status == AuthStatus.failure)
+              p(classes: 'error-msg', [text(authState?.errorMessage ?? 'Login failed.')])
+          ])
       ])
     ]);
   }
