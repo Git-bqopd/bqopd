@@ -3,7 +3,8 @@ import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import '../services/engagement_service.dart';
+import '../services/view_service.dart';
 import '../components/dynamic_social_toolbar.dart';
 // Local app imports
 import '../services/user_provider.dart';

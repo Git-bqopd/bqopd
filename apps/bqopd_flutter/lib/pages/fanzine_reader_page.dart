@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
-
+import '../services/view_service.dart';
 import '../services/user_provider.dart';
 import '../widgets/calendar_editor_widget.dart';
 import '../widgets/fanzine_curator_widget.dart';

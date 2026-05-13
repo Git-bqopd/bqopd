@@ -1,6 +1,10 @@
 import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
 
+// Import the concrete services
+import '../../services/engagement_service.dart';
+import '../../services/view_service.dart';
+
 import 'comments_panel.dart';
 import 'credits_panel.dart';
 import 'entities_panel.dart';
@@ -79,7 +83,8 @@ class PanelFactory {
       case BonusRowType.views:
         return ViewsPanel(
             imageId: context.imageId,
-            viewService: context.viewService
+            // Cast the interface back to the concrete class for the Flutter Widget
+            viewService: context.viewService as ViewService
         );
       case BonusRowType.credits:
         return CreditsPanel(imageId: context.imageId);

@@ -8,7 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-
+import '../services/username_service.dart';
+import '../services/user_bootstrap.dart';
 import '../services/user_provider.dart';
 import 'base_fanzine_workspace.dart';
 import 'folio_image_selector_modal.dart';

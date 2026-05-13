@@ -1,6 +1,7 @@
 import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../services/view_service.dart';
 
 /// A standardized table displaying view analytics for unique content (Images).
 /// Reads directly from the Image's pre-aggregated view counts.

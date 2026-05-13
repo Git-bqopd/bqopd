@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-
+import '../services/engagement_service.dart';
 import '../services/user_provider.dart';
 import 'dynamic_toolbar_button.dart';
 import '../widgets/auth_modal.dart';

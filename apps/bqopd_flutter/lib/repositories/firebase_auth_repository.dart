@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:bqopd_core/bqopd_core.dart';
+import '../services/user_bootstrap.dart';
 
 class FirebaseAuthRepository implements IAuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;

@@ -1,7 +1,7 @@
 import 'package:bqopd_core/bqopd_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import '../services/engagement_service.dart';
 import 'auth_modal.dart';
 
 class HashtagBar extends StatefulWidget {

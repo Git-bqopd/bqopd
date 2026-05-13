@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:bqopd_core/bqopd_core.dart';
+import '../services/username_service.dart';
 
 class FirebaseUserRepository implements IUserRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
