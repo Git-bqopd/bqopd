@@ -15,6 +15,8 @@ import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/fanzine_reader_page.dart';
+import 'pages/short_link_page.dart';
 
 class App extends StatefulComponent {
   const App({super.key});
@@ -112,11 +114,28 @@ class _AppState extends State<App> {
           Route(
             path: '/profile',
             builder: (context, state) {
-              if (authState?.status != AuthStatus.authenticated) {
+              final queryUserId = state.queryParams['userId'];
+
+              if (queryUserId == null && authState?.status != AuthStatus.authenticated) {
                 return LoginPage(authState: authState, authBloc: authBloc);
               }
+
               return ProfilePage(authState: authState, authBloc: authBloc);
             },
+          ),
+          Route(
+            path: '/reader/:fanzineId',
+            builder: (context, state) => FanzineReaderPage(
+              fanzineId: state.params['fanzineId']!,
+              repository: fanzineRepository,
+            ),
+          ),
+          // Put catch-all shortlink resolver at the very end
+          Route(
+            path: '/:code',
+            builder: (context, state) => ShortLinkPage(
+              code: state.params['code']!,
+            ),
           ),
         ],
       )

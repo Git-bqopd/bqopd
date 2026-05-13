@@ -1,7 +1,7 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/src/blocs/auth/auth_bloc.dart';
-import '../components/page_wrapper.dart';
+import '../components/fanzine_sticker.dart';
 
 class HomePage extends StatelessComponent {
   final AuthState? authState;
@@ -11,24 +11,17 @@ class HomePage extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return PageWrapper(
-        child: div(classes: 'flex-col items-center w-full', [
-          h1(classes: 'text-lg font-bold', [text('bqopd')]),
-          p(classes: 'text-center mt-4', [text('The fanzine platform. Select a route to continue.')]),
+    return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
+      FanzineSticker(authState: authState),
 
-          div(classes: 'flex-row gap-4 mt-4 items-center', [
-            a(href: '/profile', [text('My Profile')]),
-
-            if (authState?.status == AuthStatus.authenticated)
-              button(
-                  classes: 'btn-logout',
-                  events: {'click': (e) => authBloc.add(LogoutRequested())},
-                  [text('Logout')]
-              )
-            else
-              a(href: '/login', [text('Login')]),
-          ])
+      if (authState?.status == AuthStatus.authenticated)
+        div(classes: 'mt-4', [
+          button(
+              classes: 'btn-logout',
+              events: {'click': (e) => authBloc.add(LogoutRequested())},
+              [text('Logout')]
+          )
         ])
-    );
+    ]);
   }
 }
