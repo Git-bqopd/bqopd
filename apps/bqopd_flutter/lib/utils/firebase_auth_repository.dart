@@ -1,11 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:bqopd_core/bqopd_core.dart'; // Retained for ensureUserDocument()
+import 'package:bqopd_core/bqopd_core.dart';
+import '../services/user_bootstrap.dart';
 
-import '../interfaces/auth_repository_interface.dart';
-import '../models/auth_user.dart';
-
-class AuthRepository implements IAuthRepository {
+class FirebaseAuthRepository implements IAuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -16,10 +14,7 @@ class AuthRepository implements IAuthRepository {
 
   @override
   Future<void> login(String email, String password) async {
-    await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    await _auth.signInWithEmailAndPassword(email: email, password: password);
     await ensureUserDocument();
   }
 
@@ -29,11 +24,7 @@ class AuthRepository implements IAuthRepository {
     required String password,
     required String username,
   }) async {
-    final cred = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-
+    final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
     if (cred.user != null) {
       await _db.collection('Users').doc(cred.user!.uid).set({
         'uid': cred.user!.uid,
@@ -54,9 +45,7 @@ class AuthRepository implements IAuthRepository {
   }
 
   @override
-  Future<void> logout() async {
-    await _auth.signOut();
-  }
+  Future<void> logout() async => await _auth.signOut();
 
   @override
   AuthUser? get currentUser {

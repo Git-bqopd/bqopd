@@ -1,9 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 
-enum ViewType { list, grid }
-
-class ViewService {
+class ViewService implements IViewService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -16,6 +15,7 @@ class ViewService {
       .doc('data')
       .collection('view_logs');
 
+  @override
   Future<void> recordView({
     required String imageId,
     required String? pageId,
@@ -88,6 +88,7 @@ class ViewService {
     }
   }
 
+  @override
   Stream<QuerySnapshot> getFanzinePagesStream(String fanzineId) {
     return _db
         .collection('fanzines')

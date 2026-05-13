@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Extracted from pure dart core package as it relies on Firebase
+
 // Standard: A-Z, 0-9 (Base36) - No lowercase allowed in the "Math"
 const String _base36Chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 

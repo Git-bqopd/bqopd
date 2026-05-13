@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Pure Dart utility to parse wiki-links without Flutter UI dependencies.
+/// Extracted from pure dart core package as it relies on Firebase
 class MentionParser {
   static final RegExp _wikiLinkRegex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
 

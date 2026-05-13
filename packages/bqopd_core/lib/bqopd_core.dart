@@ -24,19 +24,14 @@ export 'src/interfaces/fanzine_repository_interface.dart';
 export 'src/interfaces/engagement_repository_interface.dart';
 export 'src/interfaces/upload_repository_interface.dart';
 export 'src/interfaces/pipeline_repository_interface.dart';
+export 'src/interfaces/i_engagement_service.dart';
+export 'src/interfaces/i_event_service.dart';
+export 'src/interfaces/i_game_service.dart';
+export 'src/interfaces/i_view_service.dart';
 
 // Utils
 export 'src/utils/con_week.dart';
-export 'src/utils/shortcode_generator.dart';
-export 'src/utils/mention_parser.dart';
-
-// Services
-export 'src/services/engagement_service.dart';
-export 'src/services/event_service.dart';
-export 'src/services/game_service.dart';
-export 'src/services/user_bootstrap.dart';
-export 'src/services/username_service.dart';
-export 'src/services/view_service.dart';
+// Note: shortcode_generator and mention_parser were moved to the Flutter app
 
 // Blocs
 export 'src/blocs/auth/auth_bloc.dart';

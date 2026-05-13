@@ -1,13 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 
-class EngagementService {
+class EngagementService implements IEngagementService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   CollectionReference get _commentsCollection =>
       _db.collection('artifacts').doc('bqopd').collection('public').doc('data').collection('comments');
 
+  @override
   Future<void> toggleLike({
     required String imageId,
     required String? fanzineId,
@@ -42,6 +44,7 @@ class EngagementService {
     await batch.commit();
   }
 
+  @override
   Future<void> addComment({
     required String imageId,
     required String? fanzineId,
@@ -78,6 +81,7 @@ class EngagementService {
     }
   }
 
+  @override
   Future<void> deleteComment(String commentId, String imageId) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -91,12 +95,14 @@ class EngagementService {
     }
   }
 
+  @override
   Stream<QuerySnapshot> getCommentsStream(String imageId) {
     return _commentsCollection
         .where('contentId', isEqualTo: imageId)
         .snapshots();
   }
 
+  @override
   Future<void> toggleCommentLike(String commentId, bool isCurrentlyLiked) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -125,6 +131,7 @@ class EngagementService {
     await batch.commit();
   }
 
+  @override
   Stream<bool> isCommentLikedStream(String commentId) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
@@ -140,6 +147,7 @@ class EngagementService {
         .map((doc) => doc.exists);
   }
 
+  @override
   Stream<bool> isLikedStream(String imageId) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
@@ -155,6 +163,7 @@ class EngagementService {
         .map((doc) => doc.exists);
   }
 
+  @override
   Future<void> followUser(String targetUid) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null || currentUser.uid == targetUid) return;
@@ -177,6 +186,7 @@ class EngagementService {
     await batch.commit();
   }
 
+  @override
   Future<void> unfollowUser(String targetUid) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
@@ -197,12 +207,14 @@ class EngagementService {
     await batch.commit();
   }
 
+  @override
   Stream<bool> isFollowingStream(String targetUid) {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(false);
     return _db.collection('profiles').doc(user.uid).collection('following').doc(targetUid).snapshots().map((doc) => doc.exists);
   }
 
+  @override
   Future<void> toggleHashtag(String imageId, String tag, bool isVoting) async {
     final user = _auth.currentUser;
     if (user == null) return;
