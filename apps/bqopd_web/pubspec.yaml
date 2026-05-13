@@ -19,4 +19,5 @@ dependencies:
 dev_dependencies:
   jaspr_builder: ^0.23.1
   build_runner: ^2.4.13
+  build_web_compilers: ^4.0.0
   lints: ^5.0.0

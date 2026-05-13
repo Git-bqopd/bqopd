@@ -59,6 +59,7 @@
       ],
       "devDependencies": [
         "build_runner",
+        "build_web_compilers",
         "jaspr_builder",
         "lints"
       ]
@@ -1610,6 +1611,90 @@
       "version": "0.9.1",
       "dependencies": [
         "intl"
+      ]
+    },
+    {
+      "name": "build_web_compilers",
+      "version": "4.4.19",
+      "dependencies": [
+        "analyzer",
+        "archive",
+        "bazel_worker",
+        "build",
+        "build_modules",
+        "build_runner",
+        "collection",
+        "glob",
+        "logging",
+        "path",
+        "pool",
+        "scratch_space",
+        "source_maps",
+        "source_span",
+        "stack_trace"
+      ]
+    },
+    {
+      "name": "scratch_space",
+      "version": "1.2.0",
+      "dependencies": [
+        "build",
+        "crypto",
+        "path",
+        "pool"
+      ]
+    },
+    {
+      "name": "source_maps",
+      "version": "0.10.13",
+      "dependencies": [
+        "source_span"
+      ]
+    },
+    {
+      "name": "build_modules",
+      "version": "5.1.12",
+      "dependencies": [
+        "analyzer",
+        "async",
+        "bazel_worker",
+        "build",
+        "collection",
+        "crypto",
+        "file",
+        "glob",
+        "graphs",
+        "json_annotation",
+        "logging",
+        "path",
+        "scratch_space",
+        "stream_transform",
+        "uuid"
+      ]
+    },
+    {
+      "name": "uuid",
+      "version": "4.5.3",
+      "dependencies": [
+        "crypto",
+        "fixnum"
+      ]
+    },
+    {
+      "name": "bazel_worker",
+      "version": "1.1.5",
+      "dependencies": [
+        "async",
+        "protobuf"
+      ]
+    },
+    {
+      "name": "protobuf",
+      "version": "6.0.0",
+      "dependencies": [
+        "collection",
+        "fixnum",
+        "meta"
       ]
     }
   ],

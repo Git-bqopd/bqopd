@@ -49,6 +49,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.1"
+  bazel_worker:
+    dependency: transitive
+    description:
+      name: bazel_worker
+      sha256: "87cae9150fcf9942b8057e5f51c4848a3efde1289e97411e1c8f01e350120999"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.5"
   bloc:
     dependency: transitive
     description:
@@ -96,6 +104,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.1"
+  build_modules:
+    dependency: transitive
+    description:
+      name: build_modules
+      sha256: "63c56d2663da4bba51c56825169a5356dd8401240241217c8eba711b2e12be5c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.1.12"
   build_runner:
     dependency: transitive
     description:
@@ -104,6 +120,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.15.0"
+  build_web_compilers:
+    dependency: transitive
+    description:
+      name: build_web_compilers
+      sha256: "8a8a3d18b6b341df6dc61a65beaabc89fcd7c68dc10b02777fc31a35ffb6efa4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.4.19"
   built_collection:
     dependency: transitive
     description:
@@ -967,6 +991,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.5.0"
+  protobuf:
+    dependency: transitive
+    description:
+      name: protobuf
+      sha256: "75ec242d22e950bdcc79ee38dd520ce4ee0bc491d7fadc4ea47694604d22bf06"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.0"
   provider:
     dependency: transitive
     description:
@@ -991,6 +1023,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.0"
+  scratch_space:
+    dependency: transitive
+    description:
+      name: scratch_space
+      sha256: "3417e014d20b12cebc5bfb1c0b1f63806054177158596cc31cc4d9aaca767a60"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.0"
   scrollable_positioned_list:
     dependency: transitive
     description:
@@ -1052,6 +1092,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.2.3"
+  source_maps:
+    dependency: transitive
+    description:
+      name: source_maps
+      sha256: "190222579a448b03896e0ca6eca5998fa810fda630c1d65e2f78b3f638f54812"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.10.13"
   source_span:
     dependency: transitive
     description:
@@ -1188,6 +1236,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.5"
+  uuid:
+    dependency: transitive
+    description:
+      name: uuid
+      sha256: "1fef9e8e11e2991bb773070d4656b7bd5d850967a2456cfc83cf47925ba79489"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.5.3"
   vector_math:
     dependency: transitive
     description:
@@ -1309,5 +1365,5 @@ packages:
     source: hosted
     version: "3.1.2"
 sdks:
-  dart: ">=3.11.0 <4.0.0"
+  dart: ">=3.11.0 <3.13.0-z"
   flutter: ">=3.38.0"

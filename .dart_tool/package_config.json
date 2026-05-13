@@ -38,6 +38,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "bazel_worker",
+      "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/bazel_worker-1.1.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
       "name": "bloc",
       "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/bloc-8.1.4",
       "packageUri": "lib/",
@@ -74,8 +80,20 @@
       "languageVersion": "3.7"
     },
     {
+      "name": "build_modules",
+      "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/build_modules-5.1.12",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
       "name": "build_runner",
       "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/build_runner-2.15.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
+      "name": "build_web_compilers",
+      "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/build_web_compilers-4.4.19",
       "packageUri": "lib/",
       "languageVersion": "3.7"
     },
@@ -734,6 +752,12 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "protobuf",
+      "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/protobuf-6.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
       "name": "provider",
       "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/provider-6.1.5+1",
       "packageUri": "lib/",
@@ -750,6 +774,12 @@
       "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/pubspec_parse-1.5.0",
       "packageUri": "lib/",
       "languageVersion": "3.6"
+    },
+    {
+      "name": "scratch_space",
+      "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/scratch_space-1.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
     },
     {
       "name": "scrollable_positioned_list",
@@ -798,6 +828,12 @@
       "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/source_gen-4.2.3",
       "packageUri": "lib/",
       "languageVersion": "3.9"
+    },
+    {
+      "name": "source_maps",
+      "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/source_maps-0.10.13",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
     },
     {
       "name": "source_span",
@@ -900,6 +936,12 @@
       "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_windows-3.1.5",
       "packageUri": "lib/",
       "languageVersion": "3.8"
+    },
+    {
+      "name": "uuid",
+      "rootUri": "file:///C:/Users/kevla/AppData/Local/Pub/Cache/hosted/pub.dev/uuid-4.5.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "vector_math",
