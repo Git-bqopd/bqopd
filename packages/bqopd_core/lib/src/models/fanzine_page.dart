@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
 /// Canonical data model for the Fanzine Page subcollection document.
@@ -12,7 +11,6 @@ class FanzinePage extends Equatable {
   final String? storagePath;
   final String status;
   final String? templateId;
-  final DocumentReference reference;
 
   final String? spreadPosition;
   final String sidePreference;
@@ -30,17 +28,15 @@ class FanzinePage extends Equatable {
     this.storagePath,
     required this.status,
     this.templateId,
-    required this.reference,
     this.spreadPosition,
     this.sidePreference = 'either',
     this.width,
     this.height,
   });
 
-  factory FanzinePage.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
+  factory FanzinePage.fromMap(String id, Map<String, dynamic> data) {
     return FanzinePage(
-      id: doc.id,
+      id: id,
       pageNumber: data['pageNumber'] ?? 0,
       imageId: data['imageId'],
       imageUrl: data['imageUrl'],
@@ -49,7 +45,6 @@ class FanzinePage extends Equatable {
       storagePath: data['storagePath'],
       status: data['status'] ?? 'ready',
       templateId: data['templateId'],
-      reference: doc.reference,
       spreadPosition: data['spreadPosition'],
       sidePreference: data['sidePreference'] ?? 'either',
       width: data['width'] as int?,

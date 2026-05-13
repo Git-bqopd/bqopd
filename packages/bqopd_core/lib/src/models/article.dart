@@ -1,6 +1,13 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 enum ArticleBlockType { text, image, link, unknown }
+
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  try { return value.toDate(); } catch (_) {}
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
 
 abstract class ArticleBlock {
   final ArticleBlockType type;
@@ -91,18 +98,17 @@ class Article {
     required this.createdAt,
   });
 
-  factory Article.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory Article.fromMap(String id, Map<String, dynamic> data) {
     final blocksList = (data['blocks'] as List<dynamic>?) ?? [];
 
     return Article(
-      id: doc.id,
+      id: id,
       title: data['title'] ?? '',
       gridCoverImage: data['gridCoverImage'] ?? '',
       blocks: blocksList
           .map((b) => ArticleBlock.fromMap(b as Map<String, dynamic>))
           .toList(),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: _parseDate(data['createdAt']) ?? DateTime.now(),
     );
   }
 
@@ -111,7 +117,7 @@ class Article {
       'title': title,
       'gridCoverImage': gridCoverImage,
       'blocks': blocks.map((b) => b.toMap()).toList(),
-      'createdAt': Timestamp.fromDate(createdAt),
+      'createdAt': createdAt,
     };
   }
 }

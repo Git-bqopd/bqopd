@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class GameCharacter {
   String id;
   String ownerId;
@@ -55,7 +53,7 @@ class GameCharacter {
       'currentHp': currentHp,
       'wins': wins,
       'losses': losses,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': DateTime.now(),
     };
   }
 }
@@ -89,7 +87,7 @@ class BattleLog {
       'defenderName': defenderName,
       'logs': logs,
       'winnerId': winnerId,
-      'timestamp': FieldValue.serverTimestamp(),
+      'timestamp': DateTime.now(),
     };
   }
 }

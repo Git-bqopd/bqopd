@@ -12,8 +12,7 @@ class WebUserRepository implements IUserRepository {
     final unsub = fsListenDoc('profiles/$uid', (String jsonStr) {
       final decoded = jsonDecode(jsonStr);
       if (decoded['exists'] == true) {
-        final doc = WebDocumentSnapshot(decoded['path'], true, restoreTimestamps(decoded['data']));
-        controller.add(UserProfile.fromFirestore(doc));
+        controller.add(UserProfile.fromMap(decoded['id'], restoreTimestamps(decoded['data'])));
       } else {
         controller.add(null);
       }
@@ -28,8 +27,7 @@ class WebUserRepository implements IUserRepository {
     final unsub = fsListenDoc('Users/$uid', (String jsonStr) {
       final decoded = jsonDecode(jsonStr);
       if (decoded['exists'] == true) {
-        final doc = WebDocumentSnapshot(decoded['path'], true, restoreTimestamps(decoded['data']));
-        controller.add(UserAccount.fromFirestore(doc));
+        controller.add(UserAccount.fromMap(decoded['id'], restoreTimestamps(decoded['data'])));
       } else {
         controller.add(null);
       }

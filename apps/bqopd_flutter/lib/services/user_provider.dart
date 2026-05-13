@@ -73,10 +73,10 @@ class UserProvider with ChangeNotifier {
       ]);
 
       if (results[0].exists) {
-        _userAccount = UserAccount.fromFirestore(results[0]);
+        _userAccount = UserAccount.fromMap(results[0].id, results[0].data() as Map<String, dynamic>);
       }
       if (results[1].exists) {
-        _userProfile = UserProfile.fromFirestore(results[1]);
+        _userProfile = UserProfile.fromMap(results[1].id, results[1].data() as Map<String, dynamic>);
 
         if (_userAccount != null && _userAccount!.preferences.containsKey('socialButtons')) {
           _socialButtonVisibility = Map<String, bool>.from(_userAccount!.preferences['socialButtons']);

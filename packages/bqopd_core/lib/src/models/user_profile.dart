@@ -1,4 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  try { return value.toDate(); } catch (_) {}
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
 
 /// Represents the public identity of any entity (Human or Managed).
 class UserProfile {
@@ -38,10 +45,9 @@ class UserProfile {
     this.updatedAt,
   });
 
-  factory UserProfile.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
+  factory UserProfile.fromMap(String id, Map<String, dynamic> data) {
     return UserProfile(
-      uid: doc.id,
+      uid: id,
       username: data['username'] ?? '',
       displayName: data['displayName'] ?? '',
       photoUrl: data['photoUrl'] ?? '',
@@ -55,7 +61,7 @@ class UserProfile {
       xHandle: data['xHandle'],
       instagramHandle: data['instagramHandle'],
       githubHandle: data['githubHandle'],
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      updatedAt: _parseDate(data['updatedAt']),
     );
   }
 
@@ -75,7 +81,7 @@ class UserProfile {
       'xHandle': xHandle,
       'instagramHandle': instagramHandle,
       'githubHandle': githubHandle,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': DateTime.now(),
     };
   }
 }

@@ -1,4 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  try { return value.toDate(); } catch (_) {}
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
 
 /// Data model for community-submitted events.
 class PageEvent {
@@ -57,8 +64,8 @@ class PageEvent {
       state: data['state'],
       zip: data['zip'],
       username: data['username'],
-      startDate: (data['startDate'] as Timestamp?)?.toDate(),
-      endDate: (data['endDate'] as Timestamp?)?.toDate(),
+      startDate: _parseDate(data['startDate']),
+      endDate: _parseDate(data['endDate']),
       category: data['category'],
       description: data['description'],
       imageUrl: data['imageUrl'],
@@ -79,8 +86,8 @@ class PageEvent {
       'state': state,
       'zip': zip,
       'username': username,
-      'startDate': Timestamp.fromDate(startDate),
-      'endDate': Timestamp.fromDate(endDate),
+      'startDate': startDate,
+      'endDate': endDate,
       'category': category,
       'description': description,
       'imageUrl': imageUrl,

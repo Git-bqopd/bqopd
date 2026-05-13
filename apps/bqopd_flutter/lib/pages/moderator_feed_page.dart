@@ -181,7 +181,7 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                       .get(),
                   builder: (context, snap) {
                     if (snap.hasData && snap.data!.exists) {
-                      final profile = UserProfile.fromFirestore(snap.data!);
+                      final profile = UserProfile.fromMap(snap.data!.id, snap.data!.data() as Map<String, dynamic>);
                       return Text("Uploaded by @${profile.username}",
                           style: const TextStyle(color: Colors.grey, fontSize: 12));
                     }

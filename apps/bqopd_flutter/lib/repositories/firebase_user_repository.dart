@@ -7,12 +7,12 @@ class FirebaseUserRepository implements IUserRepository {
 
   @override
   Stream<UserProfile?> watchUser(String uid) {
-    return _db.collection('profiles').doc(uid).snapshots().map((doc) => doc.exists ? UserProfile.fromFirestore(doc) : null);
+    return _db.collection('profiles').doc(uid).snapshots().map((doc) => doc.exists ? UserProfile.fromMap(doc.id, doc.data() as Map<String, dynamic>) : null);
   }
 
   @override
   Stream<UserAccount?> watchUserAccount(String uid) {
-    return _db.collection('Users').doc(uid).snapshots().map((doc) => doc.exists ? UserAccount.fromFirestore(doc) : null);
+    return _db.collection('Users').doc(uid).snapshots().map((doc) => doc.exists ? UserAccount.fromMap(doc.id, doc.data() as Map<String, dynamic>) : null);
   }
 
   @override

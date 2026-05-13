@@ -1,4 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  try { return value.toDate(); } catch (_) {}
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
 
 /// Represents the private system data of an authenticated human user.
 class UserAccount {
@@ -40,10 +47,9 @@ class UserAccount {
     this.updatedAt,
   });
 
-  factory UserAccount.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
+  factory UserAccount.fromMap(String id, Map<String, dynamic> data) {
     return UserAccount(
-      uid: doc.id,
+      uid: id,
       email: data['email'] ?? '',
       role: data['role'] ?? 'user',
       roles: List<String>.from(data['roles'] ?? []),
@@ -57,8 +63,8 @@ class UserAccount {
       zipCode: data['zipCode'],
       country: data['country'],
       preferences: Map<String, dynamic>.from(data['preferences'] ?? {}),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      createdAt: _parseDate(data['createdAt']),
+      updatedAt: _parseDate(data['updatedAt']),
     );
   }
 
@@ -78,7 +84,7 @@ class UserAccount {
       'zipCode': zipCode,
       'country': country,
       'preferences': preferences,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': DateTime.now(),
     };
   }
 }

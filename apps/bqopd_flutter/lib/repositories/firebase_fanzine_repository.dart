@@ -7,7 +7,7 @@ class FirebaseFanzineRepository implements IFanzineRepository {
 
   @override
   Stream<Fanzine> watchFanzineModel(String fanzineId) {
-    return _db.collection('fanzines').doc(fanzineId).snapshots().map((doc) => Fanzine.fromFirestore(doc));
+    return _db.collection('fanzines').doc(fanzineId).snapshots().map((doc) => Fanzine.fromMap(doc.id, doc.data() as Map<String, dynamic>));
   }
 
   @override
@@ -18,7 +18,7 @@ class FirebaseFanzineRepository implements IFanzineRepository {
         .collection('pages')
         .orderBy('pageNumber')
         .snapshots()
-        .map((snap) => snap.docs.map((d) => FanzinePage.fromFirestore(d)).toList());
+        .map((snap) => snap.docs.map((d) => FanzinePage.fromMap(d.id, d.data())).toList());
   }
 
   @override
@@ -29,7 +29,8 @@ class FirebaseFanzineRepository implements IFanzineRepository {
   @override
   Future<void> updatePageLayout(String fanzineId, FanzinePage page, String? spreadPosition, String sidePreference, List<FanzinePage> allPages) async {
     final batch = _db.batch();
-    batch.update(page.reference, {
+    final pageRef = _db.collection('fanzines').doc(fanzineId).collection('pages').doc(page.id);
+    batch.update(pageRef, {
       'spreadPosition': spreadPosition,
       'sidePreference': sidePreference,
     });
@@ -61,17 +62,17 @@ class FirebaseFanzineRepository implements IFanzineRepository {
 
   @override
   Future<void> removePageFromFolio(String fanzineId, FanzinePage page, List<FanzinePage> allPages) async {
-    await page.reference.delete();
+    await _db.collection('fanzines').doc(fanzineId).collection('pages').doc(page.id).delete();
   }
 
   @override
   Future<void> togglePageOrdering(String fanzineId, FanzinePage page, bool shouldOrder) async {
-    await page.reference.update({'pageNumber': shouldOrder ? 1 : 0});
+    await _db.collection('fanzines').doc(fanzineId).collection('pages').doc(page.id).update({'pageNumber': shouldOrder ? 1 : 0});
   }
 
   @override
   Future<void> reorderPageModel(String fanzineId, FanzinePage page, int delta, List<FanzinePage> allPages) async {
-    await page.reference.update({'pageNumber': page.pageNumber + delta});
+    await _db.collection('fanzines').doc(fanzineId).collection('pages').doc(page.id).update({'pageNumber': page.pageNumber + delta});
   }
 
   @override

@@ -11,8 +11,9 @@ class WebFanzineRepository implements IFanzineRepository {
     final controller = StreamController<Fanzine>();
     final unsub = fsListenDoc('fanzines/$fanzineId', (String jsonStr) {
       final decoded = jsonDecode(jsonStr);
-      final doc = WebDocumentSnapshot(decoded['path'], decoded['exists'], restoreTimestamps(decoded['data']));
-      controller.add(Fanzine.fromFirestore(doc));
+      if (decoded['exists'] == true) {
+        controller.add(Fanzine.fromMap(decoded['id'], restoreTimestamps(decoded['data'])));
+      }
     });
     controller.onCancel = () { unsub.callAsFunction(); };
     return controller.stream;
@@ -24,8 +25,7 @@ class WebFanzineRepository implements IFanzineRepository {
     final unsub = fsListenQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber', false, (String jsonStr) {
       final List decoded = jsonDecode(jsonStr);
       final pages = decoded.map((d) {
-        final doc = WebDocumentSnapshot(d['path'], d['exists'], restoreTimestamps(d['data']));
-        return FanzinePage.fromFirestore(doc);
+        return FanzinePage.fromMap(d['id'], restoreTimestamps(d['data']));
       }).toList();
       controller.add(pages);
     });
@@ -40,7 +40,7 @@ class WebFanzineRepository implements IFanzineRepository {
 
   @override
   Future<void> updatePageLayout(String fanzineId, FanzinePage page, String? spreadPosition, String sidePreference, List<FanzinePage> allPages) async {
-    await fsUpdateDoc(page.reference.path, jsonEncode({
+    await fsUpdateDoc('fanzines/$fanzineId/pages/${page.id}', jsonEncode({
       'spreadPosition': spreadPosition,
       'sidePreference': sidePreference,
     }));
@@ -70,17 +70,17 @@ class WebFanzineRepository implements IFanzineRepository {
 
   @override
   Future<void> removePageFromFolio(String fanzineId, FanzinePage page, List<FanzinePage> allPages) async {
-    await fsDeleteDoc(page.reference.path);
+    await fsDeleteDoc('fanzines/$fanzineId/pages/${page.id}');
   }
 
   @override
   Future<void> togglePageOrdering(String fanzineId, FanzinePage page, bool shouldOrder) async {
-    await fsUpdateDoc(page.reference.path, jsonEncode({'pageNumber': shouldOrder ? 1 : 0}));
+    await fsUpdateDoc('fanzines/$fanzineId/pages/${page.id}', jsonEncode({'pageNumber': shouldOrder ? 1 : 0}));
   }
 
   @override
   Future<void> reorderPageModel(String fanzineId, FanzinePage page, int delta, List<FanzinePage> allPages) async {
-    await fsUpdateDoc(page.reference.path, jsonEncode({'pageNumber': page.pageNumber + delta}));
+    await fsUpdateDoc('fanzines/$fanzineId/pages/${page.id}', jsonEncode({'pageNumber': page.pageNumber + delta}));
   }
 
   @override

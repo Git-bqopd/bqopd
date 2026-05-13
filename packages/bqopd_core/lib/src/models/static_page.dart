@@ -1,4 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+DateTime? _parseDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  try { return value.toDate(); } catch (_) {}
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
 
 class StaticPage {
   final String id;
@@ -13,13 +20,12 @@ class StaticPage {
     required this.createdAt,
   });
 
-  factory StaticPage.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory StaticPage.fromMap(String id, Map<String, dynamic> data) {
     return StaticPage(
-      id: doc.id,
+      id: id,
       imageUrl: data['imageUrl'] ?? '',
       aspectRatio: (data['aspectRatio'] as num?)?.toDouble() ?? 0.625,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: _parseDate(data['createdAt']) ?? DateTime.now(),
     );
   }
 
@@ -27,7 +33,7 @@ class StaticPage {
     return {
       'imageUrl': imageUrl,
       'aspectRatio': aspectRatio,
-      'createdAt': Timestamp.fromDate(createdAt),
+      'createdAt': createdAt,
     };
   }
 }

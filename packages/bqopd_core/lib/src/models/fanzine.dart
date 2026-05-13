@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
 enum FanzineType { ingested, folio, calendar }
@@ -57,9 +56,7 @@ class Fanzine extends Equatable {
     this.isSoftPublished = false,
   });
 
-  factory Fanzine.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
-
+  factory Fanzine.fromMap(String id, Map<String, dynamic> data) {
     FanzineType parsedType = FanzineType.ingested;
     if (data['type'] == 'folio') parsedType = FanzineType.folio;
     if (data['type'] == 'calendar') parsedType = FanzineType.calendar;
@@ -68,7 +65,7 @@ class Fanzine extends Equatable {
     final List<String> editorList = List<String>.from(data['editors'] ?? []);
 
     return Fanzine(
-      id: doc.id,
+      id: id,
       title: data['title'] ?? 'Untitled',
       volume: data['volume'],
       issue: data['issue'],
