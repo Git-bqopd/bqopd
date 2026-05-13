@@ -58,8 +58,8 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
       final newFanzineRef =
       FirebaseFirestore.instance.collection('fanzines').doc();
 
-      // Instantiate the service and call the method on the instance
-      final shortcodeService = ShortcodeService();
+      // Use the newly created Service
+      final ShortcodeService shortcodeService = ShortcodeService();
       final String? shortCode = await shortcodeService.assignShortcode(
         contentType: 'fanzine',
         contentId: newFanzineRef.id,
@@ -71,7 +71,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
           'title': title,
           'editorId': editorId,
           'ownerId': editorId,
-          'isLive': false,
+          'isLive': false, // REPLACED status: 'draft'
           'processingStatus': 'idle',
           'creationDate': FieldValue.serverTimestamp(),
           'shortCode': shortCode,
