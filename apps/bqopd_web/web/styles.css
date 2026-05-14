@@ -18,63 +18,76 @@ body {
   'opsz' 24;
 }
 
-/* Manila Envelope Aesthetic */
-.manila-envelope {
+/* Manila Envelope Aesthetic - Locked to 5x8 Ratio */
+.manila-envelope, .manila-envelope-cover {
     background-color: #F1B255;
-    padding: 10px;
+    padding: 20px;
     width: 100%;
     max-width: 450px;
     aspect-ratio: 5 / 8;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-}
-
-.manila-envelope-cover {
-    background-color: #F1B255;
-    padding: 10px;
-    width: 100%;
-    aspect-ratio: 5 / 8;
-    display: flex;
-    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
     box-sizing: border-box;
 }
 
-/* White Sticker Aesthetic */
+/* White Sticker Aesthetic - Inset and Pinning Content to Top */
 .white-sticker {
     background-color: white;
     border-radius: 12px;
     border: 1px solid rgba(0,0,0,0.05);
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    flex: 1;
-    padding: 32px;
+    flex: none;
+    width: 85%;
+    height: 80%;
     display: flex;
     flex-direction: column;
+    justify-content: center; /* Keeps main text centered */
     align-items: center;
-    justify-content: center;
-    overflow-y: auto;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 32px;
+    position: relative; /* Allow children to be pinned */
 }
 
+/* RESTORED: Compact logic for the header row pinning */
 .white-sticker-compact {
     background-color: white;
     border-radius: 12px;
     border: 1px solid rgba(0,0,0,0.05);
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    flex: 1;
+    flex: none;
+    width: 85%;
+    height: 80%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* Restored Tab Row Formatting logic */
+.bg-gray-100 {
+    background-color: #f5f5f5;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding-top: 8px;
+    padding-bottom: 8px;
 }
 
 /* Utility Classes */
 .flex-col { display: flex; flex-direction: column; }
-.flex-row { display: flex; flex-direction: row; }
+.flex-row { display: flex; flex-row; }
 .items-center { align-items: center; }
 .justify-center { justify-content: center; }
 .justify-between { justify-content: space-between; }
 .w-full { width: 100%; }
 .h-full { height: 100%; }
+.flex-1 { flex: 1; }
 .gap-2 { gap: 8px; }
 .gap-4 { gap: 16px; }
 .mt-2 { margin-top: 8px; }
@@ -93,7 +106,6 @@ body {
 .text-gray { color: #666; }
 .text-white { color: white; }
 .bg-white { background-color: white; }
-.bg-gray-100 { background-color: #f5f5f5; }
 .hidden { display: none; }
 .cursor-pointer { cursor: pointer; }
 
@@ -184,20 +196,20 @@ a:hover {
     object-fit: contain;
 }
 
-/* --- Grid View Layout (Translating Flutter's AspectRatio & Expanded) --- */
+/* --- Grid View Layout --- */
 .spread-wrapper {
     position: relative;
     width: 100%;
     max-width: 1000px;
     margin: 24px auto;
-    aspect-ratio: 11 / 8.5; /* Standard US Letter Landscape */
+    aspect-ratio: 11 / 8.5;
 }
 
 .spread-paper {
     background-color: white;
     border-radius: 2px;
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    padding: 3%; /* Relative padding to scale with the spread */
+    padding: 3%;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
@@ -234,18 +246,19 @@ a:hover {
 .page-wrapper-border img {
     width: 100%;
     height: 100%;
-    object-fit: contain; /* Prevents blowing out the container */
+    object-fit: contain;
 }
 
-/* --- Header Overlay (Translating Flutter's OverflowBox & Stack) --- */
+/* --- Header Overlay --- */
 .header-envelope-overlay {
     position: absolute;
-    top: -4%;
-    bottom: -4%;
-    left: -2%; /* Slight bleed to the left edge */
-    width: 50%; /* Cover exactly the left half of the spread */
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 50%;
     display: flex;
-    justify-content: center; /* Center the envelope inside its half */
+    justify-content: center;
+    align-items: center;
     z-index: 10;
 }
 
