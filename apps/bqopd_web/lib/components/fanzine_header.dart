@@ -35,7 +35,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
   Future<void> _resolveDisplayUrl() async {
     final uid = getCurrentUserId();
     if (uid == null) {
-      setState(() => _displayUrl = 'Login / Register');
+      setState(() => _displayUrl = 'login / register');
     } else {
       final res = await fsGetDoc('profiles/$uid');
       final data = jsonDecode(res);
