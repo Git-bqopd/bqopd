@@ -61,17 +61,18 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       ]);
     }
 
-    // Call our new layout components instead of the placeholder loop
     return div(classes: 'w-full h-full', [
       FanzineLayout(
           fanzineId: component.fanzineId,
           pages: _pages,
           hasCover: _fanzine!['hasCover'] ?? true,
-          headerWidget: FanzineHeader(
-            fanzineId: component.fanzineId,
-            shortCode: _fanzine!['shortCode'],
-            fanzineData: _fanzine,
-          )
+          headerWidget: div(classes: 'manila-envelope', [
+            FanzineHeader(
+              fanzineId: component.fanzineId,
+              shortCode: _fanzine!['shortCode'],
+              fanzineData: _fanzine,
+            )
+          ])
       )
     ]);
   }

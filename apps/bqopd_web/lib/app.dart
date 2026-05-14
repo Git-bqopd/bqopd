@@ -127,7 +127,7 @@ class _AppState extends State<App> {
             path: '/reader/:fanzineId',
             builder: (context, state) => FanzineReaderPage(
               fanzineId: state.params['fanzineId']!,
-              repository: fanzineRepository,
+              // Removed the outdated repository parameter here!
             ),
           ),
           // Put catch-all shortlink resolver at the very end

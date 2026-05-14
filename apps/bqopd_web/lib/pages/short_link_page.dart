@@ -24,7 +24,7 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
 
   Future<void> _resolve() async {
     try {
-      // 1. Check Shortcodes collection (uppercase keys)
+      // 1. Check Shortcodes master collection (uppercase keys)
       final res = await fsGetDoc('shortcodes/${component.code.toUpperCase()}');
       final data = jsonDecode(res);
 
@@ -48,7 +48,25 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
         return;
       }
 
-      // If it drops to here, link doesn't exist
+      // 3. Fallback: Check Fanzines collection directly (for older/unsynced shortcodes)
+      final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(component.code), '');
+      final fzDocs = jsonDecode(fzRes) as List;
+
+      if (fzDocs.isNotEmpty) {
+        Router.of(context).push('/reader/${fzDocs.first['id']}');
+        return;
+      }
+
+      // 4. Fallback: Check Profiles collection directly
+      final pRes = await fsQuery('profiles', 'username', '==', jsonEncode(component.code.toLowerCase()), '');
+      final pDocs = jsonDecode(pRes) as List;
+
+      if (pDocs.isNotEmpty) {
+        Router.of(context).push('/profile?userId=${pDocs.first['id']}');
+        return;
+      }
+
+      // If it drops to here, link doesn't exist anywhere
       setState(() {
         _status = "Link '${component.code}' not found.";
       });
