@@ -9,14 +9,18 @@ class FanzineHeader extends StatefulComponent {
   final String? fanzineId;
   final String? shortCode;
   final Map<String, dynamic>? fanzineData;
-  final Map<String, Map<String, dynamic>> creatorProfiles; // Added parameter
+  final Map<String, Map<String, dynamic>> creatorProfiles;
+  final Map<String, Map<String, dynamic>> imageStats;
+  final List<Map<String, dynamic>> pageStructure;
   final bool isStickerOnly;
 
   const FanzineHeader({
     this.fanzineId,
     this.shortCode,
     this.fanzineData,
-    this.creatorProfiles = const {}, // Added to constructor
+    this.creatorProfiles = const {},
+    this.imageStats = const {},
+    this.pageStructure = const [],
     this.isStickerOnly = false,
     super.key,
   });
@@ -50,27 +54,44 @@ class _FanzineHeaderState extends State<FanzineHeader> {
 
   @override
   Component build(BuildContext context) {
+    // Both views share the common navigation link at the top
+    final navLink = button(
+      classes: 'nav-pill',
+      events: {
+        'click': (e) {
+          final uid = getCurrentUserId();
+          if (uid == null)
+            Router.of(context).push('/login');
+          else
+            Router.of(context).push('/profile');
+        }
+      },
+      [text(_displayUrl)],
+    );
+
     if (component.isStickerOnly) {
-      return div(classes: 'flex-col items-center justify-center w-full h-full', [
-        div(classes: 'bg-white p-4', attributes: {'style': 'border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'}, [
-          img(src: 'assets/logo200.gif', attributes: {'width': '100'})
-        ])
+      // COMPACT LOGO MODE: Used when redundant (e.g. Grid column while List is open)
+      return div(classes: 'flex-col items-center w-full h-full p-2', [
+        navLink,
+        div(
+          classes: 'white-sticker mt-2',
+          attributes: {'style': 'width: 100%; height: auto; padding: 24px;'},
+          [
+            img(
+              src: 'assets/logo200.gif',
+              attributes: {'width': '100', 'style': 'display: block; margin: 0 auto;'},
+            )
+          ],
+        )
       ]);
     }
 
+    // FULL INTERACTIVE MODE: Used in List view or primary Grid view
     final indiciaText = component.fanzineData?['masterIndicia'] ?? "© 2026 BQOPD Collective.";
     final creators = component.fanzineData?['masterCreators'] as List? ?? [];
 
     return div(classes: 'flex-col items-center w-full h-full p-2', [
-      button(
-          classes: 'nav-pill',
-          events: {'click': (e) {
-            final uid = getCurrentUserId();
-            if (uid == null) Router.of(context).push('/login');
-            else Router.of(context).push('/profile');
-          }},
-          [text(_displayUrl)]
-      ),
+      navLink,
       div(classes: 'white-sticker-compact w-full mt-2', [
         div(classes: 'flex-row justify-center items-center py-2 bg-gray-100', [
           _buildTab('indicia', 0),
@@ -80,9 +101,25 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           _buildTab('stats', 2),
         ]),
         div(classes: 'flex-col flex-1 p-4 overflow-y-auto', [
-          if (_activeTab == 0) p(classes: 'text-xs text-justify', attributes: {'style': 'font-family: Georgia; line-height: 1.5;'}, [text(indiciaText)]),
-          if (_activeTab == 1) _buildCreatorsTab(creators),
-          if (_activeTab == 2 && component.fanzineId != null) StatsTable(contentId: component.fanzineId!, isFanzine: true)
+          div(classes: _activeTab == 0 ? '' : 'hidden', [
+            p(
+              classes: 'text-xs text-justify',
+              attributes: {'style': 'font-family: Georgia; line-height: 1.5;'},
+              [text(indiciaText)],
+            )
+          ]),
+          div(classes: _activeTab == 1 ? '' : 'hidden', [
+            _buildCreatorsTab(creators),
+          ]),
+          div(classes: _activeTab == 2 ? '' : 'hidden', [
+            if (component.fanzineId != null)
+              StatsTable(
+                contentId: component.fanzineId!,
+                isFanzine: true,
+                preloadedPages: component.pageStructure,
+                preloadedStats: component.imageStats,
+              )
+          ])
         ])
       ])
     ]);
@@ -91,26 +128,33 @@ class _FanzineHeaderState extends State<FanzineHeader> {
   Component _buildTab(String label, int index) {
     final isActive = _activeTab == index;
     return span(
-        classes: 'text-xs cursor-pointer ${isActive ? 'font-bold' : 'text-gray'}',
-        events: {'click': (e) => setState(() => _activeTab = index)},
-        [text(label)]
+      classes: 'text-xs cursor-pointer ${isActive ? 'font-bold' : 'text-gray'}',
+      events: {'click': (e) => setState(() => _activeTab = index)},
+      [text(label)],
     );
   }
 
   Component _buildCreatorsTab(List creators) {
     if (creators.isEmpty) return p(classes: 'text-xs text-center text-gray', [text('No creators listed.')]);
+
     return div(classes: 'creator-list', [
-      for (var c in creators)
-        div(classes: 'creator-row', [
-          span(classes: 'creator-role', [text('${c['role']}')]),
-          span(classes: 'creator-divider', [text('|')]),
-          div(classes: 'creator-identity', [
-            UserTile(
-              profile: component.creatorProfiles[c['uid']], // Use cached profile
-              fallbackName: c['name'] ?? 'Unknown',
-            ),
-          ]),
-        ])
+      div(attributes: {'style': 'display: inline-flex; flex-direction: column; align-items: flex-start;'}, [
+        for (var c in creators)
+          div(
+            classes: 'creator-row',
+            attributes: {'style': 'width: auto;'},
+            [
+              span(classes: 'creator-role', [text('${c['role']}')]),
+              span(classes: 'creator-divider', [text('|')]),
+              div(classes: 'creator-identity', [
+                UserTile(
+                  profile: component.creatorProfiles[c['uid']],
+                  fallbackName: c['name'] ?? 'Unknown',
+                ),
+              ]),
+            ],
+          )
+      ])
     ]);
   }
 }
@@ -132,14 +176,11 @@ class UserTile extends StatelessComponent {
         if (photoUrl != null && photoUrl.isNotEmpty)
           img(classes: 'user-avatar', src: photoUrl)
         else
-          div(classes: 'user-avatar-placeholder', [
-            text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
-          ])
+          div(classes: 'user-avatar-placeholder', [text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')])
       ]),
       div(classes: 'user-info', [
         div(classes: 'user-display-name', [text(displayName)]),
-        if (username != null)
-          div(classes: 'user-handle', [text('@$username')])
+        if (username != null) div(classes: 'user-handle', [text('@$username')])
       ])
     ]);
   }

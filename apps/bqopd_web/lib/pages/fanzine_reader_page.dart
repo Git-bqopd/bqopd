@@ -21,6 +21,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Map<String, dynamic>? _fanzine;
   List<Map<String, dynamic>> _pages = [];
   Map<String, Map<String, dynamic>> _creatorProfiles = {};
+  Map<String, Map<String, dynamic>> _imageStats = {}; // Cache for stats
   bool _loading = true;
 
   @override
@@ -38,26 +39,50 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       if (fzDoc['exists']) {
         _fanzine = fzDoc['data'];
 
-        // 2. Pre-fetch Creator Profiles to prevent UI flicker
-        final creators = _fanzine!['masterCreators'] as List? ?? [];
-        final Map<String, Map<String, dynamic>> profiles = {};
-
-        for (var c in creators) {
-          final uid = c['uid'] as String?;
-          if (uid != null && uid.isNotEmpty) {
-            final pRes = await fsGetDoc('profiles/$uid');
-            final pDoc = jsonDecode(pRes);
-            if (pDoc['exists']) {
-              profiles[uid] = pDoc['data'];
-            }
-          }
-        }
-        _creatorProfiles = profiles;
-
-        // 3. Load Pages
+        // 2. Load Pages first so we know which images to fetch stats for
         final pagesRes = await fsQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber');
         final List pagesList = jsonDecode(pagesRes);
-        _pages = pagesList.map((p) => p['data'] as Map<String, dynamic>).toList();
+        _pages = pagesList.map((p) {
+          final data = p['data'] as Map<String, dynamic>;
+          data['__id'] = p['id']; // Store internal ID
+          return data;
+        }).toList();
+
+        // 3. Parallel Batch Fetching: Profiles and Image Stats
+        final creators = _fanzine!['masterCreators'] as List? ?? [];
+        final Map<String, Map<String, dynamic>> profiles = {};
+        final Map<String, Map<String, dynamic>> stats = {};
+
+        // Get UIDs for profiles
+        final Set<String> uidsToFetch = creators
+            .map((c) => c['uid'] as String?)
+            .where((uid) => uid != null && uid.isNotEmpty)
+            .cast<String>()
+            .toSet();
+
+        // Get Image IDs for stats
+        final Set<String> imageIdsToFetch = _pages
+            .map((p) => p['imageId'] as String?)
+            .where((id) => id != null && id.isNotEmpty)
+            .cast<String>()
+            .toSet();
+
+        // Perform fetches
+        await Future.wait([
+          ...uidsToFetch.map((uid) async {
+            final pRes = await fsGetDoc('profiles/$uid');
+            final pDoc = jsonDecode(pRes);
+            if (pDoc['exists']) profiles[uid] = pDoc['data'];
+          }),
+          ...imageIdsToFetch.map((id) async {
+            final iRes = await fsGetDoc('images/$id');
+            final iDoc = jsonDecode(iRes);
+            if (iDoc['exists']) stats[id] = iDoc['data'];
+          }),
+        ]);
+
+        _creatorProfiles = profiles;
+        _imageStats = stats;
       }
     } catch (e) {
       print("Error loading fanzine: $e");
@@ -92,7 +117,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           fanzineId: component.fanzineId,
           shortCode: _fanzine!['shortCode'],
           fanzineData: _fanzine,
-          creatorProfiles: _creatorProfiles, // FIXED: Now passing pre-fetched profiles
+          creatorProfiles: _creatorProfiles,
+          imageStats: _imageStats, // Passing the full stats package down
+          pageStructure: _pages, // Passing page structure for the stats table
         ),
       )
     ]);
