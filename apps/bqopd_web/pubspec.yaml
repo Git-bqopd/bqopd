@@ -1,7 +1,6 @@
 name: bqopd_web
 description: The bqopd fanzine platform - Jaspr Web App.
 publish_to: none
-resolution: workspace
 
 environment:
   sdk: ^3.11.0

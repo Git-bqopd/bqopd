@@ -3,6 +3,17 @@
     "staging": "bqopd-9ce06",
     "default": "bqopd-9ce06"
   },
-  "targets": {},
+  "targets": {
+    "bqopd-9ce06": {
+      "hosting": {
+        "flutter_app": [
+          "bqopd-flutter"
+        ],
+        "jaspr_app": [
+          "bqopd-jaspr"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

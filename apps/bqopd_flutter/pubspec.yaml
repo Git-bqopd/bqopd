@@ -1,7 +1,6 @@
 name: bqopd
 description: "The bqopd fanzine platform."
 publish_to: 'none'
-resolution: workspace
 
 version: 1.0.0+1
 
