@@ -10,6 +10,7 @@ class FanzineReaderPage extends StatefulComponent {
 
   const FanzineReaderPage({
     required this.fanzineId,
+    super.key,
   });
 
   @override
@@ -19,6 +20,7 @@ class FanzineReaderPage extends StatefulComponent {
 class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Map<String, dynamic>? _fanzine;
   List<Map<String, dynamic>> _pages = [];
+  Map<String, Map<String, dynamic>> _creatorProfiles = {};
   bool _loading = true;
 
   @override
@@ -29,12 +31,30 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   Future<void> _loadData() async {
     try {
+      // 1. Load Fanzine Metadata
       final fzRes = await fsGetDoc('fanzines/${component.fanzineId}');
       final fzDoc = jsonDecode(fzRes);
 
       if (fzDoc['exists']) {
         _fanzine = fzDoc['data'];
 
+        // 2. Pre-fetch Creator Profiles to prevent UI flicker
+        final creators = _fanzine!['masterCreators'] as List? ?? [];
+        final Map<String, Map<String, dynamic>> profiles = {};
+
+        for (var c in creators) {
+          final uid = c['uid'] as String?;
+          if (uid != null && uid.isNotEmpty) {
+            final pRes = await fsGetDoc('profiles/$uid');
+            final pDoc = jsonDecode(pRes);
+            if (pDoc['exists']) {
+              profiles[uid] = pDoc['data'];
+            }
+          }
+        }
+        _creatorProfiles = profiles;
+
+        // 3. Load Pages
         final pagesRes = await fsQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber');
         final List pagesList = jsonDecode(pagesRes);
         _pages = pagesList.map((p) => p['data'] as Map<String, dynamic>).toList();
@@ -42,7 +62,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     } catch (e) {
       print("Error loading fanzine: $e");
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -61,17 +83,17 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       ]);
     }
 
-    // Call our new layout components instead of the placeholder loop
     return div(classes: 'w-full h-full', [
       FanzineLayout(
+        fanzineId: component.fanzineId,
+        pages: _pages,
+        hasCover: _fanzine!['hasCover'] ?? true,
+        headerWidget: FanzineHeader(
           fanzineId: component.fanzineId,
-          pages: _pages,
-          hasCover: _fanzine!['hasCover'] ?? true,
-          headerWidget: FanzineHeader(
-            fanzineId: component.fanzineId,
-            shortCode: _fanzine!['shortCode'],
-            fanzineData: _fanzine,
-          )
+          shortCode: _fanzine!['shortCode'],
+          fanzineData: _fanzine,
+          creatorProfiles: _creatorProfiles, // FIXED: Now passing pre-fetched profiles
+        ),
       )
     ]);
   }
