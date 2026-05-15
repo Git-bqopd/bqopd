@@ -9,13 +9,16 @@ class FanzineHeader extends StatefulComponent {
   final String? fanzineId;
   final String? shortCode;
   final Map<String, dynamic>? fanzineData;
+  final Map<String, Map<String, dynamic>> creatorProfiles; // Added parameter
   final bool isStickerOnly;
 
   const FanzineHeader({
     this.fanzineId,
     this.shortCode,
     this.fanzineData,
+    this.creatorProfiles = const {}, // Added to constructor
     this.isStickerOnly = false,
+    super.key,
   });
 
   @override
@@ -96,13 +99,48 @@ class _FanzineHeaderState extends State<FanzineHeader> {
 
   Component _buildCreatorsTab(List creators) {
     if (creators.isEmpty) return p(classes: 'text-xs text-center text-gray', [text('No creators listed.')]);
-    return div(classes: 'flex-col gap-2', [
+    return div(classes: 'creator-list', [
       for (var c in creators)
-        div(classes: 'flex-row items-center gap-2', [
-          span(classes: 'text-xs text-gray font-bold', attributes: {'style': 'width: 45px; text-align: right; font-size: 8px;'}, [text('${c['role']}'.toUpperCase())]),
-          span(classes: 'text-gray text-xs', [text('|')]),
-          span(classes: 'text-xs font-bold', attributes: {'style': 'font-size: 10px;'}, [text('${c['name']}'.toUpperCase())])
+        div(classes: 'creator-row', [
+          span(classes: 'creator-role', [text('${c['role']}')]),
+          span(classes: 'creator-divider', [text('|')]),
+          div(classes: 'creator-identity', [
+            UserTile(
+              profile: component.creatorProfiles[c['uid']], // Use cached profile
+              fallbackName: c['name'] ?? 'Unknown',
+            ),
+          ]),
         ])
+    ]);
+  }
+}
+
+class UserTile extends StatelessComponent {
+  final Map<String, dynamic>? profile;
+  final String fallbackName;
+
+  const UserTile({this.profile, required this.fallbackName, super.key});
+
+  @override
+  Component build(BuildContext context) {
+    final String displayName = profile?['displayName'] ?? fallbackName;
+    final String? username = profile?['username'];
+    final String? photoUrl = profile?['photoUrl'];
+
+    return div(classes: 'user-tile', [
+      div(classes: 'user-avatar-container', [
+        if (photoUrl != null && photoUrl.isNotEmpty)
+          img(classes: 'user-avatar', src: photoUrl)
+        else
+          div(classes: 'user-avatar-placeholder', [
+            text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
+          ])
+      ]),
+      div(classes: 'user-info', [
+        div(classes: 'user-display-name', [text(displayName)]),
+        if (username != null)
+          div(classes: 'user-handle', [text('@$username')])
+      ])
     ]);
   }
 }
