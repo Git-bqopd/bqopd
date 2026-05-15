@@ -17,86 +17,47 @@ class StatsTable extends StatefulComponent {
 }
 
 class _StatsTableState extends State<StatsTable> {
-  List<Map<String, dynamic>> _rows = [];
-  bool _loading = true;
+  List<Map<String, dynamic>> _pages = [];
+  bool _loadingPages = true;
 
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    _fetchPageList();
   }
 
-  Future<void> _loadStats() async {
-    if (component.isFanzine) {
-      // Load all pages for this fanzine
+  /// Fetches only the list of page identifiers.
+  /// The specific stats for each image will be loaded reactively in the rows.
+  Future<void> _fetchPageList() async {
+    if (!component.isFanzine) {
+      setState(() => _loadingPages = false);
+      return;
+    }
+
+    try {
       final res = await fsQuery('fanzines/${component.contentId}/pages', '', '', '', 'pageNumber');
       final List pages = jsonDecode(res);
-
-      List<Map<String, dynamic>> loadedRows = [];
-      for (var p in pages) {
-        final data = p['data'];
-        final imageId = data['imageId'] ?? '';
-        final pageNum = data['pageNumber'] ?? '?';
-
-        if (imageId.isNotEmpty) {
-          final imgRes = await fsGetDoc('images/$imageId');
-          final imgDoc = jsonDecode(imgRes);
-          if (imgDoc['exists']) {
-            final imgData = imgDoc['data'];
-            loadedRows.add({
-              'label': '$pageNum',
-              'regGrid': imgData['regGridCount'] ?? 0,
-              'anonGrid': imgData['anonGridCount'] ?? 0,
-              'regList': imgData['regListCount'] ?? 0,
-              'anonList': imgData['anonListCount'] ?? 0,
-            });
-          } else {
-            loadedRows.add({'label': '$pageNum', 'regGrid': 0, 'anonGrid': 0, 'regList': 0, 'anonList': 0});
-          }
-        } else {
-          loadedRows.add({'label': '$pageNum', 'regGrid': 0, 'anonGrid': 0, 'regList': 0, 'anonList': 0});
-        }
-      }
       setState(() {
-        _rows = loadedRows;
-        _loading = false;
+        _pages = pages.map((p) => p as Map<String, dynamic>).toList();
+        _loadingPages = false;
       });
-    } else {
-      // Just a single image
-      final imgRes = await fsGetDoc('images/${component.contentId}');
-      final imgDoc = jsonDecode(imgRes);
-      if (imgDoc['exists']) {
-        final imgData = imgDoc['data'];
-        setState(() {
-          _rows = [{
-            'label': '',
-            'regGrid': imgData['regGridCount'] ?? 0,
-            'anonGrid': imgData['anonGridCount'] ?? 0,
-            'regList': imgData['regListCount'] ?? 0,
-            'anonList': imgData['anonListCount'] ?? 0,
-          }];
-          _loading = false;
-        });
-      } else {
-        setState(() {
-          _rows = [{'label': '', 'regGrid': 0, 'anonGrid': 0, 'regList': 0, 'anonList': 0}];
-          _loading = false;
-        });
-      }
+    } catch (e) {
+      print("Error loading page list: $e");
+      setState(() => _loadingPages = false);
     }
   }
 
   @override
   Component build(BuildContext context) {
-    if (_loading) {
-      return div(classes: 'flex-col items-center justify-center p-4', [text('Loading stats...')]);
+    if (_loadingPages) {
+      return div(classes: 'flex-col items-center justify-center p-4', [
+        p([text('Loading page structure...')])
+      ]);
     }
 
-    final title = component.isFanzine ? "IMAGE ANALYTICS (GLOBAL LIFETIME)" : "VIEWER BREAKDOWN";
     final includeLabelColumn = component.isFanzine;
 
     return div(classes: 'flex-col items-center w-full mt-4', [
-      p(classes: 'text-xs font-bold text-gray mb-4', attributes: {'style': 'letter-spacing: 1.1px;'}, [text(title)]),
       div(classes: 'stats-table-wrapper', [
         table(classes: 'stats-table', [
           thead([
@@ -119,17 +80,77 @@ class _StatsTableState extends State<StatsTable> {
             ])
           ]),
           tbody([
-            for (var r in _rows)
-              tr([
-                if (includeLabelColumn) td([text(r['label'])]),
-                td([text('${r['regGrid']}')]),
-                td([text('${r['anonGrid']}')]),
-                td(classes: 'highlight', [text('${r['regList']}')]),
-                td([text('${r['anonList']}')]),
-              ])
+            if (!component.isFanzine)
+              StatRow(imageId: component.contentId, label: null)
+            else
+              for (var p in _pages)
+                StatRow(
+                    imageId: p['data']['imageId'] ?? '',
+                    label: '${p['data']['pageNumber'] ?? '?'}'
+                )
           ])
         ])
       ])
+    ]);
+  }
+}
+
+/// A reactive table row that listens to a specific image's stats.
+class StatRow extends StatefulComponent {
+  final String imageId;
+  final String? label;
+
+  const StatRow({required this.imageId, this.label});
+
+  @override
+  State<StatRow> createState() => _StatRowState();
+}
+
+class _StatRowState extends State<StatRow> {
+  Map<String, dynamic>? _data;
+  dynamic _unsub;
+
+  @override
+  void initState() {
+    super.initState();
+    _startListening();
+  }
+
+  void _startListening() {
+    if (component.imageId.isEmpty) return;
+
+    // Use the interop listener for real-time updates and "pop-in" effect
+    _unsub = fsListenDoc('images/${component.imageId}', (jsonStr) {
+      final doc = jsonDecode(jsonStr);
+      if (doc['exists']) {
+        setState(() {
+          _data = doc['data'];
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_unsub != null) {
+      _unsub.callAsFunction();
+    }
+    super.dispose();
+  }
+
+  @override
+  Component build(BuildContext context) {
+    final regGrid = _data?['regGridCount'] ?? 0;
+    final anonGrid = _data?['anonGridCount'] ?? 0;
+    final regList = _data?['regListCount'] ?? 0;
+    final anonList = _data?['anonListCount'] ?? 0;
+
+    return tr([
+      if (component.label != null) td([text(component.label!)]),
+      td([text('$regGrid')]),
+      td([text('$anonGrid')]),
+      td(classes: 'highlight', [text('$regList')]),
+      td([text('$anonList')]),
     ]);
   }
 }
