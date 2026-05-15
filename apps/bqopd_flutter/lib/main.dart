@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -40,7 +39,9 @@ Future<void> main() async {
   await Env.load();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  usePathUrlStrategy();
+
+  // Note: usePathUrlStrategy() removed to bypass SDK compilation errors
+  // on experimental Flutter channels.
 
   // Initialize concrete implementations
   final authRepo = FirebaseAuthRepository();

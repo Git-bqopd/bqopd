@@ -5,55 +5,54 @@ import 'dart:io' as _io;
 import 'package:build_runner/src/build_plan/builder_factories.dart'
     as _build_runner;
 import 'package:build_runner/src/bootstrap/processes.dart' as _build_runner;
-import 'package:build_modules/builders.dart' as _i1;
-import 'package:build_web_compilers/builders.dart' as _i2;
-import 'package:jaspr_builder/builder.dart' as _i3;
-import 'package:source_gen/builder.dart' as _i4;
+import 'package:build_web_compilers/builders.dart' as _i1;
+import 'package:jaspr_builder/builder.dart' as _i2;
+import 'package:source_gen/builder.dart' as _i3;
 
 final _builderFactories = _build_runner.BuilderFactories(
   {
-    'build_modules:module_library': [_i1.moduleLibraryBuilder],
     'build_web_compilers:dart2js_modules': [
-      _i2.dart2jsMetaModuleBuilder,
-      _i2.dart2jsMetaModuleCleanBuilder,
-      _i2.dart2jsModuleBuilder
+      _i1.dart2jsMetaModuleBuilder,
+      _i1.dart2jsMetaModuleCleanBuilder,
+      _i1.dart2jsModuleBuilder
     ],
     'build_web_compilers:dart2wasm_modules': [
-      _i2.dart2wasmMetaModuleBuilder,
-      _i2.dart2wasmMetaModuleCleanBuilder,
-      _i2.dart2wasmModuleBuilder
+      _i1.dart2wasmMetaModuleBuilder,
+      _i1.dart2wasmMetaModuleCleanBuilder,
+      _i1.dart2wasmModuleBuilder
     ],
-    'build_web_compilers:ddc': [_i2.ddcKernelBuilder, _i2.ddcBuilder],
+    'build_web_compilers:ddc': [_i1.ddcKernelBuilder, _i1.ddcBuilder],
     'build_web_compilers:ddc_modules': [
-      _i2.ddcMetaModuleBuilder,
-      _i2.ddcMetaModuleCleanBuilder,
-      _i2.ddcModuleBuilder
+      _i1.ddcMetaModuleBuilder,
+      _i1.ddcMetaModuleCleanBuilder,
+      _i1.ddcModuleBuilder
     ],
-    'build_web_compilers:entrypoint': [_i2.webEntrypointBuilder],
-    'build_web_compilers:entrypoint_marker': [_i2.webEntrypointMarkerBuilder],
-    'build_web_compilers:sdk_js': [_i2.sdkJsCompile, _i2.sdkJsCopyRequirejs],
-    'jaspr_builder:client_entrypoint': [_i3.buildClientEntrypoint],
-    'jaspr_builder:client_module': [_i3.buildClientModule],
-    'jaspr_builder:client_options': [_i3.buildClientOptions],
-    'jaspr_builder:clients_bundle': [_i3.buildClientsBundle],
-    'jaspr_builder:codec_bundle': [_i3.buildCodecBundle],
-    'jaspr_builder:codec_module': [_i3.buildCodecModule],
-    'jaspr_builder:import_output': [_i3.buildImportsOutput],
-    'jaspr_builder:imports_module': [_i3.buildImportsModule],
-    'jaspr_builder:server_options': [_i3.buildServerOptions],
-    'jaspr_builder:stub': [_i3.buildPlatformStubs],
-    'jaspr_builder:styles_bundle': [_i3.buildStylesBundle],
-    'jaspr_builder:styles_module': [_i3.buildStylesModule],
-    'jaspr_builder:styles_standalone': [_i3.buildStylesStandalone],
-    'jaspr_builder:sync_mixins_module': [_i3.buildSyncMixins],
-    'source_gen:combining_builder': [_i4.combiningBuilder],
+    'build_web_compilers:entrypoint': [_i1.webEntrypointBuilder],
+    'build_web_compilers:entrypoint_marker': [_i1.webEntrypointMarkerBuilder],
+    'build_web_compilers:module_library': [_i1.moduleLibraryBuilder],
+    'build_web_compilers:sdk_js': [_i1.sdkJsCompile, _i1.sdkJsCopyRequirejs],
+    'jaspr_builder:client_entrypoint': [_i2.buildClientEntrypoint],
+    'jaspr_builder:client_module': [_i2.buildClientModule],
+    'jaspr_builder:client_options': [_i2.buildClientOptions],
+    'jaspr_builder:clients_bundle': [_i2.buildClientsBundle],
+    'jaspr_builder:codec_bundle': [_i2.buildCodecBundle],
+    'jaspr_builder:codec_module': [_i2.buildCodecModule],
+    'jaspr_builder:import_output': [_i2.buildImportsOutput],
+    'jaspr_builder:imports_module': [_i2.buildImportsModule],
+    'jaspr_builder:server_options': [_i2.buildServerOptions],
+    'jaspr_builder:stub': [_i2.buildPlatformStubs],
+    'jaspr_builder:styles_bundle': [_i2.buildStylesBundle],
+    'jaspr_builder:styles_module': [_i2.buildStylesModule],
+    'jaspr_builder:styles_standalone': [_i2.buildStylesStandalone],
+    'jaspr_builder:sync_mixins_module': [_i2.buildSyncMixins],
+    'source_gen:combining_builder': [_i3.combiningBuilder],
   },
   postProcessBuilderFactories: {
-    'build_modules:module_cleanup': _i1.moduleCleanup,
     'build_web_compilers:dart2js_archive_extractor':
-        _i2.dart2jsArchiveExtractor,
-    'build_web_compilers:dart_source_cleanup': _i2.dartSourceCleanup,
-    'source_gen:part_cleanup': _i4.partCleanup,
+        _i1.dart2jsArchiveExtractor,
+    'build_web_compilers:dart_source_cleanup': _i1.dartSourceCleanup,
+    'build_web_compilers:module_cleanup': _i1.moduleCleanup,
+    'source_gen:part_cleanup': _i3.partCleanup,
   },
 );
 void main(List<String> args) async {
