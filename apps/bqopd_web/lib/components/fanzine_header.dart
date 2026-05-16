@@ -42,11 +42,11 @@ class _FanzineHeaderState extends State<FanzineHeader> {
   Future<void> _resolveDisplayUrl() async {
     final uid = getCurrentUserId();
     if (uid == null) {
-      setState(() => _displayUrl = 'login / register');
+      if (mounted) setState(() => _displayUrl = 'login / register');
     } else {
       final res = await fsGetDoc('profiles/$uid');
       final data = jsonDecode(res);
-      if (data['exists']) {
+      if (data['exists'] && mounted) {
         setState(() => _displayUrl = 'bqopd.com/${data['data']['username']}');
       }
     }
@@ -60,37 +60,64 @@ class _FanzineHeaderState extends State<FanzineHeader> {
       events: {
         'click': (e) {
           final uid = getCurrentUserId();
-          if (uid == null)
+          if (uid == null) {
             Router.of(context).push('/login');
-          else
+          } else {
             Router.of(context).push('/profile');
+          }
         }
       },
       [text(_displayUrl)],
     );
 
     if (component.isStickerOnly) {
-      // COMPACT LOGO MODE: Used when redundant (e.g. Grid column while List is open)
+      // EXPLICIT COMPACT LOGO MODE
       return div(classes: 'flex-col items-center w-full h-full p-2', [
         navLink,
         div(
-          classes: 'white-sticker mt-2',
-          attributes: {'style': 'width: 100%; height: auto; padding: 24px;'},
-          [
-            img(
-              src: 'assets/logo200.gif',
-              attributes: {'width': '100', 'style': 'display: block; margin: 0 auto;'},
-            )
-          ],
+            classes: 'flex-1 flex-col justify-center items-center w-full',
+            [
+              div(
+                  classes: 'white-sticker',
+                  [
+                    img(
+                      src: 'assets/logo200.gif',
+                      attributes: {'style': 'width: 100px; height: auto; display: block;'},
+                    )
+                  ]
+              )
+            ]
         )
       ]);
     }
 
-    // FULL INTERACTIVE MODE: Used in List view or primary Grid view
     final indiciaText = component.fanzineData?['masterIndicia'] ?? "© 2026 BQOPD Collective.";
     final creators = component.fanzineData?['masterCreators'] as List? ?? [];
 
-    return div(classes: 'flex-col items-center w-full h-full p-2', [
+    // STICKER VIEW (Responsive Toggle)
+    final stickerView = div(
+        classes: 'fh-sticker-view flex-col items-center w-full h-full p-2',
+        [
+          navLink,
+          div(
+              classes: 'flex-1 flex-col justify-center items-center w-full',
+              [
+                div(
+                    classes: 'white-sticker',
+                    [
+                      img(
+                        src: 'assets/logo200.gif',
+                        attributes: {'style': 'width: 100px; height: auto; display: block;'},
+                      )
+                    ]
+                )
+              ]
+          )
+        ]
+    );
+
+    // FULL VIEW (Responsive Toggle)
+    final fullView = div(classes: 'fh-full-view flex-col items-center w-full h-full p-2', [
       navLink,
       div(classes: 'white-sticker-compact w-full mt-2', [
         div(classes: 'flex-row justify-center items-center py-2 bg-gray-100', [
@@ -122,6 +149,11 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           ])
         ])
       ])
+    ]);
+
+    return div(classes: 'w-full h-full', [
+      stickerView,
+      fullView,
     ]);
   }
 

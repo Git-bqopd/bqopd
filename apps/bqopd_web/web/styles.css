@@ -517,3 +517,11 @@ a:hover {
         flex-direction: column;
     }
 }
+
+/* Fanzine Header Context Switches */
+.fh-sticker-view { display: none; }
+.fh-full-view { display: flex; }
+
+/* CSS Context Switch: When grid and list are both open, hide full and show sticker in the grid */
+.reader-split-layout:has(.list-area) .grid-area .fh-full-view { display: none !important; }
+.reader-split-layout:has(.list-area) .grid-area .fh-sticker-view { display: flex !important; }
