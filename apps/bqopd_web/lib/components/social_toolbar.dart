@@ -11,12 +11,19 @@ class SocialToolbar extends StatefulComponent {
   final String? youtubeId;
   final VoidCallback? onOpenGrid;
 
+  // NEW: Panel State callbacks
+  final BonusRowType? activeBonusRow;
+  final ValueChanged<BonusRowType> onToggleBonusRow;
+
   const SocialToolbar({
     required this.imageId,
     this.fanzineId,
     this.isGame = false,
     this.youtubeId,
     this.onOpenGrid,
+    required this.activeBonusRow,
+    required this.onToggleBonusRow,
+    super.key,
   });
 
   @override
@@ -44,7 +51,8 @@ class _SocialToolbarState extends State<SocialToolbar> {
       setState(() {
         _likeCount = data['likeCount'] ?? 0;
         _commentCount = data['commentCount'] ?? 0;
-        _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) + (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
+        _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) +
+            (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
       });
     }
 
@@ -67,21 +75,23 @@ class _SocialToolbarState extends State<SocialToolbar> {
     });
 
     if (newStatus) {
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode(WebFieldValue.increment(1).applyToKey('likeCount')));
-      await fsSetDoc('Users/$uid/activity/likes/images/${component.imageId}', jsonEncode({'imageId': component.imageId, 'likedAt': WebFieldValue.serverTimestamp()}), true);
+      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'likeCount': WebFieldValue.increment(1)}));
+      await fsSetDoc('Users/$uid/activity/likes/images/${component.imageId}', jsonEncode({
+        'imageId': component.imageId,
+        'likedAt': WebFieldValue.serverTimestamp()
+      }), true);
     } else {
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode(WebFieldValue.increment(-1).applyToKey('likeCount')));
+      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'likeCount': WebFieldValue.increment(-1)}));
       await fsDeleteDoc('Users/$uid/activity/likes/images/${component.imageId}');
     }
   }
 
   @override
   Component build(BuildContext context) {
-    // Determine visible tools based on context
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
       return ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
-        userRole: 'user', // Simplified for web read-only MVP
+        userRole: 'user',
         isEditingMode: false,
         hasYoutube: component.youtubeId != null && component.youtubeId!.isNotEmpty,
         isGame: component.isGame,
@@ -105,22 +115,20 @@ class _SocialToolbarState extends State<SocialToolbar> {
       count = _likeCount;
       action = _handleLike;
     } else if (tool.id == 'Comment') {
+      isActive = component.activeBonusRow == BonusRowType.comments;
       count = _commentCount;
+      action = () => component.onToggleBonusRow(BonusRowType.comments);
+    } else if (tool.id == 'Text') {
+      isActive = component.activeBonusRow == BonusRowType.textReader;
+      action = () => component.onToggleBonusRow(BonusRowType.textReader);
     } else if (tool.id == 'Views') {
       count = _viewCount;
     } else if (tool.id == 'Grid') {
       action = component.onOpenGrid ?? () {};
-    } else if (tool.id == 'Share') {
-      action = () {
-        // Web share logic or copy to clipboard via interop
-        print("Web share requested for ${component.imageId}");
-      };
     }
 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-    // Map flutter icon names to material symbols if needed (most are identical)
     final resolvedIcon = iconName.replaceAll('_outlined', '');
-
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
 
     return button(
@@ -135,11 +143,5 @@ class _SocialToolbarState extends State<SocialToolbar> {
           span(classes: 'toolbar-label', [text(tool.label)])
         ]
     );
-  }
-}
-
-extension on Map<String, dynamic> {
-  Map<String, dynamic> applyToKey(String key) {
-    return {key: this};
   }
 }
