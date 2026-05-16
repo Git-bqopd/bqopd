@@ -9,11 +9,13 @@ import 'profile_page.dart';
 
 class ShortLinkPage extends StatefulComponent {
   final String code;
+  final String? pageNumber; // NEW: Immutable path variable for deep linking
   final AuthState? authState;
   final AuthBloc? authBloc;
 
   const ShortLinkPage({
     required this.code,
+    this.pageNumber,
     this.authState,
     this.authBloc,
   });
@@ -128,7 +130,13 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
     }
 
     if (_targetFanzineId != null) {
-      return FanzineReaderPage(fanzineId: _targetFanzineId!);
+      // Convert path string to integer for initialization
+      final initialPage = component.pageNumber != null ? int.tryParse(component.pageNumber!) : null;
+
+      return FanzineReaderPage(
+        fanzineId: _targetFanzineId!,
+        initialPageNumber: initialPage,
+      );
     }
 
     if (_targetUserId != null && component.authBloc != null) {

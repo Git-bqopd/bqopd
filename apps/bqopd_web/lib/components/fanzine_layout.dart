@@ -12,12 +12,14 @@ class FanzineLayout extends StatefulComponent {
   final List<Map<String, dynamic>> pages;
   final Component headerWidget;
   final bool hasCover;
+  final int? initialPageNumber; // Capturing the anchor anchor
 
   const FanzineLayout({
     required this.fanzineId,
     required this.pages,
     required this.headerWidget,
     this.hasCover = true,
+    this.initialPageNumber,
   });
 
   @override
@@ -28,6 +30,17 @@ class _FanzineLayoutState extends State<FanzineLayout> {
   FanzineViewMode _viewMode = FanzineViewMode.grid;
   int _targetIndex = 0;
   BonusRowType? _activeGlobalPanel;
+
+  @override
+  void initState() {
+    super.initState();
+    // VITAL: In our sequence, Index 0 is the Header and Index 1 is Page 1 (Cover).
+    // If a specific page is requested via deep link, we jump straight to that index.
+    if (component.initialPageNumber != null && component.initialPageNumber! > 0) {
+      _targetIndex = component.initialPageNumber!;
+      _viewMode = FanzineViewMode.single;
+    }
+  }
 
   void _switchToSingle(int index) {
     setState(() {
@@ -84,13 +97,6 @@ class _FanzineLayoutState extends State<FanzineLayout> {
               'style': 'flex: 0 0 $calcWidth; min-width: 400px; margin: 0 auto;'
             },
             [
-              div(classes: 'flex justify-end mb-4', [
-                button(
-                    classes: 'nav-pill',
-                    events: {'click': (e) => _switchToGrid()},
-                    [text('Close')]
-                )
-              ]),
               FanzineListRenderer(
                 fanzineId: component.fanzineId,
                 pages: component.pages,
@@ -98,6 +104,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 activeGlobalPanel: _activeGlobalPanel,
                 onTogglePanel: _handleTogglePanel,
                 onOpenGrid: _switchToGrid,
+                initialIndex: _targetIndex,
               )
             ]
         ),

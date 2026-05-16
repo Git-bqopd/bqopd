@@ -7,9 +7,11 @@ import '../components/fanzine_layout.dart';
 
 class FanzineReaderPage extends StatefulComponent {
   final String fanzineId;
+  final int? initialPageNumber; // NEW: Anchor for deep linking
 
   const FanzineReaderPage({
     required this.fanzineId,
+    this.initialPageNumber,
     super.key,
   });
 
@@ -21,7 +23,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Map<String, dynamic>? _fanzine;
   List<Map<String, dynamic>> _pages = [];
   Map<String, Map<String, dynamic>> _creatorProfiles = {};
-  Map<String, Map<String, dynamic>> _imageStats = {}; // Cache for stats
+  Map<String, Map<String, dynamic>> _imageStats = {};
   bool _loading = true;
 
   @override
@@ -32,42 +34,36 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   Future<void> _loadData() async {
     try {
-      // 1. Load Fanzine Metadata
       final fzRes = await fsGetDoc('fanzines/${component.fanzineId}');
       final fzDoc = jsonDecode(fzRes);
 
       if (fzDoc['exists']) {
         _fanzine = fzDoc['data'];
 
-        // 2. Load Pages first so we know which images to fetch stats for
         final pagesRes = await fsQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber');
         final List pagesList = jsonDecode(pagesRes);
         _pages = pagesList.map((p) {
           final data = p['data'] as Map<String, dynamic>;
-          data['__id'] = p['id']; // Store internal ID
+          data['__id'] = p['id'];
           return data;
         }).toList();
 
-        // 3. Parallel Batch Fetching: Profiles and Image Stats
         final creators = _fanzine!['masterCreators'] as List? ?? [];
         final Map<String, Map<String, dynamic>> profiles = {};
         final Map<String, Map<String, dynamic>> stats = {};
 
-        // Get UIDs for profiles
         final Set<String> uidsToFetch = creators
             .map((c) => c['uid'] as String?)
             .where((uid) => uid != null && uid.isNotEmpty)
             .cast<String>()
             .toSet();
 
-        // Get Image IDs for stats
         final Set<String> imageIdsToFetch = _pages
             .map((p) => p['imageId'] as String?)
             .where((id) => id != null && id.isNotEmpty)
             .cast<String>()
             .toSet();
 
-        // Perform fetches
         await Future.wait([
           ...uidsToFetch.map((uid) async {
             final pRes = await fsGetDoc('profiles/$uid');
@@ -113,13 +109,14 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         fanzineId: component.fanzineId,
         pages: _pages,
         hasCover: _fanzine!['hasCover'] ?? true,
+        initialPageNumber: component.initialPageNumber, // Pass deep link anchor down
         headerWidget: FanzineHeader(
           fanzineId: component.fanzineId,
           shortCode: _fanzine!['shortCode'],
           fanzineData: _fanzine,
           creatorProfiles: _creatorProfiles,
-          imageStats: _imageStats, // Passing the full stats package down
-          pageStructure: _pages, // Passing page structure for the stats table
+          imageStats: _imageStats,
+          pageStructure: _pages,
         ),
       )
     ]);

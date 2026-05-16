@@ -27,8 +27,25 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _checkDefaultRoute() async {
     try {
-      // Check Firebase for the global login_zine_shortcode
-      // This matches the behavior of the Flutter app's FanzineReaderPage initialization.
+      final uid = getCurrentUserId();
+
+      // 1. DYNAMIC REDIRECTION FOR AUTHENTICATED USERS
+      if (uid != null) {
+        final userRes = await fsGetDoc('Users/$uid');
+        final userDoc = jsonDecode(userRes);
+
+        if (userDoc['exists'] == true && userDoc['data']['core_book_shortcode'] != null) {
+          final coreBook = userDoc['data']['core_book_shortcode'].toString();
+          if (coreBook.isNotEmpty) {
+            if (mounted) {
+              Router.of(context).replace('/$coreBook');
+              return;
+            }
+          }
+        }
+      }
+
+      // 2. FALLBACK FOR GUESTS: Global "Book of the Week"
       final res = await fsGetDoc('app_settings/main_settings');
       final doc = jsonDecode(res);
 
@@ -37,8 +54,6 @@ class _HomePageState extends State<HomePage> {
         final loginZine = data['login_zine_shortcode'];
 
         if (loginZine != null && loginZine.toString().isNotEmpty) {
-          // Push the shortcode to the router.
-          // The ShortLinkPage will handle resolving this code to the actual reader view.
           if (mounted) {
             Router.of(context).replace('/$loginZine');
             return;
@@ -46,10 +61,9 @@ class _HomePageState extends State<HomePage> {
         }
       }
     } catch (e) {
-      print('Error fetching default route: $e');
+      print('Error executing default route redirection: $e');
     }
 
-    // If we fail to find a redirect or an error occurs, stop loading and show the fallback UI
     if (mounted) {
       setState(() => _loading = false);
     }

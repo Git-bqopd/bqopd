@@ -26,12 +26,14 @@ class FanzineReaderPage extends StatefulWidget {
   final String? fanzineId;
   final String? shortCode;
   final bool isEditingMode;
+  final int? initialPageNumber; // NEW: Capture anchor
 
   const FanzineReaderPage({
     super.key,
     this.fanzineId,
     this.shortCode,
     this.isEditingMode = false,
+    this.initialPageNumber,
   });
 
   @override
@@ -60,7 +62,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   BonusRowType? _activeGlobalPanel;
 
-  // Stream subscriptions for real-time updates
   StreamSubscription? _fanzineSubscription;
   StreamSubscription? _pagesSubscription;
 
@@ -76,6 +77,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   void initState() {
     super.initState();
     _isEditingMode = widget.isEditingMode;
+    // Map human page number to array index
+    if (widget.initialPageNumber != null) {
+      _targetIndex = widget.initialPageNumber! - 1;
+    }
     _initData();
   }
 
@@ -134,15 +139,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     _resolvedShortCode = targetShortCode;
 
     if (_resolvedFanzineId != null) {
-      _processDeepLink();
       _setupListeners(_resolvedFanzineId!);
-      _updateUrlIfNeeded();
     } else {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Sets up real-time Firestore listeners for fanzine metadata and pages.
   void _setupListeners(String fanzineId) {
     _fanzineSubscription?.cancel();
     _fanzineSubscription = FirebaseFirestore.instance
@@ -153,17 +155,14 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       if (!doc.exists || !mounted) return;
       final fanzineData = doc.data() ?? {};
 
-      // --- SECURITY CHECK: isLive logic for Public vs Staff ---
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final bool isLive = fanzineData['isLive'] ?? false;
       final String ownerId = fanzineData['ownerId'] ?? fanzineData['editorId'] ?? '';
       final List<String> editors = List<String>.from(fanzineData['editors'] ?? []);
       final String? currentUid = userProvider.currentUserId;
 
-      // Internal Staff (Admin/Mod/Curator) or Creator (Owner/Editor) can always see it.
       final bool isInternalStaff = userProvider.isModerator || userProvider.isAdmin || userProvider.isCurator;
       final bool isAuthorizedCreator = currentUid != null && (currentUid == ownerId || editors.contains(currentUid));
-
       final bool hasPermission = isLive || isInternalStaff || isAuthorizedCreator;
 
       if (!hasPermission) {
@@ -189,17 +188,14 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
           bool isDesktop = MediaQuery.of(context).size.width > 900;
 
-          if (_isLoading && _targetIndex > 0) {
-            // Keep deep-link state
+          // SYNC: Honor deep link anchor over default preference
+          if (widget.initialPageNumber != null) {
+            _showGrid = false;
+            _showList = true;
           } else {
             if (_twoPagePreference) {
-              if (_isEditingMode && isDesktop) {
-                _showGrid = true;
-                _showList = true;
-              } else {
-                _showGrid = true;
-                _showList = false;
-              }
+              _showGrid = true;
+              _showList = _isEditingMode && isDesktop;
             } else {
               _showGrid = false;
               _showList = true;
@@ -227,42 +223,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
       setState(() {
         _pages = docs;
-        if (_targetIndex > _pages.length) _targetIndex = _pages.length;
+        if (_targetIndex >= _pages.length) _targetIndex = _pages.isNotEmpty ? _pages.length - 1 : 0;
         _isLoading = false;
       });
     });
-  }
-
-  void _processDeepLink() {
-    try {
-      final router = GoRouter.of(context);
-      final pQuery = router.routerDelegate.currentConfiguration.uri.queryParameters['p'];
-      if (pQuery != null) {
-        final pageNum = int.tryParse(pQuery);
-        if (pageNum != null && pageNum > 0) {
-          setState(() {
-            _targetIndex = pageNum;
-            _showGrid = false;
-            _showList = true;
-            _twoPagePreference = false;
-          });
-        }
-      }
-    } catch (_) {}
-  }
-
-  void _updateUrlIfNeeded() {
-    if (_resolvedShortCode != null && mounted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        try {
-          final router = GoRouter.of(context);
-          final currentLoc = router.routerDelegate.currentConfiguration.uri.toString();
-          if (!currentLoc.contains(_resolvedShortCode!) && !_isEditingMode) {
-            context.go('/$_resolvedShortCode');
-          }
-        } catch (_) {}
-      });
-    }
   }
 
   void _handlePageTap(int index) {
@@ -390,9 +354,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     if (_isAccessDenied) {
       return Scaffold(
@@ -407,10 +369,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               const SizedBox(height: 8),
               const Text("This content has not been published yet.", style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => context.go('/'),
-                child: const Text("Go Home"),
-              ),
+              ElevatedButton(onPressed: () => context.go('/'), child: const Text("Go Home")),
             ],
           ),
         ),
@@ -430,15 +389,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
                   pages: _pages,
                   headerWidget: _isEditingMode
                       ? GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _showList = true;
-                        _targetIndex = 0;
-                      });
-                    },
-                    child: AbsorbPointer(
-                      child: _buildHeader(isStickerOnly: true),
-                    ),
+                    onTap: () { setState(() { _showList = true; _targetIndex = 0; }); },
+                    child: AbsorbPointer(child: _buildHeader(isStickerOnly: true)),
                   )
                       : _buildHeader(isStickerOnly: false),
                   scrollController: ScrollController(),

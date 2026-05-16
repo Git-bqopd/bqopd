@@ -62,6 +62,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   Widget build(BuildContext context) {
     return ScrollablePositionedList.separated(
       itemScrollController: widget.itemScrollController,
+      // VITAL: Anchor the view immediately on data load
       initialScrollIndex: widget.initialIndex,
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: widget.pages.length + 1,

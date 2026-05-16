@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'env.dart';
 
-// Import Concrete Firebase Repository Implementations
 import 'repositories/firebase_auth_repository.dart';
 import 'repositories/firebase_user_repository.dart';
 import 'repositories/firebase_engagement_repository.dart';
@@ -16,13 +15,9 @@ import 'repositories/firebase_upload_repository.dart';
 import 'repositories/firebase_fanzine_repository.dart';
 import 'repositories/firebase_pipeline_repository.dart';
 
-// Import shared logic from core
 import 'package:bqopd_core/bqopd_core.dart';
-
-// Services
 import 'services/user_provider.dart';
 
-// Pages
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/profile_page.dart';
@@ -37,13 +32,8 @@ import 'pages/moderator_feed_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Env.load();
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Note: usePathUrlStrategy() removed to bypass SDK compilation errors
-  // on experimental Flutter channels.
-
-  // Initialize concrete implementations
   final authRepo = FirebaseAuthRepository();
   final userRepo = FirebaseUserRepository();
   final engagementRepo = FirebaseEngagementRepository();
@@ -54,7 +44,6 @@ Future<void> main() async {
   runApp(
     MultiRepositoryProvider(
       providers: [
-        // Register using Interfaces defined in Core
         RepositoryProvider<IAuthRepository>.value(value: authRepo),
         RepositoryProvider<IUserRepository>.value(value: userRepo),
         RepositoryProvider<IEngagementRepository>.value(value: engagementRepo),
@@ -65,20 +54,10 @@ Future<void> main() async {
       child: MultiBlocProvider(
         providers: [
           BlocProvider(
-            create: (context) => AuthBloc(
-              repository: context.read<IAuthRepository>(),
-            )..add(AuthSubscriptionRequested()),
+            create: (context) => AuthBloc(repository: context.read<IAuthRepository>())..add(AuthSubscriptionRequested()),
           ),
-          BlocProvider(
-            create: (context) => UploadBloc(
-              repository: context.read<IUploadRepository>(),
-            ),
-          ),
-          BlocProvider(
-            create: (context) => InteractionBloc(
-              repository: context.read<IEngagementRepository>(),
-            ),
-          ),
+          BlocProvider(create: (context) => UploadBloc(repository: context.read<IUploadRepository>())),
+          BlocProvider(create: (context) => InteractionBloc(repository: context.read<IEngagementRepository>())),
         ],
         child: ChangeNotifierProvider(
           create: (_) => UserProvider(),
@@ -109,102 +88,60 @@ class _MyAppState extends State<MyApp> {
         final userProvider = Provider.of<UserProvider>(context, listen: false);
         final isLoggedIn = userProvider.isLoggedIn;
         final path = state.uri.path;
-        final routePattern = state.fullPath;
 
-        final isProtected = path == '/profile' ||
-            path == '/settings' ||
-            path == '/edit-info' ||
-            path == '/dashboard' ||
-            path == '/moderator' ||
-            (routePattern != null && routePattern.startsWith('/editor')) ||
-            (routePattern != null && routePattern.startsWith('/workbench'));
+        // 1. DYNAMIC ROOT REDIRECTION
+        if (path == '/') {
+          if (isLoggedIn && userProvider.userAccount != null) {
+            final coreBook = userProvider.userAccount!.preferences['core_book_shortcode'];
+            if (coreBook != null && coreBook.toString().isNotEmpty) {
+              return '/$coreBook';
+            }
+          }
+          return null;
+        }
 
-        if (!isLoggedIn && isProtected) {
-          return '/login';
-        }
-        if (isLoggedIn && (path == '/login' || path == '/register')) {
-          return '/';
-        }
+        // 2. PROTECTED ROUTES
+        final isProtected = path == '/profile' || path == '/settings' || path == '/edit-info' || path == '/dashboard' || path == '/moderator' || state.fullPath?.startsWith('/editor') == true;
+        if (!isLoggedIn && isProtected) return '/login';
+        if (isLoggedIn && (path == '/login' || path == '/register')) return '/';
+
         return null;
       },
       routes: [
-        GoRoute(
-            path: '/',
-            name: 'root',
-            builder: (context, state) => const FanzineReaderPage()),
-        GoRoute(
-            path: '/login',
-            name: 'login',
-            builder: (context, state) => const LoginPage()),
-        GoRoute(
-            path: '/register',
-            name: 'register',
-            builder: (context, state) => const RegisterPage()),
-        GoRoute(
-            path: '/fanzine',
-            name: 'fanzine',
-            builder: (context, state) => const FanzineReaderPage()),
-        GoRoute(
-            path: '/profile',
-            name: 'profile',
-            builder: (context, state) => const ProfilePage()),
-        GoRoute(
-          path: '/dashboard',
-          name: 'curatorDashboard',
-          builder: (context, state) => const CuratorDashboardPage(),
-        ),
-        GoRoute(
-          path: '/moderator',
-          name: 'moderatorFeed',
-          builder: (context, state) => const ModeratorFeedPage(),
-        ),
-        GoRoute(
-          path: '/reader/:fanzineId',
-          name: 'reader',
-          builder: (context, state) {
-            final fanzineId = state.pathParameters['fanzineId']!;
-            return FanzineReaderPage(fanzineId: fanzineId);
-          },
-        ),
-        GoRoute(
-          path: '/publisher',
-          name: 'publisher',
-          builder: (context, state) => const PublisherPage(),
-        ),
-        GoRoute(
-          path: '/edit-info',
-          name: 'editInfo',
-          builder: (context, state) {
-            final userId = state.uri.queryParameters['userId'];
-            return EditInfoPage(targetUserId: userId);
-          },
-        ),
-        GoRoute(
-            path: '/settings',
-            name: 'settings',
-            builder: (context, state) => const SettingsPage()),
-        GoRoute(
-          path: '/editor/:fanzineId',
-          name: 'fanzineEditor',
-          builder: (context, state) {
-            final fanzineId = state.pathParameters['fanzineId']!;
-            return FanzineReaderPage(
-              fanzineId: fanzineId,
-              isEditingMode: true,
-            );
-          },
-        ),
+        GoRoute(path: '/', name: 'root', builder: (context, state) => const FanzineReaderPage()),
+        GoRoute(path: '/login', name: 'login', builder: (context, state) => const LoginPage()),
+        GoRoute(path: '/register', name: 'register', builder: (context, state) => const RegisterPage()),
+        GoRoute(path: '/profile', name: 'profile', builder: (context, state) => const ProfilePage()),
+        GoRoute(path: '/dashboard', name: 'curatorDashboard', builder: (context, state) => const CuratorDashboardPage()),
+        GoRoute(path: '/moderator', name: 'moderatorFeed', builder: (context, state) => const ModeratorFeedPage()),
+        GoRoute(path: '/reader/:fanzineId', name: 'reader', builder: (context, state) => FanzineReaderPage(fanzineId: state.pathParameters['fanzineId']!)),
+        GoRoute(path: '/publisher', name: 'publisher', builder: (context, state) => const PublisherPage()),
+        GoRoute(path: '/edit-info', name: 'editInfo', builder: (context, state) => EditInfoPage(targetUserId: state.uri.queryParameters['userId'])),
+        GoRoute(path: '/settings', name: 'settings', builder: (context, state) => const SettingsPage()),
+        GoRoute(path: '/editor/:fanzineId', name: 'fanzineEditor', builder: (context, state) => FanzineReaderPage(fanzineId: state.pathParameters['fanzineId']!, isEditingMode: true)),
+
+        // 3. SHORTCODE MATCHERS (including path variable anchors)
         GoRoute(
           path: '/:code',
           name: 'shortlink',
           builder: (context, state) {
             final code = state.pathParameters['code']!;
-            return ShortLinkPage(code: code);
+            final pQuery = state.uri.queryParameters['p'];
+            final int? initialPage = pQuery != null ? int.tryParse(pQuery) : null;
+            return ShortLinkPage(code: code, initialPageNumber: initialPage);
+          },
+        ),
+        GoRoute(
+          path: '/:code/:pageNumber',
+          name: 'shortlink_with_page',
+          builder: (context, state) {
+            final code = state.pathParameters['code']!;
+            final pageNumberStr = state.pathParameters['pageNumber']!;
+            return ShortLinkPage(code: code, initialPageNumber: int.tryParse(pageNumberStr));
           },
         ),
       ],
-      errorBuilder: (context, state) =>
-      const Scaffold(body: Center(child: Text('Page not found'))),
+      errorBuilder: (context, state) => const Scaffold(body: Center(child: Text('Page not found'))),
     );
   }
 

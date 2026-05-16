@@ -120,10 +120,21 @@ class _AppState extends State<App> {
               fanzineId: state.params['fanzineId']!,
             ),
           ),
+          // Shortlink matcher
           Route(
             path: '/:code',
             builder: (context, state) => ShortLinkPage(
               code: state.params['code']!,
+              authState: authState,
+              authBloc: authBloc,
+            ),
+          ),
+          // NEW: ULTRA-SHORT HIERARCHY PATTERN (/:code/:pageNumber)
+          Route(
+            path: '/:code/:pageNumber',
+            builder: (context, state) => ShortLinkPage(
+              code: state.params['code']!,
+              pageNumber: state.params['pageNumber'],
               authState: authState,
               authBloc: authBloc,
             ),

@@ -6,7 +6,13 @@ import 'profile_page.dart';
 
 class ShortLinkPage extends StatefulWidget {
   final String code;
-  const ShortLinkPage({super.key, required this.code});
+  final int? initialPageNumber; // NEW: Forwarding the anchor
+
+  const ShortLinkPage({
+    super.key,
+    required this.code,
+    this.initialPageNumber,
+  });
 
   @override
   State<ShortLinkPage> createState() => _ShortLinkPageState();
@@ -18,8 +24,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
   @override
   void initState() {
     super.initState();
-    // Cache the resolution future to prevent "amnesia" when popping
-    // back to this page from an editor or modal.
     _resolveFuture = _resolveShortcode(widget.code);
   }
 
@@ -71,7 +75,10 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
 
             if (result.startsWith('fanzine:')) {
               final fanzineCode = result.substring(8);
-              return FanzineReaderPage(shortCode: fanzineCode);
+              return FanzineReaderPage(
+                shortCode: fanzineCode,
+                initialPageNumber: widget.initialPageNumber, // NEW: Forward anchor
+              );
             }
 
             return const Center(child: Text('Unknown content type.'));
@@ -111,17 +118,10 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
       if (data['uid'] != null) return 'user:${data['uid']}';
     }
 
-    final fz = await db.collection('fanzines')
-        .where('shortCode', isEqualTo: cleanCode)
-        .limit(1)
-        .get();
+    final fz = await db.collection('fanzines').where('shortCode', isEqualTo: cleanCode).limit(1).get();
     if (fz.docs.isNotEmpty) return 'fanzine:$cleanCode';
 
-    // Fallback check redirected to 'profiles'
-    final profilesByUsername = await db.collection('profiles')
-        .where('username', isEqualTo: cleanCode.toLowerCase())
-        .limit(1)
-        .get();
+    final profilesByUsername = await db.collection('profiles').where('username', isEqualTo: cleanCode.toLowerCase()).limit(1).get();
     if (profilesByUsername.docs.isNotEmpty) return 'user:${profilesByUsername.docs.first.id}';
 
     return null;
