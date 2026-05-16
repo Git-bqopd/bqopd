@@ -2,12 +2,21 @@ import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
+import 'fanzine_reader_page.dart';
+import 'profile_page.dart';
 
 class ShortLinkPage extends StatefulComponent {
   final String code;
+  final AuthState? authState;
+  final AuthBloc? authBloc;
 
-  const ShortLinkPage({required this.code});
+  const ShortLinkPage({
+    required this.code,
+    this.authState,
+    this.authBloc,
+  });
 
   @override
   State<ShortLinkPage> createState() => _ShortLinkPageState();
@@ -15,6 +24,9 @@ class ShortLinkPage extends StatefulComponent {
 
 class _ShortLinkPageState extends State<ShortLinkPage> {
   String _status = "Resolving link...";
+  String? _targetFanzineId;
+  String? _targetUserId;
+  bool _isResolved = false;
 
   @override
   void initState() {
@@ -22,64 +34,117 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
     _resolve();
   }
 
+  @override
+  void didUpdateComponent(ShortLinkPage oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.code != component.code) {
+      _resolve();
+    }
+  }
+
   Future<void> _resolve() async {
+    setState(() {
+      _status = "Resolving link...";
+      _targetFanzineId = null;
+      _targetUserId = null;
+      _isResolved = false;
+    });
+
     try {
+      final String code = component.code;
+
       // 1. Check Shortcodes master collection (uppercase keys)
-      final res = await fsGetDoc('shortcodes/${component.code.toUpperCase()}');
+      final res = await fsGetDoc('shortcodes/${code.toUpperCase()}');
       final data = jsonDecode(res);
 
       if (data['exists'] == true) {
         final doc = data['data'];
         if (doc['type'] == 'fanzine') {
-          Router.of(context).push('/reader/${doc['contentId']}');
+          setState(() {
+            _targetFanzineId = doc['contentId'];
+            _isResolved = true;
+          });
           return;
         } else if (doc['type'] == 'user') {
-          Router.of(context).push('/profile?userId=${doc['contentId']}');
+          setState(() {
+            _targetUserId = doc['contentId'];
+            _isResolved = true;
+          });
           return;
         }
       }
 
       // 2. Check direct username match
-      final uRes = await fsGetDoc('usernames/${component.code.toLowerCase()}');
+      final uRes = await fsGetDoc('usernames/${code.toLowerCase()}');
       final uData = jsonDecode(uRes);
 
       if (uData['exists'] == true) {
-        Router.of(context).push('/profile?userId=${uData['data']['uid']}');
+        setState(() {
+          _targetUserId = uData['data']['uid'];
+          _isResolved = true;
+        });
         return;
       }
 
-      // 3. Fallback: Check Fanzines collection directly (for older/unsynced shortcodes)
-      final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(component.code), '');
+      // 3. Fallback: Check Fanzines collection directly
+      final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(code), '');
       final fzDocs = jsonDecode(fzRes) as List;
 
       if (fzDocs.isNotEmpty) {
-        Router.of(context).push('/reader/${fzDocs.first['id']}');
+        setState(() {
+          _targetFanzineId = fzDocs.first['id'];
+          _isResolved = true;
+        });
         return;
       }
 
       // 4. Fallback: Check Profiles collection directly
-      final pRes = await fsQuery('profiles', 'username', '==', jsonEncode(component.code.toLowerCase()), '');
+      final pRes = await fsQuery('profiles', 'username', '==', jsonEncode(code.toLowerCase()), '');
       final pDocs = jsonDecode(pRes) as List;
 
       if (pDocs.isNotEmpty) {
-        Router.of(context).push('/profile?userId=${pDocs.first['id']}');
+        setState(() {
+          _targetUserId = pDocs.first['id'];
+          _isResolved = true;
+        });
         return;
       }
 
       // If it drops to here, link doesn't exist anywhere
       setState(() {
         _status = "Link '${component.code}' not found.";
+        _isResolved = true;
       });
 
     } catch (e) {
       setState(() {
         _status = "Error resolving link: $e";
+        _isResolved = true;
       });
     }
   }
 
   @override
   Component build(BuildContext context) {
+    if (!_isResolved) {
+      return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
+        p(classes: 'text-lg font-bold', [text(_status)])
+      ]);
+    }
+
+    if (_targetFanzineId != null) {
+      return FanzineReaderPage(fanzineId: _targetFanzineId!);
+    }
+
+    if (_targetUserId != null) {
+      // Pass the auth state/bloc down to the ProfilePage to resolve the type error.
+      // ProfilePage is expected to be able to handle a null AuthBloc if provided by the route,
+      // but the constructor requires non-nullable types in the signature based on your error.
+      if (component.authBloc != null) {
+        return ProfilePage(authState: component.authState, authBloc: component.authBloc!);
+      }
+    }
+
     return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
       p(classes: 'text-lg font-bold', [text(_status)]),
       a(href: '/', [text('Go Home')])

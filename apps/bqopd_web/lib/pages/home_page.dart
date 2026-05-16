@@ -28,6 +28,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _checkDefaultRoute() async {
     try {
       // Check Firebase for the global login_zine_shortcode
+      // This matches the behavior of the Flutter app's FanzineReaderPage initialization.
       final res = await fsGetDoc('app_settings/main_settings');
       final doc = jsonDecode(res);
 
@@ -36,38 +37,49 @@ class _HomePageState extends State<HomePage> {
         final loginZine = data['login_zine_shortcode'];
 
         if (loginZine != null && loginZine.toString().isNotEmpty) {
-          // Push the shortcode to route through ShortLinkPage resolution
-          Router.of(context).push('/$loginZine');
-          return;
+          // Push the shortcode to the router.
+          // The ShortLinkPage will handle resolving this code to the actual reader view.
+          if (mounted) {
+            Router.of(context).replace('/$loginZine');
+            return;
+          }
         }
       }
     } catch (e) {
       print('Error fetching default route: $e');
     }
 
-    // If we fail or the setting is empty, fall back to showing the sticker
-    setState(() => _loading = false);
+    // If we fail to find a redirect or an error occurs, stop loading and show the fallback UI
+    if (mounted) {
+      setState(() => _loading = false);
+    }
   }
 
   @override
   Component build(BuildContext context) {
     if (_loading) {
-      return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
-        p([text('Redirecting...')])
-      ]);
+      return div(
+          classes: 'flex-col items-center justify-center w-full',
+          attributes: {'style': 'min-height: 100vh;'},
+          [p([text('Redirecting...')])]
+      );
     }
 
-    return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
-      FanzineSticker(authState: component.authState),
+    return div(
+        classes: 'flex-col items-center justify-center w-full',
+        attributes: {'style': 'min-height: 100vh;'},
+        [
+          FanzineSticker(authState: component.authState),
 
-      if (component.authState?.status == AuthStatus.authenticated)
-        div(classes: 'mt-4', [
-          button(
-              classes: 'btn-logout',
-              events: {'click': (e) => component.authBloc.add(LogoutRequested())},
-              [text('Logout')]
-          )
-        ])
-    ]);
+          if (component.authState?.status == AuthStatus.authenticated)
+            div(classes: 'mt-4', [
+              button(
+                  classes: 'btn-logout',
+                  events: {'click': (e) => component.authBloc.add(LogoutRequested())},
+                  [text('Logout')]
+              )
+            ])
+        ]
+    );
   }
 }
