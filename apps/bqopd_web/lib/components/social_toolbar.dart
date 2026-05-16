@@ -39,6 +39,14 @@ class _SocialToolbarState extends State<SocialToolbar> {
     _fetchStats();
   }
 
+  @override
+  void didUpdateComponent(SocialToolbar oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.imageId != component.imageId) {
+      _fetchStats();
+    }
+  }
+
   Future<void> _fetchStats() async {
     if (component.imageId.isEmpty) return;
 
@@ -87,7 +95,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
       return ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
-        userRole: 'user',
+        userRole: 'user', // Hardcoded for public web reader
         isEditingMode: false,
         hasYoutube: component.youtubeId != null && component.youtubeId!.isNotEmpty,
         isGame: component.isGame,
@@ -119,10 +127,19 @@ class _SocialToolbarState extends State<SocialToolbar> {
       action = () => component.onToggleBonusRow(BonusRowType.textReader);
     } else if (tool.id == 'Grid') {
       action = component.onOpenGrid ?? () {};
+    } else if (tool.bonusRow != null) {
+      isActive = component.activeBonusRow == tool.bonusRow;
+      action = () => component.onToggleBonusRow(tool.bonusRow!);
     }
 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-    final resolvedIcon = iconName.replaceAll('_outlined', '');
+
+    // FIX: Material Symbols logic.
+    // We must strip '_outlined' and '_outline' because the font variation settings
+    // in CSS handle the 'fill' state. Passing the suffix literally causes the
+    // browser to render the text instead of the icon glyph.
+    final resolvedIcon = iconName.replaceAll('_outlined', '').replaceAll('_outline', '');
+
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
 
     return button(
@@ -130,7 +147,14 @@ class _SocialToolbarState extends State<SocialToolbar> {
         events: {'click': (e) => action()},
         [
           div(classes: 'toolbar-icon-wrapper', [
-            span(classes: 'material-symbols-outlined', [text(resolvedIcon)]),
+            span(
+                classes: 'material-symbols-outlined',
+                // Apply font-variation-settings directly to ensure fill/weight matches state
+                attributes: {
+                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : ""
+                },
+                [text(resolvedIcon)]
+            ),
             if (count != null && count > 0)
               span(classes: 'badge', [text('$count')])
           ]),

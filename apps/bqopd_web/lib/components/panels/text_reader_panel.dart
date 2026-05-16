@@ -22,16 +22,42 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     _fetchText();
   }
 
-  Future<void> _fetchText() async {
-    if (component.imageId.isEmpty) return;
+  @override
+  void didUpdateComponent(TextReaderPanel oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.imageId != component.imageId) {
+      _fetchText();
+    }
+  }
 
-    final res = await fsGetDoc('images/${component.imageId}');
-    final doc = jsonDecode(res);
-    if (doc['exists'] && mounted) {
-      final data = doc['data'];
-      setState(() {
-        _content = data['text_linked'] ?? data['text_corrected'] ?? data['text_raw'] ?? "Transcription pending.";
-      });
+  Future<void> _fetchText() async {
+    if (component.imageId.isEmpty) {
+      setState(() => _content = "Transcription pending (No Image ID).");
+      return;
+    }
+
+    try {
+      final res = await fsGetDoc('images/${component.imageId}');
+      final doc = jsonDecode(res);
+      if (doc['exists'] && mounted) {
+        final data = doc['data'];
+
+        // Match Flutter's "Gold Master" hierarchy
+        final String? text = data['text_linked'] ??
+            data['text_corrected'] ??
+            data['text_raw'] ??
+            data['text']; // Legacy fallback
+
+        setState(() {
+          _content = (text != null && text.trim().isNotEmpty)
+              ? text
+              : "Transcription pending for this page.";
+        });
+      } else {
+        setState(() => _content = "Image record not found in database.");
+      }
+    } catch (e) {
+      setState(() => _content = "Error loading text: $e");
     }
   }
 
@@ -41,12 +67,12 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       div(classes: 'flex-row gap-4 mb-4', [
         button(
             classes: 'nav-pill',
-            events: {'click': (e) => setState(() => _fontSize = (_fontSize > 12) ? _fontSize - 2 : 12)},
+            events: {'click': (e) => setState(() => _fontSize = (_fontSize > 10) ? _fontSize - 2 : 10)},
             [text('A-')]
         ),
         button(
             classes: 'nav-pill',
-            events: {'click': (e) => setState(() => _fontSize = (_fontSize < 32) ? _fontSize + 2 : 32)},
+            events: {'click': (e) => setState(() => _fontSize = (_fontSize < 48) ? _fontSize + 2 : 48)},
             [text('A+')]
         ),
       ]),
