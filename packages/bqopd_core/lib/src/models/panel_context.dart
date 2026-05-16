@@ -24,6 +24,9 @@ class PanelContext {
   final void Function()? onSubmitComment;
   final dynamic fontSizeNotifier; // Handled strictly via mapping in concrete views
 
+  // NEW: Optional key for custom state persistence in complex panels
+  final String? customStateKey;
+
   PanelContext({
     required this.type,
     required this.imageId,
@@ -43,5 +46,6 @@ class PanelContext {
     this.commentController,
     this.onSubmitComment,
     this.fontSizeNotifier,
+    this.customStateKey,
   });
 }

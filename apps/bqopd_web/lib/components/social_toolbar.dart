@@ -58,7 +58,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Future<void> _handleLike() async {
     final uid = getCurrentUserId();
-    if (uid == null) return; // Need AuthModal trigger in real app
+    if (uid == null) return;
 
     final newStatus = !_isLiked;
     setState(() {
@@ -110,6 +110,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
       count = _viewCount;
     } else if (tool.id == 'Grid') {
       action = component.onOpenGrid ?? () {};
+    } else if (tool.id == 'Share') {
+      action = () {
+        // Web share logic or copy to clipboard via interop
+        print("Web share requested for ${component.imageId}");
+      };
     }
 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;

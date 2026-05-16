@@ -38,6 +38,9 @@ enum BonusRowType {
   youtube,
   indicia,
   settings,
+  // NEW: Added for enhanced analytics and sharing options
+  analyticsDashboard,
+  shareOptions,
 }
 
 /// Pure Dart data model for a dynamic toolbar button.

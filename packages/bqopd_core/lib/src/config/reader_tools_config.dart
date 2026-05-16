@@ -68,7 +68,8 @@ class ReaderToolsConfig {
       label: 'share',
       description: 'Copy a deep-link to this specific page.',
       defaultIcon: 'share_outlined',
-      action: ToolAction.copyShareLink,
+      action: ToolAction.openBonusRow, // UPDATED: Changed from copyShareLink to openBonusRow for more options
+      bonusRow: BonusRowType.shareOptions,
     ),
     ReaderTool(
       id: 'Grid',
@@ -153,7 +154,7 @@ class ReaderToolsConfig {
       defaultIcon: 'bar_chart_outlined',
       activeIcon: 'bar_chart',
       role: ToolRole.editor,
-      bonusRow: BonusRowType.views,
+      bonusRow: BonusRowType.analyticsDashboard, // UPDATED: Changed from views to analyticsDashboard
     ),
     ReaderTool(
       id: 'Credits',

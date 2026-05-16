@@ -17,8 +17,24 @@ class SettingsPanel extends StatelessWidget {
       case 'chat_bubble': return Icons.chat_bubble;
       case 'favorite_border': return Icons.favorite_border;
       case 'favorite': return Icons.favorite;
+      case 'share_outlined': return Icons.share_outlined;
+      case 'grid_view': return Icons.grid_view;
       case 'settings_outlined': return Icons.settings_outlined;
       case 'settings': return Icons.settings;
+      case 'play_circle_outline': return Icons.play_circle_outline;
+      case 'play_circle_filled': return Icons.play_circle_filled;
+      case 'tag': return Icons.tag;
+      case 'info_outline': return Icons.info_outline;
+      case 'info': return Icons.info;
+      case 'outdoor_grill': return Icons.outdoor_grill;
+      case 'edit_document': return Icons.edit_document;
+      case 'add_link': return Icons.add_link;
+      case 'link_outlined': return Icons.link_outlined;
+      case 'link': return Icons.link;
+      case 'bar_chart_outlined': return Icons.bar_chart_outlined;
+      case 'bar_chart': return Icons.bar_chart;
+      case 'manage_accounts_outlined': return Icons.manage_accounts_outlined;
+      case 'manage_accounts': return Icons.manage_accounts;
       default: return Icons.help_outline;
     }
   }

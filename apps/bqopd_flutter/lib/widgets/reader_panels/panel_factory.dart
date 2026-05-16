@@ -26,6 +26,8 @@ class PanelFactory {
       case BonusRowType.entities: return "PAGE ENTITIES";
       case BonusRowType.comments: return "COMMENTS";
       case BonusRowType.views: return "ANALYTICS";
+      case BonusRowType.analyticsDashboard: return "EXTENDED ANALYTICS";
+      case BonusRowType.shareOptions: return "SHARE PAGE";
       case BonusRowType.credits: return "ARCHIVAL METADATA & CREDITS";
       case BonusRowType.youtube: return "VIDEO";
       case BonusRowType.indicia: return "ISSUE INDICIA";
@@ -40,6 +42,7 @@ class PanelFactory {
       case BonusRowType.rawText: return Colors.grey[100]!;
       case BonusRowType.views: return Colors.grey[50]!;
       case BonusRowType.youtube: return Colors.black;
+      case BonusRowType.shareOptions: return Colors.indigo.withValues(alpha: 0.05);
       default: return Colors.white;
     }
   }
@@ -85,9 +88,27 @@ class PanelFactory {
             isInline: context.isInline
         );
       case BonusRowType.views:
+      case BonusRowType.analyticsDashboard: // Map both types to the ViewsPanel for now
         return ViewsPanel(
             imageId: context.imageId,
             viewService: context.viewService as ViewService
+        );
+      case BonusRowType.shareOptions:
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              children: [
+                const Text("Select how you'd like to share this page.", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () { /* Sharing logic */ },
+                  icon: const Icon(Icons.link, size: 16),
+                  label: const Text("Copy Direct Link"),
+                )
+              ],
+            ),
+          ),
         );
       case BonusRowType.credits:
         return CreditsPanel(imageId: context.imageId);
