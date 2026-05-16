@@ -1,7 +1,6 @@
 import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
 
-// Import the concrete services
 import '../../services/engagement_service.dart';
 import '../../services/view_service.dart';
 
@@ -46,12 +45,17 @@ class PanelFactory {
   }
 
   static Widget buildPanelContent(PanelContext context) {
+    // Safely parse the value notifier out from dynamic wrapper
+    final ValueNotifier<double> resolvedSizeNotifier =
+    (context.fontSizeNotifier is ValueNotifier<double>)
+        ? context.fontSizeNotifier as ValueNotifier<double>
+        : ValueNotifier<double>(16.0);
+
     switch (context.type) {
       case BonusRowType.textReader:
         return TextReaderPanel(
           text: context.actualText,
-          // Use explicit generic and fallback to resolve the assignment error
-          fontSizeNotifier: context.fontSizeNotifier ?? ValueNotifier<double>(16.0),
+          fontSizeNotifier: resolvedSizeNotifier,
         );
       case BonusRowType.rawText:
         return RawTextPanel(text: context.textRaw);
@@ -83,7 +87,6 @@ class PanelFactory {
       case BonusRowType.views:
         return ViewsPanel(
             imageId: context.imageId,
-            // Cast the interface back to the concrete class for the Flutter Widget
             viewService: context.viewService as ViewService
         );
       case BonusRowType.credits:

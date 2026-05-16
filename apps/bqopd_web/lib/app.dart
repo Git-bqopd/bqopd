@@ -26,7 +26,6 @@ class App extends StatefulComponent {
 }
 
 class _AppState extends State<App> {
-  // --- Repositories ---
   late final WebAuthRepository authRepository;
   late final WebFanzineRepository fanzineRepository;
   late final WebEngagementRepository engagementRepository;
@@ -34,7 +33,6 @@ class _AppState extends State<App> {
   late final WebUploadRepository uploadRepository;
   late final WebUserRepository userRepository;
 
-  // --- BLoCs ---
   late final AuthBloc authBloc;
   late final UploadBloc uploadBloc;
   late final InteractionBloc interactionBloc;
@@ -49,7 +47,6 @@ class _AppState extends State<App> {
   void initState() {
     super.initState();
     try {
-      // 1. Initialize Repositories via Web JS Interop
       authRepository = WebAuthRepository();
       fanzineRepository = WebFanzineRepository();
       engagementRepository = WebEngagementRepository();
@@ -57,14 +54,12 @@ class _AppState extends State<App> {
       uploadRepository = WebUploadRepository();
       userRepository = WebUserRepository();
 
-      // 2. Initialize Shared BLoCs
       uploadBloc = UploadBloc(repository: uploadRepository);
       interactionBloc = InteractionBloc(repository: engagementRepository);
 
       authBloc = AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested());
       authState = authBloc.state;
 
-      // 3. Listen to state changes to rebuild the Routing layer
       _sub = authBloc.stream.listen((state) {
         setState(() {
           authState = state;
@@ -73,7 +68,6 @@ class _AppState extends State<App> {
     } catch (e) {
       _hasError = true;
       _errorMsg = e.toString();
-      print("App Initialization Error: $e");
     }
   }
 
@@ -92,7 +86,7 @@ class _AppState extends State<App> {
   Component build(BuildContext context) {
     if (_hasError) {
       return div(classes: 'error-msg', [
-        text('Error loading app: $_errorMsg. Please check the console.')
+        text('Error loading app: $_errorMsg')
       ]);
     }
 
@@ -114,12 +108,9 @@ class _AppState extends State<App> {
           Route(
             path: '/profile',
             builder: (context, state) {
-              final queryUserId = state.queryParams['userId'];
-
-              if (queryUserId == null && authState?.status != AuthStatus.authenticated) {
+              if (state.queryParams['userId'] == null && authState?.status != AuthStatus.authenticated) {
                 return LoginPage(authState: authState, authBloc: authBloc);
               }
-
               return ProfilePage(authState: authState, authBloc: authBloc);
             },
           ),
@@ -127,14 +118,14 @@ class _AppState extends State<App> {
             path: '/reader/:fanzineId',
             builder: (context, state) => FanzineReaderPage(
               fanzineId: state.params['fanzineId']!,
-              // Removed the outdated repository parameter here!
             ),
           ),
-          // Put catch-all shortlink resolver at the very end
           Route(
             path: '/:code',
             builder: (context, state) => ShortLinkPage(
               code: state.params['code']!,
+              authState: authState,
+              authBloc: authBloc,
             ),
           ),
         ],

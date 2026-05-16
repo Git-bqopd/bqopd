@@ -31,7 +31,6 @@ class _CommentsPanelState extends State<CommentsPanel> {
   @override
   void initState() {
     super.initState();
-    // Trigger the load event when the panel is mounted
     context.read<InteractionBloc>().add(LoadCommentsRequested(widget.imageId));
   }
 
@@ -85,7 +84,6 @@ class _CommentsPanelState extends State<CommentsPanel> {
 }
 
 class _CommentList extends StatelessWidget {
-  // FIXED: Changed type from List<DocumentSnapshot> to List<Map<String, dynamic>>
   final List<Map<String, dynamic>> comments;
   final String imageId;
 
@@ -97,20 +95,17 @@ class _CommentList extends StatelessWidget {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(20),
-          child: Text("No comments yet. Be the first to share a thought!"),
+          child: Text("No comments yet."),
         ),
       );
     }
 
-    // Sort locally by creation date
     final sorted = List<Map<String, dynamic>>.from(comments);
     sorted.sort((a, b) {
       final aT = a['createdAt'];
       final bT = b['createdAt'];
       if (aT == null) return 1;
       if (bT == null) return -1;
-      // Note: Map version of Timestamp behaves slightly differently depending on source,
-      // but standard Firestore Timestamps in maps compare correctly.
       return aT.compareTo(bT);
     });
 
@@ -119,10 +114,7 @@ class _CommentList extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: sorted.length,
       separatorBuilder: (c, i) => const Divider(height: 1, color: Colors.black12),
-      itemBuilder: (c, i) {
-        // Data is already a map
-        return CommentItem(data: sorted[i]);
-      },
+      itemBuilder: (c, i) => CommentItem(data: sorted[i]),
     );
   }
 }

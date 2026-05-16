@@ -53,7 +53,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
     try {
       final String code = component.code;
 
-      // 1. Check Shortcodes master collection (uppercase keys)
       final res = await fsGetDoc('shortcodes/${code.toUpperCase()}');
       final data = jsonDecode(res);
 
@@ -74,7 +73,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
         }
       }
 
-      // 2. Check direct username match
       final uRes = await fsGetDoc('usernames/${code.toLowerCase()}');
       final uData = jsonDecode(uRes);
 
@@ -86,7 +84,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
         return;
       }
 
-      // 3. Fallback: Check Fanzines collection directly
       final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(code), '');
       final fzDocs = jsonDecode(fzRes) as List;
 
@@ -98,7 +95,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
         return;
       }
 
-      // 4. Fallback: Check Profiles collection directly
       final pRes = await fsQuery('profiles', 'username', '==', jsonEncode(code.toLowerCase()), '');
       final pDocs = jsonDecode(pRes) as List;
 
@@ -110,7 +106,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
         return;
       }
 
-      // If it drops to here, link doesn't exist anywhere
       setState(() {
         _status = "Link '${component.code}' not found.";
         _isResolved = true;
@@ -128,7 +123,7 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
   Component build(BuildContext context) {
     if (!_isResolved) {
       return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
-        p(classes: 'text-lg font-bold', [text(_status)])
+        div(classes: 'text-lg font-bold', [text(_status)])
       ]);
     }
 
@@ -136,13 +131,8 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
       return FanzineReaderPage(fanzineId: _targetFanzineId!);
     }
 
-    if (_targetUserId != null) {
-      // Pass the auth state/bloc down to the ProfilePage to resolve the type error.
-      // ProfilePage is expected to be able to handle a null AuthBloc if provided by the route,
-      // but the constructor requires non-nullable types in the signature based on your error.
-      if (component.authBloc != null) {
-        return ProfilePage(authState: component.authState, authBloc: component.authBloc!);
-      }
+    if (_targetUserId != null && component.authBloc != null) {
+      return ProfilePage(authState: component.authState, authBloc: component.authBloc!);
     }
 
     return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [

@@ -1,8 +1,5 @@
 import '../../bqopd_core.dart';
 
-/// Context object used to pass data to Reader Panels.
-/// This model remains in core but accepts dynamic types for Flutter-specific controllers
-/// to maintain pure Dart compatibility.
 class PanelContext {
   final BonusRowType type;
   final String imageId;
@@ -20,12 +17,12 @@ class PanelContext {
   final String textCorrectedAi;
   final String textLinkedAi;
 
-  // Services & UI State (Abstracted from Flutter dependencies)
+  // Services & UI State
   final IViewService viewService;
   final IEngagementService engagementService;
   final dynamic commentController;
   final void Function()? onSubmitComment;
-  final dynamic fontSizeNotifier;
+  final dynamic fontSizeNotifier; // Handled strictly via mapping in concrete views
 
   PanelContext({
     required this.type,
