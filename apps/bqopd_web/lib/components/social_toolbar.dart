@@ -32,40 +32,66 @@ class _SocialToolbarState extends State<SocialToolbar> {
   int _likeCount = 0;
   int _commentCount = 0;
   bool _isLiked = false;
+  dynamic _imageUnsub;
+  dynamic _likeUnsub;
 
   @override
   void initState() {
     super.initState();
-    _fetchStats();
+    _startListening();
   }
 
   @override
   void didUpdateComponent(SocialToolbar oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.imageId != component.imageId) {
-      _fetchStats();
+      _stopListening();
+      _startListening();
     }
   }
 
-  Future<void> _fetchStats() async {
+  void _startListening() {
     if (component.imageId.isEmpty) return;
 
-    final res = await fsGetDoc('images/${component.imageId}');
-    final doc = jsonDecode(res);
-    if (doc['exists'] && mounted) {
-      final data = doc['data'];
-      setState(() {
-        _likeCount = data['likeCount'] ?? 0;
-        _commentCount = data['commentCount'] ?? 0;
-      });
-    }
+    // Listen to image metadata for counts
+    _imageUnsub = fsListenDoc('images/${component.imageId}', (jsonStr) {
+      final doc = jsonDecode(jsonStr);
+      if (doc['exists'] && mounted) {
+        final data = doc['data'];
+        setState(() {
+          _likeCount = data['likeCount'] ?? 0;
+          _commentCount = data['commentCount'] ?? 0;
+        });
+      }
+    });
 
+    // Listen to personal like status
     final uid = getCurrentUserId();
     if (uid != null) {
-      final likeRes = await fsGetDoc('Users/$uid/activity/likes/images/${component.imageId}');
-      final likeDoc = jsonDecode(likeRes);
-      if (mounted) setState(() => _isLiked = likeDoc['exists'] == true);
+      _likeUnsub = fsListenDoc('Users/$uid/activity/likes/images/${component.imageId}', (jsonStr) {
+        final doc = jsonDecode(jsonStr);
+        if (mounted) {
+          setState(() => _isLiked = doc['exists'] == true);
+        }
+      });
     }
+  }
+
+  void _stopListening() {
+    if (_imageUnsub != null) {
+      try { _imageUnsub.callAsFunction(); } catch (_) {}
+      _imageUnsub = null;
+    }
+    if (_likeUnsub != null) {
+      try { _likeUnsub.callAsFunction(); } catch (_) {}
+      _likeUnsub = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopListening();
+    super.dispose();
   }
 
   Future<void> _handleLike() async {
@@ -73,6 +99,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     if (uid == null) return;
 
     final newStatus = !_isLiked;
+    // Optimistic update
     setState(() {
       _isLiked = newStatus;
       _likeCount += newStatus ? 1 : -1;
@@ -95,7 +122,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
       return ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
-        userRole: 'user', // Hardcoded for public web reader
+        userRole: 'user',
         isEditingMode: false,
         hasYoutube: component.youtubeId != null && component.youtubeId!.isNotEmpty,
         isGame: component.isGame,
@@ -133,13 +160,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     }
 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-
-    // FIX: Material Symbols logic.
-    // We must strip '_outlined' and '_outline' because the font variation settings
-    // in CSS handle the 'fill' state. Passing the suffix literally causes the
-    // browser to render the text instead of the icon glyph.
     final resolvedIcon = iconName.replaceAll('_outlined', '').replaceAll('_outline', '');
-
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
 
     return button(
@@ -149,7 +170,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
           div(classes: 'toolbar-icon-wrapper', [
             span(
                 classes: 'material-symbols-outlined',
-                // Apply font-variation-settings directly to ensure fill/weight matches state
                 attributes: {
                   'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : ""
                 },
