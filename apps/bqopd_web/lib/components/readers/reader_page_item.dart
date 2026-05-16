@@ -5,6 +5,7 @@ import '../social_toolbar.dart';
 import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
+import '../panels/hashtag_panel.dart'; // NEW
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
@@ -75,6 +76,10 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.comments:
         title = "Comments";
         inner = CommentsPanel(imageId: imageId);
+        break;
+      case BonusRowType.tags: // NEW
+        title = "Hashtags & Voting";
+        inner = HashtagPanel(imageId: imageId);
         break;
       default:
         return div([]);

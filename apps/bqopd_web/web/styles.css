@@ -1,5 +1,18 @@
+/* --- MATERIAL DESIGN 3 TOKENS --- */
+:root {
+    --m3-surface: #ffffff;
+    /* M3 Outline color for unselected chips */
+    --m3-outline: #79747E;
+    --m3-primary: #6750A4;
+    /* M3 Secondary Container for selected chips */
+    --m3-secondary-container: #E8DEF8;
+    --m3-on-secondary-container: #1D192B;
+    --m3-surface-variant: #F4F4F4;
+    --envelope-yellow: #F1B255;
+}
+
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     background-color: #e5e5e5;
     margin: 0;
     padding: 0;
@@ -11,16 +24,102 @@ body {
 
 /* Material Icons Setup */
 .material-symbols-outlined {
-  font-variation-settings:
-  'FILL' 0,
-  'wght' 400,
-  'GRAD' 0,
-  'opsz' 0;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
+
+/* --- M3 FILTER CHIP (Identical to Flutter) --- */
+.m3-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding-left: 12px;
+    padding-right: 8px;
+    border: 1px solid var(--m3-outline);
+    border-radius: 100px; /* Full pill shape */
+    background: var(--m3-surface);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    color: #49454F;
+    box-sizing: border-box;
+    gap: 0; /* Gaps are handled by the divider margins */
+}
+
+.m3-chip:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.m3-chip.active {
+    background-color: var(--m3-secondary-container);
+    border-color: transparent;
+    color: var(--m3-on-secondary-container);
+}
+
+/* The vertical separator inside the chip */
+.m3-chip .v-divider {
+    width: 1px;
+    height: 32px; /* Matches chip height to span top-to-bottom */
+    background-color: currentColor;
+    opacity: 0.12;
+    margin: 0 8px;
+}
+
+.m3-chip .chip-icon {
+    font-size: 18px !important;
+    margin-right: 4px;
+}
+
+/* --- M3 SPLIT BUTTON (Submission UI) --- */
+.m3-split-button {
+    display: inline-flex;
+    align-items: center;
+    background: var(--m3-surface);
+    border: 1px solid var(--m3-outline);
+    border-radius: 100px;
+    height: 36px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.m3-split-button input {
+    border: none !important;
+    margin-bottom: 0 !important;
+    padding: 0 12px !important;
+    height: 100% !important;
+    font-size: 13px;
+    width: 110px;
+    outline: none;
+    background: transparent;
+}
+
+.m3-split-button .split-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    height: 100%;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.m3-split-button .split-action:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.m3-split-button .v-divider {
+    width: 1px;
+    height: 20px;
+    background-color: var(--m3-outline);
+    opacity: 0.12;
+}
+
+/* --- STRUCTURAL LAYOUT (RE-RESTORED FULL VERSION) --- */
 
 /* Manila Envelope Aesthetic - Locked to 5x8 Ratio */
 .manila-envelope, .manila-envelope-cover {
-    background-color: #F1B255;
+    background-color: var(--envelope-yellow);
     padding: 20px;
     width: 100%;
     max-width: 450px;
@@ -73,7 +172,6 @@ body {
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    /* Removed width 100% to let it align to the left within the creator row */
 }
 
 .user-avatar-container {
@@ -182,6 +280,7 @@ body {
 /* Utility Classes */
 .flex-col { display: flex; flex-direction: column; }
 .flex-row { display: flex; flex-direction: row; }
+.flex-wrap { flex-wrap: wrap; }
 .items-center { align-items: center; }
 .justify-center { justify-content: center; }
 .justify-between { justify-content: space-between; }
@@ -189,12 +288,13 @@ body {
 .h-full { height: 100%; }
 .flex-1 { flex: 1; }
 .gap-2 { gap: 8px; }
-.gap-4 { gap: 16px; }
+.gap-3 { gap: 12px; }
 .mt-2 { margin-top: 8px; }
 .mt-4 { margin-top: 16px; }
 .mb-4 { margin-bottom: 16px; }
 .p-2 { padding: 8px; }
 .p-4 { padding: 16px; }
+.py-4 { padding-top: 16px; padding-bottom: 16px; }
 .px-4 { padding-left: 16px; padding-right: 16px; }
 .py-2 { padding-top: 8px; padding-bottom: 8px; }
 .font-bold { font-weight: bold; }
