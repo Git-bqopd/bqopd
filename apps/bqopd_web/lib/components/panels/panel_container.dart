@@ -16,9 +16,10 @@ class PanelContainer extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    // Apply background colors based on panel type to match Flutter's getInlineColor
+    // Apply background tints to differentiate interaction rows
     String bgColor = '#ffffff';
     if (type == BonusRowType.textReader) bgColor = '#FDFBF7';
+    if (type == BonusRowType.comments) bgColor = '#ffffff';
 
     return div(
         classes: 'p-4 mt-2',

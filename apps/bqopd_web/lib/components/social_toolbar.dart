@@ -1,6 +1,6 @@
+import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'dart:convert';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 
@@ -10,8 +10,6 @@ class SocialToolbar extends StatefulComponent {
   final bool isGame;
   final String? youtubeId;
   final VoidCallback? onOpenGrid;
-
-  // NEW: Panel State callbacks
   final BonusRowType? activeBonusRow;
   final ValueChanged<BonusRowType> onToggleBonusRow;
 
@@ -33,7 +31,6 @@ class SocialToolbar extends StatefulComponent {
 class _SocialToolbarState extends State<SocialToolbar> {
   int _likeCount = 0;
   int _commentCount = 0;
-  int _viewCount = 0;
   bool _isLiked = false;
 
   @override
@@ -44,15 +41,14 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Future<void> _fetchStats() async {
     if (component.imageId.isEmpty) return;
+
     final res = await fsGetDoc('images/${component.imageId}');
     final doc = jsonDecode(res);
-    if (doc['exists']) {
+    if (doc['exists'] && mounted) {
       final data = doc['data'];
       setState(() {
         _likeCount = data['likeCount'] ?? 0;
         _commentCount = data['commentCount'] ?? 0;
-        _viewCount = (data['regListCount'] ?? 0) + (data['anonListCount'] ?? 0) +
-            (data['regGridCount'] ?? 0) + (data['anonGridCount'] ?? 0);
       });
     }
 
@@ -60,7 +56,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     if (uid != null) {
       final likeRes = await fsGetDoc('Users/$uid/activity/likes/images/${component.imageId}');
       final likeDoc = jsonDecode(likeRes);
-      setState(() => _isLiked = likeDoc['exists'] == true);
+      if (mounted) setState(() => _isLiked = likeDoc['exists'] == true);
     }
   }
 
@@ -121,8 +117,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     } else if (tool.id == 'Text') {
       isActive = component.activeBonusRow == BonusRowType.textReader;
       action = () => component.onToggleBonusRow(BonusRowType.textReader);
-    } else if (tool.id == 'Views') {
-      count = _viewCount;
     } else if (tool.id == 'Grid') {
       action = component.onOpenGrid ?? () {};
     }

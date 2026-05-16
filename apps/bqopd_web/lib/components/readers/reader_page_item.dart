@@ -39,13 +39,15 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
 
     return div(classes: 'reader-list-item flex-col w-full', [
+      // Page Image Layer
       div(classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center', [
         if (url != null && url.isNotEmpty)
           img(src: url, classes: 'w-full h-full', attributes: {'style': 'object-fit: contain;'})
         else
-          p(classes: 'text-gray text-xs', [text('Processing...')])
+          p(classes: 'text-gray text-xs', [text('Processing Assets...')])
       ]),
 
+      // Interaction Layer
       div(classes: 'bg-white', [
         SocialToolbar(
           imageId: imageId,
@@ -62,7 +64,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   }
 
   Component _buildPanelContent(String imageId) {
-    Component inner; // FIXED: Changed from 'Widget' to 'Component'
+    Component inner;
     String title = "";
 
     switch (_activePanel!) {

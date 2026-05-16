@@ -1,6 +1,6 @@
+import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'dart:convert';
 import '../../utils/web_firebase_interop.dart';
 
 class TextReaderPanel extends StatefulComponent {
@@ -13,7 +13,7 @@ class TextReaderPanel extends StatefulComponent {
 }
 
 class _TextReaderPanelState extends State<TextReaderPanel> {
-  String _content = "Loading text...";
+  String _content = "Loading digitized text...";
   double _fontSize = 16.0;
 
   @override
@@ -23,12 +23,14 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
   }
 
   Future<void> _fetchText() async {
+    if (component.imageId.isEmpty) return;
+
     final res = await fsGetDoc('images/${component.imageId}');
     final doc = jsonDecode(res);
-    if (doc['exists']) {
+    if (doc['exists'] && mounted) {
       final data = doc['data'];
       setState(() {
-        _content = data['text_corrected'] ?? data['text_raw'] ?? "No text available.";
+        _content = data['text_linked'] ?? data['text_corrected'] ?? data['text_raw'] ?? "Transcription pending.";
       });
     }
   }
@@ -36,7 +38,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
   @override
   Component build(BuildContext context) {
     return div([
-      // Simple font size toggle
       div(classes: 'flex-row gap-4 mb-4', [
         button(
             classes: 'nav-pill',
