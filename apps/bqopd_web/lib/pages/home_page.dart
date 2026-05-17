@@ -22,7 +22,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _checkDefaultRoute();
+    if (kIsWeb) {
+      _checkDefaultRoute();
+    }
   }
 
   Future<void> _checkDefaultRoute() async {

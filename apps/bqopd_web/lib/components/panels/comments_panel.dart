@@ -22,13 +22,15 @@ class _CommentsPanelState extends State<CommentsPanel> {
   @override
   void initState() {
     super.initState();
-    _startListening();
+    if (kIsWeb) {
+      _startListening();
+    }
   }
 
   @override
   void didUpdateComponent(CommentsPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.imageId != component.imageId) {
+    if (oldComponent.imageId != component.imageId && kIsWeb) {
       _stopListening();
       _startListening();
     }
@@ -174,8 +176,10 @@ class _CommentItemState extends State<CommentItem> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
-    _listenToLikes();
+    if (kIsWeb) {
+      _loadProfile();
+      _listenToLikes();
+    }
   }
 
   @override

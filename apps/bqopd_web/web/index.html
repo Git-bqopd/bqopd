@@ -88,37 +88,47 @@
 
         // --- Database & Storage Bridge ---
         window.fsGetDoc = (path) => {
-            return db.doc(path).get().then(d => JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null}));
+            return db.doc(path).get()
+                .then(d => JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null}))
+                .catch(err => JSON.stringify({id: '', path: path, exists: false, error: err.message}));
         };
 
         window.fsListenDoc = (path, dartCallback) => {
-            return db.doc(path).onSnapshot(d => dartCallback(JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null})));
+            return db.doc(path).onSnapshot(
+                d => dartCallback(JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null})),
+                err => console.error("fsListenDoc error on path " + path + ":", err)
+            );
         };
 
         window.fsListenQuery = (path, field, op, valueJson, orderBy, desc, dartCallback) => {
             let q = db.collection(path);
             if (field && op && valueJson) q = q.where(field, op, JSON.parse(valueJson));
             if (orderBy) q = q.orderBy(orderBy, desc ? 'desc' : 'asc');
-            return q.onSnapshot(s => {
-                let docs = s.docs.map(d => ({id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}));
-                dartCallback(JSON.stringify(docs));
-            });
+            return q.onSnapshot(
+                s => {
+                    let docs = s.docs.map(d => ({id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}));
+                    dartCallback(JSON.stringify(docs));
+                },
+                err => console.error("fsListenQuery error on path " + path + ":", err)
+            );
         };
 
-        window.fsUpdateDoc = (path, dataStr) => db.doc(path).update(parseFirebaseOps(JSON.parse(dataStr)));
-        window.fsSetDoc = (path, dataStr, merge) => db.doc(path).set(parseFirebaseOps(JSON.parse(dataStr)), {merge: merge});
-        window.fsDeleteDoc = (path) => db.doc(path).delete();
-        window.fsAddDoc = (path, dataStr) => db.collection(path).add(parseFirebaseOps(JSON.parse(dataStr))).then(r => r.id);
+        window.fsUpdateDoc = (path, dataStr) => db.doc(path).update(parseFirebaseOps(JSON.parse(dataStr))).catch(err => { console.error("fsUpdateDoc error:", err); throw err; });
+        window.fsSetDoc = (path, dataStr, merge) => db.doc(path).set(parseFirebaseOps(JSON.parse(dataStr)), {merge: merge}).catch(err => { console.error("fsSetDoc error:", err); throw err; });
+        window.fsDeleteDoc = (path) => db.doc(path).delete().catch(err => { console.error("fsDeleteDoc error:", err); throw err; });
+        window.fsAddDoc = (path, dataStr) => db.collection(path).add(parseFirebaseOps(JSON.parse(dataStr))).then(r => r.id).catch(err => { console.error("fsAddDoc error:", err); throw err; });
 
         window.fsQuery = (path, field, op, valueJson, orderBy) => {
             let q = db.collection(path);
             if (field && op && valueJson) q = q.where(field, op, JSON.parse(valueJson));
             if (orderBy) q = q.orderBy(orderBy);
-            return q.get().then(s => JSON.stringify(s.docs.map(d => ({id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}))));
+            return q.get()
+                .then(s => JSON.stringify(s.docs.map(d => ({id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}))))
+                .catch(err => { console.error("fsQuery error:", err); return JSON.stringify([]); });
         };
 
-        window.fnCall = (name, dataStr) => functions.httpsCallable(name)(JSON.parse(dataStr)).then(r => JSON.stringify(r.data));
-        window.stUpload = (path, bytes, contentType) => storage.ref(path).put(bytes, {contentType: contentType}).then(s => s.ref.getDownloadURL());
+        window.fnCall = (name, dataStr) => functions.httpsCallable(name)(JSON.parse(dataStr)).then(r => JSON.stringify(r.data)).catch(err => { console.error("fnCall error:", err); throw err; });
+        window.stUpload = (path, bytes, contentType) => storage.ref(path).put(bytes, {contentType: contentType}).then(s => s.ref.getDownloadURL()).catch(err => { console.error("stUpload error:", err); throw err; });
     </script>
 
     <script src="main.dart.js" defer></script>

@@ -55,11 +55,13 @@ class _AppState extends State<App> {
       authBloc = AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested());
       authState = authBloc.state;
 
-      _sub = authBloc.stream.listen((state) {
-        setState(() {
-          authState = state;
+      if (kIsWeb) {
+        _sub = authBloc.stream.listen((state) {
+          setState(() {
+            authState = state;
+          });
         });
-      });
+      }
     } catch (e) {
       _hasError = true;
       _errorMsg = e.toString();
@@ -114,35 +116,37 @@ class _AppState extends State<App> {
               );
             },
           ),
-          Route(
-            path: '/reader/:fanzineId',
-            builder: (context, state) => FanzineReaderPage(
-              fanzineId: state.params['fanzineId']!,
+          if (kIsWeb) ...[
+            Route(
+              path: '/reader/:fanzineId',
+              builder: (context, state) => FanzineReaderPage(
+                fanzineId: state.params['fanzineId']!,
+              ),
             ),
-          ),
-          // Shortlink matcher
-          Route(
-            path: '/:code',
-            builder: (context, state) => ShortLinkPage(
-              code: state.params['code']!,
-              authState: authState,
-              authBloc: authBloc,
-              userRepository: userRepository,
-              engagementRepository: engagementRepository,
+            // Shortlink matcher
+            Route(
+              path: '/:code',
+              builder: (context, state) => ShortLinkPage(
+                code: state.params['code']!,
+                authState: authState,
+                authBloc: authBloc,
+                userRepository: userRepository,
+                engagementRepository: engagementRepository,
+              ),
             ),
-          ),
-          // NEW: ULTRA-SHORT HIERARCHY PATTERN (/:code/:pageNumber)
-          Route(
-            path: '/:code/:pageNumber',
-            builder: (context, state) => ShortLinkPage(
-              code: state.params['code']!,
-              pageNumber: state.params['pageNumber'],
-              authState: authState,
-              authBloc: authBloc,
-              userRepository: userRepository,
-              engagementRepository: engagementRepository,
+            // NEW: ULTRA-SHORT HIERARCHY PATTERN (/:code/:pageNumber)
+            Route(
+              path: '/:code/:pageNumber',
+              builder: (context, state) => ShortLinkPage(
+                code: state.params['code']!,
+                pageNumber: state.params['pageNumber'],
+                authState: authState,
+                authBloc: authBloc,
+                userRepository: userRepository,
+                engagementRepository: engagementRepository,
+              ),
             ),
-          ),
+          ],
         ],
       )
     ]);

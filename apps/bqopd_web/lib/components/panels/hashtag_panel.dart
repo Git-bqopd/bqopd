@@ -23,7 +23,9 @@ class _HashtagPanelState extends State<HashtagPanel> {
   @override
   void initState() {
     super.initState();
-    _startListening();
+    if (kIsWeb) {
+      _startListening();
+    }
   }
 
   void _startListening() {

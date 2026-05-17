@@ -1,4 +1,11 @@
 import 'dart:typed_data';
+import '../utils/web_firebase_interop.dart';
+
+/// Server VM stub implementation of the static unsubscription handler.
+class StubSubscription implements FirebaseSubscription {
+  @override
+  void callAsFunction() {}
+}
 
 /// Server VM stub for getting active auth IDs.
 String? getCurrentUserId() => null;
@@ -7,10 +14,10 @@ String? getCurrentUserId() => null;
 Future<String> fsGetDoc(String path) async => '{}';
 
 /// Server VM stub for document snapshot listeners.
-dynamic fsListenDoc(String path, void Function(String) callback) => null;
+FirebaseSubscription fsListenDoc(String path, void Function(String) callback) => StubSubscription();
 
 /// Server VM stub for query listeners.
-dynamic fsListenQuery(String path, String field, String op, String valueJson, String orderBy, bool desc, void Function(String) callback) => null;
+FirebaseSubscription fsListenQuery(String path, String field, String op, String valueJson, String orderBy, bool desc, void Function(String) callback) => StubSubscription();
 
 /// Server VM stub for doc updates.
 Future<void> fsUpdateDoc(String path, String dataJson) async {}

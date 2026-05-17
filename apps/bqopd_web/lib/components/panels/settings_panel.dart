@@ -22,7 +22,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
   @override
   void initState() {
     super.initState();
-    _loadPreferences();
+    if (kIsWeb) {
+      _loadPreferences();
+    }
   }
 
   Future<void> _loadPreferences() async {

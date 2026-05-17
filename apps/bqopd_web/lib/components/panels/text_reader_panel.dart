@@ -19,13 +19,15 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
   @override
   void initState() {
     super.initState();
-    _fetchText();
+    if (kIsWeb) {
+      _fetchText();
+    }
   }
 
   @override
   void didUpdateComponent(TextReaderPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.imageId != component.imageId) {
+    if (oldComponent.imageId != component.imageId && kIsWeb) {
       _fetchText();
     }
   }

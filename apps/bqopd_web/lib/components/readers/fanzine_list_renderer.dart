@@ -33,7 +33,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   void initState() {
     super.initState();
     // Anchor scroll on initial load if we aren't starting at the very top
-    if (component.initialIndex > 0) {
+    if (component.initialIndex > 0 && kIsWeb) {
       _anchorScroll();
     }
   }
@@ -42,7 +42,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   void didUpdateComponent(FanzineListRenderer oldComponent) {
     super.didUpdateComponent(oldComponent);
     // If the user clicks a different page in the grid or the URL updates, re-anchor
-    if (oldComponent.initialIndex != component.initialIndex) {
+    if (oldComponent.initialIndex != component.initialIndex && kIsWeb) {
       _anchorScroll();
     }
   }

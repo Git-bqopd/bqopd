@@ -73,7 +73,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     final data = _preloadedData;
     if (data.isNotEmpty) {
       _applyPayload(data);
-    } else {
+    } else if (kIsWeb) {
       _resolveOnClient();
     }
   }
@@ -81,7 +81,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
   @override
   void didUpdateComponent(ShortLinkPage oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.code != component.code) {
+    if (oldComponent.code != component.code && kIsWeb) {
       _resolveOnClient();
     }
   }

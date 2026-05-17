@@ -1,25 +1,28 @@
+@JS()
+library web_auth_repository;
+
 import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:bqopd_core/src/interfaces/auth_repository_interface.dart';
 import 'package:bqopd_core/src/models/auth_user.dart';
 
-@JS('window.loginWithFirebase')
+@JS('loginWithFirebase')
 external JSPromise _loginWithFirebase(JSString email, JSString password);
 
-@JS('window.registerWithFirebase')
+@JS('registerWithFirebase')
 external JSPromise _registerWithFirebase(JSString email, JSString password, JSString username);
 
-@JS('window.logoutFromFirebase')
+@JS('logoutFromFirebase')
 external JSPromise _logoutFromFirebase();
 
-@JS('window.getCurrentUserId')
+@JS('getCurrentUserId')
 external JSString? _getCurrentUserId();
 
-@JS('window.getCurrentUserEmail')
+@JS('getCurrentUserEmail')
 external JSString? _getCurrentUserEmail();
 
-@JS('window.onAuthStateChangedListener')
+@JS('onAuthStateChangedListener')
 external void _onAuthStateChangedListener(JSFunction callback);
 
 /// Pure Dart implementation of IAuthRepository using JS Interop
@@ -40,7 +43,33 @@ class WebAuthRepository implements IAuthRepository {
   }
 
   @override
-  Stream<AuthUser?> get authStateChanges => _authController.stream;
+  Stream<AuthUser?> get authStateChanges {
+    final controller = StreamController<AuthUser?>.broadcast();
+
+    // Emit the active authentication status immediately to new subscribers on a fresh tick
+    scheduleMicrotask(() {
+      if (!controller.isClosed) {
+        controller.add(currentUser);
+      }
+    });
+
+    // Pipe future updates from our central auth status channel
+    final subscription = _authController.stream.listen(
+          (user) {
+        if (!controller.isClosed) {
+          controller.add(user);
+        }
+      },
+      onError: controller.addError,
+      onDone: controller.close,
+    );
+
+    controller.onCancel = () {
+      subscription.cancel();
+    };
+
+    return controller.stream;
+  }
 
   @override
   Future<void> login(String email, String password) async {

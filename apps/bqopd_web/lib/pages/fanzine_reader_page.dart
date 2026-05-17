@@ -44,7 +44,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       _creatorProfiles = component.preloadedCreatorProfiles ?? {};
       _imageStats = component.preloadedImageStats ?? {};
       _loading = false;
-    } else {
+    } else if (kIsWeb) {
       _loadData();
     }
   }
