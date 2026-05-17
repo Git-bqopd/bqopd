@@ -4,148 +4,175 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
+import '../utils/server_firestore_client.dart';
 import 'fanzine_reader_page.dart';
 import 'profile_page.dart';
 
+/// Resolved and pre-rendered matching view utilizing server pre-fetched payloads.
 class ShortLinkPage extends StatefulComponent {
   final String code;
-  final String? pageNumber; // NEW: Immutable path variable for deep linking
+  final String? pageNumber;
   final AuthState? authState;
   final AuthBloc? authBloc;
+  final IUserRepository userRepository;
+  final IEngagementRepository engagementRepository;
 
   const ShortLinkPage({
     required this.code,
     this.pageNumber,
     this.authState,
     this.authBloc,
+    required this.userRepository,
+    required this.engagementRepository,
   });
 
   @override
   State<ShortLinkPage> createState() => _ShortLinkPageState();
 }
 
-class _ShortLinkPageState extends State<ShortLinkPage> {
+class _ShortLinkPageState extends State<ShortLinkPage>
+    with PreloadStateMixin, SyncStateMixin<ShortLinkPage, String> {
+  String _preloadedJson = '{}';
+
+  Map<String, dynamic> get _preloadedData {
+    try {
+      return jsonDecode(_preloadedJson) as Map<String, dynamic>;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  bool _isResolved = false;
   String _status = "Resolving link...";
   String? _targetFanzineId;
   String? _targetUserId;
-  bool _isResolved = false;
+  Map<String, dynamic>? _fanzineData;
+  List<Map<String, dynamic>> _pagesData = [];
+  Map<String, Map<String, dynamic>> _creatorProfiles = {};
+  Map<String, Map<String, dynamic>> _imageStats = {};
+
+  @override
+  Future<void> preloadState() async {
+    // Executes ONLY on the server during build-time (Static Generation)
+    // Feeds directly into the serialized HTML payload
+    final payload = await ServerFirestoreClient.resolveFullPayload(component.code);
+    _preloadedJson = jsonEncode(payload);
+  }
+
+  @override
+  String getState() => _preloadedJson;
+
+  @override
+  void updateState(String value) {
+    _preloadedJson = value;
+  }
 
   @override
   void initState() {
     super.initState();
-    _resolve();
+    final data = _preloadedData;
+    if (data.isNotEmpty) {
+      _applyPayload(data);
+    } else {
+      _resolveOnClient();
+    }
   }
 
   @override
   void didUpdateComponent(ShortLinkPage oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.code != component.code) {
-      _resolve();
+      _resolveOnClient();
     }
   }
 
-  Future<void> _resolve() async {
+  void _applyPayload(Map<String, dynamic> data) {
+    _status = data['status'] ?? '';
+    _targetFanzineId = data['targetFanzineId'];
+    _targetUserId = data['targetUserId'];
+    _fanzineData = data['fanzineData'];
+    if (data['pages'] != null) {
+      _pagesData = List<Map<String, dynamic>>.from(data['pages']);
+    }
+    if (data['creatorProfiles'] != null) {
+      _creatorProfiles = Map<String, Map<String, dynamic>>.from(
+        (data['creatorProfiles'] as Map).map(
+              (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
+        ),
+      );
+    }
+    if (data['imageStats'] != null) {
+      _imageStats = Map<String, Map<String, dynamic>>.from(
+        (data['imageStats'] as Map).map(
+              (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
+        ),
+      );
+    }
+    _isResolved = true;
+  }
+
+  /// Client-side fallback routine if the component loads without a preloaded state chunk.
+  Future<void> _resolveOnClient() async {
+    if (!mounted) return;
     setState(() {
       _status = "Resolving link...";
-      _targetFanzineId = null;
-      _targetUserId = null;
       _isResolved = false;
     });
 
     try {
-      final String code = component.code;
-
-      final res = await fsGetDoc('shortcodes/${code.toUpperCase()}');
-      final data = jsonDecode(res);
-
-      if (data['exists'] == true) {
-        final doc = data['data'];
-        if (doc['type'] == 'fanzine') {
-          setState(() {
-            _targetFanzineId = doc['contentId'];
-            _isResolved = true;
-          });
-          return;
-        } else if (doc['type'] == 'user') {
-          setState(() {
-            _targetUserId = doc['contentId'];
-            _isResolved = true;
-          });
-          return;
-        }
-      }
-
-      final uRes = await fsGetDoc('usernames/${code.toLowerCase()}');
-      final uData = jsonDecode(uRes);
-
-      if (uData['exists'] == true) {
+      final payload = await ServerFirestoreClient.resolveFullPayload(component.code);
+      if (mounted) {
         setState(() {
-          _targetUserId = uData['data']['uid'];
-          _isResolved = true;
+          _applyPayload(payload);
         });
-        return;
       }
-
-      final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(code), '');
-      final fzDocs = jsonDecode(fzRes) as List;
-
-      if (fzDocs.isNotEmpty) {
-        setState(() {
-          _targetFanzineId = fzDocs.first['id'];
-          _isResolved = true;
-        });
-        return;
-      }
-
-      final pRes = await fsQuery('profiles', 'username', '==', jsonEncode(code.toLowerCase()), '');
-      final pDocs = jsonDecode(pRes) as List;
-
-      if (pDocs.isNotEmpty) {
-        setState(() {
-          _targetUserId = pDocs.first['id'];
-          _isResolved = true;
-        });
-        return;
-      }
-
-      setState(() {
-        _status = "Link '${component.code}' not found.";
-        _isResolved = true;
-      });
-
     } catch (e) {
-      setState(() {
-        _status = "Error resolving link: $e";
-        _isResolved = true;
-      });
+      if (mounted) {
+        setState(() {
+          _status = "Error resolving link: $e";
+          _isResolved = true;
+        });
+      }
     }
   }
 
   @override
   Component build(BuildContext context) {
     if (!_isResolved) {
-      return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
-        div(classes: 'text-lg font-bold', [text(_status)])
-      ]);
+      return div(
+          classes: 'flex-col items-center justify-center w-full',
+          attributes: {'style': 'min-height: 100vh;'},
+          [div(classes: 'text-lg font-bold', [text(_status)])]);
     }
 
     if (_targetFanzineId != null) {
-      // Convert path string to integer for initialization
       final initialPage = component.pageNumber != null ? int.tryParse(component.pageNumber!) : null;
 
       return FanzineReaderPage(
         fanzineId: _targetFanzineId!,
         initialPageNumber: initialPage,
+        preloadedFanzine: _fanzineData,
+        preloadedPages: _pagesData,
+        preloadedCreatorProfiles: _creatorProfiles,
+        preloadedImageStats: _imageStats,
       );
     }
 
     if (_targetUserId != null && component.authBloc != null) {
-      return ProfilePage(authState: component.authState, authBloc: component.authBloc!);
+      return ProfilePage(
+        authState: component.authState,
+        authBloc: component.authBloc!,
+        userRepository: component.userRepository,
+        engagementRepository: component.engagementRepository,
+      );
     }
 
-    return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
-      p(classes: 'text-lg font-bold', [text(_status)]),
-      a(href: '/', [text('Go Home')])
-    ]);
+    return div(
+        classes: 'flex-col items-center justify-center w-full',
+        attributes: {'style': 'min-height: 100vh;'},
+        [
+          p(classes: 'text-lg font-bold', [text(_status)]),
+          a(href: '/', [text('Go Home')])
+        ]);
   }
 }

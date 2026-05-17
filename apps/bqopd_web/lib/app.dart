@@ -4,12 +4,7 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 
 import 'package:bqopd_core/bqopd_core.dart';
-import 'repositories/web_auth_repository.dart';
-import 'repositories/web_engagement_repository.dart';
-import 'repositories/web_fanzine_repository.dart';
-import 'repositories/web_pipeline_repository.dart';
-import 'repositories/web_upload_repository.dart';
-import 'repositories/web_user_repository.dart';
+import 'repositories/repositories.dart';
 
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
@@ -26,12 +21,12 @@ class App extends StatefulComponent {
 }
 
 class _AppState extends State<App> {
-  late final WebAuthRepository authRepository;
-  late final WebFanzineRepository fanzineRepository;
-  late final WebEngagementRepository engagementRepository;
-  late final WebPipelineRepository pipelineRepository;
-  late final WebUploadRepository uploadRepository;
-  late final WebUserRepository userRepository;
+  late final IAuthRepository authRepository;
+  late final IFanzineRepository fanzineRepository;
+  late final IEngagementRepository engagementRepository;
+  late final IPipelineRepository pipelineRepository;
+  late final IUploadRepository uploadRepository;
+  late final IUserRepository userRepository;
 
   late final AuthBloc authBloc;
   late final UploadBloc uploadBloc;
@@ -47,12 +42,12 @@ class _AppState extends State<App> {
   void initState() {
     super.initState();
     try {
-      authRepository = WebAuthRepository();
-      fanzineRepository = WebFanzineRepository();
-      engagementRepository = WebEngagementRepository();
-      pipelineRepository = WebPipelineRepository();
-      uploadRepository = WebUploadRepository();
-      userRepository = WebUserRepository();
+      authRepository = createAuthRepository();
+      fanzineRepository = createFanzineRepository();
+      engagementRepository = createEngagementRepository();
+      pipelineRepository = createPipelineRepository();
+      uploadRepository = createUploadRepository();
+      userRepository = createUserRepository();
 
       uploadBloc = UploadBloc(repository: uploadRepository);
       interactionBloc = InteractionBloc(repository: engagementRepository);
@@ -111,7 +106,12 @@ class _AppState extends State<App> {
               if (state.queryParams['userId'] == null && authState?.status != AuthStatus.authenticated) {
                 return LoginPage(authState: authState, authBloc: authBloc);
               }
-              return ProfilePage(authState: authState, authBloc: authBloc);
+              return ProfilePage(
+                authState: authState,
+                authBloc: authBloc,
+                userRepository: userRepository,
+                engagementRepository: engagementRepository,
+              );
             },
           ),
           Route(
@@ -127,6 +127,8 @@ class _AppState extends State<App> {
               code: state.params['code']!,
               authState: authState,
               authBloc: authBloc,
+              userRepository: userRepository,
+              engagementRepository: engagementRepository,
             ),
           ),
           // NEW: ULTRA-SHORT HIERARCHY PATTERN (/:code/:pageNumber)
@@ -137,6 +139,8 @@ class _AppState extends State<App> {
               pageNumber: state.params['pageNumber'],
               authState: authState,
               authBloc: authBloc,
+              userRepository: userRepository,
+              engagementRepository: engagementRepository,
             ),
           ),
         ],

@@ -1,2 +1,2 @@
-# We use client mode (SPA) to make it easy to host on Firebase alongside Flutter
-mode: client
+# We use static mode (SSG) to pre-fetch payloads and render full <img> tags on frame 1
+mode: static

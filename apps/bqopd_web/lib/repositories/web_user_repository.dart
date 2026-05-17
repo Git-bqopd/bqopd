@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:js_interop';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/firebase_mocks.dart';
@@ -75,9 +74,6 @@ class WebUserRepository implements IUserRepository {
 
   @override
   Future<String?> claimHandleForUser(String handle) async {
-    // Calling the function implemented in the core directly since it handles transactions normally,
-    // but pure web transactional implementation requires cloud functions fallback.
-    // Given the constraints, returning generic fallback status for pure web.
     return "Web handle claiming requires Flutter context or Functions backend.";
   }
 }

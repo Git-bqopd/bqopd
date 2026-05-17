@@ -1,7 +1,7 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:web/web.dart' as web;
 import 'package:bqopd_core/bqopd_core.dart';
+import '../../utils/web_utils.dart';
 import 'reader_page_item.dart';
 
 class FanzineListRenderer extends StatefulComponent {
@@ -54,15 +54,8 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           ? 'fanzine-header'
           : 'reader-page-${component.initialIndex - 1}';
 
-      final el = web.document.getElementById(targetId);
-      if (el != null) {
-        // Use package:web types to trigger the browser's native scroll logic.
-        // The block: 'start' aligns the top of the target page with the top of the reader column.
-        el.scrollIntoView(web.ScrollIntoViewOptions(
-          behavior: 'auto',
-          block: 'start',
-        ));
-      }
+      // Call the conditional utility instead of package:web directly
+      scrollToElement(targetId);
     });
   }
 

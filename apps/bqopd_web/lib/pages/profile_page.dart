@@ -1,13 +1,23 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:bqopd_core/src/blocs/auth/auth_bloc.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../components/page_wrapper.dart';
 
+/// Renders user details in a platform-independent way.
+/// This component strictly uses abstract package interfaces to remain compatible with server VM rendering.
 class ProfilePage extends StatelessComponent {
   final AuthState? authState;
   final AuthBloc authBloc;
+  final IUserRepository userRepository;
+  final IEngagementRepository engagementRepository;
 
-  const ProfilePage({required this.authState, required this.authBloc});
+  const ProfilePage({
+    required this.authState,
+    required this.authBloc,
+    required this.userRepository,
+    required this.engagementRepository,
+    super.key,
+  });
 
   @override
   Component build(BuildContext context) {

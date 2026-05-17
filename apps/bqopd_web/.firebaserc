@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "bqopd-9ce06",
+    "staging": "bqopd-9ce06"
+  },
+  "targets": {
+    "bqopd-9ce06": {
+      "hosting": {
+        "jaspr_app": [
+          "bqopd-jaspr"
+        ]
+      }
+    }
+  }
+}

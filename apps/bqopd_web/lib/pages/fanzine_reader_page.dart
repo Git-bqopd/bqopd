@@ -7,11 +7,19 @@ import '../components/fanzine_layout.dart';
 
 class FanzineReaderPage extends StatefulComponent {
   final String fanzineId;
-  final int? initialPageNumber; // NEW: Anchor for deep linking
+  final int? initialPageNumber;
+  final Map<String, dynamic>? preloadedFanzine;
+  final List<Map<String, dynamic>>? preloadedPages;
+  final Map<String, Map<String, dynamic>>? preloadedCreatorProfiles;
+  final Map<String, Map<String, dynamic>>? preloadedImageStats;
 
   const FanzineReaderPage({
     required this.fanzineId,
     this.initialPageNumber,
+    this.preloadedFanzine,
+    this.preloadedPages,
+    this.preloadedCreatorProfiles,
+    this.preloadedImageStats,
     super.key,
   });
 
@@ -29,7 +37,16 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // VITAL: Instant mount using pre-fetched payloads. No client-side layout thrashing.
+    if (component.preloadedFanzine != null && component.preloadedPages != null) {
+      _fanzine = component.preloadedFanzine;
+      _pages = component.preloadedPages!;
+      _creatorProfiles = component.preloadedCreatorProfiles ?? {};
+      _imageStats = component.preloadedImageStats ?? {};
+      _loading = false;
+    } else {
+      _loadData();
+    }
   }
 
   Future<void> _loadData() async {
@@ -92,16 +109,20 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   @override
   Component build(BuildContext context) {
     if (_loading) {
-      return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
-        p([text('Loading fanzine...')])
-      ]);
+      return div(
+          classes: 'flex-col items-center justify-center w-full',
+          attributes: {'style': 'min-height: 100vh;'},
+          [p([text('Loading fanzine...')])]);
     }
 
     if (_fanzine == null) {
-      return div(classes: 'flex-col items-center justify-center w-full', attributes: {'style': 'min-height: 100vh;'}, [
-        p([text('Fanzine not found.')]),
-        a(href: '/', [text('Go Home')])
-      ]);
+      return div(
+          classes: 'flex-col items-center justify-center w-full',
+          attributes: {'style': 'min-height: 100vh;'},
+          [
+            p([text('Fanzine not found.')]),
+            a(href: '/', [text('Go Home')])
+          ]);
     }
 
     return div(classes: 'w-full h-full', [
@@ -109,7 +130,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         fanzineId: component.fanzineId,
         pages: _pages,
         hasCover: _fanzine!['hasCover'] ?? true,
-        initialPageNumber: component.initialPageNumber, // Pass deep link anchor down
+        initialPageNumber: component.initialPageNumber,
         headerWidget: FanzineHeader(
           fanzineId: component.fanzineId,
           shortCode: _fanzine!['shortCode'],
