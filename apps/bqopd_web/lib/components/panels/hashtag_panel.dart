@@ -115,7 +115,7 @@ class _HashtagPanelState extends State<HashtagPanel> {
               classes: 'material-symbols-outlined chip-icon',
               // Match Material 3 symbol styling: FILL 1 when active
               attributes: {'style': tag.hasVoted ? "font-variation-settings: 'FILL' 1;" : "font-variation-settings: 'FILL' 0;"},
-              [text(tag.hasVoted ? 'star' : 'star_outline')]
+              [text('star')]
           ),
           text('${tag.count}'),
         ]

@@ -3,12 +3,16 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
+import '../utils/icon_utils.dart';
 
 class SocialToolbar extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
+  final String? fanzineType; // NEW: Passed to match Flutter configuration visibility
   final bool isGame;
   final String? youtubeId;
+  final bool isEditingMode; // NEW: Dynamically checks editor contexts
+  final bool isIndiciaPage; // NEW: Aligns custom publication info displays
   final VoidCallback? onOpenGrid;
   final BonusRowType? activeBonusRow;
   final ValueChanged<BonusRowType> onToggleBonusRow;
@@ -16,8 +20,11 @@ class SocialToolbar extends StatefulComponent {
   const SocialToolbar({
     required this.imageId,
     this.fanzineId,
+    this.fanzineType,
     this.isGame = false,
     this.youtubeId,
+    this.isEditingMode = false,
+    this.isIndiciaPage = false,
     this.onOpenGrid,
     required this.activeBonusRow,
     required this.onToggleBonusRow,
@@ -32,8 +39,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
   int _likeCount = 0;
   int _commentCount = 0;
   bool _isLiked = false;
+  String _userRole = 'user'; // NEW: Dynamic state listening to logged-in user profile
+
   dynamic _imageUnsub;
   dynamic _likeUnsub;
+  dynamic _userUnsub;
 
   @override
   void initState() {
@@ -65,13 +75,23 @@ class _SocialToolbarState extends State<SocialToolbar> {
       }
     });
 
-    // Listen to personal like status
     final uid = getCurrentUserId();
     if (uid != null) {
+      // Listen to personal like status
       _likeUnsub = fsListenDoc('Users/$uid/activity/likes/images/${component.imageId}', (jsonStr) {
         final doc = jsonDecode(jsonStr);
         if (mounted) {
           setState(() => _isLiked = doc['exists'] == true);
+        }
+      });
+
+      // NEW: Listen to active user account role changes to dynamically toggle toolbar permissions
+      _userUnsub = fsListenDoc('Users/$uid', (jsonStr) {
+        final doc = jsonDecode(jsonStr);
+        if (doc['exists'] && mounted) {
+          setState(() {
+            _userRole = doc['data']['role'] ?? 'user';
+          });
         }
       });
     }
@@ -85,6 +105,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
     if (_likeUnsub != null) {
       try { _likeUnsub.callAsFunction(); } catch (_) {}
       _likeUnsub = null;
+    }
+    if (_userUnsub != null) {
+      try { _userUnsub.callAsFunction(); } catch (_) {}
+      _userUnsub = null;
     }
   }
 
@@ -122,10 +146,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
       return ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
-        userRole: 'user',
-        isEditingMode: false,
+        userRole: _userRole, // FIXED: Now dynamically handles admin/curator configurations
+        isEditingMode: component.isEditingMode,
+        fanzineType: component.fanzineType,
         hasYoutube: component.youtubeId != null && component.youtubeId!.isNotEmpty,
         isGame: component.isGame,
+        isIndiciaPage: component.isIndiciaPage,
         canOpenGrid: component.onOpenGrid != null,
       );
     }).toList();
@@ -160,7 +186,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     }
 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-    final resolvedIcon = iconName.replaceAll('_outlined', '').replaceAll('_outline', '');
+    final resolvedIcon = cleanIconName(iconName);
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
 
     return button(
@@ -171,7 +197,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
             span(
                 classes: 'material-symbols-outlined',
                 attributes: {
-                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : ""
+                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                 },
                 [text(resolvedIcon)]
             ),

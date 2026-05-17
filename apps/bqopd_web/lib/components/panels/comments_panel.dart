@@ -273,7 +273,7 @@ class _CommentItemState extends State<CommentItem> {
                 span(
                     classes: 'material-symbols-outlined text-sm ${_isLiked ? 'text-red-500' : 'text-gray-300 group-hover:text-gray-400'}',
                     attributes: {'style': _isLiked ? "font-variation-settings: 'FILL' 1;" : ""},
-                    [text(_isLiked ? 'favorite' : 'favorite_border')]
+                    [text('favorite')]
                 ),
               ]
           ),
