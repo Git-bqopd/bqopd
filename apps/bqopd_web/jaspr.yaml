@@ -1,2 +1,2 @@
-# We use static mode (SSG) to pre-fetch payloads and render full <img> tags on frame 1
-mode: static
+# We use server mode (SSR) for live rendering on Google Cloud Run with sub-second response times
+mode: server

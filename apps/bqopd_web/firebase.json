@@ -10,7 +10,10 @@
     "rewrites": [
       {
         "source": "**",
-        "destination": "/index.html"
+        "run": {
+          "serviceId": "bqopd-web",
+          "region": "us-central1"
+        }
       }
     ]
   }

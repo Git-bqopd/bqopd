@@ -5,9 +5,9 @@ publish_to: none
 environment:
   sdk: ^3.11.0
 
-# Set Jaspr to build statically (SSG) for pre-rendered pages & instant media loads
+# Set Jaspr to build dynamically (SSR) via Dart backend on Google Cloud Run
 jaspr:
-  mode: static
+  mode: server
 
 dependencies:
   jaspr: ^0.23.1

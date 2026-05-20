@@ -256,15 +256,22 @@ class ServerFirestoreClient {
   }
 
   /// SERVER-SIDE STATIC PRE-RENDERING:
-  /// Uses sequential HTTP requests since dart:js_interop is not available in the VM.
+  /// Uses highly concurrent Future.wait requests to prevent the HTTP waterfall effect.
   static Future<Map<String, dynamic>> _resolveViaRest(String code) async {
     final payload = <String, dynamic>{};
     try {
       final String codeUpper = code.toUpperCase();
       final String codeLower = code.toLowerCase();
 
-      // 1. Check shortcodes collection
-      final scDoc = await getDocument('shortcodes/$codeUpper');
+      // 1 & 2. Check shortcodes and usernames in parallel on the server
+      final initialChecks = await Future.wait([
+        getDocument('shortcodes/$codeUpper'),
+        getDocument('usernames/$codeLower'),
+      ]);
+
+      final scDoc = initialChecks[0];
+      final usernameDoc = initialChecks[1];
+
       if (scDoc != null) {
         if (scDoc['type'] == 'fanzine') {
           payload['targetFanzineId'] = scDoc['contentId'];
@@ -275,52 +282,46 @@ class ServerFirestoreClient {
         }
       }
 
-      // 2. Check usernames collection
-      if (payload.isEmpty) {
-        final usernameDoc = await getDocument('usernames/$codeLower');
-        if (usernameDoc != null) {
-          payload['targetUserId'] = usernameDoc['uid'];
-          payload['status'] = 'user';
-        }
+      if (payload.isEmpty && usernameDoc != null) {
+        payload['targetUserId'] = usernameDoc['uid'];
+        payload['status'] = 'user';
       }
 
-      // 3. Query fanzines by shortCode
+      // 3 & 4. If direct lookups failed, query fanzines and profiles concurrently
       if (payload.isEmpty) {
-        final fzDocs = await runQuery(
-          collectionId: 'fanzines',
-          fieldPath: 'shortCode',
-          value: code,
-        );
+        final queryChecks = await Future.wait([
+          runQuery(collectionId: 'fanzines', fieldPath: 'shortCode', value: code),
+          runQuery(collectionId: 'profiles', fieldPath: 'username', value: codeLower),
+        ]);
+
+        final fzDocs = queryChecks[0];
+        final profileDocs = queryChecks[1];
+
         if (fzDocs.isNotEmpty) {
           payload['targetFanzineId'] = fzDocs.first['id'];
           payload['status'] = 'fanzine';
-        }
-      }
-
-      // 4. Query profiles by username
-      if (payload.isEmpty) {
-        final profileDocs = await runQuery(
-          collectionId: 'profiles',
-          fieldPath: 'username',
-          value: codeLower,
-        );
-        if (profileDocs.isNotEmpty) {
+        } else if (profileDocs.isNotEmpty) {
           payload['targetUserId'] = profileDocs.first['id'];
           payload['status'] = 'user';
         }
       }
 
-      // 5. If we resolved a fanzine target, pre-fetch and pack all its dependent layouts
+      // 5. If we resolved a fanzine target, pre-fetch and pack all its dependent layouts in parallel
       if (payload['targetFanzineId'] != null) {
         final String fanzineId = payload['targetFanzineId'] as String;
 
-        // Fetch fanzine document
-        final fanzineData = await getDocument('fanzines/$fanzineId');
+        // Fetch fanzine data and pages subcollection in parallel
+        final fzDataResults = await Future.wait([
+          getDocument('fanzines/$fanzineId'),
+          getCollection('fanzines/$fanzineId/pages'),
+        ]);
+
+        final fanzineData = fzDataResults[0];
+        final pagesList = fzDataResults[1] as List<Map<String, dynamic>>;
+
         if (fanzineData != null) {
           payload['fanzineData'] = fanzineData;
 
-          // Fetch page subcollections
-          final pagesList = await getCollection('fanzines/$fanzineId/pages');
           pagesList.sort((a, b) {
             final int pA = a['pageNumber'] ?? 0;
             final int pB = b['pageNumber'] ?? 0;
@@ -328,40 +329,52 @@ class ServerFirestoreClient {
           });
           payload['pages'] = pagesList;
 
-          // Preload Creator Profiles
+          // Assemble creators to fetch
           final creators = fanzineData['masterCreators'] as List? ?? [];
-          final Map<String, dynamic> creatorProfiles = {};
-          final List<String> uidsToFetch = creators
-              .map((c) {
-            if (c is Map) return c['uid'] as String?;
-            return null;
-          })
-              .where((uid) => uid != null && uid.isNotEmpty)
+          final Set<String> uidsToFetch = creators
+              .map((c) => c is Map ? c['uid'] as String? : null)
+              .where((uid) => uid != null && uid!.isNotEmpty)
               .cast<String>()
-              .toList();
+              .toSet();
 
-          for (final uid in uidsToFetch) {
-            final pDoc = await getDocument('profiles/$uid');
-            if (pDoc != null) {
-              creatorProfiles[uid] = pDoc;
-            }
-          }
-          payload['creatorProfiles'] = creatorProfiles;
-
-          // Preload Image Stats
-          final Map<String, dynamic> imageStats = {};
-          final List<String> imageIdsToFetch = pagesList
+          // Assemble page image IDs to fetch
+          final Set<String> imageIdsToFetch = pagesList
               .map((p) => p['imageId'] as String?)
-              .where((id) => id != null && id.isNotEmpty)
+              .where((id) => id != null && id!.isNotEmpty)
               .cast<String>()
-              .toList();
+              .toSet();
 
-          for (final id in imageIdsToFetch) {
-            final iDoc = await getDocument('images/$id');
-            if (iDoc != null) {
-              imageStats[id] = iDoc;
-            }
+          final Map<String, dynamic> creatorProfiles = {};
+          final Map<String, dynamic> imageStats = {};
+
+          final List<Future<void>> parallelFetches = [];
+
+          // Query ALL profiles concurrently
+          for (final uid in uidsToFetch) {
+            parallelFetches.add(
+              getDocument('profiles/$uid').then((pDoc) {
+                if (pDoc != null) {
+                  creatorProfiles[uid] = pDoc;
+                }
+              }),
+            );
           }
+
+          // Query ALL image metadata concurrently
+          for (final id in imageIdsToFetch) {
+            parallelFetches.add(
+              getDocument('images/$id').then((iDoc) {
+                if (iDoc != null) {
+                  imageStats[id] = iDoc;
+                }
+              }),
+            );
+          }
+
+          // Await the entire batch of metadata synchronously on the server
+          await Future.wait(parallelFetches);
+
+          payload['creatorProfiles'] = creatorProfiles;
           payload['imageStats'] = imageStats;
         }
       }

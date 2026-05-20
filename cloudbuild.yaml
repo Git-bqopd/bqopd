@@ -1,0 +1,14 @@
+steps:
+  # Build the container image using our root workspace context
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/bqopd-9ce06/bqopd-web:latest'
+      - '-f'
+      - 'apps/bqopd_web/Dockerfile'
+      - '.'
+
+# Automatically push the built image to your Container Registry
+images:
+  - 'gcr.io/bqopd-9ce06/bqopd-web:latest'
