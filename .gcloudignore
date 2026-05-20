@@ -20,7 +20,7 @@ apps/bqopd_web/build/
 # Ignore Python environment and cache folders
 venv/
 .venv/
-/pycache/
+/__pycache__/
 /*.pyc
 
 # Ignore IDE settings
