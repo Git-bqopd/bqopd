@@ -10,6 +10,43 @@ class ServerFirestoreClient {
   static const String baseUrl =
       'https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/documents';
 
+  static String? _accessToken;
+  static DateTime? _tokenExpiry;
+
+  /// Retrieves an active Google IAM access token from the Cloud Run local Metadata Server.
+  /// Bypasses Firestore Security Rules on the backend by authenticating the REST client.
+  static Future<String?> _getAccessToken() async {
+    // Return cached token if still valid
+    if (_accessToken != null && _tokenExpiry != null && _tokenExpiry!.isAfter(DateTime.now())) {
+      return _accessToken;
+    }
+    try {
+      final url = Uri.parse('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token');
+      final response = await http.get(url, headers: {'Metadata-Flavor': 'Google'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _accessToken = data['access_token'];
+        final int expiresIn = data['expires_in'] ?? 3600;
+        // Expire token 1 minute early for padding safety
+        _tokenExpiry = DateTime.now().add(Duration(seconds: expiresIn - 60));
+        return _accessToken;
+      }
+    } catch (_) {
+      // Fail silently (e.g., if running locally during development)
+    }
+    return null;
+  }
+
+  /// Appends appropriate IAM authentication headers if executing on the server.
+  static Future<Map<String, String>> _getHeaders() async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    final token = await _getAccessToken();
+    if (token != null) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
   /// Decodes Firestore's strongly typed REST JSON format into clean Dart types.
   static dynamic _decodeValue(Map<String, dynamic> val) {
     if (val.containsKey('stringValue')) return val['stringValue'];
@@ -42,13 +79,16 @@ class ServerFirestoreClient {
   static Future<Map<String, dynamic>?> getDocument(String path) async {
     try {
       final url = Uri.parse('$baseUrl/$path');
-      final response = await http.get(url);
+      final headers = await _getHeaders();
+      final response = await http.get(url, headers: headers);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final fields = data['fields'] as Map<String, dynamic>? ?? {};
         final decoded = decodeFields(fields);
         decoded['id'] = data['name'].toString().split('/').last;
         return decoded;
+      } else {
+        print('Server REST error on $path: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Error getting server-side document $path: $e');
@@ -60,7 +100,8 @@ class ServerFirestoreClient {
   static Future<List<Map<String, dynamic>>> getCollection(String path) async {
     try {
       final url = Uri.parse('$baseUrl/$path');
-      final response = await http.get(url);
+      final headers = await _getHeaders();
+      final response = await http.get(url, headers: headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
         final docs = body['documents'] as List? ?? [];
@@ -71,6 +112,8 @@ class ServerFirestoreClient {
           decoded['id'] = data['name'].toString().split('/').last;
           return decoded;
         }).toList();
+      } else {
+        print('Server REST error on collection $path: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Error getting server-side collection $path: $e');
@@ -86,6 +129,7 @@ class ServerFirestoreClient {
   }) async {
     try {
       final url = Uri.parse('$baseUrl:runQuery');
+      final headers = await _getHeaders();
       final body = {
         'structuredQuery': {
           'from': [
@@ -103,7 +147,7 @@ class ServerFirestoreClient {
       };
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode(body),
       );
       if (response.statusCode == 200) {
@@ -119,6 +163,8 @@ class ServerFirestoreClient {
           }
         }
         return decodedDocs;
+      } else {
+        print('Server REST error on query $collectionId: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Error running server-side query on $collectionId ($fieldPath == $value): $e');

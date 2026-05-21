@@ -13,6 +13,7 @@ class FanzineLayout extends StatefulComponent {
   final Component headerWidget;
   final bool hasCover;
   final int? initialPageNumber; // Capturing the anchor anchor
+  final Map<String, Map<String, dynamic>> preloadedImageStats;
 
   const FanzineLayout({
     required this.fanzineId,
@@ -20,6 +21,7 @@ class FanzineLayout extends StatefulComponent {
     required this.headerWidget,
     this.hasCover = true,
     this.initialPageNumber,
+    this.preloadedImageStats = const {},
   });
 
   @override
@@ -105,6 +107,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 onTogglePanel: _handleTogglePanel,
                 onOpenGrid: _switchToGrid,
                 initialIndex: _targetIndex,
+                preloadedImageStats: component.preloadedImageStats, // Passes stats down
               )
             ]
         ),

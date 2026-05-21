@@ -131,6 +131,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         pages: _pages,
         hasCover: _fanzine!['hasCover'] ?? true,
         initialPageNumber: component.initialPageNumber,
+        preloadedImageStats: _imageStats, // Correctly propagates preloaded stats
         headerWidget: FanzineHeader(
           fanzineId: component.fanzineId,
           shortCode: _fanzine!['shortCode'],

@@ -6,19 +6,21 @@ import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
 import '../panels/hashtag_panel.dart';
-import '../panels/settings_panel.dart'; // NEW
+import '../panels/settings_panel.dart';
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
   final Map<String, dynamic> pageData;
   final int pageIndex;
   final VoidCallback? onOpenGrid;
+  final Map<String, dynamic>? initialImageStats;
 
   const ReaderPageItem({
     required this.fanzineId,
     required this.pageData,
     required this.pageIndex,
     this.onOpenGrid,
+    this.initialImageStats,
     super.key,
   });
 
@@ -57,6 +59,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
           onOpenGrid: component.onOpenGrid,
           activeBonusRow: _activePanel,
           onToggleBonusRow: _handleTogglePanel,
+          initialImageStats: component.initialImageStats, // Passes stats down
         ),
 
         if (_activePanel != null)
@@ -82,7 +85,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         title = "Hashtags & Voting";
         inner = HashtagPanel(imageId: imageId);
         break;
-      case BonusRowType.settings: // FIXED: Now handling settings panel
+      case BonusRowType.settings:
         title = "Toolbar Settings";
         inner = SettingsPanel();
         break;

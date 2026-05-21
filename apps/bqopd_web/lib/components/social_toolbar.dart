@@ -8,14 +8,15 @@ import '../utils/icon_utils.dart';
 class SocialToolbar extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
-  final String? fanzineType; // NEW: Passed to match Flutter configuration visibility
+  final String? fanzineType;
   final bool isGame;
   final String? youtubeId;
-  final bool isEditingMode; // NEW: Dynamically checks editor contexts
-  final bool isIndiciaPage; // NEW: Aligns custom publication info displays
+  final bool isEditingMode;
+  final bool isIndiciaPage;
   final VoidCallback? onOpenGrid;
   final BonusRowType? activeBonusRow;
   final ValueChanged<BonusRowType> onToggleBonusRow;
+  final Map<String, dynamic>? initialImageStats;
 
   const SocialToolbar({
     required this.imageId,
@@ -28,6 +29,7 @@ class SocialToolbar extends StatefulComponent {
     this.onOpenGrid,
     required this.activeBonusRow,
     required this.onToggleBonusRow,
+    this.initialImageStats,
     super.key,
   });
 
@@ -39,7 +41,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
   int _likeCount = 0;
   int _commentCount = 0;
   bool _isLiked = false;
-  String _userRole = 'user'; // NEW: Dynamic state listening to logged-in user profile
+  String _userRole = 'user';
 
   dynamic _imageUnsub;
   dynamic _likeUnsub;
@@ -48,7 +50,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
   @override
   void initState() {
     super.initState();
-    _startListening();
+    // Synchronously initialize state with static preloaded data on frame 1
+    if (component.initialImageStats != null) {
+      _likeCount = component.initialImageStats!['likeCount'] ?? 0;
+      _commentCount = component.initialImageStats!['commentCount'] ?? 0;
+    }
+    // Defer the execution of network-heavy WebSocket listeners to prevent render blocking during hydration
+    _deferListening();
   }
 
   @override
@@ -56,14 +64,29 @@ class _SocialToolbarState extends State<SocialToolbar> {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.imageId != component.imageId) {
       _stopListening();
-      _startListening();
+      if (component.initialImageStats != null) {
+        _likeCount = component.initialImageStats!['likeCount'] ?? 0;
+        _commentCount = component.initialImageStats!['commentCount'] ?? 0;
+      }
+      _deferListening();
+    }
+  }
+
+  void _deferListening() {
+    if (kIsWeb) {
+      // Yield to the browser main thread so layout/images load completely on frame 1
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) {
+          _startListening();
+        }
+      });
     }
   }
 
   void _startListening() {
     if (component.imageId.isEmpty) return;
 
-    // Listen to image metadata for counts
+    // Listen to image metadata for live updates
     _imageUnsub = fsListenDoc('images/${component.imageId}', (jsonStr) {
       final doc = jsonDecode(jsonStr);
       if (doc['exists'] && mounted) {
@@ -77,7 +100,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
     final uid = getCurrentUserId();
     if (uid != null) {
-      // Listen to personal like status
       _likeUnsub = fsListenDoc('Users/$uid/activity/likes/images/${component.imageId}', (jsonStr) {
         final doc = jsonDecode(jsonStr);
         if (mounted) {
@@ -85,7 +107,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
         }
       });
 
-      // NEW: Listen to active user account role changes to dynamically toggle toolbar permissions
       _userUnsub = fsListenDoc('Users/$uid', (jsonStr) {
         final doc = jsonDecode(jsonStr);
         if (doc['exists'] && mounted) {
@@ -123,7 +144,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     if (uid == null) return;
 
     final newStatus = !_isLiked;
-    // Optimistic update
+    // Optimistic UI update
     setState(() {
       _isLiked = newStatus;
       _likeCount += newStatus ? 1 : -1;
@@ -146,7 +167,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
       return ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
-        userRole: _userRole, // FIXED: Now dynamically handles admin/curator configurations
+        userRole: _userRole,
         isEditingMode: component.isEditingMode,
         fanzineType: component.fanzineType,
         hasYoutube: component.youtubeId != null && component.youtubeId!.isNotEmpty,

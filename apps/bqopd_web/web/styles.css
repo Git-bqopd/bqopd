@@ -638,3 +638,47 @@ a:hover {
 /* CSS Context Switch: When grid and list are both open, hide full and show sticker in the grid */
 .reader-split-layout:has(.list-area) .grid-area .fh-full-view { display: none !important; }
 .reader-split-layout:has(.list-area) .grid-area .fh-sticker-view { display: flex !important; }
+
+/* --- SMOOTH PANELS TRANSITIONS --- */
+@keyframes slideDownFadeIn {
+    from {
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        max-height: 800px;
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.panel-container-animate {
+    animation: slideDownFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    overflow: hidden;
+}
+
+/* --- PREMIUM SHIMMER SKELETON LOADER --- */
+.shimmer-bg {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmerKeyframe 1.5s infinite linear;
+}
+
+@keyframes shimmerKeyframe {
+    from { background-position: -200% 0; }
+    to { background-position: 200% 0; }
+}
+
+.skeleton-line {
+    height: 12px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    width: 100%;
+}
+.skeleton-line.short {
+    width: 60%;
+}
+.skeleton-line.medium {
+    width: 85%;
+}

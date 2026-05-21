@@ -15,6 +15,7 @@ class TextReaderPanel extends StatefulComponent {
 class _TextReaderPanelState extends State<TextReaderPanel> {
   String _content = "Loading digitized text...";
   double _fontSize = 16.0;
+  bool _loading = true; // High-fidelity state tracking
 
   @override
   void initState() {
@@ -34,9 +35,15 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
 
   Future<void> _fetchText() async {
     if (component.imageId.isEmpty) {
-      setState(() => _content = "Transcription pending (No Image ID).");
+      setState(() {
+        _content = "Transcription pending (No Image ID).";
+        _loading = false;
+      });
       return;
     }
+
+    if (!mounted) return;
+    setState(() => _loading = true);
 
     try {
       final res = await fsGetDoc('images/${component.imageId}');
@@ -54,12 +61,19 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           _content = (text != null && text.trim().isNotEmpty)
               ? text
               : "Transcription pending for this page.";
+          _loading = false;
         });
       } else {
-        setState(() => _content = "Image record not found in database.");
+        setState(() {
+          _content = "Image record not found in database.";
+          _loading = false;
+        });
       }
     } catch (e) {
-      setState(() => _content = "Error loading text: $e");
+      setState(() {
+        _content = "Error loading text: $e";
+        _loading = false;
+      });
     }
   }
 
@@ -79,12 +93,21 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         ),
       ]),
 
-      p(
-          attributes: {
-            'style': 'font-size: ${_fontSize}px; font-family: Georgia, serif; line-height: 1.6; color: #333; white-space: pre-wrap; text-align: justify;'
-          },
-          [text(_content)]
-      )
+      // Swapped dry text-loader for shimmering markdown text skeletons
+      if (_loading)
+        div(classes: 'flex-col gap-2 py-4', [
+          div(classes: 'skeleton-line shimmer-bg', []),
+          div(classes: 'skeleton-line medium shimmer-bg', []),
+          div(classes: 'skeleton-line shimmer-bg', []),
+          div(classes: 'skeleton-line short shimmer-bg', []),
+        ])
+      else
+        p(
+            attributes: {
+              'style': 'font-size: ${_fontSize}px; font-family: Georgia, serif; line-height: 1.6; color: #333; white-space: pre-wrap; text-align: justify;'
+            },
+            [text(_content)]
+        )
     ]);
   }
 }

@@ -12,6 +12,7 @@ class FanzineListRenderer extends StatefulComponent {
   final BonusRowType? activeGlobalPanel;
   final ValueChanged<BonusRowType>? onTogglePanel;
   final int initialIndex;
+  final Map<String, Map<String, dynamic>> preloadedImageStats;
 
   const FanzineListRenderer({
     required this.fanzineId,
@@ -21,6 +22,7 @@ class FanzineListRenderer extends StatefulComponent {
     this.activeGlobalPanel,
     this.onTogglePanel,
     this.initialIndex = 0,
+    this.preloadedImageStats = const {},
     super.key,
   });
 
@@ -82,6 +84,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
                 pageData: component.pages[i],
                 pageIndex: i,
                 onOpenGrid: component.onOpenGrid,
+                initialImageStats: component.preloadedImageStats[component.pages[i]['imageId']], // Supplies the cached stats block for individual pages
               )
             ]
         )

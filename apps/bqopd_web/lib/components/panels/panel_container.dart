@@ -21,8 +21,9 @@ class PanelContainer extends StatelessComponent {
     if (type == BonusRowType.textReader) bgColor = '#FDFBF7';
     if (type == BonusRowType.comments) bgColor = '#ffffff';
 
+    // Added panel-container-animate rule for hardware-accelerated entry transitions
     return div(
-        classes: 'p-4 mt-2',
+        classes: 'p-4 mt-2 panel-container-animate',
         attributes: {
           'style': 'background-color: $bgColor; border-top: 1px solid #eee; border-bottom: 1px solid #eee;'
         },

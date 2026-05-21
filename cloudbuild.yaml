@@ -1,5 +1,5 @@
 steps:
-  # Build the container image using our root workspace context
+  # Step 1: Build the container image using our root workspace context
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -8,6 +8,24 @@ steps:
       - '-f'
       - 'apps/bqopd_web/Dockerfile'
       - '.'
+
+  # Step 2: Deploy the container image to Google Cloud Run with performance optimization flags
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'bqopd-web'
+      - '--image'
+      - 'gcr.io/bqopd-9ce06/bqopd-web:latest'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      # Keep 1 warm instance running 24/7 to guarantee sub-second cold starts
+      - '--min-instances'
+      - '1'
 
 # Automatically push the built image to your Container Registry
 images:

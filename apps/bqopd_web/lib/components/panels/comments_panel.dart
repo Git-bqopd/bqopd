@@ -126,12 +126,26 @@ class _CommentsPanelState extends State<CommentsPanel> {
     }
   }
 
+  // Elegant shimmering mock comment cards to hide API latency
+  Component _buildSkeletonComments() {
+    return div(classes: 'flex-col gap-4 py-2', [
+      for (int i = 0; i < 2; i++)
+        div(classes: 'flex-row gap-3 py-4 border-b border-gray-100 items-start', [
+          div(classes: 'w-10 h-10 rounded-full shimmer-bg flex-shrink-0', []),
+          div(classes: 'flex-1 flex-col gap-2', [
+            div(classes: 'skeleton-line short shimmer-bg', []),
+            div(classes: 'skeleton-line medium shimmer-bg', []),
+          ])
+        ])
+    ]);
+  }
+
   @override
   Component build(BuildContext context) {
-    if (_loading) return div(classes: 'p-4 text-center', [text('Loading thoughts...')]);
-
     return div(classes: 'flex-col', [
-      if (_comments.isEmpty)
+      if (_loading)
+        _buildSkeletonComments()
+      else if (_comments.isEmpty)
         div(classes: 'p-8 text-center text-gray text-sm italic', [text('No thoughts shared yet.')])
       else
         for (var comment in _comments)
