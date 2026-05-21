@@ -4,47 +4,20 @@ import 'package:jaspr/jaspr.dart';
 import 'web_firebase_interop.dart';
 import 'firebase_mocks.dart';
 
-/// A hybrid client that uses the Google Cloud Firestore REST API during server-side pre-rendering,
-/// and falls back to the heavily optimized Firebase JS SDK via interop for client-side routing.
+/// A hybrid client that uses the Google Cloud Firestore REST API with Web API Key authorization
+/// during server-side pre-rendering, and falls back to the heavily optimized Firebase JS SDK
+/// via interop for client-side routing.
 class ServerFirestoreClient {
+  static const String projectId = 'bqopd-9ce06';
+  static const String apiKey = 'AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g';
+
   static const String baseUrl =
-      'https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/documents';
+      'https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents';
 
-  static String? _accessToken;
-  static DateTime? _tokenExpiry;
-
-  /// Retrieves an active Google IAM access token from the Cloud Run local Metadata Server.
-  /// Bypasses Firestore Security Rules on the backend by authenticating the REST client.
-  static Future<String?> _getAccessToken() async {
-    // Return cached token if still valid
-    if (_accessToken != null && _tokenExpiry != null && _tokenExpiry!.isAfter(DateTime.now())) {
-      return _accessToken;
-    }
-    try {
-      final url = Uri.parse('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token');
-      final response = await http.get(url, headers: {'Metadata-Flavor': 'Google'});
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _accessToken = data['access_token'];
-        final int expiresIn = data['expires_in'] ?? 3600;
-        // Expire token 1 minute early for padding safety
-        _tokenExpiry = DateTime.now().add(Duration(seconds: expiresIn - 60));
-        return _accessToken;
-      }
-    } catch (_) {
-      // Fail silently (e.g., if running locally during development)
-    }
-    return null;
-  }
-
-  /// Appends appropriate IAM authentication headers if executing on the server.
-  static Future<Map<String, String>> _getHeaders() async {
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    final token = await _getAccessToken();
-    if (token != null) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-    return headers;
+  /// Generates the standard public API parameter list.
+  /// This bypasses Google IAM Metadata service checks entirely and delivers unauthenticated public reads instantly.
+  static String _getQueryString() {
+    return '?key=$apiKey';
   }
 
   /// Decodes Firestore's strongly typed REST JSON format into clean Dart types.
@@ -75,12 +48,11 @@ class ServerFirestoreClient {
     return fields.map((key, value) => MapEntry(key, _decodeValue(value as Map<String, dynamic>)));
   }
 
-  /// Fetches a document from the Firestore REST API.
+  /// Fetches a document from the Firestore REST API using the Web API Key.
   static Future<Map<String, dynamic>?> getDocument(String path) async {
     try {
-      final url = Uri.parse('$baseUrl/$path');
-      final headers = await _getHeaders();
-      final response = await http.get(url, headers: headers);
+      final url = Uri.parse('$baseUrl/$path${_getQueryString()}');
+      final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final fields = data['fields'] as Map<String, dynamic>? ?? {};
@@ -88,20 +60,19 @@ class ServerFirestoreClient {
         decoded['id'] = data['name'].toString().split('/').last;
         return decoded;
       } else {
-        print('Server REST error on $path: ${response.statusCode} - ${response.body}');
+        print('[REST PUBLIC CLIENT FAILED] Path: $path | Status Code: ${response.statusCode} | Body: ${response.body}');
       }
     } catch (e) {
-      print('Error getting server-side document $path: $e');
+      print('[REST PUBLIC CLIENT EXCEPTION] Path: $path | Error: $e');
     }
     return null;
   }
 
-  /// Fetches an entire subcollection or collection path from Firestore REST API.
+  /// Fetches an entire subcollection path using the Web API Key.
   static Future<List<Map<String, dynamic>>> getCollection(String path) async {
     try {
-      final url = Uri.parse('$baseUrl/$path');
-      final headers = await _getHeaders();
-      final response = await http.get(url, headers: headers);
+      final url = Uri.parse('$baseUrl/$path${_getQueryString()}');
+      final response = await http.get(url);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
         final docs = body['documents'] as List? ?? [];
@@ -113,23 +84,22 @@ class ServerFirestoreClient {
           return decoded;
         }).toList();
       } else {
-        print('Server REST error on collection $path: ${response.statusCode} - ${response.body}');
+        print('[REST PUBLIC CLIENT COLLECTION FAILED] Path: $path | Status: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error getting server-side collection $path: $e');
+      print('[REST PUBLIC CLIENT COLLECTION EXCEPTION] Path: $path | Error: $e');
     }
     return [];
   }
 
-  /// Runs a structured EQUAL query on the specified collection path via REST API.
+  /// Runs a structured EQUAL query on the specified collection path using Web API Key parameterization.
   static Future<List<Map<String, dynamic>>> runQuery({
     required String collectionId,
     required String fieldPath,
     required String value,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl:runQuery');
-      final headers = await _getHeaders();
+      final url = Uri.parse('$baseUrl:runQuery${_getQueryString()}');
       final body = {
         'structuredQuery': {
           'from': [
@@ -147,7 +117,7 @@ class ServerFirestoreClient {
       };
       final response = await http.post(
         url,
-        headers: headers,
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
       if (response.statusCode == 200) {
@@ -164,10 +134,10 @@ class ServerFirestoreClient {
         }
         return decodedDocs;
       } else {
-        print('Server REST error on query $collectionId: ${response.statusCode} - ${response.body}');
+        print('[REST PUBLIC CLIENT QUERY FAILED] Collection: $collectionId | Status: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error running server-side query on $collectionId ($fieldPath == $value): $e');
+      print('[REST PUBLIC CLIENT QUERY EXCEPTION] Collection: $collectionId | Error: $e');
     }
     return [];
   }
@@ -237,7 +207,7 @@ class ServerFirestoreClient {
         }
       }
 
-      // 3. Parallel fetch Fanzine data + Pages + Creators + Image Stats
+      // 3. Parallel fetch Fanzine data + Pages
       if (payload['targetFanzineId'] != null) {
         final String fanzineId = payload['targetFanzineId'] as String;
 
@@ -251,7 +221,6 @@ class ServerFirestoreClient {
 
         if (fzDoc['exists'] == true) {
           final Map<String, dynamic> fzData = fzDoc['data'] as Map<String, dynamic>? ?? {};
-          // Restore timestamps via our mock helper
           payload['fanzineData'] = restoreTimestamps(fzData);
 
           final pagesList = pagesListRaw.map((p) {
@@ -263,20 +232,14 @@ class ServerFirestoreClient {
 
           payload['pages'] = pagesList;
 
-          // Extract IDs to fetch details for
           final creators = fzData['masterCreators'] as List? ?? [];
           final uidsToFetch = creators.map((c) => c is Map ? (c as Map)['uid'] as String? : null)
               .where((uid) => uid != null && uid!.isNotEmpty)
               .cast<String>().toSet().toList();
 
-          final imageIdsToFetch = pagesList.map((p) => p['imageId'] as String?)
-              .where((id) => id != null && id!.isNotEmpty)
-              .cast<String>().toSet().toList();
-
           final Map<String, dynamic> creatorProfiles = {};
           final Map<String, dynamic> imageStats = {};
 
-          // Fire ALL profile and image requests simultaneously
           final profileFutures = uidsToFetch.map((uid) async {
             final pRes = await fsGetDoc('profiles/$uid');
             final pDoc = jsonDecode(pRes) as Map<String, dynamic>;
@@ -285,16 +248,7 @@ class ServerFirestoreClient {
             }
           });
 
-          final imageFutures = imageIdsToFetch.map((id) async {
-            final iRes = await fsGetDoc('images/$id');
-            final iDoc = jsonDecode(iRes) as Map<String, dynamic>;
-            if (iDoc['exists'] == true) {
-              imageStats[id] = restoreTimestamps(iDoc['data'] as Map<String, dynamic>);
-            }
-          });
-
-          // Wait for the entire batch of metadata to return
-          await Future.wait([...profileFutures, ...imageFutures]);
+          await Future.wait(profileFutures);
 
           payload['creatorProfiles'] = creatorProfiles;
           payload['imageStats'] = imageStats;
@@ -362,11 +316,10 @@ class ServerFirestoreClient {
         }
       }
 
-      // 5. If we resolved a fanzine target, pre-fetch and pack all its dependent layouts in parallel
+      // 5. If we resolved a fanzine target, pre-fetch pages
       if (payload['targetFanzineId'] != null) {
         final String fanzineId = payload['targetFanzineId'] as String;
 
-        // Fetch fanzine data and pages subcollection in parallel
         final fzDataResults = await Future.wait([
           getDocument('fanzines/$fanzineId'),
           getCollection('fanzines/$fanzineId/pages'),
@@ -385,18 +338,10 @@ class ServerFirestoreClient {
           });
           payload['pages'] = pagesList;
 
-          // Assemble creators to fetch
           final creators = fanzineData['masterCreators'] as List? ?? [];
           final Set<String> uidsToFetch = creators
               .map((c) => c is Map ? (c as Map)['uid'] as String? : null)
               .where((uid) => uid != null && uid!.isNotEmpty)
-              .cast<String>()
-              .toSet();
-
-          // Assemble page image IDs to fetch
-          final Set<String> imageIdsToFetch = pagesList
-              .map((p) => p['imageId'] as String?)
-              .where((id) => id != null && id!.isNotEmpty)
               .cast<String>()
               .toSet();
 
@@ -405,7 +350,6 @@ class ServerFirestoreClient {
 
           final List<Future<void>> parallelFetches = [];
 
-          // Query ALL profiles concurrently
           for (final uid in uidsToFetch) {
             parallelFetches.add(
               getDocument('profiles/$uid').then((pDoc) {
@@ -416,18 +360,6 @@ class ServerFirestoreClient {
             );
           }
 
-          // Query ALL image metadata concurrently
-          for (final id in imageIdsToFetch) {
-            parallelFetches.add(
-              getDocument('images/$id').then((iDoc) {
-                if (iDoc != null) {
-                  imageStats[id] = iDoc;
-                }
-              }),
-            );
-          }
-
-          // Await the entire batch of metadata concurrently on the server
           await Future.wait(parallelFetches);
 
           payload['creatorProfiles'] = creatorProfiles;
@@ -435,7 +367,7 @@ class ServerFirestoreClient {
         }
       }
     } catch (e) {
-      print('Error resolving full server payload: $e');
+      print('[REST CLIENT MASTER EXCEPTION] Code: $code | Error: $e');
       payload['status'] = 'Error: $e';
     }
 

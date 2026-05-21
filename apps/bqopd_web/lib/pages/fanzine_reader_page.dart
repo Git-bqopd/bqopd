@@ -75,22 +75,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             .cast<String>()
             .toSet();
 
-        final Set<String> imageIdsToFetch = _pages
-            .map((p) => p['imageId'] as String?)
-            .where((id) => id != null && id.isNotEmpty)
-            .cast<String>()
-            .toSet();
-
+        // HIGH PERFORMANCE: Skip preloading image collection metadata.
+        // Eliminates massive parallel query blockages during startup.
         await Future.wait([
           ...uidsToFetch.map((uid) async {
             final pRes = await fsGetDoc('profiles/$uid');
             final pDoc = jsonDecode(pRes);
             if (pDoc['exists']) profiles[uid] = pDoc['data'];
-          }),
-          ...imageIdsToFetch.map((id) async {
-            final iRes = await fsGetDoc('images/$id');
-            final iDoc = jsonDecode(iRes);
-            if (iDoc['exists']) stats[id] = iDoc['data'];
           }),
         ]);
 
@@ -131,7 +122,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         pages: _pages,
         hasCover: _fanzine!['hasCover'] ?? true,
         initialPageNumber: component.initialPageNumber,
-        preloadedImageStats: _imageStats, // Correctly propagates preloaded stats
+        preloadedImageStats: _imageStats,
         headerWidget: FanzineHeader(
           fanzineId: component.fanzineId,
           shortCode: _fanzine!['shortCode'],

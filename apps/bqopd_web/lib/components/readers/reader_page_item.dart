@@ -46,7 +46,14 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       // Page Image Layer
       div(classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center', [
         if (url != null && url.isNotEmpty)
-          img(src: url, classes: 'w-full h-full', attributes: {'style': 'object-fit: contain;'})
+          img(
+              src: url,
+              classes: 'w-full h-full',
+              attributes: {
+                'style': 'object-fit: contain;',
+                'loading': 'lazy', // HIGH-PERFORMANCE: native browser deferment for offscreen pages
+              }
+          )
         else
           p(classes: 'text-gray text-xs', [text('Processing Assets...')])
       ]),
@@ -59,7 +66,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
           onOpenGrid: component.onOpenGrid,
           activeBonusRow: _activePanel,
           onToggleBonusRow: _handleTogglePanel,
-          initialImageStats: component.initialImageStats, // Passes stats down
+          initialImageStats: component.initialImageStats,
         ),
 
         if (_activePanel != null)

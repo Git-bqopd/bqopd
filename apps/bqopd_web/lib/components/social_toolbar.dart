@@ -50,12 +50,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
   @override
   void initState() {
     super.initState();
-    // Synchronously initialize state with static preloaded data on frame 1
+    // VITAL: Read the SSR pre-rendered data immediately so the page is fully drawn on frame 1
     if (component.initialImageStats != null) {
       _likeCount = component.initialImageStats!['likeCount'] ?? 0;
       _commentCount = component.initialImageStats!['commentCount'] ?? 0;
     }
-    // Defer the execution of network-heavy WebSocket listeners to prevent render blocking during hydration
+    // HIGH PERFORMANCE: Defer network active listeners until after the client-side compilation completes
     _deferListening();
   }
 
@@ -74,8 +74,8 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   void _deferListening() {
     if (kIsWeb) {
-      // Yield to the browser main thread so layout/images load completely on frame 1
-      Future.delayed(const Duration(milliseconds: 150), () {
+      // Delay listener attachment to avoid competing with image loads and main.dart.js hydration
+      Future.delayed(const Duration(milliseconds: 1500), () {
         if (mounted) {
           _startListening();
         }
@@ -86,7 +86,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
   void _startListening() {
     if (component.imageId.isEmpty) return;
 
-    // Listen to image metadata for live updates
+    // Listen to image stats
     _imageUnsub = fsListenDoc('images/${component.imageId}', (jsonStr) {
       final doc = jsonDecode(jsonStr);
       if (doc['exists'] && mounted) {
@@ -144,7 +144,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     if (uid == null) return;
 
     final newStatus = !_isLiked;
-    // Optimistic UI update
     setState(() {
       _isLiked = newStatus;
       _likeCount += newStatus ? 1 : -1;

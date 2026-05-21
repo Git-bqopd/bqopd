@@ -53,10 +53,21 @@ class _ShortLinkPageState extends State<ShortLinkPage>
 
   @override
   Future<void> preloadState() async {
-    // Executes ONLY on the server during build-time (Static Generation)
-    // Feeds directly into the serialized HTML payload
-    final payload = await ServerFirestoreClient.resolveFullPayload(component.code);
-    _preloadedJson = jsonEncode(payload);
+    // Executes on the server during server-side pre-rendering
+    try {
+      final payload = await ServerFirestoreClient.resolveFullPayload(component.code);
+      _preloadedJson = jsonEncode(payload);
+
+      // CRITICAL LIFECYCLE FIX:
+      // If we are on the server (!kIsWeb), apply the payload to the state variables
+      // immediately inside the async preload sequence. This forces Jaspr to pre-render
+      // the actual fanzine reader UI into the raw HTML instead of the "Resolving link..." fallback.
+      if (!kIsWeb) {
+        _applyPayload(payload);
+      }
+    } catch (e) {
+      print('Error preloading server state: $e');
+    }
   }
 
   @override
