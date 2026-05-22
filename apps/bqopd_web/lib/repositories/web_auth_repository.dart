@@ -73,12 +73,14 @@ class WebAuthRepository implements IAuthRepository {
 
   @override
   Future<void> login(String email, String password) async {
-    await _loginWithFirebase(email.toJS, password.toJS).toDart;
+    // Add defensive trimming to protect the JS Interop channel
+    await _loginWithFirebase(email.trim().toJS, password.toJS).toDart;
   }
 
   @override
   Future<void> register({required String email, required String password, required String username}) async {
-    await _registerWithFirebase(email.toJS, password.toJS, username.toJS).toDart;
+    // Trim parameters to make sure Firebase receives clean strings
+    await _registerWithFirebase(email.trim().toJS, password.toJS, username.trim().toJS).toDart;
   }
 
   @override

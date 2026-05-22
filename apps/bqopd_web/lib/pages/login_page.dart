@@ -47,7 +47,8 @@ class _LoginPageState extends State<LoginPage> {
                 classes: 'btn-primary',
                 events: {'click': (e) {
                   if (!isLoading) {
-                    component.authBloc.add(LoginRequested(_email, _password));
+                    // Normalize the input by trimming trailing and leading whitespace
+                    component.authBloc.add(LoginRequested(_email.trim(), _password));
                   }
                 }},
                 [text(isLoading ? 'loading...' : 'login')]

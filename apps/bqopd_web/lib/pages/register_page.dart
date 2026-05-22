@@ -51,10 +51,11 @@ class _RegisterPageState extends State<RegisterPage> {
                 classes: 'btn-primary',
                 events: {'click': (e) {
                   if (!isLoading) {
+                    // Sanitize email and username to avoid whitespace-related SDK failures
                     component.authBloc.add(RegisterRequested(
-                        email: _email,
+                        email: _email.trim(),
                         password: _password,
-                        username: _username
+                        username: _username.trim()
                     ));
                   }
                 }},
