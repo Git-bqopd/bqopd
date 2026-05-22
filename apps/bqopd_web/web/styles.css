@@ -229,49 +229,7 @@ body {
     line-height: 1.2;
 }
 
-.user-handle {
-    font-size: 9px;
-    color: #666;
-    margin-top: 1px;
-    line-height: 1;
-}
-
-/* Updated Creator Row centering and alignment */
-.creator-list {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    padding-top: 10px;
-}
-
-.creator-row {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    /* Lock the internal alignment to the pipe */
-    width: 100%;
-}
-
-.creator-role {
-    /* Left side of the pipe: fixed width and right-aligned text */
-    flex: 0 0 70px;
-    text-align: right;
-    font-size: 8px;
-    font-weight: bold;
-    color: #999;
-    text-transform: uppercase;
-}
-
-.creator-divider {
-    color: #eee;
-    font-size: 12px;
-    flex-shrink: 0;
-}
-
-.creator-identity {
+.user-identity {
     /* Right side of the pipe: takes the remaining space and holds the UserTile */
     flex: 1;
     display: flex;
@@ -681,4 +639,138 @@ a:hover {
 }
 .skeleton-line.medium {
     width: 85%;
+}
+
+/* --- COMPLIANT SQUARED 8X5 PREMIUM PROFILE CARD CSS CLASSES --- */
+.envelope-8-5-desktop {
+    display: flex;
+    width: 100%;
+    max-width: 800px;
+    aspect-ratio: 8 / 5;
+    background-color: var(--envelope-yellow, #F1B255);
+    padding: 20px;
+    box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
+    box-sizing: border-box;
+    border-radius: 0px !important; /* Fully Squared */
+}
+.white-sticker-8-5 {
+    background-color: white;
+    border-radius: 0px !important; /* Fully Squared */
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    box-sizing: border-box;
+    padding: 24px;
+    overflow: hidden;
+}
+.profile-desktop-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-right: 24px;
+    box-sizing: border-box;
+    text-align: center;
+    overflow-y: auto;
+    max-height: 100%;
+}
+.profile-desktop-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-left: 24px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    max-height: 100%;
+}
+.profile-desktop-divider {
+    width: 1px;
+    background-color: #eee;
+    align-self: stretch;
+}
+.envelope-8-5-mobile-container {
+    display: none;
+}
+@media (max-width: 768px) {
+    .envelope-8-5-desktop {
+        display: none !important;
+    }
+    .envelope-8-5-mobile-container {
+        display: flex !important;
+        flex-direction: column;
+        gap: 20px;
+        width: 95%;
+        max-width: 450px;
+    }
+    .envelope-8-5-mobile-item {
+        width: 100%;
+        aspect-ratio: 8 / 5;
+        background-color: var(--envelope-yellow, #F1B255);
+        padding: 16px;
+        box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        border-radius: 0px !important; /* Fully Squared */
+    }
+    .white-sticker-mobile-8-5 {
+        background-color: white;
+        border-radius: 0px !important; /* Fully Squared */
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        overflow-y: auto;
+    }
+}
+
+/* --- PREMIUM PROFILE BUTTONS SQUARED --- */
+.profile-btn {
+    border-radius: 0px !important; /* Fully Squared */
+    background: white;
+    color: black;
+    border: 1px solid #ddd;
+    transition: all 0.15s ease-in-out;
+    box-sizing: border-box;
+}
+.profile-btn:hover {
+    background-color: #fafafa;
+    text-decoration: none !important;
+}
+
+/* --- PREMIUM SQUARED SOCIAL BUTTONS WITH CENTERED TEXT AND HOVER EXCLUSIONS --- */
+.social-link-button {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center Text Alignment */
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    background-color: #fafafa;
+    border-radius: 0px !important; /* Fully Squared */
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-decoration: none !important; /* Eradicate parent underline */
+}
+.social-link-button:hover {
+    background-color: #f5f5f5;
+}
+.social-link-button .handle-text {
+    font-size: 11px;
+    color: #3f51b5;
+    margin-left: 4px;
+    text-decoration: none; /* No default underline */
+    font-weight: 500;
+}
+.social-link-button:hover .handle-text {
+    text-decoration: underline !important; /* Underline handle text on hover only */
 }

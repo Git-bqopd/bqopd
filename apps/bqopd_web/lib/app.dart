@@ -125,6 +125,7 @@ class _AppState extends State<App> {
                 authBloc: authBloc,
                 userRepository: userRepository,
                 engagementRepository: engagementRepository,
+                userId: state.queryParams['userId'], // Feed the query param
               );
             },
           ),

@@ -37,13 +37,14 @@ class FanzineHeader extends StatefulComponent {
 class _FanzineHeaderState extends State<FanzineHeader> {
   int _activeTab = 0; // 0: indicia, 1: creators, 2: stats
   String _displayUrl = 'login / register';
+  String? _username; // Store user handle explicitly
 
   // Inline Login/Register states
   bool _showLogin = false;
   bool _showRegister = false;
   String _email = '';
   String _password = '';
-  String _username = '';
+  String _usernameInput = '';
   bool _loading = false;
   String? _error;
 
@@ -59,18 +60,22 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     final uid = getCurrentUserId();
     if (uid == null) {
       _displayUrl = 'login / register';
+      _username = null;
     } else {
       try {
         final res = await fsGetDoc('profiles/$uid');
         final data = jsonDecode(res);
         if (data['exists']) {
-          final resolvedUrl = 'bqopd.com/${data['data']['username']}';
+          final String handle = data['data']['username'] ?? 'archival';
+          final resolvedUrl = 'bqopd.com/$handle';
           if (mounted) {
             setState(() {
               _displayUrl = resolvedUrl;
+              _username = handle;
             });
           } else {
             _displayUrl = resolvedUrl;
+            _username = handle;
           }
         }
       } catch (e) {
@@ -98,7 +103,13 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               _showRegister = false;
             });
           } else {
-            Router.of(context).push('/profile');
+            // Navigate directly to the resolved handle/shortlink (e.g. '/kevin')
+            // instead of using the generic '/profile' path.
+            if (_username != null && _username!.isNotEmpty) {
+              Router.of(context).push('/$_username');
+            } else {
+              Router.of(context).push('/profile');
+            }
           }
         }
       },
@@ -208,7 +219,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
         },
         [
-          // Highly polished Top-Right close button 'X'
           button(
               classes: 'close-btn',
               attributes: {
@@ -224,7 +234,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               [text('×')]
           ),
 
-          // Brand Identity & Logo
           img(
               src: 'assets/logo200.gif',
               attributes: {
@@ -239,7 +248,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               [text('bqopd')]
           ),
 
-          // Input Fields & Submission
           div(
               classes: 'flex-col w-full',
               attributes: {
@@ -299,7 +307,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 [text(_error!)]
             ),
 
-          // Inline Register Transition link (Strict lowercase requirements)
           div(
               attributes: {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
@@ -332,7 +339,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
         },
         [
-          // Highly polished Top-Right close button 'X'
           button(
               classes: 'close-btn',
               attributes: {
@@ -348,7 +354,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               [text('×')]
           ),
 
-          // Brand Identity & Logo
           img(
               src: 'assets/logo200.gif',
               attributes: {
@@ -363,7 +368,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               [text('bqopd')]
           ),
 
-          // Input Fields & Submission
           div(
               classes: 'flex-col w-full',
               attributes: {
@@ -374,10 +378,10 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                   attributes: {
                     'type': 'text',
                     'placeholder': 'username',
-                    'value': _username,
+                    'value': _usernameInput,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _username = (e.target as dynamic).value},
+                  events: {'input': (e) => _usernameInput = (e.target as dynamic).value},
                 ),
                 input(
                   attributes: {
@@ -404,13 +408,13 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                     },
                     events: {
                       'click': (e) async {
-                        if (_username.trim().isEmpty || _email.trim().isEmpty || _password.isEmpty) {
+                        if (_usernameInput.trim().isEmpty || _email.trim().isEmpty || _password.isEmpty) {
                           setState(() => _error = "Please fill all fields.");
                           return;
                         }
                         setState(() => _loading = true);
                         try {
-                          await registerWithFirebase(_email.trim(), _password, _username.trim());
+                          await registerWithFirebase(_email.trim(), _password, _usernameInput.trim());
                           setState(() { _showRegister = false; _loading = false; _error = null; });
                           _resolveDisplayUrl();
                         } catch (e) {
@@ -432,7 +436,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 [text(_error!)]
             ),
 
-          // Inline Login Transition link (Strict lowercase requirements)
           div(
               attributes: {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'

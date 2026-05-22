@@ -9,7 +9,6 @@ import 'fanzine_reader_page.dart';
 import 'profile_page.dart';
 
 /// Resolved and pre-rendered matching view utilizing server pre-fetched payloads.
-/// Paste this into: apps/bqopd_web/lib/pages/short_link_page.dart
 class ShortLinkPage extends StatefulComponent {
   final String code;
   final String? pageNumber;
@@ -21,8 +20,8 @@ class ShortLinkPage extends StatefulComponent {
   const ShortLinkPage({
     required this.code,
     this.pageNumber,
-    this.authState,
-    this.authBloc,
+    required this.authState,
+    required this.authBloc,
     required this.userRepository,
     required this.engagementRepository,
   });
@@ -171,6 +170,8 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         preloadedPages: _pagesData,
         preloadedCreatorProfiles: _creatorProfiles,
         preloadedImageStats: _imageStats,
+        authState: component.authState,
+        authBloc: component.authBloc,
       );
     }
 
@@ -180,6 +181,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         authBloc: component.authBloc!,
         userRepository: component.userRepository,
         engagementRepository: component.engagementRepository,
+        userId: _targetUserId,
       );
     }
 
