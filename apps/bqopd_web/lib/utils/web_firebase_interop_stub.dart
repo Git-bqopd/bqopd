@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import '../utils/web_firebase_interop.dart';
 
 /// Server VM stub implementation of the static unsubscription handler.
-/// Paste this into: apps/bqopd_web/lib/utils/web_firebase_interop_stub.dart
 class StubSubscription implements FirebaseSubscription {
   @override
   void callAsFunction() {}
@@ -43,6 +42,11 @@ Future<String> stUpload(String path, Uint8List bytes, String contentType) async 
 
 /// Server VM stub for global authentication listener.
 void onAuthStateChangedListener(void Function(String?, String?) callback) {}
+
+/// Server VM stubs for Firebase top-level authentication functions.
+Future<void> loginWithFirebase(String email, String password) async {}
+Future<void> registerWithFirebase(String email, String password, String username) async {}
+Future<void> logoutFromFirebase() async {}
 
 /// Mock representation of WebFieldValue for the server environment.
 class WebFieldValue {

@@ -14,6 +14,9 @@ class FanzineListRenderer extends StatefulComponent {
   final int initialIndex;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
   final Set<String> likedImageIds; // Pass downs down
+  final AuthState? authState;
+  final AuthBloc? authBloc;
+  final bool isEditingMode;
 
   const FanzineListRenderer({
     required this.fanzineId,
@@ -25,6 +28,9 @@ class FanzineListRenderer extends StatefulComponent {
     this.initialIndex = 0,
     this.preloadedImageStats = const {},
     required this.likedImageIds,
+    this.authState,
+    this.authBloc,
+    this.isEditingMode = false,
     super.key,
   });
 
@@ -82,6 +88,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
                 onOpenGrid: component.onOpenGrid,
                 likedImageIds: component.likedImageIds, // Pass downs down
                 initialImageStats: component.preloadedImageStats[component.pages[i]['imageId']],
+                authState: component.authState,
+                authBloc: component.authBloc,
+                isEditingMode: component.isEditingMode,
               )
             ]
         )

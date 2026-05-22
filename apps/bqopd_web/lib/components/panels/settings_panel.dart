@@ -3,10 +3,8 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
-import '../../utils/icon_utils.dart'; // NEW: Clean up settings symbols
+import '../../utils/icon_utils.dart';
 
-/// Replicates the Flutter SettingsPanel for the Jaspr Web App.
-/// Allows users to toggle the visibility of specific toolbar buttons.
 class SettingsPanel extends StatefulComponent {
   const SettingsPanel({super.key});
 
@@ -64,7 +62,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
       _visibility[toolId] = next;
     });
 
-    // Update Firestore
     await fsUpdateDoc('Users/$_uid', jsonEncode({
       'preferences.socialButtons.$toolId': next
     }));
@@ -73,7 +70,16 @@ class _SettingsPanelState extends State<SettingsPanel> {
   @override
   Component build(BuildContext context) {
     if (_loading) return div(classes: 'p-4 text-center', [text('Loading preferences...')]);
-    if (_uid == null) return div(classes: 'p-4 text-center text-gray', [text('Please sign in to customize your toolbar.')]);
+    if (_uid == null) {
+      return div(classes: 'p-6 text-center flex flex-col justify-center items-center gap-2', [
+        p(classes: 'text-gray text-sm', [text('Please sign in to customize your toolbar.')]),
+        button(
+            classes: 'btn-primary mt-2',
+            events: {'click': (e) => GlobalModalBus.show()},
+            [text('Sign In')]
+        )
+      ]);
+    }
 
     final togglableTools = ReaderToolsConfig.tools
         .where((t) => t.id != 'Settings' && t.role == ToolRole.public)
@@ -87,7 +93,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   Component _buildToggleRow(ReaderTool tool) {
     final bool isVisible = _visibility[tool.id] ?? true;
-    final resolvedIcon = cleanIconName(tool.defaultIcon); // FIXED: Ensures settings icons load correctly
+    final resolvedIcon = cleanIconName(tool.defaultIcon);
 
     return div(
         classes: 'flex-row items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors',
@@ -97,7 +103,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
             span(classes: 'material-symbols-outlined text-gray-500', [text(resolvedIcon)]),
             span(classes: 'text-sm font-medium', [text(tool.label)]),
           ]),
-          // Custom M3-style Switch implementation
           div(
               classes: 'w-10 h-6 rounded-full relative transition-colors ${isVisible ? 'bg-indigo-600' : 'bg-gray-300'}',
               [

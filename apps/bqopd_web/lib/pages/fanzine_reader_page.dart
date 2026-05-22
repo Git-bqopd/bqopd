@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../components/fanzine_header.dart';
 import '../components/fanzine_layout.dart';
 
 /// Jaspr Web Reader Page utilizing Set-based likedImageIds to optimize performance.
-/// Paste this into: apps/bqopd_web/lib/pages/fanzine_reader_page.dart
 class FanzineReaderPage extends StatefulComponent {
   final String fanzineId;
   final int? initialPageNumber;
@@ -14,6 +14,8 @@ class FanzineReaderPage extends StatefulComponent {
   final List<Map<String, dynamic>>? preloadedPages;
   final Map<String, Map<String, dynamic>>? preloadedCreatorProfiles;
   final Map<String, Map<String, dynamic>>? preloadedImageStats;
+  final AuthState? authState;
+  final AuthBloc? authBloc;
 
   const FanzineReaderPage({
     required this.fanzineId,
@@ -22,6 +24,8 @@ class FanzineReaderPage extends StatefulComponent {
     this.preloadedPages,
     this.preloadedCreatorProfiles,
     this.preloadedImageStats,
+    this.authState,
+    this.authBloc,
     super.key,
   });
 
@@ -196,6 +200,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         initialPageNumber: component.initialPageNumber,
         preloadedImageStats: _imageStats,
         likedImageIds: _likedImageIds, // Pass liked Set down
+        authState: component.authState,
+        authBloc: component.authBloc,
         headerWidget: FanzineHeader(
           fanzineId: component.fanzineId,
           shortCode: _fanzine!['shortCode'],
@@ -203,6 +209,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           creatorProfiles: _creatorProfiles,
           imageStats: _imageStats,
           pageStructure: _pages,
+          authState: component.authState,
+          authBloc: component.authBloc,
         ),
       )
     ]);

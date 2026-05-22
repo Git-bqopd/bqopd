@@ -15,6 +15,9 @@ class ReaderPageItem extends StatefulComponent {
   final VoidCallback? onOpenGrid;
   final Map<String, dynamic>? initialImageStats;
   final Set<String> likedImageIds; // Pass downs down
+  final AuthState? authState;
+  final AuthBloc? authBloc;
+  final bool isEditingMode;
 
   const ReaderPageItem({
     required this.fanzineId,
@@ -23,6 +26,9 @@ class ReaderPageItem extends StatefulComponent {
     this.onOpenGrid,
     this.initialImageStats,
     required this.likedImageIds,
+    this.authState,
+    this.authBloc,
+    this.isEditingMode = false,
     super.key,
   });
 
@@ -68,6 +74,9 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
           onToggleBonusRow: _handleTogglePanel,
           likedImageIds: component.likedImageIds, // Pass downs down
           initialImageStats: component.initialImageStats,
+          authState: component.authState,
+          authBloc: component.authBloc,
+          isEditingMode: component.isEditingMode,
         ),
 
         if (_activePanel != null)

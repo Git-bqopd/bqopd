@@ -3,8 +3,6 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import '../../utils/web_firebase_interop.dart';
 
-/// A Jaspr implementation of the Hashtag voting system.
-/// Uses the CSS-defined .m3-chip and .m3-split-button classes for an identical look to Flutter.
 class HashtagPanel extends StatefulComponent {
   final String imageId;
 
@@ -55,7 +53,10 @@ class _HashtagPanelState extends State<HashtagPanel> {
 
   Future<void> _toggleVote(String tag, bool isSelected) async {
     final uid = getCurrentUserId();
-    if (uid == null) return;
+    if (uid == null) {
+      GlobalModalBus.show();
+      return;
+    }
     final cleanTag = tag.toLowerCase().replaceAll('#', '').trim();
     if (isSelected) {
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$cleanTag': WebFieldValue.arrayRemove([uid])}));
@@ -68,7 +69,10 @@ class _HashtagPanelState extends State<HashtagPanel> {
     final text = _newTagText.trim().toLowerCase().replaceAll('#', '');
     if (text.isEmpty) { setState(() => _isAdding = false); return; }
     final uid = getCurrentUserId();
-    if (uid == null) return;
+    if (uid == null) {
+      GlobalModalBus.show();
+      return;
+    }
     await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$text': WebFieldValue.arrayUnion([uid])}));
     setState(() { _newTagText = ""; _isAdding = false; });
   }
@@ -87,7 +91,6 @@ class _HashtagPanelState extends State<HashtagPanel> {
       }
     });
 
-    // Sort: approved first, then by count
     tagList.sort((a, b) => a.name == 'approved' ? -1 : (b.name == 'approved' ? 1 : b.count.compareTo(a.count)));
 
     return div(classes: 'flex-row flex-wrap gap-3 items-center py-4', [
@@ -98,7 +101,15 @@ class _HashtagPanelState extends State<HashtagPanel> {
       else
         button(
             classes: 'm3-chip hover:bg-gray-100',
-            events: {'click': (e) => setState(() => _isAdding = true)},
+            events: {
+              'click': (e) {
+                if (getCurrentUserId() == null) {
+                  GlobalModalBus.show();
+                } else {
+                  setState(() => _isAdding = true);
+                }
+              }
+            },
             [
               span(classes: 'material-symbols-outlined chip-icon', [text('add')]),
             ]
@@ -115,7 +126,6 @@ class _HashtagPanelState extends State<HashtagPanel> {
           div(classes: 'v-divider', []),
           span(
               classes: 'material-symbols-outlined chip-icon',
-              // Match Material 3 symbol styling: FILL 1 when active
               attributes: {'style': tag.hasVoted ? "font-variation-settings: 'FILL' 1;" : "font-variation-settings: 'FILL' 0;"},
               [text('star')]
           ),

@@ -8,7 +8,6 @@ import 'package:bqopd_core/bqopd_core.dart';
 enum FanzineViewMode { grid, single }
 
 /// Jaspr Web Layout component utilizing Set-based likedImageIds to prevent WebSocket connection storms.
-/// Paste this into: apps/bqopd_web/lib/components/fanzine_layout.dart
 class FanzineLayout extends StatefulComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
@@ -17,6 +16,9 @@ class FanzineLayout extends StatefulComponent {
   final int? initialPageNumber;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
   final Set<String> likedImageIds; // Pass down Set state
+  final AuthState? authState;
+  final AuthBloc? authBloc;
+  final bool isEditingMode;
 
   const FanzineLayout({
     required this.fanzineId,
@@ -26,6 +28,9 @@ class FanzineLayout extends StatefulComponent {
     this.initialPageNumber,
     this.preloadedImageStats = const {},
     required this.likedImageIds,
+    this.authState,
+    this.authBloc,
+    this.isEditingMode = false,
     super.key,
   });
 
@@ -108,6 +113,9 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 initialIndex: _targetIndex,
                 preloadedImageStats: component.preloadedImageStats,
                 likedImageIds: component.likedImageIds, // Pass down to list
+                authState: component.authState,
+                authBloc: component.authBloc,
+                isEditingMode: component.isEditingMode,
               )
             ]
         ),

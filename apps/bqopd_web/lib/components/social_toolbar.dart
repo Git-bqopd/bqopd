@@ -18,6 +18,8 @@ class SocialToolbar extends StatefulComponent {
   final ValueChanged<BonusRowType> onToggleBonusRow;
   final Set<String> likedImageIds; // Dynamic Set from parent
   final Map<String, dynamic>? initialImageStats;
+  final AuthState? authState;
+  final AuthBloc? authBloc;
 
   const SocialToolbar({
     required this.imageId,
@@ -25,13 +27,15 @@ class SocialToolbar extends StatefulComponent {
     this.fanzineType,
     this.isGame = false,
     this.youtubeId,
-    this.isEditingMode = false,
+    required this.isEditingMode,
     this.isIndiciaPage = false,
     this.onOpenGrid,
     required this.activeBonusRow,
     required this.onToggleBonusRow,
     required this.likedImageIds,
     this.initialImageStats,
+    this.authState,
+    this.authBloc,
     super.key,
   });
 
@@ -51,7 +55,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
   @override
   void initState() {
     super.initState();
-    // VITAL: Read the SSR pre-rendered data immediately so the page is fully drawn on frame 1
     if (component.initialImageStats != null) {
       _likeCount = component.initialImageStats!['likeCount'] ?? 0;
       _commentCount = component.initialImageStats!['commentCount'] ?? 0;
@@ -110,10 +113,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
     super.dispose();
   }
 
-  // HIGH PERFORMANCE: Perform instant optimistic UI mutations locally before committing to the network
   Future<void> _handleLike() async {
     final uid = getCurrentUserId();
-    if (uid == null) return;
+    if (uid == null) {
+      GlobalModalBus.show();
+      return;
+    }
 
     final newStatus = !_isLiked;
     setState(() {
@@ -174,7 +179,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
       action = component.onOpenGrid ?? () {};
     } else if (tool.bonusRow != null) {
       isActive = component.activeBonusRow == tool.bonusRow;
-      action = () => component.onToggleBonusRow(tool.bonusRow!);
+      action = () {
+        if (tool.id == 'Settings' && getCurrentUserId() == null) {
+          GlobalModalBus.show();
+        } else {
+          component.onToggleBonusRow(tool.bonusRow!);
+        }
+      };
     }
 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;

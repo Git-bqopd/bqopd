@@ -2,6 +2,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'dart:convert';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import 'stats_table.dart';
 
@@ -13,6 +14,8 @@ class FanzineHeader extends StatefulComponent {
   final Map<String, Map<String, dynamic>> imageStats;
   final List<Map<String, dynamic>> pageStructure;
   final bool isStickerOnly;
+  final AuthState? authState;
+  final AuthBloc? authBloc;
 
   const FanzineHeader({
     this.fanzineId,
@@ -22,6 +25,8 @@ class FanzineHeader extends StatefulComponent {
     this.imageStats = const {},
     this.pageStructure = const [],
     this.isStickerOnly = false,
+    this.authState,
+    this.authBloc,
     super.key,
   });
 
@@ -31,7 +36,16 @@ class FanzineHeader extends StatefulComponent {
 
 class _FanzineHeaderState extends State<FanzineHeader> {
   int _activeTab = 0; // 0: indicia, 1: creators, 2: stats
-  String _displayUrl = 'bqopd.com/...';
+  String _displayUrl = 'login / register';
+
+  // Inline Login/Register states
+  bool _showLogin = false;
+  bool _showRegister = false;
+  String _email = '';
+  String _password = '';
+  String _username = '';
+  bool _loading = false;
+  String? _error;
 
   @override
   void initState() {
@@ -40,28 +54,49 @@ class _FanzineHeaderState extends State<FanzineHeader> {
   }
 
   Future<void> _resolveDisplayUrl() async {
+    if (!kIsWeb) return;
+
     final uid = getCurrentUserId();
     if (uid == null) {
-      if (mounted) setState(() => _displayUrl = 'login / register');
+      _displayUrl = 'login / register';
     } else {
-      final res = await fsGetDoc('profiles/$uid');
-      final data = jsonDecode(res);
-      if (data['exists'] && mounted) {
-        setState(() => _displayUrl = 'bqopd.com/${data['data']['username']}');
+      try {
+        final res = await fsGetDoc('profiles/$uid');
+        final data = jsonDecode(res);
+        if (data['exists']) {
+          final resolvedUrl = 'bqopd.com/${data['data']['username']}';
+          if (mounted) {
+            setState(() {
+              _displayUrl = resolvedUrl;
+            });
+          } else {
+            _displayUrl = resolvedUrl;
+          }
+        }
+      } catch (e) {
+        print("Error resolving display URL: $e");
       }
     }
   }
 
   @override
   Component build(BuildContext context) {
-    // Both views share the common navigation link at the top
+    final isLoggedIn = component.authState?.status == AuthStatus.authenticated;
+    if (isLoggedIn) {
+      _showLogin = false;
+      _showRegister = false;
+    }
+
     final navLink = button(
       classes: 'nav-pill',
       events: {
         'click': (e) {
           final uid = getCurrentUserId();
           if (uid == null) {
-            Router.of(context).push('/login');
+            setState(() {
+              _showLogin = true;
+              _showRegister = false;
+            });
           } else {
             Router.of(context).push('/profile');
           }
@@ -71,13 +106,16 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     );
 
     if (component.isStickerOnly) {
-      // EXPLICIT COMPACT LOGO MODE
       return div(classes: 'flex-col items-center w-full h-full p-2', [
         navLink,
         div(
             classes: 'flex-1 flex-col justify-center items-center w-full',
             [
-              div(
+              _showLogin
+                  ? _buildLocalLogin()
+                  : _showRegister
+                  ? _buildLocalRegister()
+                  : div(
                   classes: 'white-sticker',
                   [
                     img(
@@ -94,7 +132,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     final indiciaText = component.fanzineData?['masterIndicia'] ?? "© 2026 BQOPD Collective.";
     final creators = component.fanzineData?['masterCreators'] as List? ?? [];
 
-    // STICKER VIEW (Responsive Toggle)
     final stickerView = div(
         classes: 'fh-sticker-view flex-col items-center w-full h-full p-2',
         [
@@ -102,7 +139,11 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           div(
               classes: 'flex-1 flex-col justify-center items-center w-full',
               [
-                div(
+                _showLogin
+                    ? _buildLocalLogin()
+                    : _showRegister
+                    ? _buildLocalRegister()
+                    : div(
                     classes: 'white-sticker',
                     [
                       img(
@@ -116,10 +157,13 @@ class _FanzineHeaderState extends State<FanzineHeader> {
         ]
     );
 
-    // FULL VIEW (Responsive Toggle)
     final fullView = div(classes: 'fh-full-view flex-col items-center w-full h-full p-2', [
       navLink,
-      div(classes: 'white-sticker-compact w-full mt-2', [
+      _showLogin
+          ? _buildLocalLogin()
+          : _showRegister
+          ? _buildLocalRegister()
+          : div(classes: 'white-sticker-compact w-full mt-2', [
         div(classes: 'flex-row justify-center items-center py-2 bg-gray-100', [
           _buildTab('indicia', 0),
           span(classes: 'px-4 text-gray text-xs', [text('|')]),
@@ -155,6 +199,263 @@ class _FanzineHeaderState extends State<FanzineHeader> {
       stickerView,
       fullView,
     ]);
+  }
+
+  Component _buildLocalLogin() {
+    return div(
+        classes: 'white-sticker',
+        attributes: {
+          'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
+        },
+        [
+          // Highly polished Top-Right close button 'X'
+          button(
+              classes: 'close-btn',
+              attributes: {
+                'style': 'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 24px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none;'
+              },
+              events: {
+                'click': (e) => setState(() {
+                  _showLogin = false;
+                  _showRegister = false;
+                  _error = null;
+                })
+              },
+              [text('×')]
+          ),
+
+          // Brand Identity & Logo
+          img(
+              src: 'assets/logo200.gif',
+              attributes: {
+                'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
+              }
+          ),
+
+          div(
+              attributes: {
+                'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
+              },
+              [text('bqopd')]
+          ),
+
+          // Input Fields & Submission
+          div(
+              classes: 'flex-col w-full',
+              attributes: {
+                'style': 'display: flex; flex-direction: column; width: 100%; gap: 10px;'
+              },
+              [
+                input(
+                  attributes: {
+                    'type': 'email',
+                    'placeholder': 'email',
+                    'value': _email,
+                    'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+                  },
+                  events: {'input': (e) => _email = (e.target as dynamic).value},
+                ),
+                input(
+                  attributes: {
+                    'type': 'password',
+                    'placeholder': 'password',
+                    'value': _password,
+                    'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+                  },
+                  events: {'input': (e) => _password = (e.target as dynamic).value},
+                ),
+                button(
+                    classes: 'btn-primary',
+                    attributes: {
+                      'style': 'width: 100%; padding: 12px; background-color: #8e8e8e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; margin-top: 4px;'
+                    },
+                    events: {
+                      'click': (e) async {
+                        if (_email.trim().isEmpty || _password.isEmpty) {
+                          setState(() => _error = "Please fill all fields.");
+                          return;
+                        }
+                        setState(() => _loading = true);
+                        try {
+                          await loginWithFirebase(_email.trim(), _password);
+                          setState(() { _showLogin = false; _loading = false; _error = null; });
+                          _resolveDisplayUrl();
+                        } catch (e) {
+                          setState(() { _error = e.toString().replaceAll('Exception:', '').trim(); _loading = false; });
+                        }
+                      }
+                    },
+                    [text(_loading ? 'loading...' : 'login')]
+                ),
+              ]
+          ),
+
+          if (_error != null)
+            p(
+                classes: 'error-msg',
+                attributes: {
+                  'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
+                },
+                [text(_error!)]
+            ),
+
+          // Inline Register Transition link (Strict lowercase requirements)
+          div(
+              attributes: {
+                'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
+              },
+              [
+                text('not cool yet? '),
+                span(
+                    attributes: {
+                      'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
+                    },
+                    events: {
+                      'click': (e) => setState(() {
+                        _showLogin = false;
+                        _showRegister = true;
+                        _error = null;
+                      })
+                    },
+                    [text('register here.')]
+                )
+              ]
+          )
+        ]
+    );
+  }
+
+  Component _buildLocalRegister() {
+    return div(
+        classes: 'white-sticker',
+        attributes: {
+          'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
+        },
+        [
+          // Highly polished Top-Right close button 'X'
+          button(
+              classes: 'close-btn',
+              attributes: {
+                'style': 'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 24px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none;'
+              },
+              events: {
+                'click': (e) => setState(() {
+                  _showLogin = false;
+                  _showRegister = false;
+                  _error = null;
+                })
+              },
+              [text('×')]
+          ),
+
+          // Brand Identity & Logo
+          img(
+              src: 'assets/logo200.gif',
+              attributes: {
+                'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
+              }
+          ),
+
+          div(
+              attributes: {
+                'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
+              },
+              [text('bqopd')]
+          ),
+
+          // Input Fields & Submission
+          div(
+              classes: 'flex-col w-full',
+              attributes: {
+                'style': 'display: flex; flex-direction: column; width: 100%; gap: 10px;'
+              },
+              [
+                input(
+                  attributes: {
+                    'type': 'text',
+                    'placeholder': 'username',
+                    'value': _username,
+                    'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+                  },
+                  events: {'input': (e) => _username = (e.target as dynamic).value},
+                ),
+                input(
+                  attributes: {
+                    'type': 'email',
+                    'placeholder': 'email',
+                    'value': _email,
+                    'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+                  },
+                  events: {'input': (e) => _email = (e.target as dynamic).value},
+                ),
+                input(
+                  attributes: {
+                    'type': 'password',
+                    'placeholder': 'password',
+                    'value': _password,
+                    'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+                  },
+                  events: {'input': (e) => _password = (e.target as dynamic).value},
+                ),
+                button(
+                    classes: 'btn-primary',
+                    attributes: {
+                      'style': 'width: 100%; padding: 12px; background-color: #8e8e8e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; margin-top: 4px;'
+                    },
+                    events: {
+                      'click': (e) async {
+                        if (_username.trim().isEmpty || _email.trim().isEmpty || _password.isEmpty) {
+                          setState(() => _error = "Please fill all fields.");
+                          return;
+                        }
+                        setState(() => _loading = true);
+                        try {
+                          await registerWithFirebase(_email.trim(), _password, _username.trim());
+                          setState(() { _showRegister = false; _loading = false; _error = null; });
+                          _resolveDisplayUrl();
+                        } catch (e) {
+                          setState(() { _error = e.toString().replaceAll('Exception:', '').trim(); _loading = false; });
+                        }
+                      }
+                    },
+                    [text(_loading ? 'loading...' : 'register')]
+                ),
+              ]
+          ),
+
+          if (_error != null)
+            p(
+                classes: 'error-msg',
+                attributes: {
+                  'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
+                },
+                [text(_error!)]
+            ),
+
+          // Inline Login Transition link (Strict lowercase requirements)
+          div(
+              attributes: {
+                'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
+              },
+              [
+                text('already cool? '),
+                span(
+                    attributes: {
+                      'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
+                    },
+                    events: {
+                      'click': (e) => setState(() {
+                        _showRegister = false;
+                        _showLogin = true;
+                        _error = null;
+                      })
+                    },
+                    [text('login here.')]
+                )
+              ]
+          )
+        ]
+    );
   }
 
   Component _buildTab(String label, int index) {

@@ -95,7 +95,10 @@ class _CommentsPanelState extends State<CommentsPanel> {
     if (textVal.isEmpty) return;
 
     final uid = getCurrentUserId();
-    if (uid == null) return;
+    if (uid == null) {
+      GlobalModalBus.show();
+      return;
+    }
 
     final uRes = await fsGetDoc('profiles/$uid');
     final uDoc = jsonDecode(uRes);
@@ -126,7 +129,6 @@ class _CommentsPanelState extends State<CommentsPanel> {
     }
   }
 
-  // Elegant shimmering mock comment cards to hide API latency
   Component _buildSkeletonComments() {
     return div(classes: 'flex-col gap-4 py-2', [
       for (int i = 0; i < 2; i++)
@@ -159,7 +161,14 @@ class _CommentsPanelState extends State<CommentsPanel> {
               'placeholder': 'Add a thought...',
               'value': _newCommentText,
             },
-            events: {'input': (e) => _newCommentText = (e.target as dynamic).value},
+            events: {
+              'input': (e) => _newCommentText = (e.target as dynamic).value,
+              'click': (e) {
+                if (getCurrentUserId() == null) {
+                  GlobalModalBus.show();
+                }
+              }
+            },
           ),
         ]),
         button(
@@ -231,7 +240,10 @@ class _CommentItemState extends State<CommentItem> {
   Future<void> _handleLike() async {
     final uid = getCurrentUserId();
     final commentId = component.data['_id'];
-    if (uid == null || commentId == null) return;
+    if (uid == null || commentId == null) {
+      GlobalModalBus.show();
+      return;
+    }
 
     final newStatus = !_isLiked;
     if (newStatus) {
@@ -251,7 +263,6 @@ class _CommentItemState extends State<CommentItem> {
     final String textContent = component.data['text'] ?? '';
     final int likeCount = component.data['likeCount'] ?? 0;
 
-    // Simple date format
     String dateStr = '';
     if (component.data['createdAt'] is DateTime) {
       final dt = component.data['createdAt'] as DateTime;
@@ -259,7 +270,6 @@ class _CommentItemState extends State<CommentItem> {
     }
 
     return div(classes: 'flex-row gap-3 py-4 border-b border-gray-100 items-start', [
-      // Avatar
       div(classes: 'w-10 h-10 rounded-full bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-200', [
         if (photoUrl != null && photoUrl.isNotEmpty)
           img(src: photoUrl, classes: 'w-full h-full object-cover')
@@ -269,7 +279,6 @@ class _CommentItemState extends State<CommentItem> {
           ])
       ]),
 
-      // Content Area
       div(classes: 'flex-1 flex-col', [
         div(classes: 'flex-row justify-between items-start', [
           div(classes: 'flex-col', [
@@ -280,7 +289,6 @@ class _CommentItemState extends State<CommentItem> {
             span(classes: 'text-gray-400 text-xs mt-0.5', [text(dateStr)]),
           ]),
 
-          // Like Button
           button(
               classes: 'flex-row items-center gap-1 bg-transparent border-none cursor-pointer group p-1 rounded hover:bg-gray-50',
               events: {'click': (e) => _handleLike()},
