@@ -9,6 +9,7 @@ import 'fanzine_reader_page.dart';
 import 'profile_page.dart';
 
 /// Resolved and pre-rendered matching view utilizing server pre-fetched payloads.
+/// Paste this into: apps/bqopd_web/lib/pages/short_link_page.dart
 class ShortLinkPage extends StatefulComponent {
   final String code;
   final String? pageNumber;
@@ -37,7 +38,8 @@ class _ShortLinkPageState extends State<ShortLinkPage>
   Map<String, dynamic> get _preloadedData {
     try {
       return jsonDecode(_preloadedJson) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e) {
+      print('[SHORTLINK STATE] Exception decoding preloaded state JSON: $e');
       return {};
     }
   }
@@ -53,20 +55,17 @@ class _ShortLinkPageState extends State<ShortLinkPage>
 
   @override
   Future<void> preloadState() async {
-    // Executes on the server during server-side pre-rendering
+    print('[SHORTLINK STATE] preloadState starting on server for code: "${component.code}"');
     try {
       final payload = await ServerFirestoreClient.resolveFullPayload(component.code);
       _preloadedJson = jsonEncode(payload);
 
-      // CRITICAL LIFECYCLE FIX:
-      // If we are on the server (!kIsWeb), apply the payload to the state variables
-      // immediately inside the async preload sequence. This forces Jaspr to pre-render
-      // the actual fanzine reader UI into the raw HTML instead of the "Resolving link..." fallback.
       if (!kIsWeb) {
+        print('[SHORTLINK STATE] Preloading active on server. Injecting raw HTML state immediately.');
         _applyPayload(payload);
       }
-    } catch (e) {
-      print('Error preloading server state: $e');
+    } catch (e, stack) {
+      print('[SHORTLINK STATE EXCEPTION] PreloadState server loop failed: $e\n$stack');
     }
   }
 
@@ -75,6 +74,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
 
   @override
   void updateState(String value) {
+    print('[SHORTLINK STATE] updateState called on client during hydration phase.');
     _preloadedJson = value;
   }
 
@@ -83,8 +83,10 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     super.initState();
     final data = _preloadedData;
     if (data.isNotEmpty) {
+      print('[SHORTLINK STATE] Successfully read preloaded server state in client. Instantly hydrating widgets.');
       _applyPayload(data);
     } else if (kIsWeb) {
+      print('[SHORTLINK STATE WARNING] Preloaded server state was completely EMPTY in client. Hydrating fallback resolver.');
       _resolveOnClient();
     }
   }
@@ -93,6 +95,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
   void didUpdateComponent(ShortLinkPage oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.code != component.code && kIsWeb) {
+      print('[SHORTLINK STATE] Code changed to "${component.code}". Re-triggering resolution.');
       _resolveOnClient();
     }
   }
@@ -120,6 +123,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       );
     }
     _isResolved = true;
+    print('[SHORTLINK STATE] Payload applied successfully. Mapped Fanzine ID: "$_targetFanzineId" | Mapped User ID: "$_targetUserId"');
   }
 
   /// Client-side fallback routine if the component loads without a preloaded state chunk.
@@ -149,6 +153,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
 
   @override
   Component build(BuildContext context) {
+    print('[SHORTLINK RENDER] Render loop called. Mapped Fanzine: "$_targetFanzineId" | Status: "$_status"');
     if (!_isResolved) {
       return div(
           classes: 'flex-col items-center justify-center w-full',

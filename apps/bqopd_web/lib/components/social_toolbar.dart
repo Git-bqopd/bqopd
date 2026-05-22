@@ -16,6 +16,7 @@ class SocialToolbar extends StatefulComponent {
   final VoidCallback? onOpenGrid;
   final BonusRowType? activeBonusRow;
   final ValueChanged<BonusRowType> onToggleBonusRow;
+  final Set<String> likedImageIds; // Dynamic Set from parent
   final Map<String, dynamic>? initialImageStats;
 
   const SocialToolbar({
@@ -29,6 +30,7 @@ class SocialToolbar extends StatefulComponent {
     this.onOpenGrid,
     required this.activeBonusRow,
     required this.onToggleBonusRow,
+    required this.likedImageIds,
     this.initialImageStats,
     super.key,
   });
@@ -43,8 +45,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
   bool _isLiked = false;
   String _userRole = 'user';
 
-  dynamic _imageUnsub;
-  dynamic _likeUnsub;
+  // HIGH PERFORMANCE: Eradicated separate document listeners to prevent client-side "Listener Storm"
   dynamic _userUnsub;
 
   @override
@@ -55,27 +56,26 @@ class _SocialToolbarState extends State<SocialToolbar> {
       _likeCount = component.initialImageStats!['likeCount'] ?? 0;
       _commentCount = component.initialImageStats!['commentCount'] ?? 0;
     }
-    // HIGH PERFORMANCE: Defer network active listeners until after the client-side compilation completes
+    _isLiked = component.likedImageIds.contains(component.imageId);
+
     _deferListening();
   }
 
   @override
   void didUpdateComponent(SocialToolbar oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.imageId != component.imageId) {
-      _stopListening();
+    if (oldComponent.imageId != component.imageId || oldComponent.likedImageIds != component.likedImageIds) {
       if (component.initialImageStats != null) {
         _likeCount = component.initialImageStats!['likeCount'] ?? 0;
         _commentCount = component.initialImageStats!['commentCount'] ?? 0;
       }
-      _deferListening();
+      _isLiked = component.likedImageIds.contains(component.imageId);
     }
   }
 
   void _deferListening() {
     if (kIsWeb) {
-      // Delay listener attachment to avoid competing with image loads and main.dart.js hydration
-      Future.delayed(const Duration(milliseconds: 1500), () {
+      Future.delayed(const Duration(milliseconds: 1000), () {
         if (mounted) {
           _startListening();
         }
@@ -84,29 +84,8 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   void _startListening() {
-    if (component.imageId.isEmpty) return;
-
-    // Listen to image stats
-    _imageUnsub = fsListenDoc('images/${component.imageId}', (jsonStr) {
-      final doc = jsonDecode(jsonStr);
-      if (doc['exists'] && mounted) {
-        final data = doc['data'];
-        setState(() {
-          _likeCount = data['likeCount'] ?? 0;
-          _commentCount = data['commentCount'] ?? 0;
-        });
-      }
-    });
-
     final uid = getCurrentUserId();
     if (uid != null) {
-      _likeUnsub = fsListenDoc('Users/$uid/activity/likes/images/${component.imageId}', (jsonStr) {
-        final doc = jsonDecode(jsonStr);
-        if (mounted) {
-          setState(() => _isLiked = doc['exists'] == true);
-        }
-      });
-
       _userUnsub = fsListenDoc('Users/$uid', (jsonStr) {
         final doc = jsonDecode(jsonStr);
         if (doc['exists'] && mounted) {
@@ -119,14 +98,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   void _stopListening() {
-    if (_imageUnsub != null) {
-      try { _imageUnsub.callAsFunction(); } catch (_) {}
-      _imageUnsub = null;
-    }
-    if (_likeUnsub != null) {
-      try { _likeUnsub.callAsFunction(); } catch (_) {}
-      _likeUnsub = null;
-    }
     if (_userUnsub != null) {
       try { _userUnsub.callAsFunction(); } catch (_) {}
       _userUnsub = null;
@@ -139,6 +110,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     super.dispose();
   }
 
+  // HIGH PERFORMANCE: Perform instant optimistic UI mutations locally before committing to the network
   Future<void> _handleLike() async {
     final uid = getCurrentUserId();
     if (uid == null) return;

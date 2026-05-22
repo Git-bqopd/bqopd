@@ -13,6 +13,7 @@ class FanzineListRenderer extends StatefulComponent {
   final ValueChanged<BonusRowType>? onTogglePanel;
   final int initialIndex;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
+  final Set<String> likedImageIds; // Pass downs down
 
   const FanzineListRenderer({
     required this.fanzineId,
@@ -23,6 +24,7 @@ class FanzineListRenderer extends StatefulComponent {
     this.onTogglePanel,
     this.initialIndex = 0,
     this.preloadedImageStats = const {},
+    required this.likedImageIds,
     super.key,
   });
 
@@ -34,7 +36,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   @override
   void initState() {
     super.initState();
-    // Anchor scroll on initial load if we aren't starting at the very top
     if (component.initialIndex > 0 && kIsWeb) {
       _anchorScroll();
     }
@@ -43,20 +44,17 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   @override
   void didUpdateComponent(FanzineListRenderer oldComponent) {
     super.didUpdateComponent(oldComponent);
-    // If the user clicks a different page in the grid or the URL updates, re-anchor
     if (oldComponent.initialIndex != component.initialIndex && kIsWeb) {
       _anchorScroll();
     }
   }
 
   void _anchorScroll() {
-    // microtask ensures the DOM nodes from the 'for' loop are mounted before we query them
     Future.microtask(() {
       final String targetId = component.initialIndex == 0
           ? 'fanzine-header'
           : 'reader-page-${component.initialIndex - 1}';
 
-      // Call the conditional utility instead of package:web directly
       scrollToElement(targetId);
     });
   }
@@ -64,7 +62,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   @override
   Component build(BuildContext context) {
     return div(classes: 'flex-col items-center w-full', [
-      // 1. The Header Anchor (Index 0)
       div(
           id: 'fanzine-header',
           classes: 'mb-4 flex justify-center w-full',
@@ -73,7 +70,6 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           ]
       ),
 
-      // 2. The Full Page List (Rendered completely to allow free scrolling)
       for (int i = 0; i < component.pages.length; i++)
         div(
             id: 'reader-page-$i',
@@ -84,7 +80,8 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
                 pageData: component.pages[i],
                 pageIndex: i,
                 onOpenGrid: component.onOpenGrid,
-                initialImageStats: component.preloadedImageStats[component.pages[i]['imageId']], // Supplies the cached stats block for individual pages
+                likedImageIds: component.likedImageIds, // Pass downs down
+                initialImageStats: component.preloadedImageStats[component.pages[i]['imageId']],
               )
             ]
         )

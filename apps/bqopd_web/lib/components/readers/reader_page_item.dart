@@ -14,6 +14,7 @@ class ReaderPageItem extends StatefulComponent {
   final int pageIndex;
   final VoidCallback? onOpenGrid;
   final Map<String, dynamic>? initialImageStats;
+  final Set<String> likedImageIds; // Pass downs down
 
   const ReaderPageItem({
     required this.fanzineId,
@@ -21,6 +22,7 @@ class ReaderPageItem extends StatefulComponent {
     required this.pageIndex,
     this.onOpenGrid,
     this.initialImageStats,
+    required this.likedImageIds,
     super.key,
   });
 
@@ -43,7 +45,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
 
     return div(classes: 'reader-list-item flex-col w-full', [
-      // Page Image Layer
       div(classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center', [
         if (url != null && url.isNotEmpty)
           img(
@@ -51,14 +52,13 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
               classes: 'w-full h-full',
               attributes: {
                 'style': 'object-fit: contain;',
-                'loading': 'lazy', // HIGH-PERFORMANCE: native browser deferment for offscreen pages
+                'loading': 'lazy',
               }
           )
         else
           p(classes: 'text-gray text-xs', [text('Processing Assets...')])
       ]),
 
-      // Interaction Layer
       div(classes: 'bg-white', [
         SocialToolbar(
           imageId: imageId,
@@ -66,6 +66,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
           onOpenGrid: component.onOpenGrid,
           activeBonusRow: _activePanel,
           onToggleBonusRow: _handleTogglePanel,
+          likedImageIds: component.likedImageIds, // Pass downs down
           initialImageStats: component.initialImageStats,
         ),
 

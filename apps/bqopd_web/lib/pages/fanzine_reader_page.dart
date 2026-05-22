@@ -5,6 +5,8 @@ import '../utils/web_firebase_interop.dart';
 import '../components/fanzine_header.dart';
 import '../components/fanzine_layout.dart';
 
+/// Jaspr Web Reader Page utilizing Set-based likedImageIds to optimize performance.
+/// Paste this into: apps/bqopd_web/lib/pages/fanzine_reader_page.dart
 class FanzineReaderPage extends StatefulComponent {
   final String fanzineId;
   final int? initialPageNumber;
@@ -34,10 +36,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Map<String, Map<String, dynamic>> _imageStats = {};
   bool _loading = true;
 
+  // HIGH-PERFORMANCE CENTRALIZED STATE
+  Set<String> _likedImageIds = {};
+  dynamic _likesUnsub;
+
   @override
   void initState() {
     super.initState();
-    // VITAL: Instant mount using pre-fetched payloads. No client-side layout thrashing.
     if (component.preloadedFanzine != null && component.preloadedPages != null) {
       _fanzine = component.preloadedFanzine;
       _pages = component.preloadedPages!;
@@ -47,6 +52,54 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     } else if (kIsWeb) {
       _loadData();
     }
+    _setupLikesPipeline();
+  }
+
+  void _setupLikesPipeline() {
+    if (kIsWeb) {
+      // Establish initial listener
+      _listenToUserLikes();
+
+      // Refresh unified channel immediately on login/logout changes
+      onAuthStateChangedListener((uid, email) {
+        _listenToUserLikes();
+      });
+    }
+  }
+
+  void _listenToUserLikes() {
+    _likesUnsub?.callAsFunction();
+    _likesUnsub = null;
+
+    final uid = getCurrentUserId();
+    if (uid == null) {
+      if (mounted) setState(() => _likedImageIds = {});
+      return;
+    }
+
+    _likesUnsub = fsListenQuery('Users/$uid/activity/likes/images', '', '', '', '', false, (jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final Set<String> likedIds = decoded.map((d) {
+          final data = d['data'] as Map<String, dynamic>? ?? {};
+          return data['imageId']?.toString() ?? d['id']?.toString() ?? '';
+        }).where((id) => id.isNotEmpty).toSet();
+
+        if (mounted) {
+          setState(() {
+            _likedImageIds = likedIds;
+          });
+        }
+      } catch (e) {
+        print("Error parsing unified likes structure: $e");
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _likesUnsub?.callAsFunction();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -75,15 +128,34 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             .cast<String>()
             .toSet();
 
-        // HIGH PERFORMANCE: Skip preloading image collection metadata.
-        // Eliminates massive parallel query blockages during startup.
-        await Future.wait([
-          ...uidsToFetch.map((uid) async {
-            final pRes = await fsGetDoc('profiles/$uid');
-            final pDoc = jsonDecode(pRes);
-            if (pDoc['exists']) profiles[uid] = pDoc['data'];
-          }),
-        ]);
+        final List<Future<void>> parallelFetches = [];
+
+        // Concurrently load creator profiles
+        for (final uid in uidsToFetch) {
+          parallelFetches.add(
+            fsGetDoc('profiles/$uid').then((pRes) {
+              final pDoc = jsonDecode(pRes);
+              if (pDoc['exists']) profiles[uid] = pDoc['data'];
+            }),
+          );
+        }
+
+        // Concurrently load image metadata
+        for (final page in _pages) {
+          final imageId = page['imageId'] as String?;
+          if (imageId != null && imageId.isNotEmpty) {
+            parallelFetches.add(
+              fsGetDoc('images/$imageId').then((imgRes) {
+                final imgDoc = jsonDecode(imgRes);
+                if (imgDoc['exists']) {
+                  stats[imageId] = imgDoc['data'];
+                }
+              }),
+            );
+          }
+        }
+
+        await Future.wait(parallelFetches);
 
         _creatorProfiles = profiles;
         _imageStats = stats;
@@ -123,6 +195,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         hasCover: _fanzine!['hasCover'] ?? true,
         initialPageNumber: component.initialPageNumber,
         preloadedImageStats: _imageStats,
+        likedImageIds: _likedImageIds, // Pass liked Set down
         headerWidget: FanzineHeader(
           fanzineId: component.fanzineId,
           shortCode: _fanzine!['shortCode'],

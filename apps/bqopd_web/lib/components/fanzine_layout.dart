@@ -7,13 +7,16 @@ import 'package:bqopd_core/bqopd_core.dart';
 
 enum FanzineViewMode { grid, single }
 
+/// Jaspr Web Layout component utilizing Set-based likedImageIds to prevent WebSocket connection storms.
+/// Paste this into: apps/bqopd_web/lib/components/fanzine_layout.dart
 class FanzineLayout extends StatefulComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
   final Component headerWidget;
   final bool hasCover;
-  final int? initialPageNumber; // Capturing the anchor anchor
+  final int? initialPageNumber;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
+  final Set<String> likedImageIds; // Pass down Set state
 
   const FanzineLayout({
     required this.fanzineId,
@@ -22,6 +25,8 @@ class FanzineLayout extends StatefulComponent {
     this.hasCover = true,
     this.initialPageNumber,
     this.preloadedImageStats = const {},
+    required this.likedImageIds,
+    super.key,
   });
 
   @override
@@ -36,8 +41,6 @@ class _FanzineLayoutState extends State<FanzineLayout> {
   @override
   void initState() {
     super.initState();
-    // VITAL: In our sequence, Index 0 is the Header and Index 1 is Page 1 (Cover).
-    // If a specific page is requested via deep link, we jump straight to that index.
     if (component.initialPageNumber != null && component.initialPageNumber! > 0) {
       _targetIndex = component.initialPageNumber!;
       _viewMode = FanzineViewMode.single;
@@ -68,13 +71,10 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     final isGrid = _viewMode == FanzineViewMode.grid;
     final bool showThirdColumn = !isGrid && _activeGlobalPanel != null;
 
-    // DESKTOP LAYOUT LOGIC:
-    // We want the image to be constrained by height to prevent vertical "ballooning".
-    // width = (Available Height) * Aspect Ratio
     final String calcWidth = "calc((100vh - 120px) * 0.625)";
 
     return div(classes: 'reader-split-layout', [
-      // Column 1: Grid Area (Fixed sidebar on desktop when in List mode)
+      // Column 1: Grid Area
       div(
           classes: 'grid-area ${!isGrid ? 'hidden-on-mobile' : ''}',
           attributes: {
@@ -95,7 +95,6 @@ class _FanzineLayoutState extends State<FanzineLayout> {
         div(
             classes: 'list-area',
             attributes: {
-              // Core fix: Limit width based on viewport height to maintain aspect ratio
               'style': 'flex: 0 0 $calcWidth; min-width: 400px; margin: 0 auto;'
             },
             [
@@ -107,7 +106,8 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 onTogglePanel: _handleTogglePanel,
                 onOpenGrid: _switchToGrid,
                 initialIndex: _targetIndex,
-                preloadedImageStats: component.preloadedImageStats, // Passes stats down
+                preloadedImageStats: component.preloadedImageStats,
+                likedImageIds: component.likedImageIds, // Pass down to list
               )
             ]
         ),

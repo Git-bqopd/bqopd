@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../utils/web_firebase_interop.dart';
 
 /// Web implementation of the subscription wrapper to bridge the JS unsubscription callback.
+/// Paste this into: apps/bqopd_web/lib/utils/web_firebase_interop_web.dart
 class WebSubscription implements FirebaseSubscription {
   final JSFunction _jsFunction;
   WebSubscription(this._jsFunction);
@@ -87,6 +88,15 @@ external JSPromise _stUpload(JSString path, JSUint8Array bytes, JSString content
 Future<String> stUpload(String path, Uint8List bytes, String contentType) async {
   final jsRes = await _stUpload(path.toJS, bytes.toJS, contentType.toJS).toDart;
   return (jsRes as JSString).toDart;
+}
+
+@JS('onAuthStateChangedListener')
+external void _onAuthStateChangedListener(JSFunction callback);
+
+void onAuthStateChangedListener(void Function(String?, String?) callback) {
+  _onAuthStateChangedListener(((JSString? uid, JSString? email) {
+    callback(uid?.toDart, email?.toDart);
+  }).toJS);
 }
 
 class WebFieldValue {

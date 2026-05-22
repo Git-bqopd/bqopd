@@ -7,6 +7,8 @@ import 'readers/fanzine_list_renderer.dart';
 
 enum FanzineViewMode { grid, single }
 
+/// Pure Flutter Layout component completely separate from Jaspr.
+/// Paste this into: apps/bqopd_flutter/lib/widgets/fanzine_layout.dart
 class FanzineLayout extends StatelessWidget {
   final FanzineViewMode viewMode;
   final List<Map<String, dynamic>> pages;

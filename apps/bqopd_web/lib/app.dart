@@ -13,6 +13,8 @@ import 'pages/profile_page.dart';
 import 'pages/fanzine_reader_page.dart';
 import 'pages/short_link_page.dart';
 
+/// Client and Server-side master routing configuration.
+/// Paste this into: apps/bqopd_web/lib/app.dart
 class App extends StatefulComponent {
   const App({super.key});
 
@@ -116,37 +118,37 @@ class _AppState extends State<App> {
               );
             },
           ),
-          if (kIsWeb) ...[
-            Route(
-              path: '/reader/:fanzineId',
-              builder: (context, state) => FanzineReaderPage(
-                fanzineId: state.params['fanzineId']!,
-              ),
+
+          // UNCONDITIONAL ROUTES: Accessible by both server and browser environments.
+          Route(
+            path: '/reader/:fanzineId',
+            builder: (context, state) => FanzineReaderPage(
+              fanzineId: state.params['fanzineId']!,
             ),
-            // Shortlink matcher
-            Route(
-              path: '/:code',
-              builder: (context, state) => ShortLinkPage(
-                code: state.params['code']!,
-                authState: authState,
-                authBloc: authBloc,
-                userRepository: userRepository,
-                engagementRepository: engagementRepository,
-              ),
+          ),
+          // Shortlink matcher
+          Route(
+            path: '/:code',
+            builder: (context, state) => ShortLinkPage(
+              code: state.params['code']!,
+              authState: authState,
+              authBloc: authBloc,
+              userRepository: userRepository,
+              engagementRepository: engagementRepository,
             ),
-            // NEW: ULTRA-SHORT HIERARCHY PATTERN (/:code/:pageNumber)
-            Route(
-              path: '/:code/:pageNumber',
-              builder: (context, state) => ShortLinkPage(
-                code: state.params['code']!,
-                pageNumber: state.params['pageNumber'],
-                authState: authState,
-                authBloc: authBloc,
-                userRepository: userRepository,
-                engagementRepository: engagementRepository,
-              ),
+          ),
+          // ULTRA-SHORT HIERARCHY PATTERN (/:code/:pageNumber)
+          Route(
+            path: '/:code/:pageNumber',
+            builder: (context, state) => ShortLinkPage(
+              code: state.params['code']!,
+              pageNumber: state.params['pageNumber'],
+              authState: authState,
+              authBloc: authBloc,
+              userRepository: userRepository,
+              engagementRepository: engagementRepository,
             ),
-          ],
+          ),
         ],
       )
     ]);
