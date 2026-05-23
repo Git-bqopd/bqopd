@@ -92,7 +92,15 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _initDataPipeline();
+    // DEFER data pipeline initialization ONLY on the client-side browser context.
+    // This completely prevents the server-side renderer from scheduling unsupported reactive frames.
+    if (kIsWeb) {
+      Future.microtask(() {
+        if (mounted) {
+          _initDataPipeline();
+        }
+      });
+    }
   }
 
   @override
@@ -100,7 +108,9 @@ class _ProfilePageState extends State<ProfilePage> {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.userId != component.userId || oldComponent.authState?.user?.uid != component.authState?.user?.uid) {
       _cancelSubscriptions();
-      _initDataPipeline();
+      if (kIsWeb) {
+        _initDataPipeline();
+      }
     }
   }
 
@@ -513,13 +523,13 @@ class _ProfilePageState extends State<ProfilePage> {
           div([
             _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: true)
           ], classes: 'white-sticker-mobile-8-5')
-        ], classes: 'envelope-8-5-mobile-item'),
+        ], classes: 'white-sticker-mobile-8-5-wrapper', attributes: const {'style': 'width: 100%; display: flex; justify-content: center;'}),
 
         div([
           div([
             _buildRightCardSocialsPart(isMobile: true)
           ], classes: 'white-sticker-mobile-8-5')
-        ], classes: 'envelope-8-5-mobile-item')
+        ], classes: 'white-sticker-mobile-8-5-wrapper', attributes: const {'style': 'width: 100%; display: flex; justify-content: center;'})
       ], classes: 'envelope-8-5-mobile-container'),
 
       // MAIN NAVIGATION TABS BAR
@@ -535,7 +545,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _buildActiveTabContent(_visibleTabs[_currentTabIndex])
       ], attributes: const {'style': 'width: 95%; max-width: 800px; margin-top: 20px;'})
     ], attributes: const {
-      'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; padding-bottom: 80px;'
+      'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 0px; padding-bottom: 80px;'
     });
   }
 
@@ -628,7 +638,7 @@ class _ProfilePageState extends State<ProfilePage> {
       else if (_socialSubTabIndex == 2)
           div([
             p([text("Upcoming Events Coming Soon")], attributes: const {'style': 'font-size: 12px; color: #999; font-style: italic;'})
-          ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'}),
+          ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'},),
 
       div([], attributes: const {'style': 'flex: 1;'}),
 
@@ -749,14 +759,14 @@ class _ProfilePageState extends State<ProfilePage> {
       return div([
         span([text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
         p([text('No items available in this category.')], classes: 'text-sm text-gray italic mt-4')
-      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center mt-4');
+      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
 
     return div([
       for (var w in works)
         _buildWorkGridTile(w)
     ], attributes: const {
-      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 16px;'
+      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;'
     });
   }
 
@@ -833,7 +843,7 @@ class _ProfilePageState extends State<ProfilePage> {
       return div([
         span([text('chat_bubble')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
         p([text('No comments posted by this profile.')], classes: 'text-sm text-gray italic mt-4')
-      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center mt-4');
+      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
 
     return div([
@@ -847,7 +857,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ], attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 8px;'}),
           p([text(c['text'] ?? '')], attributes: const {'style': 'font-size: 13px; color: #222; line-height: 1.5;'})
         ], attributes: const {'style': 'border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; margin-bottom: 16px;'})
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm mt-4 flex-col gap-4');
+    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
   }
 
   Component _buildCuratorTabContent() {
@@ -888,7 +898,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (entityCounts.isEmpty) {
       return div([
         p([text("No entities detected in draft curator pipeline.")], classes: 'text-sm text-gray italic')
-      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center mt-4');
+      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
 
     final sortedNames = entityCounts.keys.toList()..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
@@ -900,7 +910,7 @@ class _ProfilePageState extends State<ProfilePage> {
           span([text(name)], attributes: const {'style': 'font-weight: bold;'}),
           span([text('${entityCounts[name]} occurrences')], attributes: const {'style': 'color: #888; font-size: 11px;'})
         ], attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px;'})
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm mt-4 flex-col gap-3');
+    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-3');
   }
 
   Component _buildAITrainingDataPortal() {
@@ -913,7 +923,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (trainingItems.isEmpty) {
       return div([
         p([text("No training data yet.")], classes: 'text-sm text-gray italic')
-      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center mt-4');
+      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
 
     return div([
@@ -930,7 +940,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ], attributes: const {'style': 'font-size: 11px; color: #666;'})
           ], attributes: const {'style': 'display: flex; align-items: center; padding: 12px; border: 1px solid #eee; border-radius: 8px; font-size: 13px;'})
         ], attributes: const {'style': 'display: flex; align-items: center; padding: 12px; border: 1px solid #eee; border-radius: 8px; font-size: 13px;'})
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm mt-4 flex-col gap-4');
+    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
   }
 
   Component _buildSettingsTabContent() {
@@ -973,7 +983,7 @@ class _ProfilePageState extends State<ProfilePage> {
       h2([text("CUSTOMIZE SOCIAL TOOLBAR BUTTONS")], classes: 'font-bold text-sm text-gray mb-4'),
       for (var tool in togglableTools)
         _buildToolbarButtonSettingsRow(tool)
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm mt-4 flex-col gap-4');
+    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
   }
 
   Component _buildToolbarButtonSettingsRow(ReaderTool tool) {
@@ -1040,7 +1050,7 @@ class _ProfilePageState extends State<ProfilePage> {
           'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;'
         })
       ]
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm mt-4 flex-col gap-6');
+    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-6');
   }
 
   Component _buildShortcodesSettingsView() {
@@ -1070,21 +1080,21 @@ class _ProfilePageState extends State<ProfilePage> {
               : const {'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px;'},
           events: {'click': (e) => _saveGlobalSettings()}
       )
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm mt-4 flex-col gap-4');
+    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
   }
 
   Component _buildPermissionsSettingsView() {
     if (_allSystemUsers.isEmpty) {
       return div([
         p([text('No registered Users loaded.')], classes: 'text-sm text-gray italic')
-      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center mt-4');
+      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
 
     return div([
       h2([text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4'),
       for (var u in _allSystemUsers)
         _buildUserPermissionManagerRow(u)
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm mt-4 flex-col gap-4');
+    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
   }
 
   Component _buildUserPermissionManagerRow(Map<String, dynamic> u) {
