@@ -508,44 +508,61 @@ class _ProfilePageState extends State<ProfilePage> {
     final String photoUrl = _profileData?.photoUrl ?? '';
 
     return div([
-      // DESKTOP CARD VIEW (Single Unbroken White Background 8x5 Card)
       div([
-        div([
-          _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: false),
-          div([], classes: 'profile-desktop-divider'),
-          _buildRightCardSocialsPart(isMobile: false)
-        ], classes: 'white-sticker-8-5')
-      ], classes: 'envelope-8-5-desktop mt-4'),
-
-      // MOBILE CARD VIEW (Two Separate stacked 8x5 envelope/sticker cards)
-      div([
+        // Row 1: The Profile Header Card (Aesthetic desktop or mobile blocks)
         div([
           div([
-            _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: true)
-          ], classes: 'white-sticker-mobile-8-5')
-        ], classes: 'white-sticker-mobile-8-5-wrapper', attributes: const {'style': 'width: 100%; display: flex; justify-content: center;'}),
+            _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: false),
+            div([], classes: 'profile-desktop-divider'),
+            _buildRightCardSocialsPart(isMobile: false)
+          ], classes: 'white-sticker-8-5')
+        ], classes: 'envelope-8-5-desktop'),
 
         div([
           div([
-            _buildRightCardSocialsPart(isMobile: true)
-          ], classes: 'white-sticker-mobile-8-5')
-        ], classes: 'white-sticker-mobile-8-5-wrapper', attributes: const {'style': 'width: 100%; display: flex; justify-content: center;'})
-      ], classes: 'envelope-8-5-mobile-container'),
+            div([
+              _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: true)
+            ], classes: 'white-sticker-mobile-8-5')
+          ], classes: 'envelope-8-5-mobile-item'),
+          // The parent container '.envelope-8-5-mobile-container' has a CSS flexbox gap of 16px.
+          // By removing the extra 'profile-spacer' (which added another 16px + surrounding gaps),
+          // we eliminate the "doubled" empty buffer. Now, the spacing between the split card segments
+          // is exactly 16px, matching other spacing blocks across the page.
+          div([
+            div([
+              _buildRightCardSocialsPart(isMobile: true)
+            ], classes: 'white-sticker-mobile-8-5')
+          ], classes: 'envelope-8-5-mobile-item')
+        ], classes: 'envelope-8-5-mobile-container'),
 
-      // MAIN NAVIGATION TABS BAR
-      if (_visibleTabs.isNotEmpty)
-        div([
-          for (int i = 0; i < _visibleTabs.length; i++)
-            _buildMainNavigationTab(_visibleTabs[i], i)
-        ], classes: 'bg-white rounded-md mt-6 shadow-sm', attributes: const {'style': 'width: 95%; max-width: 800px; display: flex; justify-content: center; gap: 8px; overflow-x: auto; padding: 12px;'}),
+        // Row 2: Spacer
+        div([], classes: 'profile-spacer'),
 
-      // TAB VIEW PORTAL
-      div([
+        // Row 3: The Category Tabs
         if (_visibleTabs.isNotEmpty)
-          _buildActiveTabContent(_visibleTabs[_currentTabIndex])
-      ], attributes: const {'style': 'width: 95%; max-width: 800px; margin-top: 20px;'})
+          div([
+            for (int i = 0; i < _visibleTabs.length; i++)
+              _buildMainNavigationTab(_visibleTabs[i], i)
+          ], classes: 'bg-white rounded-md shadow-sm', attributes: const {'style': 'display: flex; justify-content: center; gap: 8px; overflow-x: auto; padding: 12px; box-sizing: border-box; width: 100%;'}),
+
+        // Row 4: Spacer
+        div([], classes: 'profile-spacer'),
+
+        // Row 5: The Action Utility Bar & Sub-navigation configurations
+        if (_visibleTabs.isNotEmpty)
+          _buildActiveActionUtilityBar(_visibleTabs[_currentTabIndex]),
+
+        // Row 6: Spacer
+        div([], classes: 'profile-spacer'),
+
+        // Row 7: The Content Pane
+        div([
+          if (_visibleTabs.isNotEmpty)
+            _buildActiveTabContent(_visibleTabs[_currentTabIndex])
+        ], attributes: const {'style': 'width: 100%; box-sizing: border-box;'})
+      ], classes: 'unified-profile-column')
     ], attributes: const {
-      'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 0px; padding-bottom: 80px;'
+      'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 16px; padding-bottom: 80px; box-sizing: border-box;'
     });
   }
 
@@ -638,7 +655,9 @@ class _ProfilePageState extends State<ProfilePage> {
       else if (_socialSubTabIndex == 2)
           div([
             p([text("Upcoming Events Coming Soon")], attributes: const {'style': 'font-size: 12px; color: #999; font-style: italic;'})
-          ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'},),
+          ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'})
+        else
+          div([]),
 
       div([], attributes: const {'style': 'flex: 1;'}),
 
@@ -700,16 +719,92 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Component _buildActiveActionUtilityBar(String tabName) {
+    final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
+
+    switch (tabName) {
+      case 'maker':
+        final bool viewerCanSeeDrafts = _isMe || (_viewerAccount?.role == 'admin') || (_viewerAccount?.role == 'moderator') || (_viewerAccount?.isCurator ?? false);
+        return div([
+          div([
+            button(
+                [text("published")],
+                classes: !_showDrafts ? 'm3-chip active' : 'm3-chip',
+                events: {'click': (e) => setState(() => _showDrafts = false)}
+            ),
+            if (viewerCanSeeDrafts) ...[
+              span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+              button(
+                  [text("drafts")],
+                  classes: _showDrafts ? 'm3-chip active' : 'm3-chip',
+                  events: {'click': (e) => setState(() => _showDrafts = true)}
+              )
+            ]
+          ], attributes: const {'style': 'display: flex; align-items: center;'}),
+          if (_isMe)
+            a(
+                [text("+ make")],
+                href: '/publisher',
+                classes: 'btn-primary nav-pill',
+                attributes: const {'style': 'display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; height: 32px; font-size: 12px; margin: 0;'}
+            )
+        ], classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-between', attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%;'});
+
+      case 'index':
+        return div([
+          button(
+              [text("mentions (${_userMentions.length})")],
+              classes: _indexSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip',
+              events: {'click': (e) => setState(() => _indexSubTabIndex = 0)}
+          ),
+          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+          button(
+              [text("comments (${_userComments.length})")],
+              classes: _indexSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip',
+              events: {'click': (e) => setState(() => _indexSubTabIndex = 1)}
+          )
+        ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; justify-content: center; align-items: center; box-sizing: border-box; width: 100%;'});
+
+      case 'curator':
+        return div([
+          button([text("Curator Inbox")], classes: _curatorSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 0)}),
+          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+          button([text("Publisher Queue")], classes: _curatorSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 1)}),
+          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+          button([text("Wiki Entities")], classes: _curatorSubTabIndex == 2 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 2)}),
+          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+          button([text("AI Baseline")], classes: _curatorSubTabIndex == 3 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 3)})
+        ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%;'});
+
+      case 'settings':
+        return div([
+          button([text("Toolbar Buttons")], classes: _settingsSubTabIndex == 3 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 3)}),
+          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+          button([text("Managed Profiles")], classes: _settingsSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 1)}),
+          if (isViewerAdmin) ...[
+            span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+            button([text("Shortcodes")], classes: _settingsSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 0)}),
+            span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+            button([text("Permissions")], classes: _settingsSubTabIndex == 2 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 2)})
+          ]
+        ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%;'});
+
+      case 'collection':
+      default:
+        return div([], attributes: const {'style': 'display: none;'});
+    }
+  }
+
   Component _buildActiveTabContent(String tabName) {
     switch (tabName) {
       case 'maker':
-        return _buildMakerTabContent();
+        return _buildMakerTabContentBody();
       case 'index':
-        return _buildIndexTabContent();
+        return _buildIndexTabContentBody();
       case 'settings':
-        return _buildSettingsTabContent();
+        return _buildSettingsTabContentBody();
       case 'curator':
-        return _buildCuratorTabContent();
+        return _buildCuratorTabContentBody();
       case 'collection':
       default:
         return div([
@@ -720,38 +815,48 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Component _buildMakerTabContent() {
-    final bool viewerCanSeeDrafts = _isMe || (_viewerAccount?.role == 'admin') || (_viewerAccount?.role == 'moderator') || (_viewerAccount?.isCurator ?? false);
-
+  Component _buildMakerTabContentBody() {
     return div([
-      // Maker tab header with drafts/published toggle
-      div([
-        div([
-          button(
-              [text("published")],
-              classes: !_showDrafts ? 'm3-chip active' : 'm3-chip',
-              events: {'click': (e) => setState(() => _showDrafts = false)}
-          ),
-          if (viewerCanSeeDrafts) ...[
-            span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-            button(
-                [text("drafts")],
-                classes: _showDrafts ? 'm3-chip active' : 'm3-chip',
-                events: {'click': (e) => setState(() => _showDrafts = true)}
-            )
-          ]
-        ], attributes: const {'style': 'display: flex; align-items: center;'}),
-        if (_isMe)
-          a(
-              [text("+ make")],
-              href: '/publisher',
-              classes: 'btn-primary nav-pill',
-              attributes: const {'style': 'display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; height: 32px; font-size: 12px; margin: 0;'}
-          )
-      ], classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-between', attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px;'}),
-
       _buildWorksGridSchema(_showDrafts ? _draftWorks : _publishedWorks)
-    ], classes: 'flex-col gap-4');
+    ]);
+  }
+
+  Component _buildIndexTabContentBody() {
+    return div([
+      if (_indexSubTabIndex == 0)
+        _buildWorksGridSchema(_userMentions)
+      else
+        _buildCommentsListSubView()
+    ]);
+  }
+
+  Component _buildCuratorTabContentBody() {
+    return div([
+      if (_curatorSubTabIndex == 0)
+        _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] != null && w['isLive'] != true).toList())
+      else if (_curatorSubTabIndex == 1)
+        _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] == null || w['isLive'] == true).toList())
+      else if (_curatorSubTabIndex == 2)
+          _buildCuratorEntitiesList()
+        else
+          _buildAITrainingDataPortal()
+    ]);
+  }
+
+  Component _buildSettingsTabContentBody() {
+    final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
+    return div([
+      if (_settingsSubTabIndex == 3)
+        _buildSocialButtonsSettingsView()
+      else if (_settingsSubTabIndex == 1)
+        _buildManagedProfilesSettingsView()
+      else if (_settingsSubTabIndex == 0 && isViewerAdmin)
+          _buildShortcodesSettingsView()
+        else if (_settingsSubTabIndex == 2 && isViewerAdmin)
+            _buildPermissionsSettingsView()
+          else
+            div([])
+    ]);
   }
 
   Component _buildWorksGridSchema(List<Map<String, dynamic>> works) {
@@ -766,7 +871,7 @@ class _ProfilePageState extends State<ProfilePage> {
       for (var w in works)
         _buildWorkGridTile(w)
     ], attributes: const {
-      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;'
+      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;'
     });
   }
 
@@ -813,31 +918,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Component _buildIndexTabContent() {
-    return div([
-      // Sub-tab selectors
-      div([
-        button(
-            [text("mentions (${_userMentions.length})")],
-            classes: _indexSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip',
-            events: {'click': (e) => setState(() => _indexSubTabIndex = 0)}
-        ),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        button(
-            [text("comments (${_userComments.length})")],
-            classes: _indexSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip',
-            events: {'click': (e) => setState(() => _indexSubTabIndex = 1)}
-        )
-      ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; justify-content: center; align-items: center;'}),
-
-      // Sub-tab content list
-      if (_indexSubTabIndex == 0)
-        _buildWorksGridSchema(_userMentions)
-      else
-        _buildCommentsListSubView()
-    ], classes: 'flex-col gap-4');
-  }
-
   Component _buildCommentsListSubView() {
     if (_userComments.isEmpty) {
       return div([
@@ -858,31 +938,6 @@ class _ProfilePageState extends State<ProfilePage> {
           p([text(c['text'] ?? '')], attributes: const {'style': 'font-size: 13px; color: #222; line-height: 1.5;'})
         ], attributes: const {'style': 'border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; margin-bottom: 16px;'})
     ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
-  }
-
-  Component _buildCuratorTabContent() {
-    return div([
-      // Sub-tab Bar
-      div([
-        button([text("Curator Inbox")], classes: _curatorSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 0)}),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        button([text("Publisher Queue")], classes: _curatorSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 1)}),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        button([text("Wiki Entities")], classes: _curatorSubTabIndex == 2 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 2)}),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        button([text("AI Baseline")], classes: _curatorSubTabIndex == 3 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 3)})
-      ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px;'}),
-
-      // Curator Sub-views
-      if (_curatorSubTabIndex == 0)
-        _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] != null && w['isLive'] != true).toList())
-      else if (_curatorSubTabIndex == 1)
-        _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] == null || w['isLive'] == true).toList())
-      else if (_curatorSubTabIndex == 2)
-          _buildCuratorEntitiesList()
-        else
-          _buildAITrainingDataPortal()
-    ], classes: 'flex-col gap-4');
   }
 
   Component _buildCuratorEntitiesList() {
@@ -941,37 +996,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ], attributes: const {'style': 'display: flex; align-items: center; padding: 12px; border: 1px solid #eee; border-radius: 8px; font-size: 13px;'})
         ], attributes: const {'style': 'display: flex; align-items: center; padding: 12px; border: 1px solid #eee; border-radius: 8px; font-size: 13px;'})
     ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
-  }
-
-  Component _buildSettingsTabContent() {
-    final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
-
-    return div([
-      // Sub-tab Selector
-      div([
-        button([text("Toolbar Buttons")], classes: _settingsSubTabIndex == 3 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 3)}),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        button([text("Managed Profiles")], classes: _settingsSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 1)}),
-        if (isViewerAdmin) ...[
-          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-          button([text("Shortcodes")], classes: _settingsSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 0)}),
-          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-          button([text("Permissions")], classes: _settingsSubTabIndex == 2 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 2)})
-        ]
-      ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px;'}),
-
-      // Tab Content Views
-      if (_settingsSubTabIndex == 3)
-        _buildSocialButtonsSettingsView()
-      else if (_settingsSubTabIndex == 1)
-        _buildManagedProfilesSettingsView()
-      else if (_settingsSubTabIndex == 0 && isViewerAdmin)
-          _buildShortcodesSettingsView()
-        else if (_settingsSubTabIndex == 2 && isViewerAdmin)
-            _buildPermissionsSettingsView()
-          else
-            div([])
-    ], classes: 'flex-col gap-4');
   }
 
   Component _buildSocialButtonsSettingsView() {
