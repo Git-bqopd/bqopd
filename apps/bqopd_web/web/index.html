@@ -147,18 +147,12 @@
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (evt) => {
-                    const arrayBuffer = evt.target.result;
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    let binary = '';
-                    const len = uint8Array.byteLength;
-                    for (let i = 0; i < len; i++) {
-                        binary += String.fromCharCode(uint8Array[i]);
-                    }
-                    const base64 = window.btoa(binary);
+                    const dataUrl = evt.target.result;
+                    const base64 = dataUrl.split(',')[1];
                     const objectUrl = URL.createObjectURL(file);
                     callback(base64, file.name, objectUrl);
                 };
-                reader.readAsArrayBuffer(file);
+                reader.readAsDataURL(file);
             };
             input.click();
         };
@@ -171,18 +165,12 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (evt) => {
-                const arrayBuffer = evt.target.result;
-                const uint8Array = new Uint8Array(arrayBuffer);
-                let binary = '';
-                const len = uint8Array.byteLength;
-                for (let i = 0; i < len; i++) {
-                    binary += String.fromCharCode(uint8Array[i]);
-                }
-                const base64 = window.btoa(binary);
+                const dataUrl = evt.target.result;
+                const base64 = dataUrl.split(',')[1];
                 const objectUrl = URL.createObjectURL(file);
                 callback(base64, file.name, objectUrl);
             };
-            reader.readAsArrayBuffer(file);
+            reader.readAsDataURL(file);
         };
     </script>
 

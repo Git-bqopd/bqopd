@@ -9,6 +9,7 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/firebase_mocks.dart';
 import '../utils/icon_utils.dart';
+import '../utils/web_utils.dart';
 import '../components/page_wrapper.dart';
 
 /// Fully-featured profile rendering that matches the visual aesthetics and sub-tab
@@ -604,7 +605,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // Pick local file and build pre-render client preview matching Flutter
   void _pickAndPreviewImage() {
-    pickAndReadFile('maker-upload-picker', (base64, fileName, objectUrl) {
+    triggerFilePicker('maker-upload-picker', (base64, fileName, objectUrl) {
       setState(() {
         _uploadImageBase64 = base64;
         _uploadImageName = fileName;
@@ -616,7 +617,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // Handle dynamic file upload changes from the transparent native file input
   void _onFileInputChanged() {
-    readInputFile('maker-upload-picker', (base64, fileName, objectUrl) {
+    readSelectedFile('maker-upload-picker', (base64, fileName, objectUrl) {
       setState(() {
         _uploadImageBase64 = base64;
         _uploadImageName = fileName;
@@ -711,7 +712,7 @@ class _ProfilePageState extends State<ProfilePage> {
         'ownerId': _targetUid,
         'editorId': _targetUid,
         'editors': [],
-        'isLive': true,
+        'isLive': false, // UPDATED: Set as false to guarantee this fanzine stays in drafts when created
         'processingStatus': 'complete',
         'creationDate': WebFieldValue.serverTimestamp(),
         'type': 'folio',
@@ -878,7 +879,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 [text('edit info')],
                 href: '/edit-info',
                 classes: 'profile-btn',
-                attributes: const {'style': 'width: 100px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important;'}
+                attributes: const {'style': 'width: 100px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important;'}
             ),
 
           div([], attributes: const {'style': 'height: 4px;'}),
@@ -1371,7 +1372,7 @@ class _ProfilePageState extends State<ProfilePage> {
             'background-color: ${isVisible ? '#6750A4' : '#ccc'};'
       })
     ], classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all', attributes: const {
-      'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; cursor: pointer;'
+      'style': 'display: center; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; cursor: pointer;'
     }, events: {
       'click': (e) => _toggleSocialButtonVisibility(tool.id)
     });
@@ -1385,7 +1386,7 @@ class _ProfilePageState extends State<ProfilePage> {
         div([
           input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName}, events: {'input': (e) => setState(() => _newManagedFirstName = (e.target as dynamic).value)}),
           span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
-          input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName}, events: {'input': (e) => setState(() => _newManagedLastName = (e.target as dynamic).value)})
+          input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName}, events: {'input': (e) => setState(() => _newManagedLastName = (e.target as dynamic).value)}),
         ], attributes: const {'style': 'display: flex; gap: 12px;'}),
         input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio}, events: {'input': (e) => setState(() => _newManagedBio = (e.target as dynamic).value)}),
         button(
@@ -1497,38 +1498,65 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Component _buildMakerModalOverlay() {
+    final bool isUploadMode = _makerModalMode == 'upload';
+
     return div(
         classes: 'global-modal-overlay',
-        attributes: {
-          'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
+        attributes: const {
+          'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'
         },
         [
-          div(
-              classes: 'manila-envelope',
-              attributes: {
-                'style': 'max-width: 420px; max-height: 580px; border-radius: 12px; overflow: hidden; position: relative;'
-              },
-              [
-                button(
-                    classes: 'modal-close-btn',
-                    attributes: {
-                      'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'
-                    },
-                    events: {
-                      'click': (e) {
-                        setState(() {
-                          _showMakerModal = false;
-                        });
-                      }
-                    },
-                    [text('×')]
-                ),
-
-                _makerModalMode == 'options'
-                    ? _buildMakerOptionsContent()
-                    : _buildMakerUploadContent()
-              ]
-          )
+          if (!isUploadMode)
+          // Options Mode: Keep the beautiful classic Manila Envelope modal box
+            div(
+                classes: 'manila-envelope',
+                attributes: const {
+                  'style': 'max-width: 420px; max-height: 580px; border-radius: 12px; overflow: hidden; position: relative;'
+                },
+                [
+                  button(
+                      classes: 'modal-close-btn',
+                      attributes: const {
+                        'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'
+                      },
+                      events: {
+                        'click': (e) {
+                          setState(() {
+                            _showMakerModal = false;
+                          });
+                        }
+                      },
+                      [text('×')]
+                  ),
+                  _buildMakerOptionsContent()
+                ]
+            )
+          else
+          // Upload Mode: Full scrollable single-item list layout container
+            div(
+                classes: 'upload-list-wrapper',
+                attributes: const {
+                  'style': 'width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; padding: 16px; position: relative; overflow-y: auto;'
+                },
+                [
+                  // Floating close button at the top-right of the scroll area
+                  button(
+                      classes: 'modal-close-btn',
+                      attributes: const {
+                        'style': 'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'
+                      },
+                      events: {
+                        'click': (e) {
+                          setState(() {
+                            _showMakerModal = false;
+                          });
+                        }
+                      },
+                      [text('×')]
+                  ),
+                  _buildMakerUploadContent()
+                ]
+            )
         ]
     );
   }
@@ -1569,164 +1597,279 @@ class _ProfilePageState extends State<ProfilePage> {
     ]);
   }
 
-  // Visual Image Upload sticker that mirrors the Flutter client perfectly
-  Component _buildMakerUploadContent() {
-    return div(classes: 'white-sticker p-6 w-full h-full flex flex-col justify-start items-center', attributes: const {'style': 'overflow-y: auto;'}, [
-      h1(classes: 'font-bold text-lg text-center mb-4', [text('upload single image')]),
+  Component _buildUploadToolbarButton(String label, String iconName, bool isActive) {
+    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
+    return button(
+        classes: btnClasses,
+        events: const {},
+        [
+          div(classes: 'toolbar-icon-wrapper', attributes: const {'style': 'padding: 8px; border-radius: 50%; border: 2px solid black; display: flex; justify-content: center; align-items: center; margin-bottom: 4px; pointer-events: none;'}, [
+            span(
+                classes: 'material-symbols-outlined',
+                attributes: {
+                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #6750A4;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #ccc;"
+                },
+                [text(iconName)]
+            )
+          ]),
+          span(classes: 'toolbar-label', attributes: {
+            'style': 'color: ${isActive ? '#6750a4' : '#ccc'}; font-weight: ${isActive ? 'bold' : 'normal'}; font-size: 10px;'
+          }, [text(label)])
+        ]
+    );
+  }
 
-      div(classes: 'flex-col w-full mt-2', [
-
-        // Interactive Image Selection Area
-        div(
-            classes: 'cursor-pointer flex flex-col items-center justify-center bg-gray-100 border border-dashed border-gray-300 rounded-lg overflow-hidden relative mb-4',
-            attributes: {
-              'style': 'width: 100%; height: 160px; min-height: 160px; max-height: 160px; background-color: #f9f9f9; text-align: center; position: relative;'
-            },
-            [
-              if (_uploadPreviewUrl != null)
-                img(
-                    src: _uploadPreviewUrl!,
-                    attributes: {'style': 'width: 100%; height: 100%; object-fit: contain;'}
-                )
-              else
-                div(classes: 'flex flex-col items-center justify-center p-4 text-gray-400', [
-                  span([text('add_photo_alternate')], classes: 'material-symbols-outlined', attributes: {'style': 'font-size: 40px;'}),
-                  span([text('Click to select image')], attributes: {'style': 'font-size: 11px; margin-top: 6px; font-weight: 500;'})
+  /// First Cell Header: Manila Envelope containing our visual upload metadata actions
+  Component _buildUploadHeaderWidget() {
+    return div(
+        classes: 'manila-envelope w-full mb-4',
+        attributes: const {
+          'style': 'border-radius: 8px; padding: 16px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; aspect-ratio: 5 / 8;'
+        },
+        [
+          div(
+              classes: 'white-sticker',
+              attributes: const {
+                'style': 'width: 90%; height: 85%; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; border-radius: 8px;'
+              },
+              [
+                // Top Title Context
+                div([
+                  h1(classes: 'font-bold text-base text-center mb-1', attributes: const {'style': 'color: black; margin: 0; font-size: 16px;'}, [text('upload single image')]),
+                  p(classes: 'text-xs text-center text-gray', attributes: const {'style': 'margin: 0; color: #666; font-size: 11px;'}, [text('Maker Pipeline')])
                 ]),
 
-              // Invisible, absolute-positioned native file input covering the entire box
-              // This is 100% immune to browser programmatic gesture blocks
-              input(
-                  id: 'maker-upload-picker',
-                  classes: 'maker-upload-file-input',
-                  attributes: {
-                    'type': 'file',
-                    'accept': 'image/*',
-                    'style': 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;'
-                  },
-                  events: {
-                    'change': (e) {
-                      _onFileInputChanged();
+                // Centered Identity Gif
+                img(
+                    src: 'assets/logo200.gif',
+                    attributes: const {
+                      'style': 'width: 70px; height: auto; display: block; margin: 12px 0;'
                     }
-                  }
-              )
-            ]
-        ),
+                ),
 
-        input(
-          attributes: {'type': 'text', 'placeholder': 'Title', 'value': _uploadTitle, 'style': 'margin-bottom: 8px;'},
-          events: {'input': (e) => _uploadTitle = (e.target as dynamic).value},
-        ),
-        input(
-          attributes: {'type': 'text', 'placeholder': 'Caption / Description (optional)', 'value': _uploadDescription, 'style': 'margin-bottom: 8px;'},
-          events: {'input': (e) => _uploadDescription = (e.target as dynamic).value},
-        ),
-        input(
-          attributes: {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'value': _uploadIndicia, 'style': 'margin-bottom: 12px;'},
-          events: {'input': (e) => _uploadIndicia = (e.target as dynamic).value},
-        ),
+                // Native Envelope Action controls (Back / Publish)
+                div(classes: 'flex-col w-full gap-2', attributes: const {'style': 'display: flex; flex-direction: column; width: 100%;'}, [
+                  button(
+                      [text(_isUploadingImage ? "publishing..." : "publish")],
+                      classes: 'btn-primary',
+                      attributes: _isUploadingImage
+                          ? const {'disabled': 'true', 'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%;'}
+                          : const {'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%; background-color: #6750A4; color: white;'},
+                      events: {
+                        'click': (e) => _submitSingleImage()
+                      }
+                  ),
+                  button(
+                      [text("back")],
+                      classes: 'profile-btn',
+                      attributes: const {'style': 'width: 100%; padding: 8px; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 8px; background: white; color: black; cursor: pointer;'},
+                      events: {'click': (e) => setState(() {
+                        _makerModalMode = 'options';
+                        _uploadImageBase64 = null;
+                        _uploadImageName = null;
+                        _uploadPreviewUrl = null;
+                        _uploadCreators = [];
+                      })}
+                  )
+                ])
+              ]
+          )
+        ]
+    );
+  }
 
-        // High fidelity Creators Addition area
-        div(
-            classes: 'w-full text-left flex flex-col',
-            attributes: {'style': 'margin-bottom: 16px; align-self: flex-start;'},
-            [
-              span([text('Creators')], attributes: {'style': 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 6px;'}),
+  /// Second Cell: Strictly 5:8 Image frame and standard social buttons underneath
+  Component _buildUploadPageItemWidget() {
+    return div(
+        classes: 'reader-list-item flex-col w-full bg-white rounded-lg overflow-hidden',
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; width: 100%; box-sizing: border-box; border: 1px solid #eee; background-color: white; border-radius: 8px;'
+        },
+        [
+          // 1. The 5:8 Preview Sheet Container (Visual parity with ReaderPageItem)
+          div(
+              classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center relative',
+              attributes: const {
+                'style': 'width: 100%; aspect-ratio: 5 / 8; background-color: #f5f5f5; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer;'
+              },
+              events: {
+                'click': (e) {
+                  _pickAndPreviewImage();
+                }
+              },
+              [
+                if (_uploadPreviewUrl != null)
+                  img(
+                      src: _uploadPreviewUrl!,
+                      attributes: const {
+                        'style': 'width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;'
+                      }
+                  )
+                else
+                  div(
+                      classes: 'flex flex-col items-center justify-center p-4 text-gray-400',
+                      [
+                        span([text('add_photo_alternate')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 48px; margin-bottom: 8px; color: #aaa;'}),
+                        span([text('Click to select image')], attributes: const {'style': 'font-size: 12px; font-weight: 500; text-transform: lowercase; color: #666;'})
+                      ]
+                  ),
 
-              if (_uploadCreators.isNotEmpty)
-                div(
-                    classes: 'flex flex-col gap-1 w-full mb-2',
-                    [
-                      for (int i = 0; i < _uploadCreators.length; i++)
+                // Invisible, absolute-positioned native file input covering the entire box
+                input(
+                    id: 'maker-upload-picker',
+                    classes: 'maker-upload-file-input',
+                    attributes: const {
+                      'type': 'file',
+                      'accept': 'image/*',
+                      'style': 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;'
+                    },
+                    events: {
+                      'change': (e) {
+                        _onFileInputChanged();
+                      },
+                      'click': (e) {
+                        // Prevent bubble up so it doesn't trigger parent click twice
+                        (e as dynamic).stopPropagation();
+                      }
+                    }
+                )
+              ]
+          ),
+
+          // 2. Custom Toolbar (Unifies read/create layouts) with "Upload" pre-selected and highlighted on load
+          div(classes: 'toolbar-container w-full border-t border-b border-gray-100 py-2 my-1', attributes: const {
+            'style': 'display: flex; justify-content: center; gap: 12px; box-sizing: border-box; width: 100%; background: #fff;'
+          }, [
+            _buildUploadToolbarButton('upload', 'edit_document', true),
+            _buildUploadToolbarButton('like', 'favorite_border', false),
+            _buildUploadToolbarButton('comments', 'chat_bubble_outline', false),
+            _buildUploadToolbarButton('tags', 'tag', false),
+          ]),
+
+          // 3. Active Metadata Panel (Sliding Form Drawer)
+          div(
+              classes: 'p-4 mt-1 panel-container-animate',
+              attributes: const {
+                'style': 'background-color: #ffffff; border-top: 1px solid #eee; width: 100%; box-sizing: border-box; text-align: left;'
+              },
+              [
+                div(classes: 'flex-col', [
+                  div(classes: 'mb-4', [
+                    span(
+                        classes: 'text-xs font-bold text-gray',
+                        attributes: const {'style': 'letter-spacing: 1px; text-transform: uppercase; color: #666; font-size: 11px;'},
+                        [text("UPLOAD METADATA")]
+                    )
+                  ]),
+
+                  // Text Fields
+                  input(
+                    attributes: const {'type': 'text', 'placeholder': 'Title', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
+                    events: {'input': (e) => _uploadTitle = (e.target as dynamic).value},
+                  ),
+                  input(
+                    attributes: const {'type': 'text', 'placeholder': 'Caption / Description (optional)', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
+                    events: {'input': (e) => _uploadDescription = (e.target as dynamic).value},
+                  ),
+                  input(
+                    attributes: const {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'style': 'margin-bottom: 12px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
+                    events: {'input': (e) => _uploadIndicia = (e.target as dynamic).value},
+                  ),
+
+                  // Creators Section
+                  div(
+                      classes: 'w-full text-left flex flex-col',
+                      attributes: const {'style': 'margin-top: 8px; margin-bottom: 16px;'},
+                      [
+                        span([text('Creators')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 6px;'}),
+
+                        if (_uploadCreators.isNotEmpty)
+                          div(
+                              classes: 'flex flex-col gap-1 w-full mb-2',
+                              [
+                                for (int i = 0; i < _uploadCreators.length; i++)
+                                  div(
+                                      classes: 'flex flex-row items-center justify-between bg-gray-50 border border-gray-150 p-1.5 rounded',
+                                      attributes: const {'style': 'font-size: 11px; font-weight: 500; margin-bottom: 3px;'},
+                                      [
+                                        span([text('${_uploadCreators[i]['name']} (${_uploadCreators[i]['role']})')]),
+                                        span(
+                                            classes: 'material-symbols-outlined text-red-500 cursor-pointer',
+                                            attributes: const {'style': 'font-size: 16px; margin-left: 6px;'},
+                                            events: {
+                                              'click': (e) => setState(() {
+                                                _uploadCreators.removeAt(i);
+                                              })
+                                            },
+                                            [text('remove_circle')]
+                                        )
+                                      ]
+                                  )
+                              ]
+                          ),
+
                         div(
-                            classes: 'flex flex-row items-center justify-between bg-gray-50 border border-gray-150 p-1.5 rounded',
-                            attributes: {'style': 'font-size: 11px; font-weight: 500; margin-bottom: 3px;'},
+                            classes: 'flex flex-row items-center gap-2 w-full',
+                            attributes: const {'style': 'box-sizing: border-box;'},
                             [
-                              span([text('${_uploadCreators[i]['name']} (${_uploadCreators[i]['role']})')]),
+                              div(
+                                  classes: 'flex-1',
+                                  [
+                                    input(
+                                      attributes: {
+                                        'type': 'text',
+                                        'placeholder': '@handle',
+                                        'value': _newCreatorHandle,
+                                        'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
+                                      },
+                                      events: {'input': (e) => _newCreatorHandle = (e.target as dynamic).value},
+                                    )
+                                  ]
+                              ),
+                              div(
+                                  classes: 'flex-1',
+                                  [
+                                    input(
+                                      attributes: {
+                                        'type': 'text',
+                                        'placeholder': 'Role',
+                                        'value': _newCreatorRole,
+                                        'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
+                                      },
+                                      events: {'input': (e) => _newCreatorRole = (e.target as dynamic).value},
+                                    )
+                                  ]
+                              ),
                               span(
-                                  classes: 'material-symbols-outlined text-red-500 cursor-pointer',
-                                  attributes: {'style': 'font-size: 16px; margin-left: 6px;'},
+                                  classes: 'material-symbols-outlined text-green-600 cursor-pointer',
+                                  attributes: const {'style': 'font-size: 22px; padding: 2px;'},
                                   events: {
-                                    'click': (e) => setState(() {
-                                      _uploadCreators.removeAt(i);
-                                    })
+                                    'click': (e) => _addCreator()
                                   },
-                                  [text('remove_circle')]
+                                  [text('add_circle')]
                               )
                             ]
                         )
-                    ]
-                ),
-
-              div(
-                  classes: 'flex flex-row items-center gap-2 w-full',
-                  attributes: {'style': 'box-sizing: border-box;'},
-                  [
-                    div(
-                        classes: 'flex-1',
-                        [
-                          input(
-                            attributes: {
-                              'type': 'text',
-                              'placeholder': '@handle',
-                              'value': _newCreatorHandle,
-                              'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px;'
-                            },
-                            events: {'input': (e) => _newCreatorHandle = (e.target as dynamic).value},
-                          )
-                        ]
-                    ),
-                    div(
-                        classes: 'flex-1',
-                        [
-                          input(
-                            attributes: {
-                              'type': 'text',
-                              'placeholder': 'Role',
-                              'value': _newCreatorRole,
-                              'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px;'
-                            },
-                            events: {'input': (e) => _newCreatorRole = (e.target as dynamic).value},
-                          )
-                        ]
-                    ),
-                    span(
-                        classes: 'material-symbols-outlined text-green-600 cursor-pointer',
-                        attributes: {'style': 'font-size: 22px; padding: 2px;'},
-                        events: {
-                          'click': (e) => _addCreator()
-                        },
-                        [text('add_circle')]
-                    )
-                  ]
-              )
-            ]
-        ),
-
-        if (_uploadError != null)
-          p(classes: 'error-msg mb-2', [text(_uploadError!)]),
-
-        div(classes: 'flex-row gap-2 mt-2 justify-between w-full', [
-          button(
-              [text("back")],
-              classes: 'profile-btn',
-              attributes: const {'style': 'width: 45%; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
-              events: {'click': (e) => setState(() {
-                _makerModalMode = 'options';
-                _uploadImageBase64 = null;
-                _uploadImageName = null;
-                _uploadPreviewUrl = null;
-                _uploadCreators = [];
-              })}
-          ),
-          button(
-              [text(_isUploadingImage ? "publishing..." : "publish")],
-              classes: 'profile-btn active',
-              attributes: const {'style': 'width: 45%; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background-color: #6750A4; color: white;'},
-              events: {'click': (e) => _submitSingleImage()}
+                      ]
+                  )
+                ])
+              ]
           )
-        ])
-      ])
-    ]);
+        ]
+    );
+  }
+
+  // Visual Image Upload sticker that coordinates the structural list sections
+  Component _buildMakerUploadContent() {
+    return div(
+        classes: 'flex-col w-full',
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; width: 100%; gap: 16px; box-sizing: border-box;'
+        },
+        [
+          _buildUploadHeaderWidget(),
+          _buildUploadPageItemWidget(),
+        ]
+    );
   }
 }

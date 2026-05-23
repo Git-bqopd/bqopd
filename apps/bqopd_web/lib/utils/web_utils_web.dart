@@ -1,4 +1,5 @@
 import 'package:web/web.dart' as web;
+import 'dart:js_interop';
 
 /// Browser-specific implementation using package:web.
 void scrollToElement(String id) {
@@ -9,4 +10,71 @@ void scrollToElement(String id) {
       block: 'start',
     ));
   }
+}
+
+/// Reads the selected file from the DOM `<input>` element directly using pure Dart and package:web.
+void readSelectedFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
+  final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
+  if (input == null) {
+    print('[DART FILE READER] Input element with ID "$inputId" not found.');
+    return;
+  }
+  final files = input.files;
+  if (files == null || files.length == 0) {
+    print('[DART FILE READER] No files chosen.');
+    return;
+  }
+  final file = files.item(0);
+  if (file == null) {
+    print('[DART FILE READER] Selected file is null.');
+    return;
+  }
+
+  print('[DART FILE READER] Loading: ${file.name} (${file.size} bytes)');
+
+  final reader = web.FileReader();
+  reader.onload = (web.Event event) {
+    final result = reader.result;
+    if (result == null) {
+      print('[DART FILE READER] FileReader result is null.');
+      return;
+    }
+    // Result is a JSString when reading as DataURL
+    final dataUrl = (result as JSString).toDart;
+    final splitIndex = dataUrl.indexOf(',');
+    if (splitIndex == -1) {
+      print('[DART FILE READER] Invalid DataURL format.');
+      return;
+    }
+    final base64 = dataUrl.substring(splitIndex + 1);
+    final objectUrl = web.URL.createObjectURL(file);
+
+    print('[DART FILE READER] Success. Triggering callback.');
+    callback(base64, file.name, objectUrl);
+  }.toJS;
+
+  reader.onerror = (web.Event event) {
+    print('[DART FILE READER] FileReader error encountered.');
+  }.toJS;
+
+  reader.readAsDataURL(file);
+}
+
+/// Creates or triggers a hidden native file input and monitors changes completely within Dart.
+void triggerFilePicker(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
+  var input = web.document.getElementById(inputId) as web.HTMLInputElement?;
+  if (input == null) {
+    input = web.document.createElement('input') as web.HTMLInputElement
+      ..id = inputId
+      ..type = 'file'
+      ..accept = 'image/*'
+      ..style.display = 'none';
+    web.document.body?.append(input);
+  }
+
+  input.onchange = (web.Event event) {
+    readSelectedFile(inputId, callback);
+  }.toJS;
+
+  input.click();
 }
