@@ -129,6 +129,38 @@
 
         window.fnCall = (name, dataStr) => functions.httpsCallable(name)(JSON.parse(dataStr)).then(r => JSON.stringify(r.data)).catch(err => { console.error("fnCall error:", err); throw err; });
         window.stUpload = (path, bytes, contentType) => storage.ref(path).put(bytes, {contentType: contentType}).then(s => s.ref.getDownloadURL()).catch(err => { console.error("stUpload error:", err); throw err; });
+
+        // --- Bulletproof Image Picker and Reader ---
+        window.pickAndReadFile = (inputElementId, callback) => {
+            let input = document.getElementById(inputElementId);
+            if (!input) {
+                input = document.createElement('input');
+                input.id = inputElementId;
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.style.display = 'none';
+                document.body.appendChild(input);
+            }
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const arrayBuffer = evt.target.result;
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    let binary = '';
+                    const len = uint8Array.byteLength;
+                    for (let i = 0; i < len; i++) {
+                        binary += String.fromCharCode(uint8Array[i]);
+                    }
+                    const base64 = window.btoa(binary);
+                    const objectUrl = URL.createObjectURL(file);
+                    callback(base64, file.name, objectUrl);
+                };
+                reader.readAsArrayBuffer(file);
+            };
+            input.click();
+        };
     </script>
 
     <script src="main.dart.js" defer></script>

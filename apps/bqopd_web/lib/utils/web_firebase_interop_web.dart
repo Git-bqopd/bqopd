@@ -116,6 +116,15 @@ Future<void> logoutFromFirebase() async {
   await _logoutFromFirebase().toDart;
 }
 
+@JS('pickAndReadFile')
+external void _pickAndReadFile(JSString inputId, JSFunction callback);
+
+void pickAndReadFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
+  _pickAndReadFile(inputId.toJS, ((JSString base64, JSString fileName, JSString objectUrl) {
+    callback(base64.toDart, fileName.toDart, objectUrl.toDart);
+  }).toJS);
+}
+
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
   static Map<String, dynamic> increment(num value) => {'__op': 'increment', 'value': value};

@@ -61,6 +61,16 @@ class _ProfilePageState extends State<ProfilePage> {
   // Toggles for Maker Tab
   bool _showDrafts = false;
 
+  // Maker Options Modal state
+  bool _showMakerModal = false;
+  String _makerModalMode = 'options'; // 'options', 'upload'
+  String _uploadTitle = '';
+  String _uploadImageUrl = '';
+  String _uploadDescription = '';
+  String _uploadIndicia = '';
+  String? _uploadError;
+  bool _isUploadingImage = false;
+
   // Stream Subscriptions
   StreamSubscription? _profileSub;
   StreamSubscription? _followSub;
@@ -479,6 +489,168 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _createFolio() async {
+    setState(() => _isLoading = true);
+    try {
+      final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
+      final shortCode = fanzineId.substring(fanzineId.length - 7).toUpperCase();
+      final fzData = {
+        'title': 'New Folio',
+        'ownerId': _targetUid,
+        'editorId': _targetUid,
+        'editors': [],
+        'isLive': false,
+        'processingStatus': 'complete',
+        'creationDate': WebFieldValue.serverTimestamp(),
+        'type': 'folio',
+        'shortCode': shortCode,
+        'shortCodeKey': shortCode,
+        'twoPage': true,
+      };
+      await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
+      setState(() {
+        _showMakerModal = false;
+      });
+      if (mounted) {
+        Router.of(context).replace('/reader/$fanzineId');
+      }
+    } catch (e) {
+      print("Error creating folio: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _createCalendar() async {
+    setState(() => _isLoading = true);
+    try {
+      final fanzineId = 'calendar_${DateTime.now().millisecondsSinceEpoch}';
+      final shortCode = fanzineId.substring(fanzineId.length - 7).toUpperCase();
+      final fzData = {
+        'title': 'Convention Calendar 2026',
+        'ownerId': _targetUid,
+        'editorId': _targetUid,
+        'editors': [],
+        'isLive': false,
+        'processingStatus': 'complete',
+        'creationDate': WebFieldValue.serverTimestamp(),
+        'type': 'calendar',
+        'shortCode': shortCode,
+        'shortCodeKey': shortCode,
+        'twoPage': true,
+      };
+      await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
+
+      final page1Id = 'page1_${DateTime.now().millisecondsSinceEpoch}';
+      final page2Id = 'page2_${DateTime.now().millisecondsSinceEpoch}';
+      await fsSetDoc('fanzines/$fanzineId/pages/$page1Id', jsonEncode({
+        'pageNumber': 1,
+        'templateId': 'calendar_left',
+        'status': 'ready',
+        'createdAt': WebFieldValue.serverTimestamp(),
+      }), true);
+      await fsSetDoc('fanzines/$fanzineId/pages/$page2Id', jsonEncode({
+        'pageNumber': 2,
+        'templateId': 'calendar_right',
+        'status': 'ready',
+        'createdAt': WebFieldValue.serverTimestamp(),
+      }), true);
+
+      setState(() {
+        _showMakerModal = false;
+      });
+      if (mounted) {
+        Router.of(context).replace('/reader/$fanzineId');
+      }
+    } catch (e) {
+      print("Error creating calendar: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _submitSingleImage() async {
+    if (_uploadTitle.trim().isEmpty || _uploadImageUrl.trim().isEmpty) {
+      setState(() => _uploadError = "Title and Image URL are required.");
+      return;
+    }
+    setState(() {
+      _isUploadingImage = true;
+      _uploadError = null;
+    });
+    try {
+      final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
+      final shortCode = imageId.substring(imageId.length - 7).toUpperCase();
+      final imgData = {
+        'uid': _targetUid,
+        'uploaderId': _targetUid,
+        'fileUrl': _uploadImageUrl.trim(),
+        'fileName': 'web_upload_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        'title': _uploadTitle.trim(),
+        'description': _uploadDescription.trim(),
+        'status': 'approved',
+        'tags': {},
+        'indicia': _uploadIndicia.trim(),
+        'creators': [{'uid': _targetUid, 'name': _profileData?.displayName ?? 'Creator', 'role': 'Artist'}],
+        'timestamp': WebFieldValue.serverTimestamp(),
+        'shortCode': shortCode,
+      };
+      await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
+
+      final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
+      final fzShortCode = fanzineId.substring(fanzineId.length - 7).toUpperCase();
+      final fzData = {
+        'title': _uploadTitle.trim(),
+        'ownerId': _targetUid,
+        'editorId': _targetUid,
+        'editors': [],
+        'isLive': true,
+        'processingStatus': 'complete',
+        'creationDate': WebFieldValue.serverTimestamp(),
+        'type': 'folio',
+        'shortCode': fzShortCode,
+        'shortCodeKey': fzShortCode,
+        'twoPage': false,
+      };
+      await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
+
+      final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+      await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+        'imageId': imageId,
+        'imageUrl': _uploadImageUrl.trim(),
+        'pageNumber': 1,
+        'status': 'ready',
+        'createdAt': WebFieldValue.serverTimestamp(),
+      }), true);
+
+      await fsUpdateDoc('images/$imageId', jsonEncode({
+        'usedInFanzines': WebFieldValue.arrayUnion([fanzineId])
+      }));
+
+      setState(() {
+        _showMakerModal = false;
+        _uploadTitle = '';
+        _uploadDescription = '';
+        _uploadIndicia = '';
+        _uploadImageUrl = '';
+      });
+
+      if (mounted) {
+        Router.of(context).replace('/reader/$fanzineId');
+      }
+    } catch (e) {
+      setState(() => _uploadError = e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+      }
+    }
+  }
+
   @override
   Component build(BuildContext context) {
     if (_isLoading) {
@@ -524,10 +696,6 @@ class _ProfilePageState extends State<ProfilePage> {
               _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: true)
             ], classes: 'white-sticker-mobile-8-5')
           ], classes: 'envelope-8-5-mobile-item'),
-          // The parent container '.envelope-8-5-mobile-container' has a CSS flexbox gap of 16px.
-          // By removing the extra 'profile-spacer' (which added another 16px + surrounding gaps),
-          // we eliminate the "doubled" empty buffer. Now, the spacing between the split card segments
-          // is exactly 16px, matching other spacing blocks across the page.
           div([
             div([
               _buildRightCardSocialsPart(isMobile: true)
@@ -541,9 +709,12 @@ class _ProfilePageState extends State<ProfilePage> {
         // Row 3: The Category Tabs
         if (_visibleTabs.isNotEmpty)
           div([
-            for (int i = 0; i < _visibleTabs.length; i++)
-              _buildMainNavigationTab(_visibleTabs[i], i)
-          ], classes: 'bg-white rounded-md shadow-sm', attributes: const {'style': 'display: flex; justify-content: center; gap: 8px; overflow-x: auto; padding: 12px; box-sizing: border-box; width: 100%;'}),
+            for (int i = 0; i < _visibleTabs.length; i++) ...[
+              _buildMainNavigationTab(_visibleTabs[i], i),
+              if (i < _visibleTabs.length - 1)
+                span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+            ]
+          ], classes: 'bg-white rounded-md shadow-sm py-4', attributes: const {'style': 'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%;'}),
 
         // Row 4: Spacer
         div([], classes: 'profile-spacer'),
@@ -560,7 +731,10 @@ class _ProfilePageState extends State<ProfilePage> {
           if (_visibleTabs.isNotEmpty)
             _buildActiveTabContent(_visibleTabs[_currentTabIndex])
         ], attributes: const {'style': 'width: 100%; box-sizing: border-box;'})
-      ], classes: 'unified-profile-column')
+      ], classes: 'unified-profile-column'),
+
+      if (_showMakerModal)
+        _buildMakerModalOverlay(),
     ], attributes: const {
       'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 16px; padding-bottom: 80px; box-sizing: border-box;'
     });
@@ -705,18 +879,35 @@ class _ProfilePageState extends State<ProfilePage> {
   Component _buildMainNavigationTab(String name, int index) {
     final bool isActive = _currentTabIndex == index;
 
-    return button(
-        [text(name)],
-        classes: isActive ? 'active m3-chip' : 'm3-chip',
-        attributes: const {'style': 'height: 36px; padding: 0 16px; font-size: 12px; font-weight: 900; text-transform: uppercase; border-radius: 100px; cursor: pointer; border: none;'},
+    return span([
+      text(name.toLowerCase())
+    ],
+        classes: isActive
+            ? 'text-xs font-bold text-black border-b border-black cursor-pointer'
+            : 'text-xs text-gray cursor-pointer',
         events: {
           'click': (e) {
             setState(() {
               _currentTabIndex = index;
             });
           }
-        }
-    );
+        });
+  }
+
+  Component _buildPlainTextTab({
+    required String title,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return span([
+      text(title.toLowerCase())
+    ],
+        classes: isActive
+            ? 'text-xs font-bold text-black border-b border-black cursor-pointer'
+            : 'text-xs text-gray cursor-pointer',
+        events: {
+          'click': (e) => onTap(),
+        });
   }
 
   Component _buildActiveActionUtilityBar(String tabName) {
@@ -727,65 +918,107 @@ class _ProfilePageState extends State<ProfilePage> {
         final bool viewerCanSeeDrafts = _isMe || (_viewerAccount?.role == 'admin') || (_viewerAccount?.role == 'moderator') || (_viewerAccount?.isCurator ?? false);
         return div([
           div([
-            button(
-                [text("published")],
-                classes: !_showDrafts ? 'm3-chip active' : 'm3-chip',
-                events: {'click': (e) => setState(() => _showDrafts = false)}
+            if (_isMe) ...[
+              button(
+                  [text("make")],
+                  classes: 'profile-btn',
+                  attributes: const {'style': 'width: 100px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
+                  events: {
+                    'click': (e) {
+                      setState(() {
+                        _showMakerModal = true;
+                        _makerModalMode = 'options';
+                        _uploadError = null;
+                      });
+                    }
+                  }
+              ),
+              span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
+            ],
+            _buildPlainTextTab(
+              title: "published",
+              isActive: !_showDrafts,
+              onTap: () => setState(() => _showDrafts = false),
             ),
             if (viewerCanSeeDrafts) ...[
-              span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-              button(
-                  [text("drafts")],
-                  classes: _showDrafts ? 'm3-chip active' : 'm3-chip',
-                  events: {'click': (e) => setState(() => _showDrafts = true)}
-              )
+              span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+              _buildPlainTextTab(
+                title: "drafts",
+                isActive: _showDrafts,
+                onTap: () => setState(() => _showDrafts = true),
+              ),
             ]
-          ], attributes: const {'style': 'display: flex; align-items: center;'}),
-          if (_isMe)
-            a(
-                [text("+ make")],
-                href: '/publisher',
-                classes: 'btn-primary nav-pill',
-                attributes: const {'style': 'display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; height: 32px; font-size: 12px; margin: 0;'}
-            )
-        ], classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-between', attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%;'});
+          ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; width: 100%;'})
+        ], classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-center', attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%;'});
 
       case 'index':
         return div([
-          button(
-              [text("mentions (${_userMentions.length})")],
-              classes: _indexSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip',
-              events: {'click': (e) => setState(() => _indexSubTabIndex = 0)}
+          _buildPlainTextTab(
+            title: "mentions (${_userMentions.length})",
+            isActive: _indexSubTabIndex == 0,
+            onTap: () => setState(() => _indexSubTabIndex = 0),
           ),
-          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-          button(
-              [text("comments (${_userComments.length})")],
-              classes: _indexSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip',
-              events: {'click': (e) => setState(() => _indexSubTabIndex = 1)}
-          )
+          span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+          _buildPlainTextTab(
+            title: "comments (${_userComments.length})",
+            isActive: _indexSubTabIndex == 1,
+            onTap: () => setState(() => _indexSubTabIndex = 1),
+          ),
         ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; justify-content: center; align-items: center; box-sizing: border-box; width: 100%;'});
 
       case 'curator':
         return div([
-          button([text("Curator Inbox")], classes: _curatorSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 0)}),
-          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-          button([text("Publisher Queue")], classes: _curatorSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 1)}),
-          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-          button([text("Wiki Entities")], classes: _curatorSubTabIndex == 2 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 2)}),
-          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-          button([text("AI Baseline")], classes: _curatorSubTabIndex == 3 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _curatorSubTabIndex = 3)})
+          _buildPlainTextTab(
+            title: "curator inbox",
+            isActive: _curatorSubTabIndex == 0,
+            onTap: () => setState(() => _curatorSubTabIndex = 0),
+          ),
+          span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+          _buildPlainTextTab(
+            title: "publisher queue",
+            isActive: _curatorSubTabIndex == 1,
+            onTap: () => setState(() => _curatorSubTabIndex = 1),
+          ),
+          span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+          _buildPlainTextTab(
+            title: "wiki entities",
+            isActive: _curatorSubTabIndex == 2,
+            onTap: () => setState(() => _curatorSubTabIndex = 2),
+          ),
+          span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+          _buildPlainTextTab(
+            title: "ai baseline",
+            isActive: _curatorSubTabIndex == 3,
+            onTap: () => setState(() => _curatorSubTabIndex = 3),
+          ),
         ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%;'});
 
       case 'settings':
         return div([
-          button([text("Toolbar Buttons")], classes: _settingsSubTabIndex == 3 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 3)}),
-          span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-          button([text("Managed Profiles")], classes: _settingsSubTabIndex == 1 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 1)}),
+          _buildPlainTextTab(
+            title: "toolbar buttons",
+            isActive: _settingsSubTabIndex == 3,
+            onTap: () => setState(() => _settingsSubTabIndex = 3),
+          ),
+          span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+          _buildPlainTextTab(
+            title: "managed profiles",
+            isActive: _settingsSubTabIndex == 1,
+            onTap: () => setState(() => _settingsSubTabIndex = 1),
+          ),
           if (isViewerAdmin) ...[
-            span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-            button([text("Shortcodes")], classes: _settingsSubTabIndex == 0 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 0)}),
-            span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-            button([text("Permissions")], classes: _settingsSubTabIndex == 2 ? 'm3-chip active' : 'm3-chip', events: {'click': (e) => setState(() => _settingsSubTabIndex = 2)})
+            span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+            _buildPlainTextTab(
+              title: "shortcodes",
+              isActive: _settingsSubTabIndex == 0,
+              onTap: () => setState(() => _settingsSubTabIndex = 0),
+            ),
+            span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+            _buildPlainTextTab(
+              title: "permissions",
+              isActive: _settingsSubTabIndex == 2,
+              onTap: () => setState(() => _settingsSubTabIndex = 2),
+            ),
           ]
         ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%;'});
 
@@ -935,7 +1168,7 @@ class _ProfilePageState extends State<ProfilePage> {
             if (c['context'] != null && c['context']['fanzineTitle'] != null)
               span([text("via ${c['context']['fanzineTitle']}")], attributes: const {'style': 'font-style: italic;'})
           ], attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 8px;'}),
-          p([text(c['text'] ?? '')], attributes: const {'style': 'font-size: 13px; color: #222; line-height: 1.5;'})
+          p([text(c['text'] ?? '')], attributes: const {'style': 'border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; margin-bottom: 16px;'})
         ], attributes: const {'style': 'border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; margin-bottom: 16px;'})
     ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
   }
@@ -1155,5 +1388,121 @@ class _ProfilePageState extends State<ProfilePage> {
           'click': (e) => _updateUserPermission(uid, role)
         }
     );
+  }
+
+  Component _buildMakerModalOverlay() {
+    return div(
+        classes: 'global-modal-overlay',
+        attributes: {
+          'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
+        },
+        [
+          div(
+              classes: 'manila-envelope',
+              attributes: {
+                'style': 'max-width: 420px; max-height: 580px; border-radius: 12px; overflow: hidden; position: relative;'
+              },
+              [
+                button(
+                    classes: 'modal-close-btn',
+                    attributes: {
+                      'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'
+                    },
+                    events: {
+                      'click': (e) {
+                        setState(() {
+                          _showMakerModal = false;
+                        });
+                      }
+                    },
+                    [text('×')]
+                ),
+
+                _makerModalMode == 'options'
+                    ? _buildMakerOptionsContent()
+                    : _buildMakerUploadContent()
+              ]
+          )
+        ]
+    );
+  }
+
+  Component _buildMakerOptionsContent() {
+    return div(classes: 'white-sticker p-6 w-full h-full flex flex-col justify-center items-center', [
+      h1(classes: 'font-bold text-lg text-center mb-6', [text('maker options')]),
+
+      button(
+          [text("single image")],
+          classes: 'profile-btn mb-4',
+          attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
+          events: {
+            'click': (e) => setState(() {
+              _makerModalMode = 'upload';
+              _uploadError = null;
+            })
+          }
+      ),
+
+      button(
+          [text("folio")],
+          classes: 'profile-btn mb-4',
+          attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
+          events: {
+            'click': (e) => _createFolio()
+          }
+      ),
+
+      button(
+          [text("calendar")],
+          classes: 'profile-btn mb-4',
+          attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
+          events: {
+            'click': (e) => _createCalendar()
+          }
+      ),
+    ]);
+  }
+
+  Component _buildMakerUploadContent() {
+    return div(classes: 'white-sticker p-6 w-full h-full flex flex-col justify-start items-center', attributes: const {'style': 'overflow-y: auto;'}, [
+      h1(classes: 'font-bold text-lg text-center mb-4', [text('upload single image')]),
+
+      div(classes: 'flex-col w-full mt-2', [
+        input(
+          attributes: {'type': 'text', 'placeholder': 'Title', 'value': _uploadTitle, 'style': 'margin-bottom: 8px;'},
+          events: {'input': (e) => _uploadTitle = (e.target as dynamic).value},
+        ),
+        input(
+          attributes: {'type': 'text', 'placeholder': 'Image URL (paste live web link)', 'value': _uploadImageUrl, 'style': 'margin-bottom: 8px;'},
+          events: {'input': (e) => _uploadImageUrl = (e.target as dynamic).value},
+        ),
+        input(
+          attributes: {'type': 'text', 'placeholder': 'Caption / Description (optional)', 'value': _uploadDescription, 'style': 'margin-bottom: 8px;'},
+          events: {'input': (e) => _uploadDescription = (e.target as dynamic).value},
+        ),
+        input(
+          attributes: {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'value': _uploadIndicia, 'style': 'margin-bottom: 8px;'},
+          events: {'input': (e) => _uploadIndicia = (e.target as dynamic).value},
+        ),
+
+        if (_uploadError != null)
+          p(classes: 'error-msg mb-2', [text(_uploadError!)]),
+
+        div(classes: 'flex-row gap-2 mt-4 justify-between w-full', [
+          button(
+              [text("back")],
+              classes: 'profile-btn',
+              attributes: const {'style': 'width: 45%; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
+              events: {'click': (e) => setState(() => _makerModalMode = 'options')}
+          ),
+          button(
+              [text(_isUploadingImage ? "publishing..." : "publish")],
+              classes: 'profile-btn active',
+              attributes: const {'style': 'width: 45%; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background-color: #6750A4; color: white;'},
+              events: {'click': (e) => _submitSingleImage()}
+          )
+        ])
+      ])
+    ]);
   }
 }

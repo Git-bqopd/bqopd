@@ -48,6 +48,9 @@ Future<void> loginWithFirebase(String email, String password) async {}
 Future<void> registerWithFirebase(String email, String password, String username) async {}
 Future<void> logoutFromFirebase() async {}
 
+/// Server VM stub for triggering the web file picker
+void pickAndReadFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {}
+
 /// Mock representation of WebFieldValue for the server environment.
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {};
