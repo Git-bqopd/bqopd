@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
@@ -65,11 +66,18 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _showMakerModal = false;
   String _makerModalMode = 'options'; // 'options', 'upload'
   String _uploadTitle = '';
-  String _uploadImageUrl = '';
   String _uploadDescription = '';
   String _uploadIndicia = '';
   String? _uploadError;
   bool _isUploadingImage = false;
+
+  // High-fidelity Image Upload States matching Flutter
+  String? _uploadImageBase64;
+  String? _uploadImageName;
+  String? _uploadPreviewUrl;
+  List<Map<String, dynamic>> _uploadCreators = [];
+  String _newCreatorHandle = '';
+  String _newCreatorRole = '';
 
   // Stream Subscriptions
   StreamSubscription? _profileSub;
@@ -213,9 +221,30 @@ class _ProfilePageState extends State<ProfilePage> {
     _setupWorksPipeline();
     _setupCommentsPipeline();
     _loadGlobalSettings();
-    _setupManagedProfilesPipeline();
+    _setupManagedProfilesSettings();
     _setupSystemUsersPipeline();
     _setupTrainingDataPipeline();
+  }
+
+  void _setupManagedProfilesSettings() {
+    _managedSub?.callAsFunction();
+    _managedSub = fsListenQuery('profiles', 'isManaged', '==', jsonEncode(true), '', false, (String jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final profiles = decoded.map((d) {
+          final data = restoreTimestamps(d['data'] as Map<String, dynamic>);
+          data['id'] = d['id'];
+          return data;
+        }).where((p) {
+          final List managers = p['managers'] ?? [];
+          return managers.contains(_targetUid);
+        }).toList();
+
+        setState(() {
+          _allManagedProfiles = profiles;
+        });
+      } catch (_) {}
+    });
   }
 
   void _rebuildTabSchema() {
@@ -573,32 +602,106 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  // Pick local file and build pre-render client preview matching Flutter
+  void _pickAndPreviewImage() {
+    pickAndReadFile('maker-upload-picker', (base64, fileName, objectUrl) {
+      setState(() {
+        _uploadImageBase64 = base64;
+        _uploadImageName = fileName;
+        _uploadPreviewUrl = objectUrl;
+        _uploadError = null;
+      });
+    });
+  }
+
+  // Handle dynamic file upload changes from the transparent native file input
+  void _onFileInputChanged() {
+    readInputFile('maker-upload-picker', (base64, fileName, objectUrl) {
+      setState(() {
+        _uploadImageBase64 = base64;
+        _uploadImageName = fileName;
+        _uploadPreviewUrl = objectUrl;
+        _uploadError = null;
+      });
+    });
+  }
+
+  // Handle dynamic creators lookups matching Flutter
+  Future<void> _addCreator() async {
+    final handle = _newCreatorHandle.trim();
+    final role = _newCreatorRole.trim();
+    if (handle.isEmpty) return;
+
+    final cleanHandle = handle.toLowerCase().replaceAll('@', '');
+    String resolvedName = handle;
+    String? resolvedUid;
+
+    try {
+      final resStr = await fsQuery('profiles', 'username', '==', jsonEncode(cleanHandle), '');
+      final List docs = jsonDecode(resStr);
+      if (docs.isNotEmpty) {
+        final doc = docs.first;
+        final data = doc['data'];
+        resolvedName = data['displayName'] ?? data['username'] ?? handle;
+        resolvedUid = doc['id'];
+      }
+    } catch (e) {
+      print("Error looking up user by handle: $e");
+    }
+
+    setState(() {
+      _uploadCreators.add({
+        'uid': resolvedUid,
+        'name': resolvedName,
+        'role': role.isNotEmpty ? role : 'Contributor',
+      });
+      _newCreatorHandle = '';
+      _newCreatorRole = '';
+    });
+  }
+
+  // High fidelity publication pipeline matching Flutter
   Future<void> _submitSingleImage() async {
-    if (_uploadTitle.trim().isEmpty || _uploadImageUrl.trim().isEmpty) {
-      setState(() => _uploadError = "Title and Image URL are required.");
+    if (_uploadTitle.trim().isEmpty) {
+      setState(() => _uploadError = "Title is required.");
       return;
     }
+    if (_uploadImageBase64 == null) {
+      setState(() => _uploadError = "Please select or capture an image first.");
+      return;
+    }
+
     setState(() {
       _isUploadingImage = true;
       _uploadError = null;
     });
+
     try {
+      final Uint8List bytes = base64Decode(_uploadImageBase64!);
+      final String path = 'uploads/$_targetUid/folio_assets/img_${DateTime.now().millisecondsSinceEpoch}_$_uploadImageName';
+
+      // Perform secure upload to Storage via interop
+      final String downloadUrl = await stUpload(path, bytes, 'image/jpeg');
+
       final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = imageId.substring(imageId.length - 7).toUpperCase();
+
       final imgData = {
         'uid': _targetUid,
         'uploaderId': _targetUid,
-        'fileUrl': _uploadImageUrl.trim(),
-        'fileName': 'web_upload_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        'fileUrl': downloadUrl,
+        'fileName': _uploadImageName,
         'title': _uploadTitle.trim(),
         'description': _uploadDescription.trim(),
         'status': 'approved',
         'tags': {},
         'indicia': _uploadIndicia.trim(),
-        'creators': [{'uid': _targetUid, 'name': _profileData?.displayName ?? 'Creator', 'role': 'Artist'}],
+        'creators': _uploadCreators,
         'timestamp': WebFieldValue.serverTimestamp(),
         'shortCode': shortCode,
+        'storagePath': path,
       };
+
       await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
 
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
@@ -621,7 +724,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
       await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
         'imageId': imageId,
-        'imageUrl': _uploadImageUrl.trim(),
+        'imageUrl': downloadUrl,
         'pageNumber': 1,
         'status': 'ready',
         'createdAt': WebFieldValue.serverTimestamp(),
@@ -636,7 +739,10 @@ class _ProfilePageState extends State<ProfilePage> {
         _uploadTitle = '';
         _uploadDescription = '';
         _uploadIndicia = '';
-        _uploadImageUrl = '';
+        _uploadImageBase64 = null;
+        _uploadImageName = null;
+        _uploadPreviewUrl = null;
+        _uploadCreators = [];
       });
 
       if (mounted) {
@@ -1463,37 +1569,155 @@ class _ProfilePageState extends State<ProfilePage> {
     ]);
   }
 
+  // Visual Image Upload sticker that mirrors the Flutter client perfectly
   Component _buildMakerUploadContent() {
     return div(classes: 'white-sticker p-6 w-full h-full flex flex-col justify-start items-center', attributes: const {'style': 'overflow-y: auto;'}, [
       h1(classes: 'font-bold text-lg text-center mb-4', [text('upload single image')]),
 
       div(classes: 'flex-col w-full mt-2', [
+
+        // Interactive Image Selection Area
+        div(
+            classes: 'cursor-pointer flex flex-col items-center justify-center bg-gray-100 border border-dashed border-gray-300 rounded-lg overflow-hidden relative mb-4',
+            attributes: {
+              'style': 'width: 100%; height: 160px; min-height: 160px; max-height: 160px; background-color: #f9f9f9; text-align: center; position: relative;'
+            },
+            [
+              if (_uploadPreviewUrl != null)
+                img(
+                    src: _uploadPreviewUrl!,
+                    attributes: {'style': 'width: 100%; height: 100%; object-fit: contain;'}
+                )
+              else
+                div(classes: 'flex flex-col items-center justify-center p-4 text-gray-400', [
+                  span([text('add_photo_alternate')], classes: 'material-symbols-outlined', attributes: {'style': 'font-size: 40px;'}),
+                  span([text('Click to select image')], attributes: {'style': 'font-size: 11px; margin-top: 6px; font-weight: 500;'})
+                ]),
+
+              // Invisible, absolute-positioned native file input covering the entire box
+              // This is 100% immune to browser programmatic gesture blocks
+              input(
+                  id: 'maker-upload-picker',
+                  classes: 'maker-upload-file-input',
+                  attributes: {
+                    'type': 'file',
+                    'accept': 'image/*',
+                    'style': 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;'
+                  },
+                  events: {
+                    'change': (e) {
+                      _onFileInputChanged();
+                    }
+                  }
+              )
+            ]
+        ),
+
         input(
           attributes: {'type': 'text', 'placeholder': 'Title', 'value': _uploadTitle, 'style': 'margin-bottom: 8px;'},
           events: {'input': (e) => _uploadTitle = (e.target as dynamic).value},
-        ),
-        input(
-          attributes: {'type': 'text', 'placeholder': 'Image URL (paste live web link)', 'value': _uploadImageUrl, 'style': 'margin-bottom: 8px;'},
-          events: {'input': (e) => _uploadImageUrl = (e.target as dynamic).value},
         ),
         input(
           attributes: {'type': 'text', 'placeholder': 'Caption / Description (optional)', 'value': _uploadDescription, 'style': 'margin-bottom: 8px;'},
           events: {'input': (e) => _uploadDescription = (e.target as dynamic).value},
         ),
         input(
-          attributes: {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'value': _uploadIndicia, 'style': 'margin-bottom: 8px;'},
+          attributes: {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'value': _uploadIndicia, 'style': 'margin-bottom: 12px;'},
           events: {'input': (e) => _uploadIndicia = (e.target as dynamic).value},
+        ),
+
+        // High fidelity Creators Addition area
+        div(
+            classes: 'w-full text-left flex flex-col',
+            attributes: {'style': 'margin-bottom: 16px; align-self: flex-start;'},
+            [
+              span([text('Creators')], attributes: {'style': 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 6px;'}),
+
+              if (_uploadCreators.isNotEmpty)
+                div(
+                    classes: 'flex flex-col gap-1 w-full mb-2',
+                    [
+                      for (int i = 0; i < _uploadCreators.length; i++)
+                        div(
+                            classes: 'flex flex-row items-center justify-between bg-gray-50 border border-gray-150 p-1.5 rounded',
+                            attributes: {'style': 'font-size: 11px; font-weight: 500; margin-bottom: 3px;'},
+                            [
+                              span([text('${_uploadCreators[i]['name']} (${_uploadCreators[i]['role']})')]),
+                              span(
+                                  classes: 'material-symbols-outlined text-red-500 cursor-pointer',
+                                  attributes: {'style': 'font-size: 16px; margin-left: 6px;'},
+                                  events: {
+                                    'click': (e) => setState(() {
+                                      _uploadCreators.removeAt(i);
+                                    })
+                                  },
+                                  [text('remove_circle')]
+                              )
+                            ]
+                        )
+                    ]
+                ),
+
+              div(
+                  classes: 'flex flex-row items-center gap-2 w-full',
+                  attributes: {'style': 'box-sizing: border-box;'},
+                  [
+                    div(
+                        classes: 'flex-1',
+                        [
+                          input(
+                            attributes: {
+                              'type': 'text',
+                              'placeholder': '@handle',
+                              'value': _newCreatorHandle,
+                              'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px;'
+                            },
+                            events: {'input': (e) => _newCreatorHandle = (e.target as dynamic).value},
+                          )
+                        ]
+                    ),
+                    div(
+                        classes: 'flex-1',
+                        [
+                          input(
+                            attributes: {
+                              'type': 'text',
+                              'placeholder': 'Role',
+                              'value': _newCreatorRole,
+                              'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px;'
+                            },
+                            events: {'input': (e) => _newCreatorRole = (e.target as dynamic).value},
+                          )
+                        ]
+                    ),
+                    span(
+                        classes: 'material-symbols-outlined text-green-600 cursor-pointer',
+                        attributes: {'style': 'font-size: 22px; padding: 2px;'},
+                        events: {
+                          'click': (e) => _addCreator()
+                        },
+                        [text('add_circle')]
+                    )
+                  ]
+              )
+            ]
         ),
 
         if (_uploadError != null)
           p(classes: 'error-msg mb-2', [text(_uploadError!)]),
 
-        div(classes: 'flex-row gap-2 mt-4 justify-between w-full', [
+        div(classes: 'flex-row gap-2 mt-2 justify-between w-full', [
           button(
               [text("back")],
               classes: 'profile-btn',
               attributes: const {'style': 'width: 45%; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
-              events: {'click': (e) => setState(() => _makerModalMode = 'options')}
+              events: {'click': (e) => setState(() {
+                _makerModalMode = 'options';
+                _uploadImageBase64 = null;
+                _uploadImageName = null;
+                _uploadPreviewUrl = null;
+                _uploadCreators = [];
+              })}
           ),
           button(
               [text(_isUploadingImage ? "publishing..." : "publish")],

@@ -21,6 +21,7 @@
     <script>
         const firebaseConfig = {
           apiKey: "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g",
+          attributes: null,
           authDomain: "bqopd-9ce06.firebaseapp.com",
           projectId: "bqopd-9ce06",
           storageBucket: "bqopd-9ce06.appspot.com",
@@ -160,6 +161,28 @@
                 reader.readAsArrayBuffer(file);
             };
             input.click();
+        };
+
+        // --- Read selected file from an existing input ---
+        window.readInputFile = (inputElementId, callback) => {
+            let input = document.getElementById(inputElementId);
+            if (!input) return;
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const arrayBuffer = evt.target.result;
+                const uint8Array = new Uint8Array(arrayBuffer);
+                let binary = '';
+                const len = uint8Array.byteLength;
+                for (let i = 0; i < len; i++) {
+                    binary += String.fromCharCode(uint8Array[i]);
+                }
+                const base64 = window.btoa(binary);
+                const objectUrl = URL.createObjectURL(file);
+                callback(base64, file.name, objectUrl);
+            };
+            reader.readAsArrayBuffer(file);
         };
     </script>
 

@@ -125,6 +125,15 @@ void pickAndReadFile(String inputId, void Function(String base64, String fileNam
   }).toJS);
 }
 
+@JS('readInputFile')
+external void _readInputFile(JSString inputId, JSFunction callback);
+
+void readInputFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
+  _readInputFile(inputId.toJS, ((JSString base64, JSString fileName, JSString objectUrl) {
+    callback(base64.toDart, fileName.toDart, objectUrl.toDart);
+  }).toJS);
+}
+
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
   static Map<String, dynamic> increment(num value) => {'__op': 'increment', 'value': value};
