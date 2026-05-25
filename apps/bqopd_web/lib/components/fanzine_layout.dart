@@ -14,6 +14,7 @@ class FanzineLayout extends StatefulComponent {
   final Component gridHeader;
   final Component listHeader;
   final bool hasCover;
+  final bool twoPage;
   final int? initialPageNumber;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
   final Set<String> likedImageIds; // Pass down Set state
@@ -27,6 +28,7 @@ class FanzineLayout extends StatefulComponent {
     required this.gridHeader,
     required this.listHeader,
     this.hasCover = true,
+    this.twoPage = true,
     this.initialPageNumber,
     this.preloadedImageStats = const {},
     required this.likedImageIds,
@@ -79,34 +81,37 @@ class _FanzineLayoutState extends State<FanzineLayout> {
 
   @override
   Component build(BuildContext context) {
-    final isGrid = _viewMode == FanzineViewMode.grid;
+    // If twoPage is false, we FORCE the layout to hide the grid and render only the reader list column
+    final bool enableTwoPage = component.twoPage;
+    final isGrid = enableTwoPage ? (_viewMode == FanzineViewMode.grid) : false;
     final showThirdColumn = !isGrid && _activeGlobalPanel != null;
 
     final String calcWidth = "calc((100vh - 120px) * 0.625)";
 
     return div(classes: 'reader-split-layout', [
-      // Column 1: Grid Area
-      div(
-          classes: 'grid-area ${!isGrid ? 'hidden-on-mobile' : ''}',
-          attributes: {
-            'style': isGrid ? 'flex: 1;' : 'flex: 0 0 450px;'
-          },
-          [
-            FanzineGridRenderer(
-              pages: component.pages,
-              headerWidget: component.gridHeader,
-              hasCover: component.hasCover,
-              onPageTap: _switchToSingle,
-            )
-          ]
-      ),
+      // Column 1: Grid Area (Only visible and built if enableTwoPage is true)
+      if (enableTwoPage)
+        div(
+            classes: 'grid-area ${!isGrid ? 'hidden-on-mobile' : ''}',
+            attributes: {
+              'style': isGrid ? 'flex: 1;' : 'flex: 0 0 450px;'
+            },
+            [
+              FanzineGridRenderer(
+                pages: component.pages,
+                headerWidget: component.gridHeader,
+                hasCover: component.hasCover,
+                onPageTap: _switchToSingle,
+              )
+            ]
+        ),
 
       // Column 2: List Area (The Reader)
       if (!isGrid)
         div(
             classes: 'list-area',
             attributes: {
-              'style': 'flex: 0 0 $calcWidth; min-width: 400px; margin: 0;' // Centered together, no margin auto-split
+              'style': 'flex: 0 0 $calcWidth; min-width: 400px; margin: 0;' // Centered together snugly
             },
             [
               FanzineListRenderer(
@@ -115,7 +120,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 headerWidget: component.listHeader,
                 activeGlobalPanel: _activeGlobalPanel,
                 onTogglePanel: _handleTogglePanel,
-                onOpenGrid: _switchToGrid,
+                onOpenGrid: enableTwoPage ? _switchToGrid : null, // If enableTwoPage is false, omit the grid toolbar action entirely
                 initialIndex: _targetIndex,
                 preloadedImageStats: component.preloadedImageStats,
                 likedImageIds: component.likedImageIds, // Pass down to list

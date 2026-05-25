@@ -22,6 +22,10 @@ class FanzineEditor extends StatefulComponent {
   final AuthState? authState;
   final AuthBloc? authBloc;
 
+  // State handlers to communicate reactive changes to parent layouts instantly
+  final bool? twoPage;
+  final ValueChanged<bool>? onTwoPageChanged;
+
   const FanzineEditor({
     required this.fanzineId,
     this.shortCode,
@@ -31,6 +35,8 @@ class FanzineEditor extends StatefulComponent {
     this.pageStructure = const [],
     this.authState,
     this.authBloc,
+    this.twoPage,
+    this.onTwoPageChanged,
     super.key,
   });
 
@@ -72,7 +78,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
   @override
   void didUpdateComponent(FanzineEditor oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.fanzineData != component.fanzineData) {
+    if (oldComponent.fanzineData != component.fanzineData || oldComponent.twoPage != component.twoPage) {
       _syncMetadata();
     }
   }
@@ -84,7 +90,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
       _volume = fd['volume'] ?? '';
       _issue = fd['issue'] ?? '';
       _wholeNumber = fd['wholeNumber'] ?? '';
-      _twoPage = fd['twoPage'] ?? true;
+      _twoPage = component.twoPage ?? fd['twoPage'] ?? true; // Prioritize reactive parent state if present
       _hasCover = fd['hasCover'] ?? true;
     }
   }
@@ -324,7 +330,10 @@ class _FanzineEditorState extends State<FanzineEditor> {
   }
 
   Component _buildSettingsTab() {
-    final String currentShortcode = component.shortCode?.toLowerCase() ?? 'pending...';
+    // Preserve upper/lower-case vanity layout: convert to UPPERCASE first, then map the BQOPD string to lowercase.
+    final String currentShortcode = component.shortCode != null
+        ? component.shortCode!.toUpperCase().replaceAll('BQOPD', 'bqopd')
+        : 'pending...';
 
     return div(classes: 'flex-col text-left p-2', attributes: {'style': 'gap: 16px; display: flex;'}, [
       div(classes: 'flex-col mb-3', [
@@ -372,10 +381,18 @@ class _FanzineEditorState extends State<FanzineEditor> {
             'style': 'padding: 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;'
           },
           events: {
-            'click': (e) => setState(() => _twoPage = !_twoPage)
+            'click': (e) {
+              final nextValue = !_twoPage;
+              setState(() => _twoPage = nextValue);
+              if (component.onTwoPageChanged != null) {
+                component.onTwoPageChanged!(nextValue);
+              }
+            }
           },
           [
-            span(classes: 'text-xs font-medium', attributes: {'style': 'color: #4a4a4a;'}, [text('Enable two page spread view')]),
+            span(classes: 'text-xs font-medium', attributes: {'style': 'color: #4a4a4a;'}, [
+              text(_twoPage ? 'two page spread (switch: single page view)' : 'single page view (switch: two page spread)')
+            ]),
             _buildCustomToggleSwitch(_twoPage)
           ]
       ),

@@ -46,6 +46,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   // HIGH-PERFORMANCE CENTRALIZED STATE
   Set<String> _likedImageIds = {};
   dynamic _likesUnsub;
+  dynamic _fanzineUnsub;
+
+  // Reactive state override
+  bool? _overriddenTwoPage;
 
   @override
   void initState() {
@@ -58,6 +62,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       _loading = false;
     } else if (kIsWeb) {
       _loadData();
+      _listenToFanzineDoc();
     }
     _setupLikesPipeline();
   }
@@ -103,9 +108,30 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     });
   }
 
+  void _listenToFanzineDoc() {
+    _fanzineUnsub?.callAsFunction();
+    _fanzineUnsub = null;
+
+    _fanzineUnsub = fsListenDoc('fanzines/${component.fanzineId}', (String jsonStr) {
+      try {
+        final decoded = jsonDecode(jsonStr);
+        if (decoded['exists'] == true && mounted) {
+          setState(() {
+            _fanzine = decoded['data'];
+            // Reset override once committed data streams back
+            _overriddenTwoPage = null;
+          });
+        }
+      } catch (e) {
+        print("Error listening to fanzine doc: $e");
+      }
+    });
+  }
+
   @override
   void dispose() {
     _likesUnsub?.callAsFunction();
+    _fanzineUnsub?.callAsFunction();
     super.dispose();
   }
 
@@ -206,6 +232,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       pageStructure: _pages,
       authState: component.authState,
       authBloc: component.authBloc,
+      twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
+      onTwoPageChanged: (val) {
+        setState(() {
+          _overriddenTwoPage = val;
+        });
+      },
     )
         : FanzineHeader(
       fanzineId: component.fanzineId,
@@ -236,6 +268,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         fanzineId: component.fanzineId,
         pages: _pages,
         hasCover: _fanzine!['hasCover'] ?? true,
+        twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
         initialPageNumber: component.initialPageNumber,
         preloadedImageStats: _imageStats,
         likedImageIds: _likedImageIds, // Pass liked Set down
