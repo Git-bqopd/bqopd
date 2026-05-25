@@ -10,6 +10,7 @@ import '../utils/web_firebase_interop.dart';
 import '../utils/firebase_mocks.dart';
 import '../utils/icon_utils.dart';
 import '../utils/web_utils.dart';
+import '../utils/web_shortcode_service.dart';
 import '../components/page_wrapper.dart';
 
 /// Fully-featured profile rendering that matches the visual aesthetics and sub-tab
@@ -502,7 +503,18 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoading = true);
     try {
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
-      final shortCode = fanzineId.substring(fanzineId.length - 7).toUpperCase();
+
+      // Strict inlined owner check for vanity eligibility
+      final String? email = component.authState?.user?.email;
+      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
+      // Generate and register shortcode using the shared logic!
+      final shortCode = await WebShortcodeService.assignShortcode(
+        contentType: 'fanzine',
+        contentId: fanzineId,
+        isVanity: useVanity,
+      ) ?? fanzineId.substring(fanzineId.length - 7).toUpperCase();
+
       final fzData = {
         'title': 'New Folio',
         'ownerId': _targetUid,
@@ -513,7 +525,7 @@ class _ProfilePageState extends State<ProfilePage> {
         'creationDate': WebFieldValue.serverTimestamp(),
         'type': 'folio',
         'shortCode': shortCode,
-        'shortCodeKey': shortCode,
+        'shortCodeKey': shortCode.toUpperCase(),
         'twoPage': true,
       };
       await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
@@ -536,7 +548,18 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoading = true);
     try {
       final fanzineId = 'calendar_${DateTime.now().millisecondsSinceEpoch}';
-      final shortCode = fanzineId.substring(fanzineId.length - 7).toUpperCase();
+
+      // Strict inlined owner check for vanity eligibility
+      final String? email = component.authState?.user?.email;
+      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
+      // Generate and register shortcode using the shared logic!
+      final shortCode = await WebShortcodeService.assignShortcode(
+        contentType: 'fanzine',
+        contentId: fanzineId,
+        isVanity: useVanity,
+      ) ?? fanzineId.substring(fanzineId.length - 7).toUpperCase();
+
       final fzData = {
         'title': 'Convention Calendar 2026',
         'ownerId': _targetUid,
@@ -547,7 +570,7 @@ class _ProfilePageState extends State<ProfilePage> {
         'creationDate': WebFieldValue.serverTimestamp(),
         'type': 'calendar',
         'shortCode': shortCode,
-        'shortCodeKey': shortCode,
+        'shortCodeKey': shortCode.toUpperCase(),
         'twoPage': true,
       };
       await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
@@ -664,7 +687,17 @@ class _ProfilePageState extends State<ProfilePage> {
       final String downloadUrl = await stUpload(path, bytes, 'image/jpeg');
 
       final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
-      final shortCode = imageId.substring(imageId.length - 7).toUpperCase();
+
+      // Strict inlined owner check for vanity eligibility
+      final String? email = component.authState?.user?.email;
+      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
+      // Generate and register shortcode for image using shared logic!
+      final shortCode = await WebShortcodeService.assignShortcode(
+        contentType: 'image',
+        contentId: imageId,
+        isVanity: useVanity,
+      ) ?? imageId.substring(imageId.length - 7).toUpperCase();
 
       final imgData = {
         'uid': _targetUid,
@@ -685,7 +718,14 @@ class _ProfilePageState extends State<ProfilePage> {
       await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
 
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
-      final fzShortCode = fanzineId.substring(fanzineId.length - 7).toUpperCase();
+
+      // Generate and register shortcode for parent fanzine!
+      final fzShortCode = await WebShortcodeService.assignShortcode(
+        contentType: 'fanzine',
+        contentId: fanzineId,
+        isVanity: useVanity,
+      ) ?? fanzineId.substring(fanzineId.length - 7).toUpperCase();
+
       final fzData = {
         'title': _uploadTitle.trim(),
         'ownerId': _targetUid,
@@ -696,7 +736,7 @@ class _ProfilePageState extends State<ProfilePage> {
         'creationDate': WebFieldValue.serverTimestamp(),
         'type': 'folio',
         'shortCode': fzShortCode,
-        'shortCodeKey': fzShortCode,
+        'shortCodeKey': fzShortCode.toUpperCase(),
         'twoPage': false,
       };
       await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
@@ -914,7 +954,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'})
       else if (_socialSubTabIndex == 2)
           div([
-            p([text("Upcoming Events Coming Soon")], attributes: const {'style': 'font-size: 12px; color: #999; font-style: italic;'})
+            p([text("Upcoming Events Coming Soon")], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'})
           ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'})
         else
           div([]),

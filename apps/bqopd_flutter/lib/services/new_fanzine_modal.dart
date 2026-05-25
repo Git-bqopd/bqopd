@@ -22,13 +22,13 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
   final _titleController = TextEditingController();
   bool _isLoading = false;
 
-  // NEW: Checkbox state for layout preference
+  // Checkbox state for layout preference
   bool _twoPageView = false;
 
   bool _isVanityEligible(User? user) {
     if (user == null || user.email == null) return false;
-    return user.email == 'kevin@712liberty.com' ||
-        user.email!.contains('bqopd');
+    // Inlined check for vanity eligibility to bypass analyzer linking delays
+    return user.email!.trim().toLowerCase() == 'kevin@712liberty.com';
   }
 
   Future<void> _handleSubmit() async {
@@ -71,7 +71,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
           'title': title,
           'editorId': editorId,
           'ownerId': editorId,
-          'isLive': false, // REPLACED status: 'draft'
+          'isLive': false,
           'processingStatus': 'idle',
           'creationDate': FieldValue.serverTimestamp(),
           'shortCode': shortCode,
@@ -139,7 +139,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
                   (value == null || value.isEmpty) ? 'Please enter a title' : null,
                 ),
                 const SizedBox(height: 16),
-                // NEW Checkbox Row
+                // Checkbox Row
                 Row(
                   children: [
                     Checkbox(

@@ -22,13 +22,13 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
   final _titleController = TextEditingController();
   bool _isLoading = false;
 
-  // NEW: Checkbox state for layout preference
+  // Checkbox state for layout preference
   bool _twoPageView = false;
 
   bool _isVanityEligible(User? user) {
     if (user == null || user.email == null) return false;
-    return user.email == 'kevin@712liberty.com' ||
-        user.email!.contains('bqopd');
+    // Inlined check for vanity eligibility to bypass analyzer linking delays
+    return user.email!.trim().toLowerCase() == 'kevin@712liberty.com';
   }
 
   Future<void> _handleSubmit() async {
@@ -58,8 +58,8 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
       final newFanzineRef =
       FirebaseFirestore.instance.collection('fanzines').doc();
 
-      // Instantiate the service and call the method on the instance
-      final shortcodeService = ShortcodeService();
+      // Use the newly created Service
+      final ShortcodeService shortcodeService = ShortcodeService();
       final String? shortCode = await shortcodeService.assignShortcode(
         contentType: 'fanzine',
         contentId: newFanzineRef.id,
@@ -139,7 +139,7 @@ class _NewFanzineModalState extends State<NewFanzineModal> {
                   (value == null || value.isEmpty) ? 'Please enter a title' : null,
                 ),
                 const SizedBox(height: 16),
-                // NEW Checkbox Row
+                // Checkbox Row
                 Row(
                   children: [
                     Checkbox(

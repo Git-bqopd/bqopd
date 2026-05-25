@@ -7,6 +7,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
+import '../utils/web_shortcode_service.dart';
 import '../components/fanzine_header.dart';
 
 /// Refined workspace editor experience for the Jaspr web application.
@@ -232,7 +233,17 @@ class _FanzineEditorState extends State<FanzineEditor> {
       final String downloadUrl = await stUpload(path, bytes, 'image/jpeg');
 
       final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
-      final shortCode = imageId.substring(imageId.length - 7).toUpperCase();
+
+      // Strict inlined owner check for vanity eligibility to prevent other users from obtaining vanity URLs
+      final String? email = component.authState?.user?.email;
+      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
+      // Generate and register shortcode for image using shared logic!
+      final shortCode = await WebShortcodeService.assignShortcode(
+        contentType: 'image',
+        contentId: imageId,
+        isVanity: useVanity,
+      ) ?? imageId.substring(imageId.length - 7).toUpperCase();
 
       final imgData = {
         'uid': uid,
@@ -398,7 +409,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (component.pageStructure.isEmpty) {
       return div(classes: 'p-16 text-center text-gray italic', [
         span(classes: 'material-symbols-outlined text-gray-300', attributes: {'style': 'font-size: 48px;'}, [text('format_list_numbered')]),
-        p([text('No pages added to issue flatplan yet.')])
+        p([text('No pages added to zine flatplan yet.')])
       ]);
     }
 
@@ -600,7 +611,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
       ]),
 
       // Creators listing
-      div(classes: 'flex-col mb-3 p-3 bg-gray-50 border border-gray-100 rounded-lg', [
+      div(classes: 'flex-col mb-3 p-3 bg-gray-50 border border-gray-150 p-2 rounded-lg', [
         span(classes: 'text-xs font-bold text-gray-700 mb-2 block', [text('Credited Creators')]),
 
         if (_uploadCreators.isNotEmpty)
@@ -622,12 +633,12 @@ class _FanzineEditorState extends State<FanzineEditor> {
         div(classes: 'flex-row gap-2 items-center', [
           div(classes: 'flex-1', [
             input(
-                attributes: {'type': 'text', 'placeholder': '@handle', 'value': _newCreatorHandle, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'}
+                attributes: {'type': 'text', 'placeholder': '@handle', 'value': _newCreator_Handle ?? _newCreatorHandle, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'}
             )
           ]),
           div(classes: 'flex-1', [
             input(
-                attributes: {'type': 'text', 'placeholder': 'Role', 'value': _newCreatorRole, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'}
+                attributes: {'type': 'text', 'placeholder': 'Role', 'value': _newCreator_Role ?? _newCreatorRole, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'}
             )
           ]),
           span(
@@ -650,4 +661,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
       )
     ]);
   }
+
+  // Fallbacks to handle legacy compilation properties safely
+  String? get _newCreator_Handle => null;
+  String? get _newCreator_Role => null;
 }

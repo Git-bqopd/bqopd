@@ -31,7 +31,7 @@ export 'src/interfaces/i_view_service.dart';
 
 // Utils
 export 'src/utils/con_week.dart';
-// Note: shortcode_generator and mention_parser were moved to the Flutter app
+export 'src/utils/shortcode_generator.dart';
 
 // Blocs
 export 'src/blocs/auth/auth_bloc.dart';

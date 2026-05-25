@@ -1,35 +1,11 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 
-/// Service responsible for generating and assigning unique shortcodes.
-/// Moved from utils to be a proper service in the Flutter app layer.
+/// Flutter service responsible for generating, verifying, and assigning unique shortcodes.
+/// Uses the unified pure-Dart ShortcodeGenerator from our core package.
 class ShortcodeService {
-  static const String _base36Chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-
-  String _generateStandardCode() {
-    final random = Random();
-    String code = '';
-    // 7 characters long
-    for (int i = 0; i < 7; i++) {
-      code += _base36Chars[random.nextInt(_base36Chars.length)];
-    }
-    return code;
-  }
-
-  String _generateVanityCode() {
-    final random = Random();
-    String randomPart = '';
-    // 1. Generate 3 random alphanumeric chars
-    for (int i = 0; i < 3; i++) {
-      randomPart += _base36Chars[random.nextInt(_base36Chars.length)];
-    }
-
-    // 2. Insert "bqopd" (lowercase) at a random position (0 to 3)
-    // This creates the "Display" version (e.g. "N7bqopd4")
-    final insertPos = random.nextInt(4);
-    return '${randomPart.substring(0, insertPos)}bqopd${randomPart.substring(insertPos)}';
-  }
 
   /// Generates a unique shortcode and registers it in the database.
   Future<String?> assignShortcode({
@@ -37,29 +13,28 @@ class ShortcodeService {
     required String contentId,
     bool isVanity = false,
   }) async {
-    String displayCode; // e.g. "N7bqopd4" OR "7X91B2Z"
-    String dbKey; // e.g. "N7BQOPD4" OR "7X91B2Z" (The Search Key)
+    String displayCode;
+    String dbKey;
 
     bool isUnique = false;
     int retries = 0;
     const int maxRetries = 10;
 
     while (!isUnique && retries < maxRetries) {
-      // 1. Generate based on preference
+      // Use our unified generator from core
       if (isVanity) {
-        displayCode = _generateVanityCode();
+        displayCode = ShortcodeGenerator.generateVanityCode();
       } else {
-        displayCode = _generateStandardCode();
+        displayCode = ShortcodeGenerator.generateStandardCode();
       }
 
-      // 2. Normalize for DB Lookup (Always Uppercase)
       dbKey = displayCode.toUpperCase();
 
-      // 3. Check collisions in 'shortcodes' (Master Lookup)
+      // Check collisions in 'shortcodes' (Master Lookup)
       final docRef = _db.collection('shortcodes').doc(dbKey);
       final docSnapshot = await docRef.get();
 
-      // 4. Check collisions in 'usernames'
+      // Check collisions in 'usernames'
       final userRef = _db.collection('usernames').doc(dbKey.toLowerCase());
       final userSnapshot = await userRef.get();
 
