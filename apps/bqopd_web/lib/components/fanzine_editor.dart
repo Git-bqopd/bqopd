@@ -8,12 +8,13 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
 import '../utils/web_shortcode_service.dart';
+import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
 
 /// Refined workspace editor experience for the Jaspr web application.
 /// Form-fitting, height-adaptive panel supporting dynamic folio adjustments.
 class FanzineEditor extends StatefulComponent {
-  final String fanzineId;
+  final String frefFanzineId;
   final String? shortCode;
   final Map<String, dynamic>? fanzineData;
   final Map<String, Map<String, dynamic>> creatorProfiles;
@@ -27,7 +28,7 @@ class FanzineEditor extends StatefulComponent {
   final ValueChanged<bool>? onTwoPageChanged;
 
   const FanzineEditor({
-    required this.fanzineId,
+    required this.frefFanzineId,
     this.shortCode,
     this.fanzineData,
     this.creatorProfiles = const {},
@@ -106,7 +107,95 @@ class _FanzineEditorState extends State<FanzineEditor> {
         'twoPage': _twoPage,
         'hasCover': _hasCover,
       };
-      await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode(config));
+
+      if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+        // COMMIT ENTIRE CONFIGURATION AND CHANNELS TO CLOUD FIRESTORE FOR FIRST TIME
+        final fz = UnsavedFanzineRegistry.fanzines[component.frefFanzineId]!;
+
+        final updatedFz = Fanzine(
+          id: fz.id,
+          title: _title.trim(),
+          volume: _volume.trim(),
+          issue: _issue.trim(),
+          wholeNumber: _wholeNumber.trim(),
+          type: fz.type,
+          isLive: fz.isLive,
+          processingStatus: fz.processingStatus,
+          ownerId: fz.ownerId,
+          editors: fz.editors,
+          twoPage: _twoPage,
+          hasCover: _hasCover,
+          shortCode: fz.shortCode,
+          sourceFile: fz.sourceFile,
+          draftEntities: fz.draftEntities,
+          masterCreators: fz.masterCreators,
+          masterIndicia: fz.masterIndicia,
+          indiciaPageId: fz.indiciaPageId,
+          startMonth: fz.startMonth,
+          startYear: fz.startYear,
+          isSoftPublished: fz.isSoftPublished,
+        );
+
+        final fzDataToSave = {
+          'title': updatedFz.title,
+          'volume': updatedFz.volume,
+          'issue': updatedFz.issue,
+          'wholeNumber': updatedFz.wholeNumber,
+          'type': updatedFz.type.name,
+          'isLive': updatedFz.isLive,
+          'processingStatus': updatedFz.processingStatus,
+          'ownerId': updatedFz.ownerId,
+          'editorId': updatedFz.ownerId,
+          'editors': updatedFz.editors,
+          'twoPage': updatedFz.twoPage,
+          'hasCover': updatedFz.hasCover,
+          'shortCode': updatedFz.shortCode,
+          'shortCodeKey': updatedFz.shortCode?.toUpperCase(),
+          'creationDate': WebFieldValue.serverTimestamp(),
+        };
+
+        // 1. Create master fanzine doc
+        await fsSetDoc('fanzines/${component.frefFanzineId}', jsonEncode(fzDataToSave), true);
+
+        // 2. Register shortcode master registry doc
+        if (updatedFz.shortCode != null) {
+          final scData = {
+            'type': 'fanzine',
+            'contentId': component.frefFanzineId,
+            'displayCode': updatedFz.shortCode,
+            'createdAt': WebFieldValue.serverTimestamp(),
+          };
+          await fsSetDoc('shortcodes/${updatedFz.shortCode!.toUpperCase()}', jsonEncode(scData), true);
+        }
+
+        // 3. Write nested page structures contiguously to subcollections
+        final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
+        for (var p in pages) {
+          final pageData = {
+            'imageId': p.imageId,
+            'imageUrl': p.imageUrl,
+            'pageNumber': p.pageNumber,
+            'status': p.status,
+            'spreadPosition': p.spreadPosition,
+            'sidePreference': p.sidePreference,
+            'width': p.width,
+            'height': p.height,
+            'createdAt': WebFieldValue.serverTimestamp(),
+          };
+          await fsSetDoc('fanzines/${component.frefFanzineId}/pages/${p.id}', jsonEncode(pageData), true);
+        }
+
+        // 4. Remove this fanzine from our temporary memory registry
+        UnsavedFanzineRegistry.remove(component.frefFanzineId);
+
+        // 5. Update local broad controllers to enforce smooth UX state transition
+        UnsavedFanzineRegistry.fanzineControllers[component.frefFanzineId]?.add(updatedFz);
+        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+
+        print('[UNSAVED REGISTRY] Successfully committed temporary Fanzine: "${component.frefFanzineId}" to database.');
+      } else {
+        await fsUpdateDoc('fanzines/${component.frefFanzineId}', jsonEncode(config));
+      }
     } catch (e) {
       print("Error saving fanzine settings: $e");
     } finally {
@@ -116,7 +205,31 @@ class _FanzineEditorState extends State<FanzineEditor> {
 
   Future<void> _deletePage(String pageId) async {
     try {
-      await fsDeleteDoc('fanzines/${component.fanzineId}/pages/$pageId');
+      if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
+        pages.removeWhere((p) => p.id == pageId);
+        for (int i = 0; i < pages.length; i++) {
+          final p = pages[i];
+          pages[i] = FanzinePage(
+            id: p.id,
+            pageNumber: i + 1,
+            imageId: p.imageId,
+            imageUrl: p.imageUrl,
+            gridUrl: p.gridUrl,
+            listUrl: p.listUrl,
+            storagePath: p.storagePath,
+            status: p.status,
+            templateId: p.templateId,
+            spreadPosition: p.spreadPosition,
+            sidePreference: p.sidePreference,
+            width: p.width,
+            height: p.height,
+          );
+        }
+        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+        return;
+      }
+      await fsDeleteDoc('fanzines/${component.frefFanzineId}/pages/$pageId');
     } catch (e) {
       print("Error removing page: $e");
     }
@@ -128,8 +241,41 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (pageId.isEmpty) return;
 
     try {
+      if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
+        final idx = pages.indexWhere((p) => p.id == pageId);
+        if (idx == -1) return;
+
+        final targetIdx = idx + delta;
+        if (targetIdx < 0 || targetIdx >= pages.length) return;
+
+        final temp = pages[idx];
+        pages[idx] = pages[targetIdx];
+        pages[targetIdx] = temp;
+
+        for (int i = 0; i < pages.length; i++) {
+          final p = pages[i];
+          pages[i] = FanzinePage(
+            id: p.id,
+            pageNumber: i + 1,
+            imageId: p.imageId,
+            imageUrl: p.imageUrl,
+            gridUrl: p.gridUrl,
+            listUrl: p.listUrl,
+            storagePath: p.storagePath,
+            status: p.status,
+            templateId: p.templateId,
+            spreadPosition: p.spreadPosition,
+            sidePreference: p.sidePreference,
+            width: p.width,
+            height: p.height,
+          );
+        }
+        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+        return;
+      }
       await fsUpdateDoc(
-        'fanzines/${component.fanzineId}/pages/$pageId',
+        'fanzines/${component.frefFanzineId}/pages/$pageId',
         jsonEncode({'pageNumber': currentNum + delta}),
       );
     } catch (e) {
@@ -142,8 +288,32 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (pageId.isEmpty) return;
 
     try {
+      if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
+        final idx = pages.indexWhere((p) => p.id == pageId);
+        if (idx != -1) {
+          final p = pages[idx];
+          pages[idx] = FanzinePage(
+            id: p.id,
+            pageNumber: p.pageNumber,
+            imageId: p.imageId,
+            imageUrl: p.imageUrl,
+            gridUrl: p.gridUrl,
+            listUrl: p.listUrl,
+            storagePath: p.storagePath,
+            status: p.status,
+            templateId: p.templateId,
+            spreadPosition: spreadPosition,
+            sidePreference: sidePreference,
+            width: p.width,
+            height: p.height,
+          );
+          UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+        }
+        return;
+      }
       await fsUpdateDoc(
-        'fanzines/${component.fanzineId}/pages/$pageId',
+        'fanzines/${component.frefFanzineId}/pages/$pageId',
         jsonEncode({
           'spreadPosition': spreadPosition,
           'sidePreference': sidePreference,
@@ -233,7 +403,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
 
     try {
       final Uint8List bytes = base64Decode(_uploadImageBase64!);
-      final String path = 'uploads/$uid/folio_assets/${component.fanzineId}/img_${DateTime.now().millisecondsSinceEpoch}_$_uploadImageName';
+      final String path = 'uploads/$uid/folio_assets/${component.frefFanzineId}/img_${DateTime.now().millisecondsSinceEpoch}_$_uploadImageName';
 
       // Perform secure upload to Firebase Storage
       final String downloadUrl = await stUpload(path, bytes, 'image/jpeg');
@@ -265,8 +435,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
         'timestamp': WebFieldValue.serverTimestamp(),
         'shortCode': shortCode,
         'storagePath': path,
-        'folioContext': component.fanzineId,
-        'usedInFanzines': [component.fanzineId],
+        'folioContext': component.frefFanzineId,
+        'usedInFanzines': [component.frefFanzineId],
       };
 
       await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
@@ -274,13 +444,32 @@ class _FanzineEditorState extends State<FanzineEditor> {
       // Add to fanzine pages
       final int nextNum = component.pageStructure.length + 1;
       final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
-      await fsSetDoc('fanzines/${component.fanzineId}/pages/$pageId', jsonEncode({
-        'imageId': imageId,
-        'imageUrl': downloadUrl,
-        'pageNumber': nextNum,
-        'status': 'ready',
-        'createdAt': WebFieldValue.serverTimestamp(),
-      }), true);
+
+      if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
+        final nextNum = pages.length + 1;
+        final newPage = FanzinePage(
+          id: pageId,
+          pageNumber: nextNum,
+          imageId: imageId,
+          imageUrl: downloadUrl,
+          status: 'ready',
+        );
+        pages.add(newPage);
+        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+      } else {
+        await fsSetDoc('fanzines/${component.frefFanzineId}/pages/$pageId', jsonEncode({
+          'imageId': imageId,
+          'imageUrl': downloadUrl,
+          'pageNumber': nextNum,
+          'status': 'ready',
+          'createdAt': WebFieldValue.serverTimestamp(),
+        }), true);
+
+        await fsUpdateDoc('images/$imageId', jsonEncode({
+          'usedInFanzines': WebFieldValue.arrayUnion([component.frefFanzineId])
+        }));
+      }
 
       setState(() {
         _activeTab = 1; // Swap to the order tab to see the fresh flatplan sequence
@@ -564,7 +753,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
     return button(
         classes: 'm3-chip ${isSelected ? 'active' : ''}',
         attributes: {
-          'style': 'height: 24px; font-size: 10px; padding: 0 8px; border-radius: 4px; border: 1px solid #ddd; margin: 0; outline: none;'
+          'style': 'height: 24px; font-size: 10px; padding: 0 8px; border-radius: 4px; border: 1px solid #ddd; margin: 0;'
         },
         events: {'click': (e) => onTap()},
         [text(label)]
@@ -650,12 +839,14 @@ class _FanzineEditorState extends State<FanzineEditor> {
         div(classes: 'flex-row gap-2 items-center', [
           div(classes: 'flex-1', [
             input(
-                attributes: {'type': 'text', 'placeholder': '@handle', 'value': _newCreator_Handle ?? _newCreatorHandle, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'}
+                attributes: {'type': 'text', 'placeholder': '@handle', 'value': _newCreator_Handle ?? _newCreatorHandle, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'},
+                events: {'input': (e) => _newCreatorHandle = (e.target as dynamic).value}
             )
           ]),
           div(classes: 'flex-1', [
             input(
-                attributes: {'type': 'text', 'placeholder': 'Role', 'value': _newCreator_Role ?? _newCreatorRole, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'}
+                attributes: {'type': 'text', 'placeholder': 'Role', 'value': _newCreator_Role ?? _newCreatorRole, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'},
+                events: {'input': (e) => _newCreatorRole = (e.target as dynamic).value}
             )
           ]),
           span(

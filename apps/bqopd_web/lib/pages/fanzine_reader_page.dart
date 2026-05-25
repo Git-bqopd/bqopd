@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
+import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
 import '../components/fanzine_editor.dart';
 import '../components/fanzine_layout.dart';
@@ -112,6 +113,41 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     _fanzineUnsub?.callAsFunction();
     _fanzineUnsub = null;
 
+    // Resolve locally from memory first if unsaved
+    if (UnsavedFanzineRegistry.fanzines.containsKey(component.fanzineId)) {
+      _fanzineUnsub = UnsavedFanzineRegistry.getOrCreateFanzineController(component.fanzineId).stream.listen((fz) {
+        if (mounted) {
+          setState(() {
+            _fanzine = {
+              'id': fz.id,
+              'title': fz.title,
+              'volume': fz.volume,
+              'issue': fz.issue,
+              'wholeNumber': fz.wholeNumber,
+              'type': fz.type.name,
+              'isLive': fz.isLive,
+              'processingStatus': fz.processingStatus,
+              'ownerId': fz.ownerId,
+              'editors': fz.editors,
+              'twoPage': fz.twoPage,
+              'hasCover': fz.hasCover,
+              'shortCode': fz.shortCode,
+              'sourceFile': fz.sourceFile,
+              'draftEntities': fz.draftEntities,
+              'masterCreators': fz.masterCreators,
+              'masterIndicia': fz.masterIndicia,
+              'indiciaPageId': fz.indiciaPageId,
+              'startMonth': fz.startMonth,
+              'startYear': fz.startYear,
+              'isSoftPublished': fz.isSoftPublished,
+            };
+            _overriddenTwoPage = null;
+          });
+        }
+      });
+      return;
+    }
+
     _fanzineUnsub = fsListenDoc('fanzines/${component.fanzineId}', (String jsonStr) {
       try {
         final decoded = jsonDecode(jsonStr);
@@ -137,6 +173,54 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
   Future<void> _loadData() async {
     try {
+      // Hydrate directly from Unsaved Memory layer if applicable
+      if (UnsavedFanzineRegistry.fanzines.containsKey(component.fanzineId)) {
+        final fz = UnsavedFanzineRegistry.fanzines[component.fanzineId]!;
+        _fanzine = {
+          'id': fz.id,
+          'title': fz.title,
+          'volume': fz.volume,
+          'issue': fz.issue,
+          'wholeNumber': fz.wholeNumber,
+          'type': fz.type.name,
+          'isLive': fz.isLive,
+          'processingStatus': fz.processingStatus,
+          'ownerId': fz.ownerId,
+          'editors': fz.editors,
+          'twoPage': fz.twoPage,
+          'hasCover': fz.hasCover,
+          'shortCode': fz.shortCode,
+          'sourceFile': fz.sourceFile,
+          'draftEntities': fz.draftEntities,
+          'masterCreators': fz.masterCreators,
+          'masterIndicia': fz.masterIndicia,
+          'indiciaPageId': fz.indiciaPageId,
+          'startMonth': fz.startMonth,
+          'startYear': fz.startYear,
+          'isSoftPublished': fz.isSoftPublished,
+        };
+
+        final pgs = UnsavedFanzineRegistry.pages[component.fanzineId] ?? [];
+        _pages = pgs.map((p) => {
+          '__id': p.id,
+          'imageId': p.imageId,
+          'imageUrl': p.imageUrl,
+          'gridUrl': p.gridUrl,
+          'listUrl': p.listUrl,
+          'pageNumber': p.pageNumber,
+          'status': p.status,
+          'spreadPosition': p.spreadPosition,
+          'sidePreference': p.sidePreference,
+          'width': p.width,
+          'height': p.height,
+        }).toList();
+
+        _creatorProfiles = {};
+        _imageStats = {};
+        _loading = false;
+        return;
+      }
+
       final fzRes = await fsGetDoc('fanzines/${component.fanzineId}');
       final fzDoc = jsonDecode(fzRes);
 
@@ -224,7 +308,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     // Tabbed Editor workspace used strictly at the top of the List view
     final Component listHeader = component.isEditingMode
         ? FanzineEditor(
-      fanzineId: component.fanzineId,
+      frefFanzineId: component.fanzineId,
       shortCode: _fanzine!['shortCode'],
       fanzineData: _fanzine,
       creatorProfiles: _creatorProfiles,

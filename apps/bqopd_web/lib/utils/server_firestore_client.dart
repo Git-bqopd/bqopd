@@ -3,11 +3,11 @@ import 'package:http/http.dart' as http;
 import 'package:jaspr/jaspr.dart';
 import 'web_firebase_interop.dart';
 import 'firebase_mocks.dart';
+import 'unsaved_fanzine_registry.dart';
 
 /// A hybrid client that uses the Google Cloud Firestore REST API with Web API Key authorization
 /// during server-side pre-rendering, and falls back to the heavily optimized Firebase JS SDK
 /// via interop for client-side routing.
-/// Paste this into: apps/bqopd_web/lib/utils/server_firestore_client.dart
 class ServerFirestoreClient {
   static const String projectId = 'bqopd-9ce06';
   static const String apiKey = 'AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g';
@@ -173,6 +173,57 @@ class ServerFirestoreClient {
     try {
       final String codeUpper = code.toUpperCase();
       final String codeLower = code.toLowerCase();
+
+      // INTERCEPT FIRST: Check local temporary unsaved fanzines in client memory!
+      if (UnsavedFanzineRegistry.hasCode(code)) {
+        final fz = UnsavedFanzineRegistry.getByCode(code)!;
+        payload['targetFanzineId'] = fz.id;
+        payload['status'] = 'fanzine';
+
+        payload['fanzineData'] = {
+          'id': fz.id,
+          'title': fz.title,
+          'volume': fz.volume,
+          'issue': fz.issue,
+          'wholeNumber': fz.wholeNumber,
+          'type': fz.type.name,
+          'isLive': fz.isLive,
+          'processingStatus': fz.processingStatus,
+          'ownerId': fz.ownerId,
+          'editors': fz.editors,
+          'twoPage': fz.twoPage,
+          'hasCover': fz.hasCover,
+          'shortCode': fz.shortCode,
+          'sourceFile': fz.sourceFile,
+          'draftEntities': fz.draftEntities,
+          'masterCreators': fz.masterCreators,
+          'masterIndicia': fz.masterIndicia,
+          'indiciaPageId': fz.indiciaPageId,
+          'startMonth': fz.startMonth,
+          'startYear': fz.startYear,
+          'isSoftPublished': fz.isSoftPublished,
+        };
+
+        final pgs = UnsavedFanzineRegistry.pages[fz.id] ?? [];
+        payload['pages'] = pgs.map((p) => {
+          'id': p.id,
+          'pageNumber': p.pageNumber,
+          'imageId': p.imageId,
+          'imageUrl': p.imageUrl,
+          'gridUrl': p.gridUrl,
+          'listUrl': p.listUrl,
+          'status': p.status,
+          'spreadPosition': p.spreadPosition,
+          'sidePreference': p.sidePreference,
+          'width': p.width,
+          'height': p.height,
+        }).toList();
+
+        payload['creatorProfiles'] = <String, Map<String, dynamic>>{};
+        payload['imageStats'] = <String, Map<String, dynamic>>{};
+
+        return payload;
+      }
 
       final lookupResults = await Future.wait([
         fsGetDoc('shortcodes/$codeUpper'),

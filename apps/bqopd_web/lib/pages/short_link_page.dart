@@ -5,6 +5,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/server_firestore_client.dart';
+import '../utils/unsaved_fanzine_registry.dart';
 import 'fanzine_reader_page.dart';
 import 'profile_page.dart';
 
@@ -163,6 +164,9 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     if (_targetFanzineId != null) {
       final initialPage = component.pageNumber != null ? int.tryParse(component.pageNumber!) : null;
 
+      // Auto-detect if this is a temporary, unsaved fanzine from our memory layer
+      final bool isUnsavedTemp = UnsavedFanzineRegistry.fanzines.containsKey(_targetFanzineId);
+
       return FanzineReaderPage(
         fanzineId: _targetFanzineId!,
         initialPageNumber: initialPage,
@@ -172,6 +176,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         preloadedImageStats: _imageStats,
         authState: component.authState,
         authBloc: component.authBloc,
+        isEditingMode: isUnsavedTemp, // Auto-launch directly into the Editor for temporary creations!
       );
     }
 

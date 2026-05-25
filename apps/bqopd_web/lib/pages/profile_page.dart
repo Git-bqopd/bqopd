@@ -11,6 +11,7 @@ import '../utils/firebase_mocks.dart';
 import '../utils/icon_utils.dart';
 import '../utils/web_utils.dart';
 import '../utils/web_shortcode_service.dart';
+import '../utils/unsaved_fanzine_registry.dart';
 import '../components/page_wrapper.dart';
 
 /// Fully-featured profile rendering that matches the visual aesthetics and sub-tab
@@ -499,41 +500,69 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// High-efficiency local checker for database collisions prior to reserving a shortcode key.
+  Future<String> _generateUniqueTempShortcode() async {
+    final String? email = component.authState?.user?.email;
+    final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
+    bool isUnique = false;
+    String code = "";
+    int retries = 0;
+    while (!isUnique && retries < 15) {
+      final String candidate = useVanity
+          ? ShortcodeGenerator.generateVanityCode()
+          : ShortcodeGenerator.generateStandardCode();
+      final String codeUpper = candidate.toUpperCase();
+
+      final docRes = await fsGetDoc('shortcodes/$codeUpper');
+      final Map<String, dynamic> doc = jsonDecode(docRes) as Map<String, dynamic>;
+
+      final userRes = await fsGetDoc('usernames/${codeUpper.toLowerCase()}');
+      final Map<String, dynamic> unDoc = jsonDecode(userRes) as Map<String, dynamic>;
+
+      final isLocalCollision = UnsavedFanzineRegistry.hasCode(candidate);
+
+      if (doc['exists'] != true && unDoc['exists'] != true && !isLocalCollision) {
+        isUnique = true;
+        code = candidate;
+      }
+      retries++;
+    }
+    if (code.isEmpty) {
+      code = 'TEMP_${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+    }
+    return code;
+  }
+
   Future<void> _createFolio() async {
     setState(() => _isLoading = true);
     try {
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
+      final shortCode = await _generateUniqueTempShortcode();
 
-      // Strict inlined owner check for vanity eligibility
-      final String? email = component.authState?.user?.email;
-      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+      final newFanzine = Fanzine(
+        id: fanzineId,
+        title: 'New Folio',
+        ownerId: _targetUid,
+        type: FanzineType.folio,
+        isLive: false,
+        processingStatus: 'complete',
+        shortCode: shortCode,
+        twoPage: true,
+        hasCover: true,
+        editors: const [],
+        draftEntities: const [],
+        masterCreators: const [],
+      );
 
-      // Generate and register shortcode using the shared logic!
-      final shortCode = await WebShortcodeService.assignShortcode(
-        contentType: 'fanzine',
-        contentId: fanzineId,
-        isVanity: useVanity,
-      ) ?? fanzineId.substring(fanzineId.length - 7).toUpperCase();
+      // Register fanzine locally in memory
+      UnsavedFanzineRegistry.add(newFanzine, []);
 
-      final fzData = {
-        'title': 'New Folio',
-        'ownerId': _targetUid,
-        'editorId': _targetUid,
-        'editors': [],
-        'isLive': false,
-        'processingStatus': 'complete',
-        'creationDate': WebFieldValue.serverTimestamp(),
-        'type': 'folio',
-        'shortCode': shortCode,
-        'shortCodeKey': shortCode.toUpperCase(),
-        'twoPage': true,
-      };
-      await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
       setState(() {
         _showMakerModal = false;
       });
       if (mounted) {
-        Router.of(context).replace('/editor/$fanzineId'); // FIXED: Routes to web /editor instead of /reader
+        Router.of(context).replace('/$shortCode'); // Navigate directly to shortcode URL
       }
     } catch (e) {
       print("Error creating folio: $e");
@@ -548,53 +577,49 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoading = true);
     try {
       final fanzineId = 'calendar_${DateTime.now().millisecondsSinceEpoch}';
+      final shortCode = await _generateUniqueTempShortcode();
 
-      // Strict inlined owner check for vanity eligibility
-      final String? email = component.authState?.user?.email;
-      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
-
-      // Generate and register shortcode using the shared logic!
-      final shortCode = await WebShortcodeService.assignShortcode(
-        contentType: 'fanzine',
-        contentId: fanzineId,
-        isVanity: useVanity,
-      ) ?? fanzineId.substring(fanzineId.length - 7).toUpperCase();
-
-      final fzData = {
-        'title': 'Convention Calendar 2026',
-        'ownerId': _targetUid,
-        'editorId': _targetUid,
-        'editors': [],
-        'isLive': false,
-        'processingStatus': 'complete',
-        'creationDate': WebFieldValue.serverTimestamp(),
-        'type': 'calendar',
-        'shortCode': shortCode,
-        'shortCodeKey': shortCode.toUpperCase(),
-        'twoPage': true,
-      };
-      await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
+      final newFanzine = Fanzine(
+        id: fanzineId,
+        title: 'Convention Calendar 2026',
+        ownerId: _targetUid,
+        type: FanzineType.calendar,
+        isLive: false,
+        processingStatus: 'complete',
+        shortCode: shortCode,
+        twoPage: true,
+        hasCover: true,
+        editors: const [],
+        draftEntities: const [],
+        masterCreators: const [],
+      );
 
       final page1Id = 'page1_${DateTime.now().millisecondsSinceEpoch}';
       final page2Id = 'page2_${DateTime.now().millisecondsSinceEpoch}';
-      await fsSetDoc('fanzines/$fanzineId/pages/$page1Id', jsonEncode({
-        'pageNumber': 1,
-        'templateId': 'calendar_left',
-        'status': 'ready',
-        'createdAt': WebFieldValue.serverTimestamp(),
-      }), true);
-      await fsSetDoc('fanzines/$fanzineId/pages/$page2Id', jsonEncode({
-        'pageNumber': 2,
-        'templateId': 'calendar_right',
-        'status': 'ready',
-        'createdAt': WebFieldValue.serverTimestamp(),
-      }), true);
+
+      final List<FanzinePage> pages = [
+        FanzinePage(
+          id: page1Id,
+          pageNumber: 1,
+          templateId: 'calendar_left',
+          status: 'ready',
+        ),
+        FanzinePage(
+          id: page2Id,
+          pageNumber: 2,
+          templateId: 'calendar_right',
+          status: 'ready',
+        ),
+      ];
+
+      // Register fanzine locally in memory
+      UnsavedFanzineRegistry.add(newFanzine, pages);
 
       setState(() {
         _showMakerModal = false;
       });
       if (mounted) {
-        Router.of(context).replace('/editor/$fanzineId'); // FIXED: Routes to web /editor instead of /reader
+        Router.of(context).replace('/$shortCode'); // Navigate directly to shortcode URL
       }
     } catch (e) {
       print("Error creating calendar: $e");
@@ -688,7 +713,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
 
-      // Strict inlined owner check for vanity eligibility
+      // Strict inlined owner check for vanity eligibility to prevent other users from obtaining vanity URLs
       final String? email = component.authState?.user?.email;
       final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
 
@@ -731,7 +756,7 @@ class _ProfilePageState extends State<ProfilePage> {
         'ownerId': _targetUid,
         'editorId': _targetUid,
         'editors': [],
-        'isLive': false, // UPDATED: Set as false to guarantee this fanzine stays in drafts when created
+        'isLive': false,
         'processingStatus': 'complete',
         'creationDate': WebFieldValue.serverTimestamp(),
         'type': 'folio',
@@ -766,7 +791,7 @@ class _ProfilePageState extends State<ProfilePage> {
       });
 
       if (mounted) {
-        Router.of(context).replace('/editor/$fanzineId'); // FIXED: Routes to web /editor instead of /reader
+        Router.of(context).replace('/$fzShortCode'); // Navigate directly to fanzine shortcode URL
       }
     } catch (e) {
       setState(() => _uploadError = e.toString());
@@ -1255,9 +1280,13 @@ class _ProfilePageState extends State<ProfilePage> {
     final bool isDraft = w['isLive'] != true;
     final bool canEdit = _isMe || (_viewerAccount?.role == 'admin') || (_viewerAccount?.role == 'moderator') || (_viewerAccount?.isCurator ?? false);
 
-    final String targetRoute = (canEdit && (isDraft || _showDrafts || activeTab == 'curator'))
+    // If this is an unsaved temporary folio, direct route through ShortLinkPage using its local code key
+    final String codeKey = w['shortCode'] ?? fanzineId;
+    final String targetRoute = (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId))
+        ? '/$codeKey'
+        : ((canEdit && (isDraft || _showDrafts || activeTab == 'curator'))
         ? '/editor/$fanzineId'
-        : '/reader/$fanzineId';
+        : '/reader/$fanzineId');
 
     return a(
         [
