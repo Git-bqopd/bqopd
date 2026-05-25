@@ -11,7 +11,8 @@ enum FanzineViewMode { grid, single }
 class FanzineLayout extends StatefulComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
-  final Component headerWidget;
+  final Component gridHeader;
+  final Component listHeader;
   final bool hasCover;
   final int? initialPageNumber;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
@@ -23,7 +24,8 @@ class FanzineLayout extends StatefulComponent {
   const FanzineLayout({
     required this.fanzineId,
     required this.pages,
-    required this.headerWidget,
+    required this.gridHeader,
+    required this.listHeader,
     this.hasCover = true,
     this.initialPageNumber,
     this.preloadedImageStats = const {},
@@ -46,6 +48,10 @@ class _FanzineLayoutState extends State<FanzineLayout> {
   @override
   void initState() {
     super.initState();
+    // Default to the split-screen view in editing mode so both grid and list are visible side-by-side
+    if (component.isEditingMode) {
+      _viewMode = FanzineViewMode.single;
+    }
     if (component.initialPageNumber != null && component.initialPageNumber! > 0) {
       _targetIndex = component.initialPageNumber!;
       _viewMode = FanzineViewMode.single;
@@ -74,7 +80,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
   @override
   Component build(BuildContext context) {
     final isGrid = _viewMode == FanzineViewMode.grid;
-    final bool showThirdColumn = !isGrid && _activeGlobalPanel != null;
+    final showThirdColumn = !isGrid && _activeGlobalPanel != null;
 
     final String calcWidth = "calc((100vh - 120px) * 0.625)";
 
@@ -88,7 +94,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
           [
             FanzineGridRenderer(
               pages: component.pages,
-              headerWidget: component.headerWidget,
+              headerWidget: component.gridHeader,
               hasCover: component.hasCover,
               onPageTap: _switchToSingle,
             )
@@ -100,13 +106,13 @@ class _FanzineLayoutState extends State<FanzineLayout> {
         div(
             classes: 'list-area',
             attributes: {
-              'style': 'flex: 0 0 $calcWidth; min-width: 400px; margin: 0 auto;'
+              'style': 'flex: 0 0 $calcWidth; min-width: 400px; margin: 0;' // Centered together, no margin auto-split
             },
             [
               FanzineListRenderer(
                 fanzineId: component.fanzineId,
                 pages: component.pages,
-                headerWidget: component.headerWidget,
+                headerWidget: component.listHeader,
                 activeGlobalPanel: _activeGlobalPanel,
                 onTogglePanel: _handleTogglePanel,
                 onOpenGrid: _switchToGrid,

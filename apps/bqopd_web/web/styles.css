@@ -142,6 +142,20 @@ body {
     box-sizing: border-box;
 }
 
+/* Flexible Manila Envelope - For dynamic content editors */
+.manila-envelope-flexible {
+    background-color: var(--envelope-yellow);
+    padding: 20px;
+    width: 100%;
+    max-width: 450px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
+    box-sizing: border-box;
+}
+
 /* White Sticker Aesthetic - Inset and Pinning Content to Top */
 .white-sticker {
     background-color: white;
@@ -170,6 +184,19 @@ body {
     flex: none;
     width: 85%;
     height: 80%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* Flexible White Sticker - Adapts height to content dynamically */
+.white-sticker-flexible {
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    width: 85%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -552,16 +579,20 @@ a:hover {
     color: #3f51b5; /* indigo */
 }
 
-/* Layout Splitter */
+/* Layout Splitter - CENTERING UPGRADE */
 .reader-split-layout {
     display: flex;
+    flex-direction: row;
+    justify-content: center; /* Center the columns together snugly */
+    align-items: stretch;
     width: 100%;
     height: 100vh;
     overflow: hidden;
+    background-color: #e5e5e5; /* Clean body backdrop */
 }
 
 .grid-area {
-    background-color: #eeeeee;
+    background-color: transparent; /* Blends seamlessly in split configuration */
     overflow-y: auto;
     padding: 24px;
     box-sizing: border-box;
@@ -574,6 +605,7 @@ a:hover {
     box-sizing: border-box;
     position: relative;
     border-left: 1px solid #e0e0e0;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.04); /* Subtly separate list depth */
 }
 
 /* Responsive Desktop Split Layout */
@@ -583,6 +615,7 @@ a:hover {
     }
     .reader-split-layout {
         flex-direction: column;
+        justify-content: flex-start;
     }
 }
 

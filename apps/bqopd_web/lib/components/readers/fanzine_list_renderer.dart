@@ -72,7 +72,11 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           id: 'fanzine-header',
           classes: 'mb-4 flex justify-center w-full',
           [
-            div(classes: 'manila-envelope', [component.headerWidget])
+            // Dynamically select standard squared aspect wrapper OR height-adaptive workspace wrapper
+            div(
+                classes: component.isEditingMode ? 'manila-envelope-flexible' : 'manila-envelope',
+                [component.headerWidget]
+            )
           ]
       ),
 

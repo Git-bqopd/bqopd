@@ -4,6 +4,7 @@ import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../components/fanzine_header.dart';
+import '../components/fanzine_editor.dart';
 import '../components/fanzine_layout.dart';
 
 /// Jaspr Web Reader Page utilizing Set-based likedImageIds to optimize performance.
@@ -16,6 +17,7 @@ class FanzineReaderPage extends StatefulComponent {
   final Map<String, Map<String, dynamic>>? preloadedImageStats;
   final AuthState? authState;
   final AuthBloc? authBloc;
+  final bool isEditingMode;
 
   const FanzineReaderPage({
     required this.fanzineId,
@@ -26,6 +28,7 @@ class FanzineReaderPage extends StatefulComponent {
     this.preloadedImageStats,
     this.authState,
     this.authBloc,
+    this.isEditingMode = false,
     super.key,
   });
 
@@ -192,6 +195,42 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           ]);
     }
 
+    // Tabbed Editor workspace used strictly at the top of the List view
+    final Component listHeader = component.isEditingMode
+        ? FanzineEditor(
+      fanzineId: component.fanzineId,
+      shortCode: _fanzine!['shortCode'],
+      fanzineData: _fanzine,
+      creatorProfiles: _creatorProfiles,
+      imageStats: _imageStats,
+      pageStructure: _pages,
+      authState: component.authState,
+      authBloc: component.authBloc,
+    )
+        : FanzineHeader(
+      fanzineId: component.fanzineId,
+      shortCode: _fanzine!['shortCode'],
+      fanzineData: _fanzine,
+      creatorProfiles: _creatorProfiles,
+      imageStats: _imageStats,
+      pageStructure: _pages,
+      authState: component.authState,
+      authBloc: component.authBloc,
+    );
+
+    // Compact sticker logo used at the top of the Grid view (forced to sticker only in editor mode)
+    final Component gridHeader = FanzineHeader(
+      fanzineId: component.fanzineId,
+      shortCode: _fanzine!['shortCode'],
+      fanzineData: _fanzine,
+      creatorProfiles: _creatorProfiles,
+      imageStats: _imageStats,
+      pageStructure: _pages,
+      isStickerOnly: component.isEditingMode,
+      authState: component.authState,
+      authBloc: component.authBloc,
+    );
+
     return div(classes: 'w-full h-full', [
       FanzineLayout(
         fanzineId: component.fanzineId,
@@ -202,16 +241,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         likedImageIds: _likedImageIds, // Pass liked Set down
         authState: component.authState,
         authBloc: component.authBloc,
-        headerWidget: FanzineHeader(
-          fanzineId: component.fanzineId,
-          shortCode: _fanzine!['shortCode'],
-          fanzineData: _fanzine,
-          creatorProfiles: _creatorProfiles,
-          imageStats: _imageStats,
-          pageStructure: _pages,
-          authState: component.authState,
-          authBloc: component.authBloc,
-        ),
+        isEditingMode: component.isEditingMode,
+        gridHeader: gridHeader,
+        listHeader: listHeader,
       )
     ]);
   }

@@ -139,6 +139,18 @@ class _AppState extends State<App> {
               authBloc: authBloc,
             ),
           ),
+
+          // MASTER FOLIO WEB EDITOR ROUTE
+          Route(
+            path: '/editor/:fanzineId',
+            builder: (context, state) => FanzineReaderPage(
+              fanzineId: state.params['fanzineId']!,
+              isEditingMode: true,
+              authState: authState,
+              authBloc: authBloc,
+            ),
+          ),
+
           // Shortlink matcher
           Route(
             path: '/:code',
@@ -219,7 +231,7 @@ class _AppState extends State<App> {
 class _GlobalModalLoginContent extends StatefulComponent {
   final AuthState? authState;
   final AuthBloc authBloc;
-  final VoidCallback onSuccess;
+  final void Function() onSuccess;
 
   const _GlobalModalLoginContent({
     required this.authState,

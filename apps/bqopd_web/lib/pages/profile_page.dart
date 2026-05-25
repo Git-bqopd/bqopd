@@ -344,27 +344,6 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  void _setupManagedProfilesPipeline() {
-    _managedSub?.callAsFunction();
-    _managedSub = fsListenQuery('profiles', 'isManaged', '==', jsonEncode(true), '', false, (String jsonStr) {
-      try {
-        final List decoded = jsonDecode(jsonStr);
-        final profiles = decoded.map((d) {
-          final data = restoreTimestamps(d['data'] as Map<String, dynamic>);
-          data['id'] = d['id'];
-          return data;
-        }).where((p) {
-          final List managers = p['managers'] ?? [];
-          return managers.contains(_targetUid);
-        }).toList();
-
-        setState(() {
-          _allManagedProfiles = profiles;
-        });
-      } catch (_) {}
-    });
-  }
-
   void _setupSystemUsersPipeline() {
     _usersSub?.callAsFunction();
     _usersSub = fsListenQuery('Users', '', '', '', '', false, (String jsonStr) {
@@ -542,7 +521,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _showMakerModal = false;
       });
       if (mounted) {
-        Router.of(context).replace('/reader/$fanzineId');
+        Router.of(context).replace('/editor/$fanzineId'); // FIXED: Routes to web /editor instead of /reader
       }
     } catch (e) {
       print("Error creating folio: $e");
@@ -592,7 +571,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _showMakerModal = false;
       });
       if (mounted) {
-        Router.of(context).replace('/reader/$fanzineId');
+        Router.of(context).replace('/editor/$fanzineId'); // FIXED: Routes to web /editor instead of /reader
       }
     } catch (e) {
       print("Error creating calendar: $e");
@@ -747,7 +726,7 @@ class _ProfilePageState extends State<ProfilePage> {
       });
 
       if (mounted) {
-        Router.of(context).replace('/reader/$fanzineId');
+        Router.of(context).replace('/editor/$fanzineId'); // FIXED: Routes to web /editor instead of /reader
       }
     } catch (e) {
       setState(() => _uploadError = e.toString());
@@ -1231,6 +1210,15 @@ class _ProfilePageState extends State<ProfilePage> {
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio');
 
+    // Route dynamically based on ownership and draft status
+    final String activeTab = _visibleTabs.isNotEmpty ? _visibleTabs[_currentTabIndex] : 'maker';
+    final bool isDraft = w['isLive'] != true;
+    final bool canEdit = _isMe || (_viewerAccount?.role == 'admin') || (_viewerAccount?.role == 'moderator') || (_viewerAccount?.isCurator ?? false);
+
+    final String targetRoute = (canEdit && (isDraft || _showDrafts || activeTab == 'curator'))
+        ? '/editor/$fanzineId'
+        : '/reader/$fanzineId';
+
     return a(
         [
           // Poster image
@@ -1250,7 +1238,7 @@ class _ProfilePageState extends State<ProfilePage> {
               span([text(displaySuffix)], attributes: const {'style': 'font-size: 11px; color: #666;'})
           ], attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'})
         ],
-        href: '/reader/$fanzineId',
+        href: targetRoute,
         classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
         attributes: const {
           'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer;'
