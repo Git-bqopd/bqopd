@@ -25,7 +25,7 @@ class FanzineEditor extends StatefulComponent {
 
   // State handlers to communicate reactive changes to parent layouts instantly
   final bool? twoPage;
-  final ValueChanged<bool>? onTwoPageChanged;
+  final void Function(bool)? onTwoPageChanged;
 
   const FanzineEditor({
     required this.frefFanzineId,
@@ -524,50 +524,48 @@ class _FanzineEditorState extends State<FanzineEditor> {
         ? component.shortCode!.toUpperCase().replaceAll('BQOPD', 'bqopd')
         : 'pending...';
 
-    return div(classes: 'flex-col text-left p-2', attributes: {'style': 'gap: 16px; display: flex;'}, [
-      div(classes: 'flex-col mb-3', [
-        span(classes: 'text-xs font-bold text-gray mb-1', [text('fanzine name')]),
+    return div(classes: 'flex-col text-left p-2', attributes: {'style': 'gap: 8px; display: flex;'}, [
+      // Row 1: Shortcode rendered cleanly inline with metadata
+      div(
+          classes: 'text-xs text-gray-500 font-semibold mb-1 text-left',
+          [text('shortcode: $currentShortcode')]
+      ),
+
+      // Row 2: new folio name input
+      div(classes: 'flex-col mb-1', [
         input(
-          attributes: {'type': 'text', 'placeholder': 'Title', 'value': _title},
+          attributes: {'type': 'text', 'placeholder': 'new folio name', 'value': _title},
           events: {'input': (e) => _title = (e.target as dynamic).value},
         )
       ]),
 
-      div(classes: 'flex-row gap-2 mb-3', attributes: {'style': 'display: flex; gap: 8px;'}, [
+      // Row 3: volume, issue, wholeNumber inputs (vol. / num. / whole num.)
+      div(classes: 'flex-row gap-2 mb-1', attributes: {'style': 'display: flex; gap: 8px;'}, [
         div(classes: 'flex-1 flex-col', [
-          span(classes: 'text-xs font-bold text-gray mb-1', [text('Volume')]),
           input(
-            attributes: {'type': 'text', 'placeholder': 'Vol.', 'value': _volume},
+            attributes: {'type': 'text', 'placeholder': 'vol.', 'value': _volume},
             events: {'input': (e) => _volume = (e.target as dynamic).value},
           )
         ]),
         div(classes: 'flex-1 flex-col', [
-          span(classes: 'text-xs font-bold text-gray mb-1', [text('Issue')]),
           input(
-            attributes: {'type': 'text', 'placeholder': 'No.', 'value': _issue},
+            attributes: {'type': 'text', 'placeholder': 'num.', 'value': _issue},
             events: {'input': (e) => _issue = (e.target as dynamic).value},
           )
         ]),
         div(classes: 'flex-1 flex-col', [
-          span(classes: 'text-xs font-bold text-gray mb-1', [text('Whole Number')]),
           input(
-            attributes: {'type': 'text', 'placeholder': 'Whole No.', 'value': _wholeNumber},
+            attributes: {'type': 'text', 'placeholder': 'whole num.', 'value': _wholeNumber},
             events: {'input': (e) => _wholeNumber = (e.target as dynamic).value},
           )
         ]),
       ]),
 
-      // Shortcode rendered cleanly inline with metadata
-      div(
-          classes: 'text-xs text-gray-500 font-semibold mb-3 text-left',
-          [text('shortcode: $currentShortcode')]
-      ),
-
-      // Custom M3 Switch for two page layout
+      // Row 4: Custom M3 Switch for two page layout
       div(
           classes: 'flex-row items-center justify-between cursor-pointer',
           attributes: {
-            'style': 'padding: 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;'
+            'style': 'padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;'
           },
           events: {
             'click': (e) {
@@ -586,11 +584,12 @@ class _FanzineEditorState extends State<FanzineEditor> {
           ]
       ),
 
+      // Row 5: Save configuration button
       button(
           classes: 'btn-primary w-full',
           attributes: _isSavingSettings ? {'disabled': 'true'} : {},
           events: {'click': (e) => _saveSettings()},
-          [text(_isSavingSettings ? 'Saving Configuration...' : 'Save Configuration')]
+          [text(_isSavingSettings ? 'saving folio...' : 'save folio')]
       )
     ]);
   }
@@ -598,7 +597,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
   Component _buildCustomToggleSwitch(bool val) {
     return div(
         attributes: {
-          'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? '#6750A4' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
+          'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
         },
         [
           div(
@@ -642,7 +641,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
         classes: 'flex-col bg-gray-50 border border-gray-150 p-3 rounded-lg mb-2',
         attributes: {'style': 'gap: 8px;'},
         [
-          // Top row: Page number, Image thumbnail, delete button
+          // Bottom row: Page number, Image thumbnail, delete button
           div(classes: 'flex-row items-center justify-between', [
             div(classes: 'flex-row items-center gap-3', [
               span(

@@ -542,7 +542,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final newFanzine = Fanzine(
         id: fanzineId,
-        title: 'New Folio',
+        title: 'new folio name',
         ownerId: _targetUid,
         type: FanzineType.folio,
         isLive: false,
@@ -619,7 +619,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _showMakerModal = false;
       });
       if (mounted) {
-        Router.of(context).replace('/$shortCode'); // Navigate directly to shortcode URL
+        Router.of(context).replace('/$shortCode'); // Navigate directly to fanzine shortcode URL
       }
     } catch (e) {
       print("Error creating calendar: $e");
@@ -1578,9 +1578,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       },
                       events: {
                         'click': (e) {
-                          setState(() {
-                            _showMakerModal = false;
-                          });
+                          _showMakerModal = false;
                         }
                       },
                       [text('×')]
@@ -1604,9 +1602,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       },
                       events: {
                         'click': (e) {
-                          setState(() {
-                            _showMakerModal = false;
-                          });
+                          _showMakerModal = false;
                         }
                       },
                       [text('×')]
