@@ -57,23 +57,32 @@ class _FanzineEditorState extends State<FanzineEditor> {
   bool _hasCover = true;
   bool _isSavingSettings = false;
 
-  // Single Page Upload Settings
-  String _uploadTitle = '';
-  String _uploadDescription = '';
-  String _uploadIndicia = '';
-  String? _uploadImageBase64;
-  String? _uploadImageName;
-  String? _uploadPreviewUrl;
-  List<Map<String, dynamic>> _uploadCreators = [];
-  String _newCreatorHandle = '';
-  String _newCreatorRole = '';
-  bool _isUploadingImage = false;
-  String? _uploadError;
+  // Real-time Library Sync State
+  dynamic _imagesUnsub;
+  List<Map<String, dynamic>> _userImages = [];
+  bool _loadingImages = true;
+  bool _isUploading = false;
+
+  // Library Orphan Modal State
+  bool _showOrphanSelector = false;
+  Set<String> _selectedOrphanIds = {};
+
+  // Custom Confirmation Dialog State
+  String? _activeConfirmId;
+  bool _isConfirmDirect = false;
+  String _confirmTitle = "";
+  String _confirmBody = "";
 
   @override
   void initState() {
     super.initState();
     _syncMetadata();
+    if (kIsWeb) {
+      _listenToUserImages();
+      onAuthStateChangedListener((uid, email) {
+        _listenToUserImages();
+      });
+    }
   }
 
   @override
@@ -82,6 +91,12 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (oldComponent.fanzineData != component.fanzineData || oldComponent.twoPage != component.twoPage) {
       _syncMetadata();
     }
+  }
+
+  @override
+  void dispose() {
+    _imagesUnsub?.callAsFunction();
+    super.dispose();
   }
 
   void _syncMetadata() {
@@ -94,6 +109,43 @@ class _FanzineEditorState extends State<FanzineEditor> {
       _twoPage = component.twoPage ?? fd['twoPage'] ?? true; // Prioritize reactive parent state if present
       _hasCover = fd['hasCover'] ?? true;
     }
+  }
+
+  /// Establishes real-time connection to synchronized user media profiles.
+  void _listenToUserImages() {
+    _imagesUnsub?.callAsFunction();
+    _imagesUnsub = null;
+
+    final uid = getCurrentUserId();
+    if (uid == null) {
+      if (mounted) {
+        setState(() {
+          _userImages = [];
+          _loadingImages = false;
+        });
+      }
+      return;
+    }
+
+    _imagesUnsub = fsListenQuery('images', 'uploaderId', '==', jsonEncode(uid), '', false, (String jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final images = decoded.map((d) {
+          final data = d['data'] as Map<String, dynamic>;
+          data['id'] = d['id'];
+          return data;
+        }).toList();
+
+        if (mounted) {
+          setState(() {
+            _userImages = images;
+            _loadingImages = false;
+          });
+        }
+      } catch (e) {
+        print("Error parsing synchronized user images: $e");
+      }
+    });
   }
 
   Future<void> _saveSettings() async {
@@ -324,189 +376,198 @@ class _FanzineEditorState extends State<FanzineEditor> {
     }
   }
 
-  void _pickAndPreviewImage() {
-    triggerFilePicker('folio-editor-upload-picker', (base64, fileName, objectUrl) {
-      setState(() {
-        _uploadImageBase64 = base64;
-        _uploadImageName = fileName;
-        _uploadPreviewUrl = objectUrl;
-        _uploadError = null;
-      });
-    });
+  bool _isImage5x8(Map<String, dynamic> img) {
+    if (img['is5x8'] == true) return true;
+    final w = img['width'] as num?;
+    final h = img['height'] as num?;
+    if (w != null && h != null && h > 0) {
+      final ratio = w / h;
+      return ratio >= 0.58 && ratio <= 0.67;
+    }
+    return false;
   }
 
-  void _onFileInputChanged() {
-    readSelectedFile('folio-editor-upload-picker', (base64, fileName, objectUrl) {
+  /// Triggers client native file browser completely within client Dart VM channels.
+  void _triggerNewImageUpload() {
+    triggerFilePicker('folio-editor-instant-picker', (base64, fileName, objectUrl) async {
       setState(() {
-        _uploadImageBase64 = base64;
-        _uploadImageName = fileName;
-        _uploadPreviewUrl = objectUrl;
-        _uploadError = null;
+        _isUploading = true;
       });
-    });
-  }
+      try {
+        final dims = await getImageDimensions(objectUrl);
+        final width = dims['width'] ?? 0;
+        final height = dims['height'] ?? 0;
+        final double ratio = (width > 0 && height > 0) ? width / height : 0.625;
+        final bool is5x8 = (ratio >= 0.58 && ratio <= 0.67);
 
-  Future<void> _addCreator() async {
-    final handle = _newCreatorHandle.trim();
-    final role = _newCreatorRole.trim();
-    if (handle.isEmpty) return;
+        final uid = getCurrentUserId();
+        if (uid == null) throw Exception("User is not signed in.");
 
-    final cleanHandle = handle.toLowerCase().replaceAll('@', '');
-    String resolvedName = handle;
-    String? resolvedUid;
+        final String path = 'uploads/$uid/folio_assets/${component.frefFanzineId}/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+        final Uint8List bytes = base64Decode(base64);
 
-    try {
-      final resStr = await fsQuery('profiles', 'username', '==', jsonEncode(cleanHandle), '');
-      final List docs = jsonDecode(resStr);
-      if (docs.isNotEmpty) {
-        final doc = docs.first;
-        final data = doc['data'];
-        resolvedName = data['displayName'] ?? data['username'] ?? handle;
-        resolvedUid = doc['id'];
+        final downloadUrl = await stUpload(path, bytes, 'image/jpeg');
+        final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
+
+        // Check vanity eligibility
+        final String? email = component.authState?.user?.email;
+        final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
+        final shortCode = await WebShortcodeService.assignShortcode(
+          contentType: 'image',
+          contentId: imageId,
+          isVanity: useVanity,
+        ) ?? imageId.substring(imageId.length - 7).toUpperCase();
+
+        final imgData = {
+          'uid': uid,
+          'uploaderId': uid,
+          'fileUrl': downloadUrl,
+          'fileName': fileName,
+          'title': fileName,
+          'status': 'approved',
+          'tags': {},
+          'indicia': '',
+          'creators': [],
+          'timestamp': WebFieldValue.serverTimestamp(),
+          'shortCode': shortCode,
+          'storagePath': path,
+          'folioContext': component.frefFanzineId,
+          'usedInFanzines': [component.frefFanzineId],
+          'width': width,
+          'height': height,
+          'aspectRatio': ratio,
+          'is5x8': is5x8,
+        };
+
+        await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
+
+        // Add to the folio pages immediately
+        await _addExistingImage(imageId, downloadUrl, width, height);
+
+        print('[FOLIO UPLOAD] Image successfully processed and added.');
+      } catch (e) {
+        print('[FOLIO UPLOAD ERROR] $e');
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isUploading = false;
+          });
+        }
       }
-    } catch (_) {}
+    });
+  }
+
+  Future<void> _addExistingImage(String imageId, String imageUrl, int width, int height) async {
+    final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+    if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+      final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
+      final nextNum = pages.length + 1;
+      final newPage = FanzinePage(
+        id: pageId,
+        pageNumber: nextNum,
+        imageId: imageId,
+        imageUrl: imageUrl,
+        status: 'ready',
+        width: width,
+        height: height,
+      );
+      pages.add(newPage);
+      UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+    } else {
+      final resStr = await fsQuery('fanzines/${component.frefFanzineId}/pages', '', '', '', '');
+      final List pageDocs = jsonDecode(resStr);
+      final int nextNum = pageDocs.length + 1;
+
+      await fsSetDoc('fanzines/${component.frefFanzineId}/pages/$pageId', jsonEncode({
+        'imageId': imageId,
+        'imageUrl': imageUrl,
+        'pageNumber': nextNum,
+        'status': 'ready',
+        'width': width,
+        'height': height,
+        'createdAt': WebFieldValue.serverTimestamp(),
+      }), true);
+
+      await fsUpdateDoc('images/$imageId', jsonEncode({
+        'usedInFanzines': WebFieldValue.arrayUnion([component.frefFanzineId])
+      }));
+    }
+  }
+
+  void _confirmRemoveImage(String imageId, bool isDirect) {
+    final String actionText = isDirect ? "Delete Completely" : "Remove from Folio";
+    final String bodyText = isDirect
+        ? "This is a direct upload. Deleting it will remove it from ALL folios and your library forever."
+        : "This image is from your library. Removing it will only take it out of this specific folio.";
 
     setState(() {
-      _uploadCreators.add({
-        'uid': resolvedUid,
-        'name': resolvedName,
-        'role': role.isNotEmpty ? role : 'Contributor',
-      });
-      _newCreatorHandle = '';
-      _newCreatorRole = '';
+      _activeConfirmId = imageId;
+      _isConfirmDirect = isDirect;
+      _confirmTitle = actionText;
+      _confirmBody = bodyText;
     });
   }
 
-  Future<void> _submitSingleImage() async {
-    if (_uploadTitle.trim().isEmpty) {
-      setState(() => _uploadError = "Title is required.");
-      return;
-    }
-    if (_uploadImageBase64 == null) {
-      setState(() => _uploadError = "Please select an image first.");
-      return;
-    }
+  Future<void> _executeImageRemoval() async {
+    final imageId = _activeConfirmId;
+    if (imageId == null) return;
 
     setState(() {
-      _isUploadingImage = true;
-      _uploadError = null;
+      _activeConfirmId = null;
+      _isUploading = true;
     });
 
-    final String? uid = getCurrentUserId();
-    if (uid == null) {
-      setState(() {
-        _uploadError = "Unauthenticated user.";
-        _isUploadingImage = false;
-      });
-      return;
-    }
-
     try {
-      final Uint8List bytes = base64Decode(_uploadImageBase64!);
-      final String path = 'uploads/$uid/folio_assets/${component.frefFanzineId}/img_${DateTime.now().millisecondsSinceEpoch}_$_uploadImageName';
-
-      // Perform secure upload to Firebase Storage
-      final String downloadUrl = await stUpload(path, bytes, 'image/jpeg');
-
-      final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
-
-      // Strict inlined owner check for vanity eligibility to prevent other users from obtaining vanity URLs
-      final String? email = component.authState?.user?.email;
-      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
-
-      // Generate and register shortcode for image using shared logic!
-      final shortCode = await WebShortcodeService.assignShortcode(
-        contentType: 'image',
-        contentId: imageId,
-        isVanity: useVanity,
-      ) ?? imageId.substring(imageId.length - 7).toUpperCase();
-
-      final imgData = {
-        'uid': uid,
-        'uploaderId': uid,
-        'fileUrl': downloadUrl,
-        'fileName': _uploadImageName,
-        'title': _uploadTitle.trim(),
-        'description': _uploadDescription.trim(),
-        'status': 'approved',
-        'tags': {},
-        'indicia': _uploadIndicia.trim(),
-        'creators': _uploadCreators,
-        'timestamp': WebFieldValue.serverTimestamp(),
-        'shortCode': shortCode,
-        'storagePath': path,
-        'folioContext': component.frefFanzineId,
-        'usedInFanzines': [component.frefFanzineId],
-      };
-
-      await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
-
-      // Add to fanzine pages
-      final int nextNum = component.pageStructure.length + 1;
-      final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
-
-      if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
-        final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
-        final nextNum = pages.length + 1;
-        final newPage = FanzinePage(
-          id: pageId,
-          pageNumber: nextNum,
-          imageId: imageId,
-          imageUrl: downloadUrl,
-          status: 'ready',
-        );
-        pages.add(newPage);
-        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
-      } else {
-        await fsSetDoc('fanzines/${component.frefFanzineId}/pages/$pageId', jsonEncode({
-          'imageId': imageId,
-          'imageUrl': downloadUrl,
-          'pageNumber': nextNum,
-          'status': 'ready',
-          'createdAt': WebFieldValue.serverTimestamp(),
-        }), true);
-
-        await fsUpdateDoc('images/$imageId', jsonEncode({
-          'usedInFanzines': WebFieldValue.arrayUnion([component.frefFanzineId])
-        }));
+      if (_isConfirmDirect) {
+        await fsDeleteDoc('images/$imageId');
       }
 
-      setState(() {
-        _activeTab = 1; // Swap to the order tab to see the fresh flatplan sequence
-        _uploadTitle = '';
-        _uploadDescription = '';
-        _uploadIndicia = '';
-        _uploadImageBase64 = null;
-        _uploadImageName = null;
-        _uploadPreviewUrl = null;
-        _uploadCreators = [];
-      });
+      // Find any page belonging to this image in current folio and delete it
+      final pagesRes = await fsQuery('fanzines/${component.frefFanzineId}/pages', 'imageId', '==', jsonEncode(imageId), '');
+      final List pageDocs = jsonDecode(pagesRes);
+
+      for (var pageDoc in pageDocs) {
+        final pageId = pageDoc['id'] ?? '';
+        if (pageId.isNotEmpty) {
+          await _deletePage(pageId);
+        }
+      }
+
+      print('[FOLIO REMOVE] Image successfully removed/deleted.');
     } catch (e) {
-      setState(() => _uploadError = e.toString());
+      print('[FOLIO REMOVE ERROR] $e');
     } finally {
-      setState(() => _isUploadingImage = false);
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
     }
   }
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'white-sticker-flexible w-full mt-2', [
+    return div([
       // 1. Core Tab Row
-      div(classes: 'flex-row justify-center items-center py-2 bg-gray-100', [
+      div([
         _buildTabButton('settings', 0),
-        span(classes: 'px-4 text-gray text-xs', [text('|')]),
+        span([text('|')], classes: 'px-4 text-gray text-xs'),
         _buildTabButton('order', 1),
-        span(classes: 'px-4 text-gray text-xs', [text('|')]),
+        span([text('|')], classes: 'px-4 text-gray text-xs'),
         _buildTabButton('upload', 2),
-      ]),
+      ], classes: 'flex-row justify-center items-center py-2 bg-gray-100'),
 
       // 2. Active Tab Sheet - Height Auto adaptive
-      div(classes: 'flex-col p-4', [
+      div([
         if (_activeTab == 0) _buildSettingsTab(),
         if (_activeTab == 1) _buildOrderTab(),
         if (_activeTab == 2) _buildUploadTab(),
-      ]),
-    ]);
+      ], classes: 'flex-col p-4'),
+
+      if (_showOrphanSelector) _buildOrphanSelectorModal(),
+      if (_activeConfirmId != null) _buildConfirmModal(),
+    ], classes: 'white-sticker-flexible w-full mt-2');
   }
 
   Component _buildTabButton(String label, int index) {
@@ -524,109 +585,109 @@ class _FanzineEditorState extends State<FanzineEditor> {
         ? component.shortCode!.toUpperCase().replaceAll('BQOPD', 'bqopd')
         : 'pending...';
 
-    return div(classes: 'flex-col text-left p-2', attributes: {'style': 'gap: 8px; display: flex;'}, [
+    return div([
       // Row 1: Shortcode rendered cleanly inline with metadata
       div(
-          classes: 'text-xs text-gray-500 font-semibold mb-1 text-left',
-          [text('shortcode: $currentShortcode')]
+        [text('shortcode: $currentShortcode')],
+        classes: 'text-xs text-gray-500 font-semibold mb-1 text-left',
       ),
 
       // Row 2: new folio name input
-      div(classes: 'flex-col mb-1', [
+      div([
         input(
           attributes: {'type': 'text', 'placeholder': 'new folio name', 'value': _title},
           events: {'input': (e) => _title = (e.target as dynamic).value},
         )
-      ]),
+      ], classes: 'flex-col mb-1'),
 
       // Row 3: volume, issue, wholeNumber inputs (vol. / num. / whole num.)
-      div(classes: 'flex-row gap-2 mb-1', attributes: {'style': 'display: flex; gap: 8px;'}, [
-        div(classes: 'flex-1 flex-col', [
+      div([
+        div([
           input(
             attributes: {'type': 'text', 'placeholder': 'vol.', 'value': _volume},
             events: {'input': (e) => _volume = (e.target as dynamic).value},
           )
-        ]),
-        div(classes: 'flex-1 flex-col', [
+        ], classes: 'flex-1 flex-col'),
+        div([
           input(
             attributes: {'type': 'text', 'placeholder': 'num.', 'value': _issue},
             events: {'input': (e) => _issue = (e.target as dynamic).value},
           )
-        ]),
-        div(classes: 'flex-1 flex-col', [
+        ], classes: 'flex-1 flex-col'),
+        div([
           input(
             attributes: {'type': 'text', 'placeholder': 'whole num.', 'value': _wholeNumber},
             events: {'input': (e) => _wholeNumber = (e.target as dynamic).value},
           )
-        ]),
-      ]),
+        ], classes: 'flex-1 flex-col'),
+      ], classes: 'flex-row gap-2 mb-1', attributes: const {'style': 'display: flex; gap: 8px;'}),
 
       // Row 4: Custom M3 Switch for two page layout
       div(
-          classes: 'flex-row items-center justify-between cursor-pointer',
-          attributes: {
-            'style': 'padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;'
-          },
-          events: {
-            'click': (e) {
-              final nextValue = !_twoPage;
-              setState(() => _twoPage = nextValue);
-              if (component.onTwoPageChanged != null) {
-                component.onTwoPageChanged!(nextValue);
-              }
+        [
+          span([
+            text(_twoPage ? 'two page spread (switch: single page view)' : 'single page view (switch: two page spread)')
+          ], classes: 'text-xs font-medium', attributes: const {'style': 'color: #4a4a4a;'}),
+          _buildCustomToggleSwitch(_twoPage)
+        ],
+        classes: 'flex-row items-center justify-between cursor-pointer',
+        attributes: const {
+          'style': 'padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;'
+        },
+        events: {
+          'click': (e) {
+            final nextValue = !_twoPage;
+            setState(() => _twoPage = nextValue);
+            if (component.onTwoPageChanged != null) {
+              component.onTwoPageChanged!(nextValue);
             }
-          },
-          [
-            span(classes: 'text-xs font-medium', attributes: {'style': 'color: #4a4a4a;'}, [
-              text(_twoPage ? 'two page spread (switch: single page view)' : 'single page view (switch: two page spread)')
-            ]),
-            _buildCustomToggleSwitch(_twoPage)
-          ]
+          }
+        },
       ),
 
       // Row 5: Save configuration button
       button(
-          classes: 'btn-primary w-full',
-          attributes: _isSavingSettings ? {'disabled': 'true'} : {},
-          events: {'click': (e) => _saveSettings()},
-          [text(_isSavingSettings ? 'saving folio...' : 'save folio')]
+        [text(_isSavingSettings ? 'saving folio...' : 'save folio')],
+        classes: 'btn-primary w-full',
+        attributes: _isSavingSettings ? {'disabled': 'true'} : const {},
+        events: {'click': (e) => _saveSettings()},
       )
-    ]);
+    ], classes: 'flex-col text-left p-2', attributes: const {'style': 'gap: 8px; display: flex;'});
   }
 
   Component _buildCustomToggleSwitch(bool val) {
     return div(
-        attributes: {
-          'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
-        },
-        [
-          div(
-              attributes: {
-                'style': 'width: 16px; height: 16px; border-radius: 50%; background-color: white; position: absolute; top: 4px; left: ${val ? '24px' : '4px'}; transition: left 0.2s;'
-              },
-              []
-          )
-        ]
+      [
+        div(
+          [],
+          attributes: {
+            'style': 'width: 16px; height: 16px; border-radius: 50%; background-color: white; position: absolute; top: 4px; left: ${val ? '24px' : '4px'}; transition: left 0.2s;'
+          },
+        )
+      ],
+      attributes: {
+        'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
+      },
     );
   }
 
   Component _buildOrderTab() {
     if (component.pageStructure.isEmpty) {
-      return div(classes: 'p-16 text-center text-gray italic', [
-        span(classes: 'material-symbols-outlined text-gray-300', attributes: {'style': 'font-size: 48px;'}, [text('format_list_numbered')]),
+      return div([
+        span([text('format_list_numbered')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
         p([text('No pages added to zine flatplan yet.')])
-      ]);
+      ], classes: 'p-16 text-center text-gray italic');
     }
 
-    return div(classes: 'flex-col gap-3 text-left p-2', [
+    return div([
       h2(
-          classes: 'text-sm font-bold text-gray uppercase tracking-wider mb-3',
-          [text('Folio Flatplan Sequence')]
+        [text('Folio Flatplan Sequence')],
+        classes: 'text-sm font-bold text-gray uppercase tracking-wider mb-3',
       ),
 
       for (int i = 0; i < component.pageStructure.length; i++)
         _buildOrderPageRow(component.pageStructure[i], i)
-    ]);
+    ], classes: 'flex-col gap-3 text-left p-2');
   }
 
   Component _buildOrderPageRow(Map<String, dynamic> page, int idx) {
@@ -638,113 +699,113 @@ class _FanzineEditorState extends State<FanzineEditor> {
     final String selectedSidePref = page['sidePreference'] ?? 'either';
 
     return div(
-        classes: 'flex-col bg-gray-50 border border-gray-150 p-3 rounded-lg mb-2',
-        attributes: {'style': 'gap: 8px;'},
-        [
-          // Bottom row: Page number, Image thumbnail, delete button
-          div(classes: 'flex-row items-center justify-between', [
-            div(classes: 'flex-row items-center gap-3', [
-              span(
-                  classes: 'font-black text-xs text-gray-400',
-                  attributes: {'style': 'width: 20px; text-align: right;'},
-                  [text('$pageNum.')]
-              ),
-              div(
-                  classes: 'rounded border border-gray-200 overflow-hidden bg-white',
-                  attributes: {'style': 'width: 36px; height: 50px; position: relative;'},
-                  [
-                    if (!isPending)
-                      img(
-                          src: optimalUrl!,
-                          attributes: {'style': 'width: 100%; height: 100%; object-fit: cover;'}
-                      )
-                    else
-                      div(
-                          classes: 'shimmer-bg w-full h-full flex items-center justify-center',
-                          [
-                            span(
-                                classes: 'material-symbols-outlined text-gray-300',
-                                attributes: {'style': 'font-size: 16px;'},
-                                [text('progress_activity')]
-                            )
-                          ]
-                      )
-                  ]
-              ),
-              span(
-                  classes: 'text-xs font-bold text-gray-700',
-                  [text(isPending ? 'Processing web asset...' : 'Archival Page')]
-              )
-            ]),
-
-            // Action Arrow reordering
-            div(classes: 'flex-row items-center gap-1', [
-              button(
-                  classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: pageNum <= 1 ? {'disabled': 'true'} : {},
-                  events: {'click': (e) => _reorderPage(page, -1)},
-                  [span(classes: 'material-symbols-outlined text-sm', [text('arrow_upward')])]
-              ),
-              button(
-                  classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: pageNum >= component.pageStructure.length ? {'disabled': 'true'} : {},
-                  events: {'click': (e) => _reorderPage(page, 1)},
-                  [span(classes: 'material-symbols-outlined text-sm', [text('arrow_downward')])]
-              ),
-              span(classes: 'px-1 text-gray-300', [text('|')]),
-              button(
-                  classes: 'p-1 hover:bg-red-50 rounded border-none bg-transparent cursor-pointer',
-                  events: {'click': (e) => _deletePage(page['__id'] ?? '')},
-                  [span(classes: 'material-symbols-outlined text-sm text-red-500', [text('close')])]
-              ),
-            ])
-          ]),
-
-          // Bottom Row: Spread Position and Side Preference configuration (Only if not Page 1 cover)
-          if (pageNum > 1 || !_hasCover)
+      [
+        // Bottom row: Page number, Image thumbnail, delete button
+        div([
+          div([
+            span(
+              [text('$pageNum.')],
+              classes: 'font-black text-xs text-gray-400',
+              attributes: const {'style': 'width: 20px; text-align: right;'},
+            ),
             div(
-                classes: 'flex-row flex-wrap gap-2 pt-2 border-t border-gray-200 mt-1 justify-between items-center',
-                [
-                  // Spread Position Segmented Button
-                  div(classes: 'flex-row gap-1', [
-                    _buildSegmentButton(
-                      'start',
-                      selectedSpreadPos == 'start',
-                          () => _updatePageLayout(page, 'start', selectedSidePref),
-                    ),
-                    _buildSegmentButton(
-                      'end',
-                      selectedSpreadPos == 'end',
-                          () => _updatePageLayout(page, 'end', selectedSidePref),
-                    ),
-                    _buildSegmentButton(
-                      'none',
-                      selectedSpreadPos.isEmpty,
-                          () => _updatePageLayout(page, null, selectedSidePref),
-                    ),
-                  ]),
-
-                  // Side Preference Segmented Button
-                  div(classes: 'flex-row gap-1', [
-                    _buildSegmentButton(
-                      'left',
-                      selectedSidePref == 'left',
-                          () => _updatePageLayout(page, selectedSpreadPos, 'left'),
-                    ),
-                    _buildSegmentButton(
-                      'either',
-                      selectedSidePref == 'either',
-                          () => _updatePageLayout(page, selectedSpreadPos, 'either'),
-                    ),
-                    _buildSegmentButton(
-                      'right',
-                      selectedSidePref == 'right',
-                          () => _updatePageLayout(page, selectedSpreadPos, 'right'),
-                    ),
-                  ]),
-                ]
+              [
+                if (!isPending)
+                  img(
+                      src: optimalUrl!,
+                      attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
+                  )
+                else
+                  div(
+                    [
+                      span(
+                        [text('progress_activity')],
+                        classes: 'material-symbols-outlined text-gray-300',
+                        attributes: const {'style': 'font-size: 16px;'},
+                      )
+                    ],
+                    classes: 'shimmer-bg w-full h-full flex items-center justify-center',
+                  )
+              ],
+              classes: 'rounded border border-gray-200 overflow-hidden bg-white',
+              attributes: const {'style': 'width: 36px; height: 50px; position: relative;'},
+            ),
+            span(
+              [text(isPending ? 'Processing web asset...' : 'Archival Page')],
+              classes: 'text-xs font-bold text-gray-700',
             )
-        ]
+          ], classes: 'flex-row items-center gap-3'),
+
+          // Action Arrow reordering
+          div([
+            button(
+              [span([text('arrow_upward')], classes: 'material-symbols-outlined text-sm')],
+              classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
+              attributes: pageNum <= 1 ? {'disabled': 'true'} : const {},
+              events: {'click': (e) => _reorderPage(page, -1)},
+            ),
+            button(
+              [span([text('arrow_downward')], classes: 'material-symbols-outlined text-sm')],
+              classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
+              attributes: pageNum >= component.pageStructure.length ? {'disabled': 'true'} : const {},
+              events: {'click': (e) => _reorderPage(page, 1)},
+            ),
+            span([text('|')], classes: 'px-1 text-gray-300'),
+            button(
+              [span([text('close')], classes: 'material-symbols-outlined text-sm text-red-500')],
+              classes: 'p-1 hover:bg-red-50 rounded border-none bg-transparent cursor-pointer',
+              events: {'click': (e) => _deletePage(page['__id'] ?? '')},
+            ),
+          ], classes: 'flex-row items-center gap-1')
+        ], classes: 'flex-row items-center justify-between'),
+
+        // Bottom Row: Spread Position and Side Preference configuration (Only if not Page 1 cover)
+        if (pageNum > 1 || !_hasCover)
+          div(
+            [
+              // Spread Position Segmented Button
+              div([
+                _buildSegmentButton(
+                  'start',
+                  selectedSpreadPos == 'start',
+                      () => _updatePageLayout(page, 'start', selectedSidePref),
+                ),
+                _buildSegmentButton(
+                  'end',
+                  selectedSpreadPos == 'end',
+                      () => _updatePageLayout(page, 'end', selectedSidePref),
+                ),
+                _buildSegmentButton(
+                  'none',
+                  selectedSpreadPos.isEmpty,
+                      () => _updatePageLayout(page, null, selectedSidePref),
+                ),
+              ], classes: 'flex-row gap-1'),
+
+              // Side Preference Segmented Button
+              div([
+                _buildSegmentButton(
+                  'left',
+                  selectedSidePref == 'left',
+                      () => _updatePageLayout(page, selectedSpreadPos, 'left'),
+                ),
+                _buildSegmentButton(
+                  'either',
+                  selectedSidePref == 'either',
+                      () => _updatePageLayout(page, selectedSpreadPos, 'either'),
+                ),
+                _buildSegmentButton(
+                  'right',
+                  selectedSidePref == 'right',
+                      () => _updatePageLayout(page, selectedSpreadPos, 'right'),
+                ),
+              ], classes: 'flex-row gap-1'),
+            ],
+            classes: 'flex-row flex-wrap gap-2 pt-2 border-t border-gray-200 mt-1 justify-between items-center',
+          )
+      ],
+      classes: 'flex-col bg-gray-50 border border-gray-150 p-3 rounded-lg mb-2',
+      attributes: const {'style': 'gap: 8px;'},
     );
   }
 
@@ -760,113 +821,439 @@ class _FanzineEditorState extends State<FanzineEditor> {
   }
 
   Component _buildUploadTab() {
-    return div(classes: 'flex-col gap-3 text-left p-2', [
-      h2(
-          classes: 'text-sm font-bold text-gray uppercase tracking-wider mb-2',
-          [text('Upload Image into Folio')]
+    // Filter user's images that belong to this fanzine
+    final folioImages = _userImages.where((img) {
+      final List usedIn = img['usedInFanzines'] ?? [];
+      final String? context = img['folioContext'];
+      return context == component.frefFanzineId || usedIn.contains(component.frefFanzineId);
+    }).toList();
+
+    final fiveByEightDocs = folioImages.where((img) => _isImage5x8(img)).toList();
+    final otherDocs = folioImages.where((img) => !_isImage5x8(img)).toList();
+
+    return div([
+      // 1. Side by side Action Buttons matches image_36f407.png perfectly
+      div(
+        [
+          button(
+              [
+                if (_isUploading)
+                  span([text('progress_activity')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px; animation: spin 1s linear infinite;'})
+                else
+                  span([text('upload')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                text(_isUploading ? "uploading..." : "upload new image")
+              ],
+              attributes: {
+                'style': 'background-color: #9e9e9e; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
+                if (_isUploading) 'disabled': 'true'
+              },
+              events: {
+                'click': (e) {
+                  if (!_isUploading) _triggerNewImageUpload();
+                }
+              }
+          ),
+          button(
+              [
+                span([text('photo_library')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                text("select orphan image")
+              ],
+              attributes: {
+                'style': 'background-color: #9e9e9e; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
+                if (_isUploading) 'disabled': 'true'
+              },
+              events: {
+                'click': (e) {
+                  if (!_isUploading) setState(() => _showOrphanSelector = true);
+                }
+              }
+          ),
+        ],
+        attributes: const {
+          'style': 'display: flex; gap: 12px; justify-content: center; width: 100%; margin-top: 8px; margin-bottom: 20px;'
+        },
       ),
 
-      // 1. The 5:8 Drag & Select Sheet (Matches profile_page)
-      div(
-          classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center relative rounded-lg border-2 border-dashed border-gray-300 cursor-pointer overflow-hidden mb-3',
-          attributes: {'style': 'width: 100%; aspect-ratio: 5 / 8;'},
-          events: {'click': (e) => _pickAndPreviewImage()},
-          [
-            if (_uploadPreviewUrl != null)
-              img(
-                  src: _uploadPreviewUrl!,
-                  attributes: {'style': 'width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;'}
-              )
-            else
-              div(classes: 'flex flex-col items-center justify-center p-4 text-center', [
-                span(classes: 'material-symbols-outlined text-gray-400 mb-2', attributes: {'style': 'font-size: 48px;'}, [text('add_photo_alternate')]),
-                span(classes: 'text-xs font-bold text-gray-500', [text('Click or Tap to select image')]),
-                span(classes: 'text-xs text-gray-400 mt-1', [text('Image will automatically resize to optimal page metrics')])
-              ]),
+      // Subtle animated progress indicator directly below buttons
+      if (_isUploading)
+        div([
+          div([], attributes: const {
+            'style': 'height: 3px; background-color: #6750A4; width: 60%; border-radius: 2px; animation: shimmerKeyframe 1.5s infinite linear;'
+          })
+        ], attributes: const {
+          'style': 'width: 100%; height: 3px; background-color: #eee; border-radius: 2px; overflow: hidden; margin-top: -12px; margin-bottom: 16px;'
+        }),
 
-            input(
-                id: 'folio-editor-upload-picker',
+      // If empty and not currently uploading, show empty placeholder
+      if (folioImages.isEmpty && !_isUploading)
+        div(
+          [text("no images in this folio yet.")],
+          attributes: const {
+            'style': 'text-align: center; padding: 40px 16px; color: #888; font-size: 13px; font-style: italic; width: 100%; border-top: 1px solid #f0f0f0;'
+          },
+        )
+      else ...[
+        // Categorized Grids
+        if (fiveByEightDocs.isNotEmpty || (_isUploading && fiveByEightDocs.isEmpty && otherDocs.isEmpty)) ...[
+          div([
+            span(
+              [text("full pages (5x8)")],
+              attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
+            )
+          ], attributes: const {'style': 'margin-top: 12px; margin-bottom: 8px;'}),
+          _buildUploadedImagesGrid(fiveByEightDocs, showUploadPlaceholder: _isUploading),
+          div([], attributes: const {'style': 'height: 16px;'})
+        ],
+
+        if (otherDocs.isNotEmpty && !(_isUploading && fiveByEightDocs.isEmpty && otherDocs.isEmpty)) ...[
+          div([
+            span(
+              [text("inline assets")],
+              attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
+            )
+          ], attributes: const {'style': 'margin-top: 12px; margin-bottom: 8px;'}),
+          _buildUploadedImagesGrid(otherDocs),
+          div([], attributes: const {'style': 'height: 16px;'})
+        ]
+      ]
+    ], classes: 'flex-col gap-3 text-left p-2');
+  }
+
+  Component _buildUploadedImagesGrid(List<Map<String, dynamic>> docs, {bool showUploadPlaceholder = false}) {
+    return div(
+      [
+        if (showUploadPlaceholder)
+          _buildShimmerPlaceholderCard(),
+        for (var doc in docs)
+          _buildFolioGridItem(doc)
+      ],
+      attributes: const {
+        'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; width: 100%; margin-top: 8px;'
+      },
+    );
+  }
+
+  Component _buildShimmerPlaceholderCard() {
+    return div(
+        [
+          div([
+            span([text('progress_activity')], classes: 'material-symbols-outlined', attributes: const {
+              'style': 'font-size: 24px; color: #6750A4; animation: spin 1s linear infinite;'
+            }),
+            span([text("processing...")], attributes: const {
+              'style': 'font-size: 9px; color: #6750A4; font-weight: bold; margin-top: 8px;'
+            })
+          ], attributes: const {
+            'style': 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;'
+          })
+        ],
+        classes: 'shimmer-bg',
+        attributes: const {
+          'style': 'aspect-ratio: 5 / 8; background-color: #f5f5f5; border: 1px solid rgba(103, 80, 164, 0.3); border-radius: 6px; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'
+        }
+    );
+  }
+
+  Component _buildFolioGridItem(Map<String, dynamic> doc) {
+    final String imageId = doc['id'] ?? '';
+    final String? optimalUrl = doc['gridUrl'] ?? doc['fileUrl'];
+    final String title = doc['title'] ?? doc['fileName'] ?? 'untitled';
+    final int width = doc['width'] ?? 0;
+    final int height = doc['height'] ?? 0;
+    final bool isDirect = doc['folioContext'] == component.frefFanzineId;
+
+    return div(
+      [
+        // Background Image
+        if (optimalUrl != null && optimalUrl.isNotEmpty)
+          img(
+              src: optimalUrl,
+              attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
+          ),
+
+        // Dimensions and badges (Absolute Positioned)
+        div(
+          [
+            div(
+              [text(isDirect ? "direct" : "added")],
+              attributes: const {
+                'style': 'background-color: rgba(33,33,33,0.75); color: white; font-size: 8px; font-weight: bold; border-radius: 4px; padding: 2px 4px; text-align: center; text-transform: lowercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+              },
+            ),
+            div(
+              [text("${width}x${height}")],
+              attributes: const {
+                'style': 'background-color: rgba(0,0,0,0.65); color: white; font-size: 8px; font-weight: bold; border-radius: 4px; padding: 2px 4px; text-align: center;'
+              },
+            )
+          ],
+          attributes: const {
+            'style': 'position: absolute; top: 4px; left: 4px; right: 4px; display: flex; flex-direction: column; gap: 2px; pointer-events: none;'
+          },
+        ),
+
+        // Remove/Delete Action Button on Top-Right (Absolute Positioned)
+        div(
+          [
+            button(
+                [span([text(isDirect ? 'delete' : 'close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
                 attributes: {
-                  'type': 'file',
-                  'accept': 'image/*',
-                  'style': 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;'
+                  'style': 'border: none; background: rgba(0,0,0,0.7); border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: ${isDirect ? '#ff5252' : 'white'}; border: 1px solid white;'
                 },
                 events: {
-                  'change': (e) => _onFileInputChanged(),
-                  'click': (e) => (e as dynamic).stopPropagation()
+                  'click': (e) {
+                    _confirmRemoveImage(imageId, isDirect);
+                  }
                 }
             )
-          ]
-      ),
-
-      // Metadata inputs
-      div(classes: 'flex-col mb-3', [
-        input(
-          attributes: {'type': 'text', 'placeholder': 'Title (Required)', 'value': _uploadTitle},
-          events: {'input': (e) => _uploadTitle = (e.target as dynamic).value},
+          ],
+          attributes: const {
+            'style': 'position: absolute; top: 4px; right: 4px;'
+          },
         ),
-        input(
-          attributes: {'type': 'text', 'placeholder': 'Caption / Description (Optional)', 'value': _uploadDescription},
-          events: {'input': (e) => _uploadDescription = (e.target as dynamic).value},
-        ),
-        input(
-          attributes: {'type': 'text', 'placeholder': 'Indicia / Copyright (Optional)', 'value': _uploadIndicia},
-          events: {'input': (e) => _uploadIndicia = (e.target as dynamic).value},
-        ),
-      ]),
 
-      // Creators listing
-      div(classes: 'flex-col mb-3 p-3 bg-gray-50 border border-gray-150 p-2 rounded-lg', [
-        span(classes: 'text-xs font-bold text-gray-700 mb-2 block', [text('Credited Creators')]),
+        // Footer Title (Absolute Positioned)
+        div(
+          [
+            span(
+              [text(title.toLowerCase())],
+              attributes: const {
+                'style': 'font-size: 8px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; text-align: center;'
+              },
+            )
+          ],
+          attributes: const {
+            'style': 'position: absolute; bottom: 0; left: 0; right: 0; background-color: rgba(0,0,0,0.65); padding: 4px 6px; pointer-events: none;'
+          },
+        )
+      ],
+      attributes: const {
+        'style': 'aspect-ratio: 5 / 8; background-color: #f5f5f5; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'
+      },
+    );
+  }
 
-        if (_uploadCreators.isNotEmpty)
-          div(classes: 'flex-col gap-1 mb-2', [
-            for (int i = 0; i < _uploadCreators.length; i++)
-              div(classes: 'flex-row items-center justify-between bg-white border border-gray-150 p-2 rounded mb-1 text-xs font-medium', [
-                span([text('${_uploadCreators[i]['name']} (${_uploadCreators[i]['role']})')]),
-                span(
-                    classes: 'material-symbols-outlined text-red-500 cursor-pointer',
-                    attributes: {'style': 'font-size: 16px;'},
-                    events: {
-                      'click': (e) => setState(() => _uploadCreators.removeAt(i))
-                    },
-                    [text('remove_circle')]
+  Component _buildOrphanSelectorModal() {
+    // Filter user's images that are not yet in this fanzine
+    final orphanImages = _userImages.where((img) {
+      final List usedIn = img['usedInFanzines'] ?? [];
+      final String? context = img['folioContext'];
+      return context != component.frefFanzineId && !usedIn.contains(component.frefFanzineId);
+    }).toList();
+
+    return div(
+      [
+        div(
+          [
+            // Modal Header
+            div(
+              [
+                h2(
+                  [text("Select Orphan Images to Add (${_selectedOrphanIds.length})")],
+                  attributes: const {'style': 'font-size: 16px; font-weight: bold; margin: 0; color: black;'},
+                ),
+                div(
+                  [
+                    if (_selectedOrphanIds.isNotEmpty)
+                      button(
+                          [text("add selected")],
+                          attributes: const {
+                            'style': 'background-color: #6750A4; color: white; border: none; border-radius: 20px; padding: 6px 14px; font-size: 11px; font-weight: bold; cursor: pointer;'
+                          },
+                          events: {
+                            'click': (e) => _addSelectedOrphans()
+                          }
+                      ),
+                    button(
+                        [text("×")],
+                        attributes: const {
+                          'style': 'border: none; background: #eee; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; font-weight: bold;'
+                        },
+                        events: {
+                          'click': (e) {
+                            setState(() {
+                              _showOrphanSelector = false;
+                              _selectedOrphanIds.clear();
+                            });
+                          }
+                        }
+                    )
+                  ],
+                  attributes: const {'style': 'display: flex; gap: 8px; align-items: center;'},
                 )
-              ])
-          ]),
+              ],
+              attributes: const {
+                'style': 'padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between;'
+              },
+            ),
 
-        div(classes: 'flex-row gap-2 items-center', [
-          div(classes: 'flex-1', [
-            input(
-                attributes: {'type': 'text', 'placeholder': '@handle', 'value': _newCreator_Handle ?? _newCreatorHandle, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'},
-                events: {'input': (e) => _newCreatorHandle = (e.target as dynamic).value}
+            // Modal Body
+            div(
+              [
+                if (_loadingImages)
+                  div([text("Loading gallery...")], attributes: const {'style': 'text-align: center; padding: 40px 0; color: #888;'})
+                else if (orphanImages.isEmpty)
+                  div(
+                    [
+                      span([text('image_not_supported')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 48px; color: #ccc;'}),
+                      p([text("No orphan images available in your library.")], attributes: const {'style': 'font-size: 13px; font-style: italic; margin-top: 8px;'})
+                    ],
+                    attributes: const {'style': 'text-align: center; padding: 40px 0; color: #888;'},
+                  )
+                else
+                  div(
+                    [
+                      for (var img in orphanImages)
+                        _buildOrphanGridItem(img)
+                    ],
+                    attributes: const {
+                      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px;'
+                    },
+                  )
+              ],
+              attributes: const {
+                'style': 'padding: 20px; overflow-y: auto; flex: 1;'
+              },
             )
-          ]),
-          div(classes: 'flex-1', [
-            input(
-                attributes: {'type': 'text', 'placeholder': 'Role', 'value': _newCreator_Role ?? _newCreatorRole, 'style': 'margin-bottom: 0; padding: 6px 12px; font-size: 12px;'},
-                events: {'input': (e) => _newCreatorRole = (e.target as dynamic).value}
-            )
-          ]),
-          span(
-              classes: 'material-symbols-outlined text-green-600 cursor-pointer',
-              attributes: {'style': 'font-size: 22px; padding: 2px;'},
-              events: {'click': (e) => _addCreator()},
-              [text('add_circle')]
+          ],
+          attributes: const {
+            'style': 'background-color: white; border-radius: 12px; width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.2);'
+          },
+        )
+      ],
+      classes: 'global-modal-overlay',
+      attributes: const {
+        'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'
+      },
+    );
+  }
+
+  Component _buildOrphanGridItem(Map<String, dynamic> imgData) {
+    final String imageId = imgData['id'] ?? '';
+    final bool isSelected = _selectedOrphanIds.contains(imageId);
+    final String? thumbUrl = imgData['gridUrl'] ?? imgData['fileUrl'];
+
+    return div(
+      [
+        if (thumbUrl != null && thumbUrl.isNotEmpty)
+          img(
+              src: thumbUrl,
+              attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
           )
-        ])
-      ]),
+        else
+          div([text("no preview")], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 11px;'}),
 
-      if (_uploadError != null)
-        p(classes: 'error-msg mb-3', [text(_uploadError!)]),
+        // Checkmark badge
+        if (isSelected)
+          div(
+            [
+              span(
+                [text('check')],
+                classes: 'material-symbols-outlined',
+                attributes: const {'style': 'font-size: 12px; color: white; font-weight: bold;'},
+              )
+            ],
+            attributes: const {
+              'style': 'position: absolute; top: 6px; right: 6px; background-color: #6750A4; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.2);'
+            },
+          )
+      ],
+      attributes: {
+        'style': 'aspect-ratio: 5/8; background-color: #f5f5f5; border-radius: 6px; overflow: hidden; border: 2px solid ${isSelected ? '#6750A4' : 'transparent'}; position: relative; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1);'
+      },
+      events: {
+        'click': (e) {
+          setState(() {
+            if (isSelected) {
+              _selectedOrphanIds.remove(imageId);
+            } else {
+              _selectedOrphanIds.add(imageId);
+            }
+          });
+        }
+      },
+    );
+  }
 
-      button(
-          classes: 'btn-primary w-full',
-          attributes: (_isUploadingImage || _uploadImageBase64 == null) ? {'disabled': 'true'} : {},
-          events: {'click': (e) => _submitSingleImage()},
-          [text(_isUploadingImage ? 'Publishing page to Folio...' : 'Publish to Folio')]
-      )
-    ]);
+  Future<void> _addSelectedOrphans() async {
+    if (_selectedOrphanIds.isEmpty) return;
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      for (final imageId in _selectedOrphanIds) {
+        final imgData = _userImages.firstWhere((img) => img['id'] == imageId);
+        final String? url = imgData['fileUrl'] ?? imgData['gridUrl'];
+        final int width = imgData['width'] ?? 0;
+        final int height = imgData['height'] ?? 0;
+
+        if (url != null) {
+          await _addExistingImage(imageId, url, width, height);
+        }
+      }
+
+      setState(() {
+        _showOrphanSelector = false;
+        _selectedOrphanIds.clear();
+      });
+    } catch (e) {
+      print('[ORPHAN SELECTOR ERROR] $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  Component _buildConfirmModal() {
+    return div(
+      [
+        div(
+          [
+            h3([text(_confirmTitle)], attributes: const {'style': 'font-size: 16px; font-weight: bold; margin: 0; color: black;'}),
+            p([text(_confirmBody)], attributes: const {'style': 'font-size: 13px; color: #555; line-height: 1.5; margin: 0;'}),
+            div(
+              [
+                button(
+                    [text("cancel")],
+                    attributes: const {
+                      'style': 'background-color: #eee; color: black; border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: bold; cursor: pointer;'
+                    },
+                    events: {
+                      'click': (e) {
+                        setState(() {
+                          _activeConfirmId = null;
+                        });
+                      }
+                    }
+                ),
+                button(
+                    [text(_isConfirmDirect ? "DELETE FOREVER" : "REMOVE")],
+                    attributes: {
+                      'style': 'background-color: ${_isConfirmDirect ? "#ff5252" : "#6750A4"}; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: bold; cursor: pointer;'
+                    },
+                    events: {
+                      'click': (e) => _executeImageRemoval()
+                    }
+                )
+              ],
+              attributes: const {'style': 'display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;'},
+            )
+          ],
+          attributes: const {
+            'style': 'background-color: white; border-radius: 12px; width: 100%; max-width: 400px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left;'
+          },
+        )
+      ],
+      classes: 'global-modal-overlay',
+      attributes: const {
+        'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 30000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
+      },
+    );
   }
 
   // Fallbacks to handle legacy compilation properties safely

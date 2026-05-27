@@ -1,5 +1,6 @@
 import 'package:web/web.dart' as web;
 import 'dart:js_interop';
+import 'dart:async';
 
 /// Browser-specific implementation using package:web.
 void scrollToElement(String id) {
@@ -12,7 +13,7 @@ void scrollToElement(String id) {
   }
 }
 
-/// Reads the selected file from the DOM `<input>` element directly using pure Dart and package:web.
+/// Reads the selected file from the DOM <input> element directly using pure Dart and package:web.
 void readSelectedFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
   final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
   if (input == null) {
@@ -39,7 +40,7 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
       print('[DART FILE READER] FileReader result is null.');
       return;
     }
-    // Result is a JSString when reading as DataURL
+// Result is a JSString when reading as DataURL
     final dataUrl = (result as JSString).toDart;
     final splitIndex = dataUrl.indexOf(',');
     if (splitIndex == -1) {
@@ -51,6 +52,8 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
 
     print('[DART FILE READER] Success. Triggering callback.');
     callback(base64, file.name, objectUrl);
+
+
   }.toJS;
 
   reader.onerror = (web.Event event) {
@@ -77,4 +80,24 @@ void triggerFilePicker(String inputId, void Function(String base64, String fileN
   }.toJS;
 
   input.click();
+}
+
+/// Asynchronously loads an image object to extract its native width and height metrics on client.
+Future<Map<String, int>> getImageDimensions(String objectUrl) {
+  final completer = Completer<Map<String, int>>();
+  final img = web.document.createElement('img') as web.HTMLImageElement;
+  img.src = objectUrl;
+  img.onload = (web.Event event) {
+    completer.complete({
+      'width': img.naturalWidth,
+      'height': img.naturalHeight,
+    });
+  }.toJS;
+  img.onerror = (web.Event event) {
+    completer.complete({
+      'width': 0,
+      'height': 0,
+    });
+  }.toJS;
+  return completer.future;
 }
