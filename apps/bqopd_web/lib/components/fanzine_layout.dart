@@ -9,7 +9,7 @@ enum FanzineViewMode { grid, single }
 
 /// Jaspr Web Layout component utilizing Set-based likedImageIds to prevent WebSocket connection storms.
 class FanzineLayout extends StatefulComponent {
-  final String fanzineId;
+  final String frefFanzineId; // Corrected from fanzineId to match code usages
   final List<Map<String, dynamic>> pages;
   final Component gridHeader;
   final Component listHeader;
@@ -23,7 +23,7 @@ class FanzineLayout extends StatefulComponent {
   final bool isEditingMode;
 
   const FanzineLayout({
-    required this.fanzineId,
+    required String fanzineId,
     required this.pages,
     required this.gridHeader,
     required this.listHeader,
@@ -36,7 +36,7 @@ class FanzineLayout extends StatefulComponent {
     this.authBloc,
     this.isEditingMode = false,
     super.key,
-  });
+  }) : frefFanzineId = fanzineId;
 
   @override
   State<FanzineLayout> createState() => _FanzineLayoutState();
@@ -86,8 +86,6 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     final isGrid = enableTwoPage ? (_viewMode == FanzineViewMode.grid) : false;
     final showThirdColumn = !isGrid && _activeGlobalPanel != null;
 
-    final String calcWidth = "calc((100vh - 120px) * 0.625)";
-
     return div(classes: 'reader-split-layout', [
       // Column 1: Grid Area (Only visible and built if enableTwoPage is true)
       if (enableTwoPage)
@@ -106,16 +104,17 @@ class _FanzineLayoutState extends State<FanzineLayout> {
             ]
         ),
 
-      // Column 2: List Area (The Reader)
+      // Column 2: List Area (The Reader) - Expanded to a spacious minimum of 600px
+      // Now acts as a fully styled flex container to center its list contents cleanly.
       if (!isGrid)
         div(
-            classes: 'list-area',
-            attributes: {
-              'style': 'flex: 0 0 $calcWidth; min-width: 400px; margin: 0;' // Centered together snugly
+            classes: 'list-area flex-col items-center',
+            attributes: const {
+              'style': 'flex: 0 0 600px; min-width: 600px; margin: 0; display: flex; flex-direction: column; align-items: center;'
             },
             [
               FanzineListRenderer(
-                fanzineId: component.fanzineId,
+                fanzineId: component.frefFanzineId,
                 pages: component.pages,
                 headerWidget: component.listHeader,
                 activeGlobalPanel: _activeGlobalPanel,
@@ -138,7 +137,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
             attributes: {'style': 'border-left: 1px solid #e0e0e0;'},
             [
               PanelColumnRenderer(
-                fanzineId: component.fanzineId,
+                fanzineId: component.frefFanzineId,
                 pages: component.pages,
                 activePanel: _activeGlobalPanel!,
                 onClose: () => setState(() => _activeGlobalPanel = null),

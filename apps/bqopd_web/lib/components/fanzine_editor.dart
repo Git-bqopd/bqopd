@@ -10,6 +10,7 @@ import '../utils/web_utils.dart';
 import '../utils/web_shortcode_service.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
+import 'segmented_button.dart';
 
 /// Refined workspace editor experience for the Jaspr web application.
 /// Form-fitting, height-adaptive panel supporting dynamic folio adjustments.
@@ -278,10 +279,37 @@ class _FanzineEditorState extends State<FanzineEditor> {
             height: p.height,
           );
         }
-        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
         return;
       }
+
+      // PERSISTED DATABASE DELETION WITH SEQUENTIAL HEALING
       await fsDeleteDoc('fanzines/${component.frefFanzineId}/pages/$pageId');
+
+      // Filter out the deleted page and heal the rest sequentially
+      final List<Map<String, dynamic>> fullPages = component.pageStructure
+          .where((p) => _isPage5x8(p) && p['__id'] != pageId)
+          .toList();
+
+      final List<Future<void>> updates = [];
+      for (int i = 0; i < fullPages.length; i++) {
+        final item = fullPages[i];
+        final String itemId = item['__id'] ?? '';
+        final int currentNum = item['pageNumber'] ?? 0;
+        final int expectedNum = i + 1;
+
+        if (itemId.isNotEmpty && currentNum != expectedNum) {
+          updates.add(
+            fsUpdateDoc(
+              'fanzines/${component.frefFanzineId}/pages/$itemId',
+              jsonEncode({'pageNumber': expectedNum}),
+            ),
+          );
+        }
+      }
+      if (updates.isNotEmpty) {
+        await Future.wait(updates);
+      }
     } catch (e) {
       print("Error removing page: $e");
     }
@@ -289,7 +317,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
 
   Future<void> _reorderPage(Map<String, dynamic> page, int delta) async {
     final String pageId = page['__id'] ?? '';
-    final int currentNum = page['pageNumber'] ?? 0;
     if (pageId.isEmpty) return;
 
     try {
@@ -323,13 +350,43 @@ class _FanzineEditorState extends State<FanzineEditor> {
             height: p.height,
           );
         }
-        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
         return;
       }
-      await fsUpdateDoc(
-        'fanzines/${component.frefFanzineId}/pages/$pageId',
-        jsonEncode({'pageNumber': currentNum + delta}),
-      );
+
+      // PERSISTED DATABASE REORDERING (SEQUENTIAL HEALING SWAP)
+      final fullPages = component.pageStructure.where((p) => _isPage5x8(p)).toList();
+      final idx = fullPages.indexWhere((p) => p['__id'] == pageId);
+      if (idx == -1) return;
+
+      final targetIdx = idx + delta;
+      if (targetIdx < 0 || targetIdx >= fullPages.length) return;
+
+      // Swapping elements in copy array of 5x8 pages
+      final temp = fullPages[idx];
+      fullPages[idx] = fullPages[targetIdx];
+      fullPages[targetIdx] = temp;
+
+      // Update and heal any indexing duplicates/drifts in parallel
+      final List<Future<void>> updates = [];
+      for (int i = 0; i < fullPages.length; i++) {
+        final item = fullPages[i];
+        final String itemId = item['__id'] ?? '';
+        final int currentNum = item['pageNumber'] ?? 0;
+        final int expectedNum = i + 1;
+
+        if (itemId.isNotEmpty && currentNum != expectedNum) {
+          updates.add(
+            fsUpdateDoc(
+              'fanzines/${component.frefFanzineId}/pages/$itemId',
+              jsonEncode({'pageNumber': expectedNum}),
+            ),
+          );
+        }
+      }
+      if (updates.isNotEmpty) {
+        await Future.wait(updates);
+      }
     } catch (e) {
       print("Error reordering: $e");
     }
@@ -360,7 +417,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
             width: p.width,
             height: p.height,
           );
-          UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+          UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
         }
         return;
       }
@@ -380,6 +437,17 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (img['is5x8'] == true) return true;
     final w = img['width'] as num?;
     final h = img['height'] as num?;
+    if (w != null && h != null && h > 0) {
+      final ratio = w / h;
+      return ratio >= 0.58 && ratio <= 0.67;
+    }
+    return false;
+  }
+
+  bool _isPage5x8(Map<String, dynamic> page) {
+    if (page['templateId'] != null) return true;
+    final w = page['width'] as num?;
+    final h = page['height'] as num?;
     if (w != null && h != null && h > 0) {
       final ratio = w / h;
       return ratio >= 0.58 && ratio <= 0.67;
@@ -473,7 +541,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
         height: height,
       );
       pages.add(newPage);
-      UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+      UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
     } else {
       final resStr = await fsQuery('fanzines/${component.frefFanzineId}/pages', '', '', '', '');
       final List pageDocs = jsonDecode(resStr);
@@ -671,8 +739,26 @@ class _FanzineEditorState extends State<FanzineEditor> {
     );
   }
 
+  Component _buildCustomToggleSwitchForCover(bool val) {
+    return div(
+      [
+        div(
+          [],
+          attributes: {
+            'style': 'width: 12px; height: 12px; border-radius: 50%; background-color: white; position: absolute; top: 3px; left: ${val ? '18px' : '3px'}; transition: left 0.2s;'
+          },
+        )
+      ],
+      attributes: {
+        'style': 'width: 33px; height: 18px; border-radius: 10px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
+      },
+    );
+  }
+
   Component _buildOrderTab() {
-    if (component.pageStructure.isEmpty) {
+    final fullPages = component.pageStructure.where((p) => _isPage5x8(p)).toList();
+
+    if (fullPages.isEmpty) {
       return div([
         span([text('format_list_numbered')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
         p([text('No pages added to zine flatplan yet.')])
@@ -685,12 +771,80 @@ class _FanzineEditorState extends State<FanzineEditor> {
         classes: 'text-sm font-bold text-gray uppercase tracking-wider mb-3',
       ),
 
-      for (int i = 0; i < component.pageStructure.length; i++)
-        _buildOrderPageRow(component.pageStructure[i], i)
+      for (int i = 0; i < fullPages.length; i++)
+        _buildOrderPageRow(fullPages[i], i, fullPages.length, fullPages)
     ], classes: 'flex-col gap-3 text-left p-2');
   }
 
-  Component _buildOrderPageRow(Map<String, dynamic> page, int idx) {
+  void _onSpreadPosChanged(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages, String clickedVal) {
+    final String currentSpreadPos = page['spreadPosition'] ?? '';
+
+    if (clickedVal == 'start') {
+      if (currentSpreadPos == 'start') {
+        // Toggle OFF: disassemble both this and the next page
+        _disassembleSpread(idx, idx + 1, fullPages, 'either', 'either');
+      } else {
+        // Toggle ON: must not be the last image
+        if (idx < totalCount - 1) {
+          _assembleSpread(idx, idx + 1, fullPages);
+        }
+      }
+    } else if (clickedVal == 'end') {
+      if (currentSpreadPos == 'end') {
+        // Toggle OFF: disassemble both this and the previous page
+        _disassembleSpread(idx, idx - 1, fullPages, 'either', 'either');
+      } else {
+        // Toggle ON: must not be the first image
+        if (idx > 0) {
+          _assembleSpread(idx - 1, idx, fullPages);
+        }
+      }
+    }
+  }
+
+  void _onSidePrefChanged(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages, String clickedVal) {
+    final String currentSpreadPos = page['spreadPosition'] ?? '';
+
+    if (currentSpreadPos == 'start') {
+      if (clickedVal != 'left') {
+        // Spread is broken: disassembled both this and the next page
+        _disassembleSpread(idx, idx + 1, fullPages, clickedVal, 'either');
+      } else {
+        _updatePageLayout(page, 'start', 'left');
+      }
+    } else if (currentSpreadPos == 'end') {
+      if (clickedVal != 'right') {
+        // Spread is broken: disassembled both this and the previous page
+        _disassembleSpread(idx, idx - 1, fullPages, clickedVal, 'either');
+      } else {
+        _updatePageLayout(page, 'end', 'right');
+      }
+    } else {
+      // Independent preference change
+      _updatePageLayout(page, null, clickedVal);
+    }
+  }
+
+  void _assembleSpread(int startIdx, int endIdx, List<Map<String, dynamic>> fullPages) {
+    if (startIdx < 0 || endIdx >= fullPages.length) return;
+    final startPage = fullPages[startIdx];
+    final endPage = fullPages[endIdx];
+
+    _updatePageLayout(startPage, 'start', 'left');
+    _updatePageLayout(endPage, 'end', 'right');
+  }
+
+  void _disassembleSpread(int activeIdx, int siblingIdx, List<Map<String, dynamic>> fullPages, String activeTargetSide, String siblingTargetSide) {
+    final activePage = fullPages[activeIdx];
+    _updatePageLayout(activePage, null, activeTargetSide);
+
+    if (siblingIdx >= 0 && siblingIdx < fullPages.length) {
+      final siblingPage = fullPages[siblingIdx];
+      _updatePageLayout(siblingPage, null, siblingTargetSide);
+    }
+  }
+
+  Component _buildOrderPageRow(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages) {
     final pageNum = page['pageNumber'] ?? (idx + 1);
     final String? optimalUrl = page['gridUrl'] ?? page['listUrl'] ?? page['imageUrl'];
     final bool isPending = optimalUrl == null || optimalUrl.isEmpty;
@@ -698,125 +852,157 @@ class _FanzineEditorState extends State<FanzineEditor> {
     final String selectedSpreadPos = page['spreadPosition'] ?? '';
     final String selectedSidePref = page['sidePreference'] ?? 'either';
 
+    final bool isPage1Cover = pageNum == 1 && _hasCover;
+
     return div(
+      classes: 'fanzine-page-row-card',
+      attributes: const {
+        'style': 'display: flex; flex-direction: column; gap: 12px; border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; background-color: #ffffff; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'
+      },
       [
-        // Bottom row: Page number, Image thumbnail, delete button
-        div([
-          div([
-            span(
-              [text('$pageNum.')],
-              classes: 'font-black text-xs text-gray-400',
-              attributes: const {'style': 'width: 20px; text-align: right;'},
-            ),
-            div(
-              [
-                if (!isPending)
-                  img(
-                      src: optimalUrl!,
-                      attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
-                  )
-                else
-                  div(
-                    [
-                      span(
-                        [text('progress_activity')],
-                        classes: 'material-symbols-outlined text-gray-300',
-                        attributes: const {'style': 'font-size: 16px;'},
-                      )
-                    ],
-                    classes: 'shimmer-bg w-full h-full flex items-center justify-center',
-                  )
-              ],
-              classes: 'rounded border border-gray-200 overflow-hidden bg-white',
-              attributes: const {'style': 'width: 36px; height: 50px; position: relative;'},
-            ),
-            span(
-              [text(isPending ? 'Processing web asset...' : 'Archival Page')],
-              classes: 'text-xs font-bold text-gray-700',
-            )
-          ], classes: 'flex-row items-center gap-3'),
-
-          // Action Arrow reordering
-          div([
-            button(
-              [span([text('arrow_upward')], classes: 'material-symbols-outlined text-sm')],
-              classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-              attributes: pageNum <= 1 ? {'disabled': 'true'} : const {},
-              events: {'click': (e) => _reorderPage(page, -1)},
-            ),
-            button(
-              [span([text('arrow_downward')], classes: 'material-symbols-outlined text-sm')],
-              classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-              attributes: pageNum >= component.pageStructure.length ? {'disabled': 'true'} : const {},
-              events: {'click': (e) => _reorderPage(page, 1)},
-            ),
-            span([text('|')], classes: 'px-1 text-gray-300'),
-            button(
-              [span([text('close')], classes: 'material-symbols-outlined text-sm text-red-500')],
-              classes: 'p-1 hover:bg-red-50 rounded border-none bg-transparent cursor-pointer',
-              events: {'click': (e) => _deletePage(page['__id'] ?? '')},
-            ),
-          ], classes: 'flex-row items-center gap-1')
-        ], classes: 'flex-row items-center justify-between'),
-
-        // Bottom Row: Spread Position and Side Preference configuration (Only if not Page 1 cover)
-        if (pageNum > 1 || !_hasCover)
-          div(
+        // Top Row: Thumbnail, Page Number, Title, reordering buttons
+        div(
+            classes: 'flex-row items-center justify-between',
+            attributes: const {
+              'style': 'display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;'
+            },
             [
-              // Spread Position Segmented Button
               div([
-                _buildSegmentButton(
-                  'start',
-                  selectedSpreadPos == 'start',
-                      () => _updatePageLayout(page, 'start', selectedSidePref),
+                span(
+                  [text('$pageNum.')],
+                  classes: 'font-black text-xs text-gray-400',
+                  attributes: const {'style': 'width: 20px; text-align: right; margin-right: 8px; display: inline-block;'},
                 ),
-                _buildSegmentButton(
-                  'end',
-                  selectedSpreadPos == 'end',
-                      () => _updatePageLayout(page, 'end', selectedSidePref),
+                div(
+                  [
+                    if (!isPending)
+                      img(
+                          src: optimalUrl!,
+                          attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
+                      )
+                    else
+                      div(
+                        [
+                          span(
+                            [text('progress_activity')],
+                            classes: 'material-symbols-outlined text-gray-300',
+                            attributes: const {'style': 'font-size: 16px;'},
+                          )
+                        ],
+                        classes: 'shimmer-bg w-full h-full flex items-center justify-center',
+                      )
+                  ],
+                  classes: 'rounded border border-gray-200 overflow-hidden bg-white',
+                  attributes: const {'style': 'width: 36px; height: 50px; position: relative; display: inline-block; vertical-align: middle; margin-right: 12px;'},
                 ),
-                _buildSegmentButton(
-                  'none',
-                  selectedSpreadPos.isEmpty,
-                      () => _updatePageLayout(page, null, selectedSidePref),
-                ),
-              ], classes: 'flex-row gap-1'),
+                span(
+                  [text(isPending ? 'Processing web asset...' : 'Archival Page')],
+                  classes: 'text-xs font-bold text-gray-700',
+                  attributes: const {'style': 'display: inline-block; vertical-align: middle;'},
+                )
+              ], classes: 'flex-row items-center gap-3', attributes: const {'style': 'display: flex; align-items: center;'}),
 
-              // Side Preference Segmented Button
+              // Action Arrow reordering
               div([
-                _buildSegmentButton(
-                  'left',
-                  selectedSidePref == 'left',
-                      () => _updatePageLayout(page, selectedSpreadPos, 'left'),
+                button(
+                  [span([text('arrow_upward')], classes: 'material-symbols-outlined text-sm')],
+                  classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
+                  attributes: pageNum <= 1 ? {'disabled': 'true'} : const {},
+                  events: {'click': (e) => _reorderPage(page, -1)},
                 ),
-                _buildSegmentButton(
-                  'either',
-                  selectedSidePref == 'either',
-                      () => _updatePageLayout(page, selectedSpreadPos, 'either'),
+                button(
+                  [span([text('arrow_downward')], classes: 'material-symbols-outlined text-sm')],
+                  classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
+                  attributes: pageNum >= totalCount ? {'disabled': 'true'} : const {},
+                  events: {'click': (e) => _reorderPage(page, 1)},
                 ),
-                _buildSegmentButton(
-                  'right',
-                  selectedSidePref == 'right',
-                      () => _updatePageLayout(page, selectedSpreadPos, 'right'),
+                span([text('|')], classes: 'px-1 text-gray-300', attributes: const {'style': 'margin: 0 4px;'}),
+                button(
+                  [span([text('close')], classes: 'material-symbols-outlined text-sm text-red-500')],
+                  classes: 'p-1 hover:bg-red-50 rounded border-none bg-transparent cursor-pointer',
+                  events: {'click': (e) => _deletePage(page['__id'] ?? '')},
                 ),
-              ], classes: 'flex-row gap-1'),
-            ],
-            classes: 'flex-row flex-wrap gap-2 pt-2 border-t border-gray-200 mt-1 justify-between items-center',
-          )
+              ], classes: 'flex-row items-center gap-1', attributes: const {'style': 'display: flex; align-items: center;'})
+            ]
+        ),
+
+        // Bottom Row: Aligned columns for Segmented Buttons and Cover switch
+        div(
+          classes: 'flex-row flex-wrap justify-between items-center pt-3 border-t border-gray-100',
+          attributes: const {
+            'style': 'display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 16px; border-top: 1px solid #f3f4f6; width: 100%;'
+          },
+          [
+            // Column 1: Spread Position (start | end)
+            div(
+                attributes: const {
+                  'style': 'width: 140px; display: flex; align-items: center;'
+                },
+                [
+                  if (!isPage1Cover)
+                    SegmentedButton<String>(
+                      segments: const ['start', 'end'],
+                      selected: selectedSpreadPos,
+                      labelBuilder: (val) => val,
+                      onSelectionChanged: (val) {
+                        _onSpreadPosChanged(page, idx, totalCount, fullPages, val);
+                      },
+                    )
+                  else
+                  // Preservation of the layout columns
+                    div(attributes: const {'style': 'width: 140px;'}, []),
+                ]
+            ),
+
+            // Column 2: Side Preference (left | either | right)
+            div(
+                attributes: const {
+                  'style': 'width: 200px; display: flex; align-items: center;'
+                },
+                [
+                  SegmentedButton<String>(
+                    segments: const ['left', 'either', 'right'],
+                    selected: isPage1Cover ? 'right' : selectedSidePref,
+                    labelBuilder: (val) => val,
+                    onSelectionChanged: (val) {
+                      if (isPage1Cover) return;
+                      _onSidePrefChanged(page, idx, totalCount, fullPages, val);
+                    },
+                  ),
+                ]
+            ),
+
+            // Column 3: Cover Switch (only for the first page)
+            if (pageNum == 1)
+              div(
+                [
+                  span([text('cover')], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #49454F; margin-right: 6px;'}),
+                  _buildCustomToggleSwitchForCover(_hasCover),
+                ],
+                attributes: const {
+                  'style': 'display: inline-flex; align-items: center; margin-left: auto;'
+                },
+                events: {
+                  'click': (e) {
+                    final nextVal = !_hasCover;
+                    setState(() => _hasCover = nextVal);
+
+                    // Synchronously update the first page layout fields to align with the cover's active status
+                    if (nextVal) {
+                      _updatePageLayout(page, null, 'right');
+                    } else {
+                      _updatePageLayout(page, null, 'either');
+                    }
+
+                    if (!UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+                      fsUpdateDoc('fanzines/${component.frefFanzineId}', jsonEncode({'hasCover': nextVal}));
+                    }
+                  }
+                },
+              ),
+          ],
+        )
       ],
-      classes: 'flex-col bg-gray-50 border border-gray-150 p-3 rounded-lg mb-2',
-      attributes: const {'style': 'gap: 8px;'},
-    );
-  }
-
-  Component _buildSegmentButton(String label, bool isSelected, void Function() onTap) {
-    return button(
-        classes: 'm3-chip ${isSelected ? 'active' : ''}',
-        attributes: {
-          'style': 'height: 24px; font-size: 10px; padding: 0 8px; border-radius: 4px; border: 1px solid #ddd; margin: 0;'
-        },
-        events: {'click': (e) => onTap()},
-        [text(label)]
     );
   }
 
@@ -1107,7 +1293,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
                         _buildOrphanGridItem(img)
                     ],
                     attributes: const {
-                      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px;'
+                      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 150px)); gap: 12px;'
                     },
                   )
               ],

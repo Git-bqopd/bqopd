@@ -67,34 +67,57 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
   @override
   Component build(BuildContext context) {
+    final String headerStyle = component.isEditingMode
+        ? 'width: 600px; max-width: 100%; box-sizing: border-box;'
+        : 'width: calc((100vh - 120px) * 0.625); max-width: 100%; box-sizing: border-box;';
+
     return div(classes: 'flex-col items-center w-full', [
+      // Manila Envelope / Workspace Editor Widget: Spans 600px wide if editing, otherwise perfectly matches the outer boundaries of the padded images below.
       div(
           id: 'fanzine-header',
-          classes: 'mb-4 flex justify-center w-full',
+          classes: 'mb-4 flex-row justify-center w-full',
           [
-            // Dynamically select standard squared aspect wrapper OR height-adaptive workspace wrapper
             div(
                 classes: component.isEditingMode ? 'manila-envelope-flexible' : 'manila-envelope',
+                attributes: {
+                  'style': headerStyle
+                },
                 [component.headerWidget]
             )
           ]
       ),
 
+      // Page Images Loop: Centered inner column constrained to the height-based aspect ratio!
       for (int i = 0; i < component.pages.length; i++)
         div(
             id: 'reader-page-$i',
-            classes: 'w-full',
+            classes: 'w-full flex-row justify-center', // Centers the inner column using flex-row
+            attributes: i == component.pages.length - 1
+                ? const {
+              'style': 'padding-bottom: 48px; box-sizing: border-box;'
+            }
+                : const {
+              'style': 'box-sizing: border-box;'
+            },
             [
-              ReaderPageItem(
-                fanzineId: component.fanzineId,
-                pageData: component.pages[i],
-                pageIndex: i,
-                onOpenGrid: component.onOpenGrid,
-                likedImageIds: component.likedImageIds, // Pass downs down
-                initialImageStats: component.preloadedImageStats[component.pages[i]['imageId']],
-                authState: component.authState,
-                authBloc: component.authBloc,
-                isEditingMode: component.isEditingMode,
+              // Inside column: Dynamically calculates the optimal width while safeguarding against overflow
+              div(
+                  attributes: const {
+                    'style': 'width: calc((100vh - 120px) * 0.625); max-width: 100%; padding-left: 24px; padding-right: 24px; box-sizing: border-box;'
+                  },
+                  [
+                    ReaderPageItem(
+                      fanzineId: component.fanzineId, // Correctly resolved field getter
+                      pageData: component.pages[i],
+                      pageIndex: i,
+                      onOpenGrid: component.onOpenGrid,
+                      likedImageIds: component.likedImageIds, // Pass downs down
+                      initialImageStats: component.preloadedImageStats[component.pages[i]['imageId']],
+                      authState: component.authState,
+                      authBloc: component.authBloc,
+                      isEditingMode: component.isEditingMode,
+                    )
+                  ]
               )
             ]
         )

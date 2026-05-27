@@ -7,6 +7,7 @@ import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
 import '../components/fanzine_editor.dart';
 import '../components/fanzine_layout.dart';
+import '../utils/firebase_mocks.dart';
 
 /// Jaspr Web Reader Page utilizing Set-based likedImageIds to optimize performance.
 class FanzineReaderPage extends StatefulComponent {
@@ -48,6 +49,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Set<String> _likedImageIds = {};
   dynamic _likesUnsub;
   dynamic _fanzineUnsub;
+  dynamic _pagesUnsub; // NEW: Pages real-time listener
 
   // Reactive state override
   bool? _overriddenTwoPage;
@@ -64,6 +66,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     } else if (kIsWeb) {
       _loadData();
       _listenToFanzineDoc();
+      _listenToPagesDoc(); // NEW: Page listener setup
     }
     _setupLikesPipeline();
   }
@@ -164,10 +167,59 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     });
   }
 
+  /// NEW: Pages real-time listener subscription to keep flatplan responsive
+  void _listenToPagesDoc() {
+    _pagesUnsub?.callAsFunction();
+    _pagesUnsub = null;
+
+    if (UnsavedFanzineRegistry.fanzines.containsKey(component.fanzineId)) {
+      _pagesUnsub = UnsavedFanzineRegistry.getOrCreatePagesController(component.fanzineId).stream.listen((pgs) {
+        if (mounted) {
+          setState(() {
+            _pages = pgs.map((p) => {
+              '__id': p.id,
+              'imageId': p.imageId,
+              'imageUrl': p.imageUrl,
+              'gridUrl': p.gridUrl,
+              'listUrl': p.listUrl,
+              'pageNumber': p.pageNumber,
+              'status': p.status,
+              'spreadPosition': p.spreadPosition,
+              'sidePreference': p.sidePreference,
+              'width': p.width,
+              'height': p.height,
+            }).toList();
+          });
+        }
+      });
+      return;
+    }
+
+    _pagesUnsub = fsListenQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber', false, (String jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final pagesList = decoded.map((d) {
+          final data = restoreTimestamps(d['data'] as Map<String, dynamic>);
+          data['__id'] = d['id'];
+          return data;
+        }).toList();
+
+        if (mounted) {
+          setState(() {
+            _pages = pagesList;
+          });
+        }
+      } catch (e) {
+        print("Error listening to pages stream: $e");
+      }
+    });
+  }
+
   @override
   void dispose() {
     _likesUnsub?.callAsFunction();
     _fanzineUnsub?.callAsFunction();
+    _pagesUnsub?.callAsFunction(); // NEW: Page unsubscribe
     super.dispose();
   }
 
