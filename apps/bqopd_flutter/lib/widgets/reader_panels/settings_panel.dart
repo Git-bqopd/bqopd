@@ -19,6 +19,7 @@ class SettingsPanel extends StatelessWidget {
       case 'favorite': return Icons.favorite;
       case 'share_outlined': return Icons.share_outlined;
       case 'grid_view': return Icons.grid_view;
+      case 'menu_book': return Icons.menu_book;
       case 'settings_outlined': return Icons.settings_outlined;
       case 'settings': return Icons.settings;
       case 'play_circle_outline': return Icons.play_circle_outline;
@@ -35,6 +36,7 @@ class SettingsPanel extends StatelessWidget {
       case 'bar_chart': return Icons.bar_chart;
       case 'manage_accounts_outlined': return Icons.manage_accounts_outlined;
       case 'manage_accounts': return Icons.manage_accounts;
+      case 'terminal': return Icons.terminal; // Map settings panel icon
       default: return Icons.help_outline;
     }
   }

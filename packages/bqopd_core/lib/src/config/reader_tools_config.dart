@@ -39,22 +39,16 @@ class ReaderToolsConfig {
   }
 
   static const List<ReaderTool> tools = [
+    // 1. Grid (open)
     ReaderTool(
-      id: 'Text',
-      label: 'text',
-      description: 'Read the finalized text.',
-      defaultIcon: 'article_outlined',
-      activeIcon: 'article',
-      bonusRow: BonusRowType.textReader,
+      id: 'Grid',
+      label: 'open',
+      description: 'Return to the grid navigation view.',
+      defaultIcon: 'menu_book',
+      action: ToolAction.switchToGridView,
+      condition: ToolCondition.hideOnDesktopSplit,
     ),
-    ReaderTool(
-      id: 'Comment',
-      label: 'comments',
-      description: 'Join the discussion on this specific page.',
-      defaultIcon: 'chat_bubble_outline',
-      activeIcon: 'chat_bubble',
-      bonusRow: BonusRowType.comments,
-    ),
+    // 2. Like (like)
     ReaderTool(
       id: 'Like',
       label: 'like',
@@ -63,55 +57,25 @@ class ReaderToolsConfig {
       activeIcon: 'favorite',
       action: ToolAction.toggleLike,
     ),
+    // 3. Comment (comments)
     ReaderTool(
-      id: 'Share',
-      label: 'share',
-      description: 'Copy a deep-link to this specific page.',
-      defaultIcon: 'share_outlined',
-      action: ToolAction.openBonusRow, // UPDATED: Changed from copyShareLink to openBonusRow for more options
-      bonusRow: BonusRowType.shareOptions,
+      id: 'Comment',
+      label: 'comments',
+      description: 'Join the discussion on this specific page.',
+      defaultIcon: 'chat_bubble_outline',
+      activeIcon: 'chat_bubble',
+      bonusRow: BonusRowType.comments,
     ),
+    // 4. Text (text)
     ReaderTool(
-      id: 'Grid',
-      label: 'open',
-      description: 'Return to the grid navigation view.',
-      defaultIcon: 'grid_view',
-      action: ToolAction.switchToGridView,
-      condition: ToolCondition.hideOnDesktopSplit,
+      id: 'Text',
+      label: 'text',
+      description: 'Read the finalized text.',
+      defaultIcon: 'article_outlined',
+      activeIcon: 'article',
+      bonusRow: BonusRowType.textReader,
     ),
-    ReaderTool(
-      id: 'Settings',
-      label: 'buttons',
-      description: 'Customize which buttons appear on your toolbar.',
-      defaultIcon: 'settings_outlined',
-      activeIcon: 'settings',
-      bonusRow: BonusRowType.settings,
-    ),
-    ReaderTool(
-      id: 'YouTube',
-      label: 'YouTube',
-      description: 'Watch the video associated with this page.',
-      defaultIcon: 'play_circle_outline',
-      activeIcon: 'play_circle_filled',
-      condition: ToolCondition.requiresYouTube,
-      bonusRow: BonusRowType.youtube,
-    ),
-    ReaderTool(
-      id: 'Tags',
-      label: 'tags',
-      description: 'Vote on hashtags and metadata.',
-      defaultIcon: 'tag',
-      bonusRow: BonusRowType.tags,
-    ),
-    ReaderTool(
-      id: 'Indicia',
-      label: 'indicia',
-      description: 'View publication information and copyright details.',
-      defaultIcon: 'info_outline',
-      activeIcon: 'info',
-      condition: ToolCondition.requiresIndicia,
-      bonusRow: BonusRowType.indicia,
-    ),
+    // 5. Raw (raw) - [Editor Only]
     ReaderTool(
       id: 'Raw',
       label: 'raw',
@@ -121,6 +85,7 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.rawText,
     ),
+    // 6. Master (corrected) - [Editor Only]
     ReaderTool(
       id: 'Master',
       label: 'corrected',
@@ -129,6 +94,7 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.masterText,
     ),
+    // 7. Linked (linked) - [Editor Only]
     ReaderTool(
       id: 'Linked',
       label: 'linked',
@@ -137,6 +103,7 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.linkedText,
     ),
+    // 8. Entities (entities) - [Editor Only]
     ReaderTool(
       id: 'Entities',
       label: 'entities',
@@ -147,15 +114,25 @@ class ReaderToolsConfig {
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
     ),
+    // 9. Tags (tags)
     ReaderTool(
-      id: 'Views',
-      label: 'views',
-      description: 'View detailed reader analytics for this content.',
-      defaultIcon: 'bar_chart_outlined',
-      activeIcon: 'bar_chart',
-      role: ToolRole.editor,
-      bonusRow: BonusRowType.analyticsDashboard, // UPDATED: Changed from views to analyticsDashboard
+      id: 'Tags',
+      label: 'tags',
+      description: 'Vote on hashtags and metadata.',
+      defaultIcon: 'tag',
+      bonusRow: BonusRowType.tags,
     ),
+    // 10. Indicia (indicia)
+    ReaderTool(
+      id: 'Indicia',
+      label: 'indicia',
+      description: 'View publication information and copyright details.',
+      defaultIcon: 'info_outline',
+      activeIcon: 'info',
+      condition: ToolCondition.requiresIndicia,
+      bonusRow: BonusRowType.indicia,
+    ),
+    // 11. Credits (credits) - [Editor Only]
     ReaderTool(
       id: 'Credits',
       label: 'credits',
@@ -164,6 +141,54 @@ class ReaderToolsConfig {
       activeIcon: 'manage_accounts',
       role: ToolRole.editor,
       bonusRow: BonusRowType.credits,
+    ),
+    // 12. Views (views) - [Editor Only]
+    ReaderTool(
+      id: 'Views',
+      label: 'views',
+      description: 'View detailed reader analytics for this content.',
+      defaultIcon: 'bar_chart_outlined',
+      activeIcon: 'bar_chart',
+      role: ToolRole.editor,
+      bonusRow: BonusRowType.analyticsDashboard,
+    ),
+    // 13. YouTube (YouTube)
+    ReaderTool(
+      id: 'YouTube',
+      label: 'YouTube',
+      description: 'Watch the video associated with this page.',
+      defaultIcon: 'play_circle_outline',
+      activeIcon: 'play_circle_filled',
+      condition: ToolCondition.requiresYouTube,
+      bonusRow: BonusRowType.youtube,
+    ),
+    // 14. Terminal (Terminal)
+    ReaderTool(
+      id: 'Terminal',
+      label: 'Terminal',
+      description: 'Enter the CA Combat Terminal game experience.',
+      defaultIcon: 'terminal',
+      activeIcon: 'terminal',
+      condition: ToolCondition.requiresGame,
+      bonusRow: BonusRowType.terminal,
+    ),
+    // 15. Share (share)
+    ReaderTool(
+      id: 'Share',
+      label: 'share',
+      description: 'Copy a deep-link to this specific page.',
+      defaultIcon: 'share_outlined',
+      action: ToolAction.openBonusRow,
+      bonusRow: BonusRowType.shareOptions,
+    ),
+    // 16. Settings (buttons)
+    ReaderTool(
+      id: 'Settings',
+      label: 'buttons',
+      description: 'Customize which buttons appear on your toolbar.',
+      defaultIcon: 'settings_outlined',
+      activeIcon: 'settings',
+      bonusRow: BonusRowType.settings,
     ),
   ];
 }

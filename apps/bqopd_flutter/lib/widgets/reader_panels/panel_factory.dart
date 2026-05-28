@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/engagement_service.dart';
 import '../../services/view_service.dart';
+import '../../game/game_lobby.dart'; // Added GameLobby import
 
 import 'comments_panel.dart';
 import 'credits_panel.dart';
@@ -33,6 +34,7 @@ class PanelFactory {
       case BonusRowType.indicia: return "ISSUE INDICIA";
       case BonusRowType.settings: return "SETTINGS";
       case BonusRowType.editDetails: return "EDIT DETAILS";
+      case BonusRowType.terminal: return "COMBAT TERMINAL"; // Added title
     }
   }
 
@@ -43,6 +45,7 @@ class PanelFactory {
       case BonusRowType.views: return Colors.grey[50]!;
       case BonusRowType.youtube: return Colors.black;
       case BonusRowType.shareOptions: return Colors.indigo.withValues(alpha: 0.05);
+      case BonusRowType.terminal: return const Color(0xFF0D0D0D); // Terminal dark color match
       default: return Colors.white;
     }
   }
@@ -64,18 +67,18 @@ class PanelFactory {
         return RawTextPanel(text: context.textRaw);
       case BonusRowType.masterText:
         return MasterTextPanel(
-            imageId: context.imageId,
-            initialText: context.textCorrected,
-            aiBaselineText: context.textCorrectedAi,
-            fanzineId: context.fanzineId ?? '',
-            templateId: context.templateId
+          imageId: context.imageId,
+          initialText: context.textCorrected,
+          fanzineId: context.fanzineId ?? '',
+          templateId: context.templateId,
+          aiBaselineText: context.textCorrectedAi,
         );
       case BonusRowType.linkedText:
         return LinkedTextPanel(
-            imageId: context.imageId,
-            initialText: context.textLinked,
-            aiBaselineText: context.textLinkedAi,
-            fanzineId: context.fanzineId ?? ''
+          imageId: context.imageId,
+          initialText: context.textLinked,
+          fanzineId: context.fanzineId ?? '',
+          aiBaselineText: context.textLinkedAi,
         );
       case BonusRowType.tags:
         return HashtagPanel(imageId: context.imageId);
@@ -123,6 +126,8 @@ class PanelFactory {
         return const SettingsPanel();
       case BonusRowType.editDetails:
         return const Center(child: Text("Edit Details not implemented yet"));
+      case BonusRowType.terminal:
+        return const GameLobby(); // Instantiated combat game lobby
     }
   }
 }

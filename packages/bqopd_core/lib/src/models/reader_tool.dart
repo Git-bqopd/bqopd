@@ -1,10 +1,8 @@
-/// Defines who is allowed to see the button
 enum ToolRole {
   public, // Visible to everyone
   editor, // Visible only to curators/editors
 }
 
-/// Defines what happens when the button is clicked
 enum ToolAction {
   openBonusRow,     // Opens the associated widget drawer
   toggleLike,       // Hits the engagement service to toggle like state
@@ -12,7 +10,6 @@ enum ToolAction {
   switchToGridView, // Triggers layout change back to the Grid/Navigation view
 }
 
-/// Defines conditional visibility based on the specific page's data or layout state
 enum ToolCondition {
   always,
   requiresYouTube,
@@ -23,7 +20,6 @@ enum ToolCondition {
   requiresOcrPipeline,
 }
 
-/// Defines the specific widget drawer to mount
 enum BonusRowType {
   textReader,
   rawText,
@@ -41,6 +37,7 @@ enum BonusRowType {
   // NEW: Added for enhanced analytics and sharing options
   analyticsDashboard,
   shareOptions,
+  terminal, // Restored terminal enum option
 }
 
 /// Pure Dart data model for a dynamic toolbar button.

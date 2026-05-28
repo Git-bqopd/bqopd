@@ -106,6 +106,14 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         title = "Toolbar Settings";
         inner = SettingsPanel();
         break;
+      case BonusRowType.terminal:
+        title = "Terminal Game";
+        inner = div([
+          p(classes: 'text-center text-sm text-gray p-6 italic', [
+            text('CA Combat Terminal is optimized only for mobile application contexts.')
+          ])
+        ]);
+        break;
       default:
         return div([]);
     }
