@@ -1,0 +1,9 @@
+# Root .gitignore
+.dart_tool/
+.pub-cache/
+.pub/
+build/
+.idea/
+.vscode/
+*.iml
+.DS_Store

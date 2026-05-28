@@ -1,0 +1,7 @@
+.dart_tool/
+build/
+.pub-cache/
+.pub/
+web/main.dart.js
+web/main.dart.js.map
+web/main.dart.js.deps
