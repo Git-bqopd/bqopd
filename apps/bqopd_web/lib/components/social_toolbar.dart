@@ -67,12 +67,25 @@ class _SocialToolbarState extends State<SocialToolbar> {
   @override
   void didUpdateComponent(SocialToolbar oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.imageId != component.imageId || oldComponent.likedImageIds != component.likedImageIds) {
+
+    // Reset back to initial preloaded stats ONLY if the active imageId has changed
+    if (oldComponent.imageId != component.imageId) {
       if (component.initialImageStats != null) {
         _likeCount = component.initialImageStats!['likeCount'] ?? 0;
         _commentCount = component.initialImageStats!['commentCount'] ?? 0;
+      } else {
+        _likeCount = 0;
+        _commentCount = 0;
       }
       _isLiked = component.likedImageIds.contains(component.imageId);
+    }
+    // If the image remains the same but the liked set changes, adjust the count dynamically
+    else if (oldComponent.likedImageIds != component.likedImageIds) {
+      final wasLiked = _isLiked;
+      _isLiked = component.likedImageIds.contains(component.imageId);
+      if (wasLiked != _isLiked) {
+        _likeCount += _isLiked ? 1 : -1;
+      }
     }
   }
 

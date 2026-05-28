@@ -473,12 +473,13 @@ a:hover {
     box-sizing: border-box;
 }
 
+/* --- OPTIMIZED COMPACT TOOLBAR & BUTTONS --- */
 .toolbar-container {
-    padding: 12px 8px;
+    padding: 8px 4px;
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 8px;
+    gap: 4px; /* Reduced from 8px to pack elements tighter */
 }
 
 .toolbar-btn {
@@ -486,30 +487,39 @@ a:hover {
     flex-direction: column;
     align-items: center;
     cursor: pointer;
-    margin: 0 6px;
+    margin: 0 2px; /* Reduced side margin from 6px to 2px */
     background: none;
     border: none;
     padding: 0;
+    transition: transform 0.15s ease;
+}
+
+.toolbar-btn:active {
+    transform: scale(0.92);
 }
 
 .toolbar-icon-wrapper {
     position: relative;
-    padding: 10px;
+    padding: 6px; /* Reduced from 10px to scale down wrapper */
     border-radius: 50%;
-    border: 2px solid black;
+    border: 1.5px solid black; /* Thinned border from 2px for tighter visuals */
     display: flex;
     justify-content: center;
     align-items: center;
-    margin-bottom: 4px;
+    margin-bottom: 2px; /* Reduced from 4px */
+}
+
+.toolbar-icon-wrapper .material-symbols-outlined {
+    font-size: 18px !important; /* Scaled down glyph size from 24px */
 }
 
 .toolbar-btn.active .toolbar-icon-wrapper {
-    background-color: rgba(0, 0, 0, 0.1);
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 .toolbar-btn.active.like-btn .toolbar-icon-wrapper {
     border-color: #ff5252;
-    background-color: rgba(255, 82, 82, 0.1);
+    background-color: rgba(255, 82, 82, 0.08);
 }
 
 .toolbar-btn.active.like-btn .material-symbols-outlined,
@@ -519,14 +529,14 @@ a:hover {
 
 .badge {
     position: absolute;
-    top: -4px;
-    right: -4px;
+    top: -5px;
+    right: -5px;
     background-color: #757575;
     color: white;
-    font-size: 9px;
+    font-size: 8px; /* Slightly shrunk from 9px */
     font-weight: bold;
     border-radius: 50%;
-    padding: 2px 5px;
+    padding: 1px 4px; /* Smoother badge bounds */
     border: 1px solid white;
 }
 
@@ -539,7 +549,7 @@ a:hover {
 }
 
 .toolbar-label {
-    font-size: 10px;
+    font-size: 9px; /* Shrunk from 10px to guarantee single row fitting */
     color: black;
 }
 
