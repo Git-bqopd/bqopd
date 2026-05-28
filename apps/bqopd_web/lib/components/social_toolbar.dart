@@ -48,6 +48,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
   int _commentCount = 0;
   bool _isLiked = false;
   String _userRole = 'user';
+  Map<String, bool> _socialButtonVisibility = {};
 
   // HIGH PERFORMANCE: Eradicated separate document listeners to prevent client-side "Listener Storm"
   dynamic _userUnsub;
@@ -105,8 +106,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
       _userUnsub = fsListenDoc('Users/$uid', (jsonStr) {
         final doc = jsonDecode(jsonStr);
         if (doc['exists'] && mounted) {
+          final data = doc['data'] as Map<String, dynamic>? ?? {};
+          final prefs = data['preferences'] as Map<String, dynamic>? ?? {};
+          final buttons = prefs['socialButtons'] as Map<String, dynamic>? ?? {};
           setState(() {
-            _userRole = doc['data']['role'] ?? 'user';
+            _userRole = data['role'] ?? 'user';
+            _socialButtonVisibility = Map<String, bool>.from(buttons);
           });
         }
       });
@@ -151,9 +156,49 @@ class _SocialToolbarState extends State<SocialToolbar> {
     }
   }
 
+  Future<void> _toggleButtonVisibility(String toolId) async {
+    final uid = getCurrentUserId();
+    if (uid == null) {
+      GlobalModalBus.show();
+      return;
+    }
+
+    final current = _socialButtonVisibility[toolId] ?? true;
+    final next = !current;
+
+    setState(() {
+      _socialButtonVisibility[toolId] = next;
+    });
+
+    await fsUpdateDoc('Users/$uid', jsonEncode({
+      'preferences.socialButtons.$toolId': next
+    }));
+  }
+
   @override
   Component build(BuildContext context) {
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
+      // EXCLUDE raw, corrected (Master), and views editor buttons in the Jaspr Web App
+      if (tool.id == 'Raw' || tool.id == 'Master' || tool.id == 'Views') {
+        return false;
+      }
+
+      // FORCE show the 'Settings' (buttons), 'Grid' (open), and 'Like' (like) buttons unconditionally
+      if (tool.id == 'Settings' || tool.id == 'Grid' || tool.id == 'Like') {
+        return true;
+      }
+
+      // CHECK user preference to decide if this button is visible in the main bar
+      final bool isUserVisible = _socialButtonVisibility[tool.id] ?? true;
+      if (!isUserVisible) {
+        return false;
+      }
+
+      // FORCE show the 'Indicia' button unconditionally if selected by user
+      if (tool.id == 'Indicia') {
+        return true;
+      }
+
       return ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
         userRole: _userRole,
@@ -166,9 +211,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
       );
     }).toList();
 
-    return div(classes: 'toolbar-container', [
-      for (var tool in visibleTools)
-        _buildToolbarButton(tool)
+    return div(classes: 'w-full flex-col', [
+      div(classes: 'toolbar-container', [
+        for (var tool in visibleTools)
+          _buildToolbarButton(tool)
+      ]),
+      if (component.activeBonusRow == BonusRowType.settings)
+        _buildSettingsToggleRow()
     ]);
   }
 
@@ -219,6 +268,91 @@ class _SocialToolbarState extends State<SocialToolbar> {
             ),
             if (count != null && count > 0)
               span(classes: 'badge', [text('$count')])
+          ]),
+          span(classes: 'toolbar-label', [text(tool.label)])
+        ]
+    );
+  }
+
+  Component _buildSettingsToggleRow() {
+    final togglableTools = ReaderToolsConfig.tools.where((tool) {
+      // EXCLUDE core/fixed buttons from the customisation toggles row
+      if (tool.id == 'Settings' || tool.id == 'Grid' || tool.id == 'Like') return false;
+      if (tool.id == 'Raw' || tool.id == 'Master' || tool.id == 'Views') return false;
+
+      if (tool.id == 'Indicia') {
+        return true;
+      }
+
+      return ReaderToolsConfig.isToolVisibleInContext(
+        tool: tool,
+        userRole: _userRole,
+        isEditingMode: component.isEditingMode,
+        fanzineType: component.fanzineType,
+        hasYoutube: component.youtubeId != null && component.youtubeId!.isNotEmpty,
+        isGame: component.isGame,
+        isIndiciaPage: component.isIndiciaPage,
+        canOpenGrid: component.onOpenGrid != null,
+      );
+    }).toList();
+
+    return div(
+        classes: 'toolbar-container panel-container-animate mt-2',
+        attributes: {
+          'style': 'background-color: #f9f9f9; border-top: 1px solid #eee; border-bottom: 1px solid #eee; width: 100%; box-sizing: border-box;'
+        },
+        [
+          for (var tool in togglableTools)
+            _buildSettingsToggleButton(tool)
+        ]
+    );
+  }
+
+  Component _buildSettingsToggleButton(ReaderTool tool) {
+    final bool isVisible = _socialButtonVisibility[tool.id] ?? true;
+
+    bool isToolActive = false;
+    int? toolCount;
+
+    if (tool.id == 'Like') {
+      isToolActive = _isLiked;
+      toolCount = _likeCount;
+    } else if (tool.id == 'Comment') {
+      isToolActive = component.activeBonusRow == BonusRowType.comments;
+      toolCount = _commentCount;
+    } else if (tool.id == 'Text') {
+      isToolActive = component.activeBonusRow == BonusRowType.textReader;
+    } else if (tool.bonusRow != null) {
+      isToolActive = component.activeBonusRow == tool.bonusRow;
+    }
+
+    final iconName = (isToolActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
+    final resolvedIcon = cleanIconName(iconName);
+
+    final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''} ${!isVisible ? 'greyed-out' : ''}';
+    final String extraStyle = !isVisible ? 'opacity: 0.35; filter: grayscale(100%);' : '';
+
+    return button(
+        classes: btnClasses,
+        attributes: {
+          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; $extraStyle'
+        },
+        events: {
+          'click': (e) => _toggleButtonVisibility(tool.id)
+        },
+        [
+          div(classes: 'toolbar-icon-wrapper', [
+            span(
+                classes: 'material-symbols-outlined',
+                attributes: {
+                  'style': isToolActive
+                      ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
+                      : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
+                },
+                [text(resolvedIcon)]
+            ),
+            if (toolCount != null && toolCount > 0)
+              span(classes: 'badge', [text('$toolCount')])
           ]),
           span(classes: 'toolbar-label', [text(tool.label)])
         ]

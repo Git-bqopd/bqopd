@@ -9,7 +9,7 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css|gif|png|jpg|jpeg|webp|svg|ico|woff|woff2|ttf|otf)",
+        "source": "**/*.@(gif|png|jpg|jpeg|webp|svg|ico|woff|woff2|ttf|otf)",
         "headers": [
           {
             "key": "Cache-Control",
@@ -18,11 +18,11 @@
         ]
       },
       {
-        "source": "**/main.dart.js",
+        "source": "**/*.@(js|css)",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "public, max-age=31536000, immutable"
+            "value": "no-cache, no-store, must-revalidate"
           }
         ]
       }

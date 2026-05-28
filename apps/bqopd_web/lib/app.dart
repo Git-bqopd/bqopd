@@ -259,15 +259,15 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
         div(classes: 'flex-col w-full mt-2', [
           input(
             attributes: {'type': 'text', 'placeholder': 'username', 'value': _username},
-            events: {'input': (e) => _username = (e.target as dynamic).value},
+            events: {'input': (e) => setState(() => _username = (e.target as dynamic).value)},
           ),
           input(
             attributes: {'type': 'email', 'placeholder': 'email', 'value': _email},
-            events: {'input': (e) => _email = (e.target as dynamic).value},
+            events: {'input': (e) => setState(() => _email = (e.target as dynamic).value)},
           ),
           input(
             attributes: {'type': 'password', 'placeholder': 'password', 'value': _password},
-            events: {'input': (e) => _password = (e.target as dynamic).value},
+            events: {'input': (e) => setState(() => _password = (e.target as dynamic).value)},
           ),
           button(
               classes: 'btn-primary mt-2',
@@ -307,11 +307,11 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
       div(classes: 'flex-col w-full mt-2', [
         input(
           attributes: {'type': 'email', 'placeholder': 'email', 'value': _email},
-          events: {'input': (e) => _email = (e.target as dynamic).value},
+          events: {'input': (e) => setState(() => _email = (e.target as dynamic).value)},
         ),
         input(
           attributes: {'type': 'password', 'placeholder': 'password', 'value': _password},
-          events: {'input': (e) => _password = (e.target as dynamic).value},
+          events: {'input': (e) => setState(() => _password = (e.target as dynamic).value)},
         ),
         button(
             classes: 'btn-primary mt-2',

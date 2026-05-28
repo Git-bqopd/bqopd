@@ -6,7 +6,6 @@ import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
 import '../panels/hashtag_panel.dart';
-import '../panels/settings_panel.dart';
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
@@ -79,7 +78,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
           isEditingMode: component.isEditingMode,
         ),
 
-        if (_activePanel != null)
+        // AVOID rendering the redundant vertical SettingsPanel container when the settings tab is active
+        if (_activePanel != null && _activePanel != BonusRowType.settings)
           _buildPanelContent(imageId),
       ])
     ]);
@@ -101,10 +101,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.tags:
         title = "Hashtags & Voting";
         inner = HashtagPanel(imageId: imageId);
-        break;
-      case BonusRowType.settings:
-        title = "Toolbar Settings";
-        inner = SettingsPanel();
         break;
       case BonusRowType.terminal:
         title = "Terminal Game";

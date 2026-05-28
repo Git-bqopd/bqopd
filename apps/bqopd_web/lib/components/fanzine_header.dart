@@ -261,7 +261,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                     'value': _email,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _email = (e.target as dynamic).value},
+                  events: {'input': (e) => setState(() => _email = (e.target as dynamic).value)},
                 ),
                 input(
                   attributes: {
@@ -270,7 +270,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                     'value': _password,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _password = (e.target as dynamic).value},
+                  events: {'input': (e) => setState(() => _password = (e.target as dynamic).value)},
                 ),
                 button(
                     classes: 'btn-primary',
@@ -381,7 +381,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                     'value': _usernameInput,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _usernameInput = (e.target as dynamic).value},
+                  events: {'input': (e) => setState(() => _usernameInput = (e.target as dynamic).value)},
                 ),
                 input(
                   attributes: {
@@ -390,7 +390,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                     'value': _email,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _email = (e.target as dynamic).value},
+                  events: {'input': (e) => setState(() => _email = (e.target as dynamic).value)},
                 ),
                 input(
                   attributes: {
@@ -399,7 +399,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                     'value': _password,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _password = (e.target as dynamic).value},
+                  events: {'input': (e) => setState(() => _password = (e.target as dynamic).value)},
                 ),
                 button(
                     classes: 'btn-primary',
