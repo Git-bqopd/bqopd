@@ -845,14 +845,13 @@ class _FanzineEditorState extends State<FanzineEditor> {
   }
 
   Component _buildOrderPageRow(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages) {
-    final pageNum = page['pageNumber'] ?? (idx + 1);
     final String? optimalUrl = page['gridUrl'] ?? page['listUrl'] ?? page['imageUrl'];
     final bool isPending = optimalUrl == null || optimalUrl.isEmpty;
 
     final String selectedSpreadPos = page['spreadPosition'] ?? '';
     final String selectedSidePref = page['sidePreference'] ?? 'either';
 
-    final bool isPage1Cover = pageNum == 1 && _hasCover;
+    final bool isPage1Cover = idx == 0 && _hasCover;
 
     return div(
       classes: 'fanzine-page-row-card',
@@ -869,7 +868,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
             [
               div([
                 span(
-                  [text('$pageNum.')],
+                  [text('${idx + 1}.')], // FIXED: Use absolute visual loop index instead of database metadata pageNum
                   classes: 'font-black text-xs text-gray-400',
                   attributes: const {'style': 'width: 20px; text-align: right; margin-right: 8px; display: inline-block;'},
                 ),
@@ -907,13 +906,13 @@ class _FanzineEditorState extends State<FanzineEditor> {
                 button(
                   [span([text('arrow_upward')], classes: 'material-symbols-outlined text-sm')],
                   classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: pageNum <= 1 ? {'disabled': 'true'} : const {},
+                  attributes: (idx == 0) ? {'disabled': 'true'} : const {}, // FIXED: Disable up arrow strictly at first visual index
                   events: {'click': (e) => _reorderPage(page, -1)},
                 ),
                 button(
                   [span([text('arrow_downward')], classes: 'material-symbols-outlined text-sm')],
                   classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: pageNum >= totalCount ? {'disabled': 'true'} : const {},
+                  attributes: (idx >= totalCount - 1) ? {'disabled': 'true'} : const {}, // FIXED: Disable down arrow strictly at final visual index
                   events: {'click': (e) => _reorderPage(page, 1)},
                 ),
                 span([text('|')], classes: 'px-1 text-gray-300', attributes: const {'style': 'margin: 0 4px;'}),
@@ -973,7 +972,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
             ),
 
             // Column 3: Cover Switch (only for the first page)
-            if (pageNum == 1)
+            if (idx == 0) // FIXED: Render cover switch strictly based on absolute loop index, avoiding duplicate rendering for duplicate indices in database
               div(
                 [
                   span([text('cover')], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #49454F; margin-right: 6px;'}),
