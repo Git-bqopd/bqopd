@@ -101,3 +101,22 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
   }.toJS;
   return completer.future;
 }
+
+/// Client-side implementation of retrieving an input element value with type-safe casts.
+String getInputValue(dynamic event) {
+  if (event == null) return '';
+  try {
+    if (event is web.Event) {
+      final target = event.target;
+      if (target is web.HTMLInputElement) {
+        return target.value;
+      }
+      if (target is web.HTMLTextAreaElement) {
+        return target.value;
+      }
+    }
+  } catch (e) {
+    print('[getInputValue Error] $e');
+  }
+  return '';
+}

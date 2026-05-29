@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/firebase_mocks.dart';
+import '../../utils/web_utils.dart';
 
 class CommentsPanel extends StatefulComponent {
   final String imageId;
@@ -129,6 +130,7 @@ class _CommentsPanelState extends State<CommentsPanel> {
     }
   }
 
+  /// Helper to generate premium skeleton loader lines with Jaspr's Component model
   Component _buildSkeletonComments() {
     return div(classes: 'flex-col gap-4 py-2', [
       for (int i = 0; i < 2; i++)
@@ -162,7 +164,7 @@ class _CommentsPanelState extends State<CommentsPanel> {
               'value': _newCommentText,
             },
             events: {
-              'input': (e) => _newCommentText = (e.target as dynamic).value,
+              'input': (e) => _newCommentText = getInputValue(e),
               'click': (e) {
                 if (getCurrentUserId() == null) {
                   GlobalModalBus.show();
@@ -188,7 +190,7 @@ class CommentItem extends StatefulComponent {
   const CommentItem({required this.data, super.key});
 
   @override
-  State<CommentItem> createState() => _CommentItemState();
+  State createState() => _CommentItemState();
 }
 
 class _CommentItemState extends State<CommentItem> {

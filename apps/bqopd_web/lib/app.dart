@@ -6,6 +6,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import 'repositories/repositories.dart';
 import 'utils/web_firebase_interop.dart';
+import 'utils/web_utils.dart';
 
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
@@ -259,15 +260,15 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
         div(classes: 'flex-col w-full mt-2', [
           input(
             attributes: {'type': 'text', 'placeholder': 'username'},
-            events: {'input': (e) => _username = (e.target as dynamic).value},
+            events: {'input': (e) => _username = getInputValue(e)},
           ),
           input(
             attributes: {'type': 'email', 'placeholder': 'email'},
-            events: {'input': (e) => _email = (e.target as dynamic).value},
+            events: {'input': (e) => _email = getInputValue(e)},
           ),
           input(
             attributes: {'type': 'password', 'placeholder': 'password'},
-            events: {'input': (e) => _password = (e.target as dynamic).value},
+            events: {'input': (e) => _password = getInputValue(e)},
           ),
           button(
               classes: 'btn-primary mt-2',
@@ -307,11 +308,11 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
       div(classes: 'flex-col w-full mt-2', [
         input(
           attributes: {'type': 'email', 'placeholder': 'email'},
-          events: {'input': (e) => _email = (e.target as dynamic).value},
+          events: {'input': (e) => _email = getInputValue(e)},
         ),
         input(
           attributes: {'type': 'password', 'placeholder': 'password'},
-          events: {'input': (e) => _password = (e.target as dynamic).value},
+          events: {'input': (e) => _password = getInputValue(e)},
         ),
         button(
             classes: 'btn-primary mt-2',

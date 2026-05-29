@@ -2,6 +2,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/src/blocs/auth/auth_bloc.dart';
 import '../components/page_wrapper.dart';
+import '../utils/web_utils.dart';
 
 class RegisterPage extends StatefulComponent {
   final AuthState? authState;
@@ -49,15 +50,15 @@ class _RegisterPageState extends State<RegisterPage> {
                 div(classes: 'flex-col w-full mt-4', [
                   input(
                     attributes: {'type': 'text', 'placeholder': 'username'},
-                    events: {'input': (e) => _username = (e.target as dynamic).value},
+                    events: {'input': (e) => _username = getInputValue(e)},
                   ),
                   input(
                     attributes: {'type': 'email', 'placeholder': 'email'},
-                    events: {'input': (e) => _email = (e.target as dynamic).value},
+                    events: {'input': (e) => _email = getInputValue(e)},
                   ),
                   input(
                     attributes: {'type': 'password', 'placeholder': 'password'},
-                    events: {'input': (e) => _password = (e.target as dynamic).value},
+                    events: {'input': (e) => _password = getInputValue(e)},
                   ),
                   button(
                       classes: 'btn-primary',

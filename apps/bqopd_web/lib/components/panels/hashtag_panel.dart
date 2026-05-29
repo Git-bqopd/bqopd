@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import '../../utils/web_firebase_interop.dart';
+import '../../utils/web_utils.dart';
 
 class HashtagPanel extends StatefulComponent {
   final String imageId;
@@ -143,7 +144,7 @@ class _HashtagPanelState extends State<HashtagPanel> {
           'autofocus': 'true'
         },
         events: {
-          'input': (e) => _newTagText = (e.target as dynamic).value,
+          'input': (e) => _newTagText = getInputValue(e),
           'keypress': (e) { if ((e as dynamic).key == 'Enter') _submitNewTag(); }
         },
       ),

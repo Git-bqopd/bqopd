@@ -18,3 +18,8 @@ void triggerFilePicker(String inputId, void Function(String base64, String fileN
 Future<Map<String, int>> getImageDimensions(String objectUrl) async {
   return {'width': 0, 'height': 0};
 }
+
+/// Platform-safe stub for retrieving an input element value.
+String getInputValue(dynamic event) {
+  return '';
+}

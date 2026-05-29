@@ -4,6 +4,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'dart:convert';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
+import '../utils/web_utils.dart';
 import 'stats_table.dart';
 
 class FanzineHeader extends StatefulComponent {
@@ -101,6 +102,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
             setState(() {
               _showLogin = true;
               _showRegister = false;
+              _error = null;
             });
           } else {
             // Navigate directly to the resolved handle/shortlink (e.g. '/kevin')
@@ -123,9 +125,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
             classes: 'flex-1 flex-col justify-center items-center w-full',
             [
               _showLogin
-                  ? _buildLocalLogin()
+                  ? _buildLocalLogin(key: 'sticker_login')
                   : _showRegister
-                  ? _buildLocalRegister()
+                  ? _buildLocalRegister(key: 'sticker_register')
                   : div(
                   classes: 'white-sticker',
                   [
@@ -151,9 +153,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               classes: 'flex-1 flex-col justify-center items-center w-full',
               [
                 _showLogin
-                    ? _buildLocalLogin()
+                    ? _buildLocalLogin(key: 'grid_sticker_login')
                     : _showRegister
-                    ? _buildLocalRegister()
+                    ? _buildLocalRegister(key: 'grid_sticker_register')
                     : div(
                     classes: 'white-sticker',
                     [
@@ -171,9 +173,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     final fullView = div(classes: 'fh-full-view flex-col items-center w-full h-full p-2', [
       navLink,
       _showLogin
-          ? _buildLocalLogin()
+          ? _buildLocalLogin(key: 'full_view_login')
           : _showRegister
-          ? _buildLocalRegister()
+          ? _buildLocalRegister(key: 'full_view_register')
           : div(classes: 'white-sticker-compact w-full mt-2', [
         div(classes: 'flex-row justify-center items-center py-2 bg-gray-100', [
           _buildTab('indicia', 0),
@@ -212,8 +214,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     ]);
   }
 
-  Component _buildLocalLogin() {
+  Component _buildLocalLogin({required String key}) {
     return div(
+        key: ValueKey(key),
         classes: 'white-sticker',
         attributes: {
           'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
@@ -258,17 +261,19 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                   attributes: {
                     'type': 'email',
                     'placeholder': 'email',
+                    'value': _email,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _email = (e.target as dynamic).value},
+                  events: {'input': (e) => _email = getInputValue(e)},
                 ),
                 input(
                   attributes: {
                     'type': 'password',
                     'placeholder': 'password',
+                    'value': _password,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _password = (e.target as dynamic).value},
+                  events: {'input': (e) => _password = getInputValue(e)},
                 ),
                 button(
                     classes: 'btn-primary',
@@ -330,8 +335,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     );
   }
 
-  Component _buildLocalRegister() {
+  Component _buildLocalRegister({required String key}) {
     return div(
+        key: ValueKey(key),
         classes: 'white-sticker',
         attributes: {
           'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
@@ -376,25 +382,28 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                   attributes: {
                     'type': 'text',
                     'placeholder': 'username',
+                    'value': _usernameInput,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _usernameInput = (e.target as dynamic).value},
+                  events: {'input': (e) => _usernameInput = getInputValue(e)},
                 ),
                 input(
                   attributes: {
                     'type': 'email',
                     'placeholder': 'email',
+                    'value': _email,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _email = (e.target as dynamic).value},
+                  events: {'input': (e) => _email = getInputValue(e)},
                 ),
                 input(
                   attributes: {
                     'type': 'password',
                     'placeholder': 'password',
+                    'value': _password,
                     'style': 'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
                   },
-                  events: {'input': (e) => _password = (e.target as dynamic).value},
+                  events: {'input': (e) => _password = getInputValue(e)},
                 ),
                 button(
                     classes: 'btn-primary',

@@ -1441,11 +1441,11 @@ class _ProfilePageState extends State<ProfilePage> {
       div([
         h3([text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black'),
         div([
-          input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName}, events: {'input': (e) => _newManagedFirstName = (e.target as dynamic).value}),
+          input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
           span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
-          input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName}, events: {'input': (e) => _newManagedLastName = (e.target as dynamic).value}),
+          input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName}, events: {'input': (e) => _newManagedLastName = getInputValue(e)}),
         ], attributes: const {'style': 'display: flex; gap: 12px;'}),
-        input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio}, events: {'input': (e) => _newManagedBio = (e.target as dynamic).value}),
+        input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio}, events: {'input': (e) => _newManagedBio = getInputValue(e)}),
         button(
             [text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
             classes: 'btn-primary nav-pill',
@@ -1484,12 +1484,12 @@ class _ProfilePageState extends State<ProfilePage> {
 
       div([
         span([text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray'),
-        input(attributes: {'value': _loginZineShortcode}, events: {'input': (e) => _loginZineShortcode = (e.target as dynamic).value})
+        input(attributes: {'value': _loginZineShortcode}, events: {'input': (e) => _loginZineShortcode = getInputValue(e)})
       ], classes: 'flex-col gap-2'),
 
       div([
         span([text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray'),
-        input(attributes: {'value': _registerZineShortcode}, events: {'input': (e) => _registerZineShortcode = (e.target as dynamic).value})
+        input(attributes: {'value': _registerZineShortcode}, events: {'input': (e) => _registerZineShortcode = getInputValue(e)})
       ], classes: 'flex-col gap-2'),
 
       div([], attributes: const {'style': 'height: 12px;'}),
@@ -1818,15 +1818,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   // Text Fields
                   input(
                     attributes: const {'type': 'text', 'placeholder': 'Title', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
-                    events: {'input': (e) => _uploadTitle = (e.target as dynamic).value},
+                    events: {'input': (e) => _uploadTitle = getInputValue(e)},
                   ),
                   input(
                     attributes: const {'type': 'text', 'placeholder': 'Caption / Description (optional)', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
-                    events: {'input': (e) => _uploadDescription = (e.target as dynamic).value},
+                    events: {'input': (e) => _uploadDescription = getInputValue(e)},
                   ),
                   input(
                     attributes: const {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'style': 'margin-bottom: 12px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
-                    events: {'input': (e) => _uploadIndicia = (e.target as dynamic).value},
+                    events: {'input': (e) => _uploadIndicia = getInputValue(e)},
                   ),
 
                   // Creators Section
@@ -1875,7 +1875,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                         'value': _newCreatorHandle,
                                         'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
                                       },
-                                      events: {'input': (e) => _newCreatorHandle = (e.target as dynamic).value},
+                                      events: {'input': (e) => _newCreatorHandle = getInputValue(e)},
                                     )
                                   ]
                               ),
@@ -1889,7 +1889,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                         'value': _newCreatorRole,
                                         'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
                                       },
-                                      events: {'input': (e) => _newCreatorRole = (e.target as dynamic).value},
+                                      events: {'input': (e) => _newCreatorRole = getInputValue(e)},
                                     )
                                   ]
                               ),

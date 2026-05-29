@@ -664,7 +664,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
       div([
         input(
           attributes: {'type': 'text', 'placeholder': 'new folio name', 'value': _title},
-          events: {'input': (e) => _title = (e.target as dynamic).value},
+          events: {'input': (e) => _title = getInputValue(e)},
         )
       ], classes: 'flex-col mb-1'),
 
@@ -673,19 +673,19 @@ class _FanzineEditorState extends State<FanzineEditor> {
         div([
           input(
             attributes: {'type': 'text', 'placeholder': 'vol.', 'value': _volume},
-            events: {'input': (e) => _volume = (e.target as dynamic).value},
+            events: {'input': (e) => _volume = getInputValue(e)},
           )
         ], classes: 'flex-1 flex-col'),
         div([
           input(
             attributes: {'type': 'text', 'placeholder': 'num.', 'value': _issue},
-            events: {'input': (e) => _issue = (e.target as dynamic).value},
+            events: {'input': (e) => _issue = getInputValue(e)},
           )
         ], classes: 'flex-1 flex-col'),
         div([
           input(
             attributes: {'type': 'text', 'placeholder': 'whole num.', 'value': _wholeNumber},
-            events: {'input': (e) => _wholeNumber = (e.target as dynamic).value},
+            events: {'input': (e) => _wholeNumber = getInputValue(e)},
           )
         ], classes: 'flex-1 flex-col'),
       ], classes: 'flex-row gap-2 mb-1', attributes: const {'style': 'display: flex; gap: 8px;'}),
