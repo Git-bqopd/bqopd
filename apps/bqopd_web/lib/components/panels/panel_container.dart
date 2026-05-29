@@ -29,13 +29,14 @@ class PanelContainer extends StatelessComponent {
         },
         [
           div(classes: 'flex-col', [
-            div(classes: 'mb-2', [
-              span(
-                  classes: 'text-xs font-bold text-gray',
-                  attributes: {'style': 'letter-spacing: 1px; text-transform: uppercase;'},
-                  [text(title)]
-              )
-            ]),
+            if (title.isNotEmpty)
+              div(classes: 'mb-2', [
+                span(
+                    classes: 'text-xs font-bold text-gray',
+                    attributes: {'style': 'letter-spacing: 1px; text-transform: uppercase;'},
+                    [text(title)]
+                )
+              ]),
             child
           ])
         ]

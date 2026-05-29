@@ -140,6 +140,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 fanzineId: component.frefFanzineId,
                 pages: component.pages,
                 activePanel: _activeGlobalPanel!,
+                isEditingMode: component.isEditingMode,
                 onClose: () => setState(() => _activeGlobalPanel = null),
               )
             ]

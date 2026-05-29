@@ -4,6 +4,9 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
+import '../panels/master_text_panel.dart';
+import '../panels/linked_text_panel.dart';
+import '../panels/entities_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
 /// Matches the Flutter PanelColumnRenderer logic.
@@ -11,12 +14,14 @@ class PanelColumnRenderer extends StatelessComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
   final BonusRowType activePanel;
+  final bool isEditingMode;
   final VoidCallback onClose;
 
   const PanelColumnRenderer({
     required this.fanzineId,
     required this.pages,
     required this.activePanel,
+    this.isEditingMode = false,
     required this.onClose,
   });
 
@@ -25,6 +30,9 @@ class PanelColumnRenderer extends StatelessComponent {
     String title = activePanel.name.toUpperCase();
     if (activePanel == BonusRowType.textReader) title = "Reader";
     if (activePanel == BonusRowType.comments) title = "Comments";
+    if (activePanel == BonusRowType.masterText) title = "Corrected Text Editor";
+    if (activePanel == BonusRowType.linkedText) title = "Wiki-Link Editor";
+    if (activePanel == BonusRowType.entities) title = ""; // Omit 'Page Entities' text on desktop column headers too
 
     return div(classes: 'flex-col h-full', [
       // Header
@@ -57,8 +65,14 @@ class PanelColumnRenderer extends StatelessComponent {
         TextReaderPanel(imageId: imageId)
       else if (activePanel == BonusRowType.comments)
         CommentsPanel(imageId: imageId)
-      else
-        div([text('Panel type not yet implemented in web column.')])
+      else if (activePanel == BonusRowType.masterText)
+          MasterTextPanel(imageId: imageId, fanzineId: fanzineId)
+        else if (activePanel == BonusRowType.linkedText)
+            LinkedTextPanel(imageId: imageId, fanzineId: fanzineId)
+          else if (activePanel == BonusRowType.entities)
+              EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: isEditingMode)
+            else
+              div([text('Panel type not yet implemented in web column.')])
     ]);
   }
 }

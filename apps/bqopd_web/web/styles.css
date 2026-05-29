@@ -548,6 +548,10 @@ a:hover {
     background-color: #ff5252;
 }
 
+.toolbar-btn.active.like-btn .badge {
+    background-color: #ff5252;
+}
+
 .toolbar-label {
     font-size: 9px; /* Shrunk from 10px to guarantee single row fitting */
     color: black;
@@ -643,12 +647,10 @@ a:hover {
     from {
         max-height: 0;
         opacity: 0;
-        transform: translateY(-8px);
     }
     to {
         max-height: 800px;
         opacity: 1;
-        transform: translateY(0);
     }
 }
 

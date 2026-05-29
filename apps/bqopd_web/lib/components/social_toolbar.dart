@@ -178,14 +178,24 @@ class _SocialToolbarState extends State<SocialToolbar> {
   @override
   Component build(BuildContext context) {
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
-      // EXCLUDE raw, corrected (Master), and views editor buttons in the Jaspr Web App
-      if (tool.id == 'Raw' || tool.id == 'Master' || tool.id == 'Views') {
+      // EXCLUDE raw and views editor buttons in the Jaspr Web App
+      if (tool.id == 'Raw' || tool.id == 'Views') {
         return false;
       }
 
       // FORCE show the 'Settings' (buttons), 'Grid' (open), and 'Like' (like) buttons unconditionally
       if (tool.id == 'Settings' || tool.id == 'Grid' || tool.id == 'Like') {
         return true;
+      }
+
+      // FORCE show the 'Entities' tool unconditionally so users can always interact with page references
+      if (tool.id == 'Entities') {
+        return true;
+      }
+
+      // FORCE show the 'Master' (corrected text editor) and 'Linked' (wiki-link editor) tools if we are in editing mode
+      if (tool.id == 'Master' || tool.id == 'Linked') {
+        return component.isEditingMode;
       }
 
       // CHECK user preference to decide if this button is visible in the main bar

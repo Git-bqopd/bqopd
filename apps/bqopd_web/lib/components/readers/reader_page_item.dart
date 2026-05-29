@@ -6,6 +6,9 @@ import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
 import '../panels/hashtag_panel.dart';
+import '../panels/master_text_panel.dart';
+import '../panels/linked_text_panel.dart';
+import '../panels/entities_panel.dart';
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
@@ -101,6 +104,18 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.tags:
         title = "Hashtags & Voting";
         inner = HashtagPanel(imageId: imageId);
+        break;
+      case BonusRowType.masterText:
+        title = "Corrected Text Editor";
+        inner = MasterTextPanel(imageId: imageId, fanzineId: component.fanzineId);
+        break;
+      case BonusRowType.linkedText:
+        title = "Wiki-Link Editor";
+        inner = LinkedTextPanel(imageId: imageId, fanzineId: component.fanzineId);
+        break;
+      case BonusRowType.entities:
+        title = ""; // Omit the 'PAGE ENTITIES' text
+        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
         break;
       case BonusRowType.terminal:
         title = "Terminal Game";
