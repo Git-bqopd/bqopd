@@ -1,6 +1,7 @@
 import 'package:web/web.dart' as web;
 import 'dart:js_interop';
 import 'dart:async';
+import 'dart:js_util' as js_util;
 
 /// Browser-specific implementation using package:web.
 void scrollToElement(String id) {
@@ -40,7 +41,7 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
       print('[DART FILE READER] FileReader result is null.');
       return;
     }
-// Result is a JSString when reading as DataURL
+    // Result is a JSString when reading as DataURL
     final dataUrl = (result as JSString).toDart;
     final splitIndex = dataUrl.indexOf(',');
     if (splitIndex == -1) {
@@ -52,8 +53,6 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
 
     print('[DART FILE READER] Success. Triggering callback.');
     callback(base64, file.name, objectUrl);
-
-
   }.toJS;
 
   reader.onerror = (web.Event event) {
@@ -103,20 +102,48 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
 }
 
 /// Client-side implementation of retrieving an input element value with type-safe casts.
+/// Leverages a robust multi-tier fallback to seamlessly bridge new JS interop and legacy types.
 String getInputValue(dynamic event) {
   if (event == null) return '';
+
+  // 1. Try modern js_util property access (highly robust, works on raw JS objects, JSObjects, and native browser Events)
   try {
-    if (event is web.Event) {
-      final target = event.target;
-      if (target is web.HTMLInputElement) {
-        return target.value;
-      }
-      if (target is web.HTMLTextAreaElement) {
-        return target.value;
+    if (js_util.hasProperty(event, 'target')) {
+      final target = js_util.getProperty(event, 'target');
+      if (target != null && js_util.hasProperty(target, 'value')) {
+        final val = js_util.getProperty(target, 'value');
+        if (val != null) {
+          return val.toString();
+        }
       }
     }
   } catch (e) {
-    print('[getInputValue Error] $e');
+    print('[getInputValue js_util Error] $e');
   }
+
+  // 2. Fallback to dynamic property invocation (handles legacy dart:html or wrapped event variants)
+  try {
+    final target = (event as dynamic).target;
+    if (target != null) {
+      final val = target.value;
+      if (val != null) {
+        return val.toString();
+      }
+    }
+  } catch (e) {
+    print('[getInputValue dynamic Fallback Error] $e');
+  }
+
+  // 3. Fallback to package:web extension type matching
+  try {
+    if (event is web.Event) {
+      final target = event.target;
+      if (target != null) {
+        final input = target as web.HTMLInputElement;
+        return input.value;
+      }
+    }
+  } catch (_) {}
+
   return '';
 }
