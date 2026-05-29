@@ -1441,11 +1441,11 @@ class _ProfilePageState extends State<ProfilePage> {
       div([
         h3([text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black'),
         div([
-          input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName}, events: {'input': (e) => setState(() => _newManagedFirstName = (e.target as dynamic).value)}),
+          input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName}, events: {'input': (e) => _newManagedFirstName = (e.target as dynamic).value}),
           span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
-          input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName}, events: {'input': (e) => setState(() => _newManagedLastName = (e.target as dynamic).value)}),
+          input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName}, events: {'input': (e) => _newManagedLastName = (e.target as dynamic).value}),
         ], attributes: const {'style': 'display: flex; gap: 12px;'}),
-        input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio}, events: {'input': (e) => setState(() => _newManagedBio = (e.target as dynamic).value)}),
+        input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio}, events: {'input': (e) => _newManagedBio = (e.target as dynamic).value}),
         button(
             [text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
             classes: 'btn-primary nav-pill',
