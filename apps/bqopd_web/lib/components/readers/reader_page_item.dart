@@ -94,7 +94,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
 
     switch (_activePanel!) {
       case BonusRowType.textReader:
-        title = "Reader";
+        title = ""; // Omit the 'READER' text
         inner = TextReaderPanel(imageId: imageId);
         break;
       case BonusRowType.comments:
@@ -106,11 +106,11 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         inner = HashtagPanel(imageId: imageId);
         break;
       case BonusRowType.masterText:
-        title = "Corrected Text Editor";
+        title = ""; // Omit the 'CORRECTED TEXT EDITOR' title
         inner = MasterTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.linkedText:
-        title = "Wiki-Link Editor";
+        title = ""; // Omit the 'WIKI-LINK EDITOR' title
         inner = LinkedTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:

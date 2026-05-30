@@ -179,21 +179,31 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
     }
 
     return div(classes: 'flex-col text-left', [
-      textarea(
-          classes: 'w-full p-3 border border-gray-300 rounded-md text-sm',
+      // Implement the .grow-wrap element mirroring architecture
+      div(
+          classes: 'grow-wrap',
           attributes: {
-            'rows': '8',
-            'placeholder': 'Start typing directly in the editor to create or correct page text...',
-            'style': 'font-family: Courier, monospace; line-height: 1.5; resize: vertical; box-sizing: border-box; width: 100%; min-height: 150px; outline: none; border-color: #ccc; margin-bottom: 12px;'
+            'data-replicated-value': _textValue,
           },
-          events: {
-            'input': (e) {
-              _textValue = getInputValue(e);
-            }
-          },
-          [text(_textValue)]
+          [
+            textarea(
+                classes: 'border border-gray-300 rounded-md',
+                attributes: {
+                  'placeholder': 'Start typing directly in the editor to create or correct page text...',
+                  'oninput': 'this.parentNode.dataset.replicatedValue = this.value',
+                },
+                events: {
+                  'input': (e) {
+                    setState(() {
+                      _textValue = getInputValue(e);
+                    });
+                  }
+                },
+                [text(_textValue)]
+            )
+          ]
       ),
-      div(classes: 'flex flex-row justify-between items-center', [
+      div(classes: 'flex flex-row justify-between items-center mt-3', [
         span([
           text(_statusMessage)
         ], classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'),

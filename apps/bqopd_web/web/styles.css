@@ -548,10 +548,6 @@ a:hover {
     background-color: #ff5252;
 }
 
-.toolbar-btn.active.like-btn .badge {
-    background-color: #ff5252;
-}
-
 .toolbar-label {
     font-size: 9px; /* Shrunk from 10px to guarantee single row fitting */
     color: black;
@@ -649,7 +645,7 @@ a:hover {
         opacity: 0;
     }
     to {
-        max-height: 800px;
+        max-height: 20000px;
         opacity: 1;
     }
 }
@@ -826,4 +822,37 @@ a:hover {
 }
 .social-link-button:hover .handle-text {
     text-decoration: underline !important; /* Underline handle text on hover only */
+}
+
+/* --- PREMIUM AUTO-GROWING TEXTAREA CONTAINER SYSTEM --- */
+.grow-wrap {
+    display: grid;
+    width: 100%;
+}
+.grow-wrap::after {
+    /* Exact layout mirrors textarea styling to calculate accurate line wrapping height */
+    content: attr(data-replicated-value) " ";
+    white-space: pre-wrap;
+    word-break: break-word;
+    visibility: hidden;
+    font-family: Courier, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 12px;
+    border: 1px solid transparent;
+    grid-area: 1 / 1 / 2 / 2;
+    box-sizing: border-box;
+}
+.grow-wrap > textarea {
+    grid-area: 1 / 1 / 2 / 2;
+    resize: none;
+    overflow: hidden;
+    font-family: Courier, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+    padding: 12px;
+    margin: 0;
 }

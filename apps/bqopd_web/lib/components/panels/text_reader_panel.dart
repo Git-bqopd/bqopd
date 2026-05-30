@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 import '../../utils/web_firebase_interop.dart';
 
+/// Renders page text with dynamic parser support for Wiki-Link entities.
+/// Renders verified usernames as clickable links, and unlinked entities as plain bold text.
 class TextReaderPanel extends StatefulComponent {
   final String imageId;
 
@@ -16,6 +20,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
   String _content = "Loading digitized text...";
   double _fontSize = 16.0;
   bool _loading = true; // High-fidelity state tracking
+  Map<String, Map<String, dynamic>> _loadedProfiles = {};
 
   @override
   void initState() {
@@ -51,18 +56,23 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       if (doc['exists'] && mounted) {
         final data = doc['data'];
 
-        // Match Flutter's "Gold Master" hierarchy
-        final String? text = data['text_linked'] ??
+        // Match the Gold Master fallback hierarchy
+        final String? textVal = data['text_linked'] ??
             data['text_corrected'] ??
             data['text_raw'] ??
             data['text']; // Legacy fallback
 
+        final resolvedText = (textVal != null && textVal.trim().isNotEmpty)
+            ? textVal
+            : "Transcription pending for this page.";
+
         setState(() {
-          _content = (text != null && text.trim().isNotEmpty)
-              ? text
-              : "Transcription pending for this page.";
+          _content = resolvedText;
           _loading = false;
         });
+
+        // Trigger loading profiles for entities in the background
+        _loadEntityProfiles(resolvedText);
       } else {
         setState(() {
           _content = "Image record not found in database.";
@@ -77,37 +87,170 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     }
   }
 
+  Future<void> _loadEntityProfiles(String textContent) async {
+    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+    final matches = regex.allMatches(textContent);
+    final Set<String> uidsToFetch = {};
+
+    for (final m in matches) {
+      final ref = m.group(2)?.trim();
+      if (ref != null && ref.startsWith('user:')) {
+        final uid = ref.substring(5);
+        if (!_loadedProfiles.containsKey(uid)) {
+          uidsToFetch.add(uid);
+        }
+      }
+    }
+
+    if (uidsToFetch.isEmpty) return;
+
+    final List<Future<void>> fetches = [];
+    final Map<String, Map<String, dynamic>> fetchedProfiles = {};
+
+    for (var uid in uidsToFetch) {
+      fetches.add(
+          fsGetDoc('profiles/$uid').then((res) {
+            final doc = jsonDecode(res);
+            if (doc['exists'] == true) {
+              fetchedProfiles[uid] = doc['data'] as Map<String, dynamic>;
+            }
+          }).catchError((e) {
+            print('[TEXT READER PANEL] Error loading profile $uid: $e');
+          })
+      );
+    }
+
+    if (fetches.isNotEmpty) {
+      await Future.wait(fetches);
+      if (mounted) {
+        setState(() {
+          _loadedProfiles.addAll(fetchedProfiles);
+        });
+      }
+    }
+  }
+
+  List<Component> _parseAndRenderContent(String textContent) {
+    final List<Component> children = [];
+    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+
+    int currentIndex = 0;
+    final matches = regex.allMatches(textContent);
+
+    for (final match in matches) {
+      // Add standard text leading up to the entity match
+      if (match.start > currentIndex) {
+        children.add(text(textContent.substring(currentIndex, match.start)));
+      }
+
+      final String display = match.group(1)?.trim() ?? '';
+      final String? ref = match.group(2)?.trim();
+
+      if (ref != null && ref.startsWith('user:')) {
+        final uid = ref.substring(5);
+        final profile = _loadedProfiles[uid];
+        final String? username = profile?['username'];
+
+        if (profile != null && username != null && username.isNotEmpty) {
+          // Rule 1: Connected to an @username handle -> Bold, Underlined, and Clickable
+          children.add(a(
+              href: '/$username',
+              attributes: {
+                'style': 'font-weight: bold; text-decoration: underline; color: #3f51b5; cursor: pointer;'
+              },
+              events: {
+                'click': (e) {
+                  e.preventDefault();
+                  Router.of(context).push('/$username');
+                }
+              },
+              [text(display)]
+          ));
+        } else {
+          // Rule 2: Connected to a profile ID but NO handle -> Bold, NOT underlined, NOT a link
+          children.add(span(
+              attributes: const {
+                'style': 'font-weight: bold; text-decoration: none; color: inherit; cursor: default;'
+              },
+              [text(display)]
+          ));
+        }
+      } else {
+        // Rule 3: Unlinked standard brackets -> Bold, NOT underlined, NOT a link
+        children.add(span(
+            attributes: const {
+              'style': 'font-weight: bold; text-decoration: none; color: inherit; cursor: default;'
+            },
+            [text(display)]
+        ));
+      }
+
+      currentIndex = match.end;
+    }
+
+    // Add remaining plain text trailing after final entity
+    if (currentIndex < textContent.length) {
+      children.add(text(textContent.substring(currentIndex)));
+    }
+
+    return children;
+  }
+
   @override
   Component build(BuildContext context) {
-    return div([
-      div(classes: 'flex-row gap-4 mb-4', [
-        button(
-            classes: 'nav-pill',
-            events: {'click': (e) => setState(() => _fontSize = (_fontSize > 10) ? _fontSize - 2 : 10)},
-            [text('A-')]
-        ),
-        button(
-            classes: 'nav-pill',
-            events: {'click': (e) => setState(() => _fontSize = (_fontSize < 48) ? _fontSize + 2 : 48)},
-            [text('A+')]
-        ),
-      ]),
+    return div(
+        attributes: const {
+          'style': 'position: relative; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;'
+        },
+        [
+          // Move A- and A+ buttons to the top right corner
+          div(
+              classes: 'flex-row gap-2',
+              attributes: const {
+                'style': 'position: absolute; top: 0; right: 0; display: flex; gap: 8px; z-index: 10;'
+              },
+              [
+                button(
+                    classes: 'nav-pill',
+                    attributes: const {
+                      'style': 'margin-bottom: 0; margin-left: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
+                    },
+                    events: {'click': (e) => setState(() => _fontSize = (_fontSize > 10) ? _fontSize - 2 : 10)},
+                    [text('A-')]
+                ),
+                button(
+                    classes: 'nav-pill',
+                    attributes: const {
+                      'style': 'margin-bottom: 0; margin-left: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
+                    },
+                    events: {'click': (e) => setState(() => _fontSize = (_fontSize < 48) ? _fontSize + 2 : 48)},
+                    [text('A+')]
+                ),
+              ]
+          ),
 
-      // Swapped dry text-loader for shimmering markdown text skeletons
-      if (_loading)
-        div(classes: 'flex-col gap-2 py-4', [
-          div(classes: 'skeleton-line shimmer-bg', []),
-          div(classes: 'skeleton-line medium shimmer-bg', []),
-          div(classes: 'skeleton-line shimmer-bg', []),
-          div(classes: 'skeleton-line short shimmer-bg', []),
-        ])
-      else
-        p(
-            attributes: {
-              'style': 'font-size: ${_fontSize}px; font-family: Georgia, serif; line-height: 1.6; color: #333; white-space: pre-wrap; text-align: justify;'
-            },
-            [text(_content)]
-        )
-    ]);
+          div(
+              attributes: const {
+                'style': 'margin-top: 36px; width: 100%; box-sizing: border-box; overflow: visible;'
+              },
+              [
+                if (_loading)
+                  div(classes: 'flex-col gap-2 py-4', [
+                    div(classes: 'skeleton-line shimmer-bg', []),
+                    div(classes: 'skeleton-line medium shimmer-bg', []),
+                    div(classes: 'skeleton-line shimmer-bg', []),
+                    div(classes: 'skeleton-line short shimmer-bg', []),
+                  ])
+                else
+                  p(
+                      attributes: {
+                        'style': 'font-size: ${_fontSize}px; font-family: Georgia, serif; line-height: 1.6; color: #333; white-space: pre-wrap; text-align: justify; margin: 0; overflow: visible;'
+                      },
+                      _parseAndRenderContent(_content)
+                  )
+              ]
+          )
+        ]
+    );
   }
 }

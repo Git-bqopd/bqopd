@@ -28,10 +28,10 @@ class PanelColumnRenderer extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     String title = activePanel.name.toUpperCase();
-    if (activePanel == BonusRowType.textReader) title = "Reader";
+    if (activePanel == BonusRowType.textReader) title = ""; // Omit 'Reader' text on desktop column headers too
     if (activePanel == BonusRowType.comments) title = "Comments";
-    if (activePanel == BonusRowType.masterText) title = "Corrected Text Editor";
-    if (activePanel == BonusRowType.linkedText) title = "Wiki-Link Editor";
+    if (activePanel == BonusRowType.masterText) title = ""; // Omit 'Corrected Text Editor' on desktop column headers too
+    if (activePanel == BonusRowType.linkedText) title = ""; // Omit 'Wiki-Link Editor' title on desktop column headers too
     if (activePanel == BonusRowType.entities) title = ""; // Omit 'Page Entities' text on desktop column headers too
 
     return div(classes: 'flex-col h-full', [

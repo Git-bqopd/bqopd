@@ -21,11 +21,20 @@ class PanelContainer extends StatelessComponent {
     if (type == BonusRowType.textReader) bgColor = '#FDFBF7';
     if (type == BonusRowType.comments) bgColor = '#ffffff';
 
-    // Added panel-container-animate rule for hardware-accelerated entry transitions
+    // Text editors and readers should grow dynamically to arbitrary lengths without any transition-induced clipping.
+    // For these panels, we omit 'panel-container-animate' to bypass CSS max-height caps completely.
+    final bool isUnlimitedHeight = type == BonusRowType.textReader ||
+        type == BonusRowType.masterText ||
+        type == BonusRowType.linkedText;
+
+    final String classesStr = isUnlimitedHeight
+        ? 'p-4 mt-2'
+        : 'p-4 mt-2 panel-container-animate';
+
     return div(
-        classes: 'p-4 mt-2 panel-container-animate',
+        classes: classesStr,
         attributes: {
-          'style': 'background-color: $bgColor; border-top: 1px solid #eee; border-bottom: 1px solid #eee;'
+          'style': 'background-color: $bgColor; border-top: 1px solid #eee; border-bottom: 1px solid #eee; overflow: visible;'
         },
         [
           div(classes: 'flex-col', [
