@@ -188,6 +188,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
         return true;
       }
 
+      // CHECK user preference to decide if this button is visible in the main bar
+      final bool isUserVisible = _socialButtonVisibility[tool.id] ?? true;
+      if (!isUserVisible) {
+        return false;
+      }
+
       // FORCE show the 'Entities' tool unconditionally so users can always interact with page references
       if (tool.id == 'Entities') {
         return true;
@@ -196,12 +202,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
       // FORCE show the 'Master' (corrected text editor) and 'Linked' (wiki-link editor) tools if we are in editing mode
       if (tool.id == 'Master' || tool.id == 'Linked') {
         return component.isEditingMode;
-      }
-
-      // CHECK user preference to decide if this button is visible in the main bar
-      final bool isUserVisible = _socialButtonVisibility[tool.id] ?? true;
-      if (!isUserVisible) {
-        return false;
       }
 
       // FORCE show the 'Indicia' button unconditionally if selected by user
@@ -288,10 +288,16 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final togglableTools = ReaderToolsConfig.tools.where((tool) {
       // EXCLUDE core/fixed buttons from the customisation toggles row
       if (tool.id == 'Settings' || tool.id == 'Grid' || tool.id == 'Like') return false;
-      if (tool.id == 'Raw' || tool.id == 'Master' || tool.id == 'Views') return false;
+      if (tool.id == 'Raw' || tool.id == 'Views') return false;
 
-      if (tool.id == 'Indicia') {
+      // Unconditionally include Entities as always available for toggle
+      if (tool.id == 'Entities') {
         return true;
+      }
+
+      // Contextually include Master (corrected), Linked (linked), and Indicia (indicia) in editing mode
+      if (tool.id == 'Master' || tool.id == 'Linked' || tool.id == 'Indicia') {
+        return component.isEditingMode;
       }
 
       return ReaderToolsConfig.isToolVisibleInContext(
