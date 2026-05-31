@@ -196,7 +196,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         break;
       case BonusRowType.newPage:
         title = "New Page Text Editor";
-        inner = PublisherTextPanel(imageId: imageId);
+        inner = PublisherTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.terminal:
         title = "Terminal Game";

@@ -89,7 +89,7 @@ class PanelColumnRenderer extends StatelessComponent {
                     else if (activePanel == BonusRowType.analyticsDashboard)
                         AnalyticsPanel(imageId: imageId)
                       else if (activePanel == BonusRowType.newPage)
-                          PublisherTextPanel(imageId: imageId)
+                          PublisherTextPanel(imageId: imageId, fanzineId: fanzineId)
                         else
                           div([text('Panel type not yet implemented in web column.')])
     ]);

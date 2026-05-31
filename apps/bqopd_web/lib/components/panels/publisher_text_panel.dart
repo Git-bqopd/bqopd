@@ -9,7 +9,8 @@ import '../../utils/web_utils.dart';
 /// Mirroring standard old publisher capability inside the settings panel context.
 class PublisherTextPanel extends StatefulComponent {
   final String imageId;
-  const PublisherTextPanel({required this.imageId, super.key});
+  final String? fanzineId;
+  const PublisherTextPanel({required this.imageId, this.fanzineId, super.key});
 
   @override
   State<PublisherTextPanel> createState() => _PublisherTextPanelState();
@@ -171,6 +172,16 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
       ]);
     }
 
+    // Filter user's images that belong to this fanzine
+    final folioImages = _userImages.where((img) {
+      if (component.fanzineId == null || component.fanzineId!.isEmpty) {
+        return false;
+      }
+      final List usedIn = img['usedInFanzines'] ?? [];
+      final String? contextId = img['folioContext'];
+      return contextId == component.fanzineId || usedIn.contains(component.fanzineId);
+    }).toList();
+
     return div(classes: 'flex-col text-left gap-4', attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px;'}, [
       p([text('Page Layout Editor')], attributes: const {
         'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin: 0;'
@@ -208,22 +219,22 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
 
       div([], attributes: const {'style': 'height: 1px; background-color: #eee;'}),
 
-      // Click to insert images grid (using a container with native event listener instead of GestureDetector)
+      // Click to insert images grid
       div(classes: 'flex-col gap-2', [
         p([text('INSERT FROM YOUR GALLERY')], attributes: const {
           'style': 'font-size: 10px; font-weight: bold; color: #888; letter-spacing: 0.5px; margin: 0 0 8px 0;'
         }),
         if (_loadingImages)
           div(classes: 'skeleton-line shimmer-bg', [])
-        else if (_userImages.isEmpty)
-          p([text('No images in your library to insert. Upload images first in the Upload tab.')], attributes: const {
+        else if (folioImages.isEmpty)
+          p([text('No images in this folio to insert. Upload images first in the Upload tab of this fanzine.')], attributes: const {
             'style': 'font-size: 11px; color: #999; font-style: italic;'
           })
         else
           div(attributes: const {
             'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px;'
           }, [
-            for (var img in _userImages)
+            for (var img in folioImages)
               div(
                   attributes: {
                     'style': 'aspect-ratio: 5/8; background-color: #f1f1f1; background-image: url("${img['gridUrl'] ?? img['fileUrl'] ?? ''}"); background-size: cover; background-position: center; border-radius: 4px; border: 1px solid #ddd; cursor: pointer;'
