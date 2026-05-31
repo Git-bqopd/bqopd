@@ -243,8 +243,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
         UnsavedFanzineRegistry.remove(component.frefFanzineId);
 
         // 5. Update local broad controllers to enforce smooth UX state transition
-        UnsavedFanzineRegistry.fanzineControllers[component.frefFanzineId]?.add(updatedFz);
-        UnsavedFanzineRegistry.pagesControllers[component.frefFanzineId]?.add(pages);
+        UnsavedFanzineRegistry.getOrCreateFanzineController(component.frefFanzineId).add(updatedFz);
+        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
 
         print('[UNSAVED REGISTRY] Successfully committed temporary Fanzine: "${component.frefFanzineId}" to database.');
       } else {
@@ -509,7 +509,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
           'is5x8': is5x8,
         };
 
-        await fsSetDoc('images/$imageId', imgData.toString(), true);
+        // FIXED: Serialize imgData cleanly using jsonEncode instead of imgData.toString()
+        await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
 
         // Add to the folio pages immediately
         await _addExistingImage(imageId, downloadUrl, width, height);
@@ -542,6 +543,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
         height: height,
       );
       pages.add(newPage);
+      // FIXED: Use getOrCreatePagesController to guarantee stream safety
       UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
     } else {
       final resStr = await fsQuery('fanzines/${component.frefFanzineId}/pages', '', '', '', '');
@@ -628,7 +630,8 @@ Start typing directly inside the text editor panel below to generate columns of 
           templateId: 'calendar_left',
         );
         pages.add(newPage);
-        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
+        // FIXED: Use getOrCreatePagesController to guarantee stream safety
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       } else {
         await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
           'pageNumber': nextNum,
@@ -809,6 +812,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     ], classes: 'flex-col text-left p-2', attributes: const {'style': 'gap: 8px; display: flex;'});
   }
 
+  // FIXED: Changed return type from 'Widget' to 'Component' to resolve compilation error
   Component _buildCustomToggleSwitch(bool val) {
     return div(
       [],
@@ -818,6 +822,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     );
   }
 
+  // FIXED: Changed return type from 'Widget' to 'Component' to resolve compilation error
   Component _buildCustomToggleSwitchForCover(bool val) {
     return div(
       [],

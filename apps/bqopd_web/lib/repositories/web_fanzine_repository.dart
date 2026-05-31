@@ -70,7 +70,8 @@ class WebFanzineRepository implements IFanzineRepository {
           width: page.width,
           height: page.height,
         );
-        UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(pages);
+        // FIXED: Use getOrCreatePagesController to guarantee stream safety
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       }
       return;
     }
@@ -83,8 +84,8 @@ class WebFanzineRepository implements IFanzineRepository {
 
   @override
   Future<void> addPageByShortcode(String fanzineId, String shortcode) async {
-    final resStr = await fsQuery('images', 'shortCode', '==', jsonEncode(shortcode), '');
-    final List docs = jsonDecode(resStr);
+    final imageQuery = await fsQuery('images', 'shortCode', '==', jsonEncode(shortcode), '');
+    final List docs = jsonDecode(imageQuery);
     if (docs.isEmpty) throw Exception('Image shortcode not found.');
     final doc = docs.first;
     final data = doc['data'];
@@ -106,17 +107,18 @@ class WebFanzineRepository implements IFanzineRepository {
         height: height,
       );
       pages.add(newPage);
-      UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(pages);
+      // FIXED: Use getOrCreatePagesController to guarantee stream safety
+      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       return;
     }
 
     final resStr = await fsQuery('fanzines/$fanzineId/pages', '', '', '', '');
     final int nextNum = jsonDecode(resStr).length + 1;
 
-    await fsAddDoc('fanzines/$fanzineId/pages', jsonEncode({
+    await fsSetDoc('fanzines/$fanzineId/pages/page_${DateTime.now().millisecondsSinceEpoch}', jsonEncode({
       'imageId': imageId, 'imageUrl': imageUrl, 'pageNumber': nextNum, 'status': 'ready',
       'width': width, 'height': height, 'createdAt': WebFieldValue.serverTimestamp(),
-    }));
+    }), true);
     await fsUpdateDoc('images/$imageId', jsonEncode({'usedInFanzines': WebFieldValue.arrayUnion([fanzineId])}));
   }
 
@@ -143,7 +145,8 @@ class WebFanzineRepository implements IFanzineRepository {
           height: p.height,
         );
       }
-      UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(pages);
+      // FIXED: Use getOrCreatePagesController to guarantee stream safety
+      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       return;
     }
 
@@ -182,7 +185,8 @@ class WebFanzineRepository implements IFanzineRepository {
           width: p.width,
           height: p.height,
         );
-        UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(pages);
+        // FIXED: Use getOrCreatePagesController to guarantee stream safety
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       }
       return;
     }
@@ -222,7 +226,8 @@ class WebFanzineRepository implements IFanzineRepository {
           height: p.height,
         );
       }
-      UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(pages);
+      // FIXED: Use getOrCreatePagesController to guarantee stream safety
+      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       return;
     }
 
@@ -343,7 +348,8 @@ class WebFanzineRepository implements IFanzineRepository {
 
       currentPages.insert(afterPageNumber, newPage);
       UnsavedFanzineRegistry.pages[fanzineId] = currentPages;
-      UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(currentPages);
+      // FIXED: Use getOrCreatePagesController to guarantee stream safety
+      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(currentPages);
 
       // Save simulated image document directly so standard queries can resolve it.
       await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
