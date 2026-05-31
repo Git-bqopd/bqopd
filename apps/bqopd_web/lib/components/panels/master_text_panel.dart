@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
+import '../../utils/unsaved_fanzine_registry.dart';
 
 /// Interactive corrected text editor panel for Fanzine Folio pages.
 /// Allows curators and creators to type directly to save master/corrected text.
@@ -30,6 +32,9 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
   String _statusMessage = '';
   bool _isError = false;
   Timer? _statusTimer;
+
+  // Target template config mapping inside the Master baseline
+  bool _isTemplate = false;
 
   @override
   void initState() {
@@ -73,6 +78,7 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
         setState(() {
           _textValue = data['text_corrected'] ?? data['text_raw'] ?? data['text'] ?? '';
           _aiBaselineText = data['text_corrected_ai'] ?? '';
+          _isTemplate = data['type'] == 'template' || data['templateId'] == 'basic_text';
           _loading = false;
         });
       } else {
@@ -121,6 +127,7 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
     });
 
     try {
+      final uid = getCurrentUserId() ?? 'system_web';
       final updates = <String, dynamic>{
         'text_corrected': _textValue,
         'needs_linking': true,
@@ -131,6 +138,81 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
         updates['human_correction_score'] = score;
         if (score > 0) {
           updates['isTrainingData'] = true;
+        }
+      }
+
+      // REDIRECT IF TEMPLATE PAGE: Re-compile WebPs immediately on save
+      if (_isTemplate) {
+        setState(() {
+          _statusMessage = 'Re-compiling WebP page layouts...';
+        });
+
+        final resultJson = await renderPublisherPage(_textValue);
+        final decoded = jsonDecode(resultJson);
+
+        final String origBase64 = decoded['original'];
+        final String listBase64 = decoded['list'];
+        final String gridBase64 = decoded['grid'];
+
+        final origBytes = base64Decode(origBase64);
+        final listBytes = base64Decode(listBase64);
+        final gridBytes = base64Decode(gridBase64);
+
+        final String fanzineId = component.fanzineId ?? 'unknown_fanzine';
+        final String baseDir = 'uploads/$uid/folio_assets/$fanzineId/${component.imageId}';
+
+        final urls = await Future.wait([
+          stUpload('$baseDir/original.webp', origBytes, 'image/webp'),
+          stUpload('$baseDir/list.webp', listBytes, 'image/webp'),
+          stUpload('$baseDir/grid.webp', gridBytes, 'image/webp'),
+        ]);
+
+        final cb = DateTime.now().millisecondsSinceEpoch;
+        final fileUrl = '${urls[0]}&cb=$cb';
+        final listUrl = '${urls[1]}&cb=$cb';
+        final gridUrl = '${urls[2]}&cb=$cb';
+
+        updates['fileUrl'] = fileUrl;
+        updates['listUrl'] = listUrl;
+        updates['gridUrl'] = gridUrl;
+
+        // Sync layout page documents as well
+        if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
+          final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+          final idx = pages.indexWhere((p) => p.imageId == component.imageId);
+          if (idx != -1) {
+            final p = pages[idx];
+            pages[idx] = FanzinePage(
+              id: p.id,
+              pageNumber: p.pageNumber,
+              imageId: p.imageId,
+              imageUrl: fileUrl,
+              gridUrl: gridUrl,
+              listUrl: listUrl,
+              storagePath: p.storagePath,
+              status: 'ready',
+              templateId: p.templateId,
+              spreadPosition: p.spreadPosition,
+              sidePreference: p.sidePreference,
+              width: p.width,
+              height: p.height,
+            );
+            UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+          }
+        } else {
+          final pagesRes = await fsQuery('fanzines/$fanzineId/pages', 'imageId', '==', jsonEncode(component.imageId), '');
+          final List pageDocs = jsonDecode(pagesRes) as List;
+          for (var pageDoc in pageDocs) {
+            final pageId = pageDoc['id'] ?? '';
+            if (pageId.isNotEmpty) {
+              await fsUpdateDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+                'imageUrl': fileUrl,
+                'listUrl': listUrl,
+                'gridUrl': gridUrl,
+                'status': 'ready',
+              }));
+            }
+          }
         }
       }
 

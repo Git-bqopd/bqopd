@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
+import '../../utils/unsaved_fanzine_registry.dart';
 
 /// Live interactive text configuration and image insertion editor panel.
 /// Mirroring standard old publisher capability inside the settings panel context.
@@ -107,23 +109,98 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
     });
   }
 
+  // HIGH-PERFORMANCE STATIC IMAGE SAVE PIPELINE
+  // Renders off-screen WebP files and uploads them dynamically on Save!
   Future<void> _save() async {
     if (component.imageId.isEmpty || _saving) return;
 
     setState(() {
       _saving = true;
-      _statusMessage = 'Publishing page contents...';
+      _statusMessage = 'Compiling & publishing page layout...';
       _isError = false;
     });
 
     try {
+      final uid = getCurrentUserId() ?? 'system_web';
+
+      // 1. Run the Web-based Canvas compiler for absolute print accuracy
+      final resultJson = await renderPublisherPage(_textValue);
+      final decoded = jsonDecode(resultJson);
+
+      final String origBase64 = decoded['original'];
+      final String listBase64 = decoded['list'];
+      final String gridBase64 = decoded['grid'];
+
+      final origBytes = base64Decode(origBase64);
+      final listBytes = base64Decode(listBase64);
+      final gridBytes = base64Decode(gridBase64);
+
+      final String fanzineId = component.fanzineId ?? 'unknown_fanzine';
+      final String baseDir = 'uploads/$uid/folio_assets/$fanzineId/${component.imageId}';
+
+      // 2. Upload three standard WebP sizes concurrently to Google Cloud Storage
+      final urls = await Future.wait([
+        stUpload('$baseDir/original.webp', origBytes, 'image/webp'),
+        stUpload('$baseDir/list.webp', listBytes, 'image/webp'),
+        stUpload('$baseDir/grid.webp', gridBytes, 'image/webp'),
+      ]);
+
+      // FORCE FRESH IMAGE URLS: Append timestamp parameter so browser reloads WebP instantly
+      final cb = DateTime.now().millisecondsSinceEpoch;
+      final fileUrl = '${urls[0]}&cb=$cb';
+      final listUrl = '${urls[1]}&cb=$cb';
+      final gridUrl = '${urls[2]}&cb=$cb';
+
+      // 3. Save clean markdown texts along with references in Firestore
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({
         'text': _textValue,
         'text_corrected': _textValue,
         'text_linked': _textValue,
+        'fileUrl': fileUrl,
+        'listUrl': listUrl,
+        'gridUrl': gridUrl,
         'needs_ai_cleaning': false,
-        'needs_linking': true, // Auto-trigger Wiki-Link pipeline
+        'needs_linking': true,
       }));
+
+      // 4. Synchronize parent fanzine page document models reactively
+      if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+        final idx = pages.indexWhere((p) => p.imageId == component.imageId);
+        if (idx != -1) {
+          final p = pages[idx];
+          pages[idx] = FanzinePage(
+            id: p.id,
+            pageNumber: p.pageNumber,
+            imageId: p.imageId,
+            imageUrl: fileUrl,
+            gridUrl: gridUrl,
+            listUrl: listUrl,
+            storagePath: p.storagePath,
+            status: 'ready',
+            templateId: p.templateId,
+            spreadPosition: p.spreadPosition,
+            sidePreference: p.sidePreference,
+            width: p.width,
+            height: p.height,
+          );
+          UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+        }
+      } else {
+        final pagesRes = await fsQuery('fanzines/$fanzineId/pages', 'imageId', '==', jsonEncode(component.imageId), '');
+        final List pageDocs = jsonDecode(pagesRes) as List;
+        for (var pageDoc in pageDocs) {
+          final pageId = pageDoc['id'] ?? '';
+          if (pageId.isNotEmpty) {
+            await fsUpdateDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+              'imageUrl': fileUrl,
+              'listUrl': listUrl,
+              'gridUrl': gridUrl,
+              'status': 'ready',
+            }));
+          }
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -182,6 +259,21 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
       return contextId == component.fanzineId || usedIn.contains(component.fanzineId);
     }).toList();
 
+    // Stable sort to keep shortnames identical with fanzine editor
+    folioImages.sort((a, b) {
+      final aT = a['timestamp'] ?? a['createdAt'] ?? '';
+      final bT = b['timestamp'] ?? b['createdAt'] ?? '';
+      return aT.toString().compareTo(bT.toString());
+    });
+
+    final Map<String, String> imageShortNames = {};
+    for (int i = 0; i < folioImages.length; i++) {
+      final String id = folioImages[i]['id'] ?? '';
+      if (id.isNotEmpty) {
+        imageShortNames[id] = "img${(i + 1).toString().padLeft(2, '0')}";
+      }
+    }
+
     return div(classes: 'flex-col text-left gap-4', attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px;'}, [
       p([text('Page Layout Editor')], attributes: const {
         'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin: 0;'
@@ -232,18 +324,30 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
           })
         else
           div(attributes: const {
-            'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px;'
+            'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 12px;'
           }, [
             for (var img in folioImages)
-              div(
-                  attributes: {
-                    'style': 'aspect-ratio: 5/8; background-color: #f1f1f1; background-image: url("${img['gridUrl'] ?? img['fileUrl'] ?? ''}"); background-size: cover; background-position: center; border-radius: 4px; border: 1px solid #ddd; cursor: pointer;'
-                  },
-                  events: {
-                    'click': (e) => _insertImageAsset(img['fileUrl'] ?? img['gridUrl'] ?? '')
-                  },
-                  []
-              )
+              div(attributes: const {
+                'style': 'display: flex; flex-direction: column; align-items: center; gap: 4px;'
+              }, [
+                // 1. Image Thumbnail container
+                div(
+                    attributes: {
+                      'style': 'width: 100%; aspect-ratio: 5/8; background-color: #f1f1f1; background-image: url("${img['gridUrl'] ?? img['fileUrl'] ?? ''}"); background-size: cover; background-position: center; border-radius: 4px; border: 1px solid #ddd; cursor: pointer;'
+                    },
+                    events: {
+                      'click': (e) => _insertImageAsset(img['fileUrl'] ?? img['gridUrl'] ?? '')
+                    },
+                    []
+                ),
+                // 2. Beautiful Selectable & Copyable shortname tag container
+                span(
+                    [text('{{${imageShortNames[img['id']] ?? 'img'}}}')],
+                    attributes: const {
+                      'style': 'font-size: 10px; font-weight: bold; font-family: monospace; color: #6750A4; user-select: all; -webkit-user-select: all; cursor: text; padding: 2px 4px; background: #f5f5f5; border-radius: 4px; border: 1px solid #e2e8f0; display: inline-block; max-width: 100%; text-align: center; word-break: break-all;'
+                    }
+                )
+              ])
           ])
       ])
     ]);

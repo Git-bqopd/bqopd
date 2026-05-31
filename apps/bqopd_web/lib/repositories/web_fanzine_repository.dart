@@ -248,6 +248,39 @@ class WebFanzineRepository implements IFanzineRepository {
     final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
     final shortCode = ShortcodeGenerator.generateStandardCode();
 
+    // COMPILE TO WEBP IMMEDIATELY: Ensure the page always resolves as an image from the moment of creation!
+    String fileUrl = '';
+    String listUrl = '';
+    String gridUrl = '';
+
+    try {
+      final resultJson = await renderPublisherPage(initialText);
+      final decoded = jsonDecode(resultJson);
+
+      final String origBase64 = decoded['original'];
+      final String listBase64 = decoded['list'];
+      final String gridBase64 = decoded['grid'];
+
+      final origBytes = base64Decode(origBase64);
+      final listBytes = base64Decode(listBase64);
+      final gridBytes = base64Decode(gridBase64);
+
+      final String baseDir = 'uploads/$uid/folio_assets/$fanzineId/$imageId';
+
+      final urls = await Future.wait([
+        stUpload('$baseDir/original.webp', origBytes, 'image/webp'),
+        stUpload('$baseDir/list.webp', listBytes, 'image/webp'),
+        stUpload('$baseDir/grid.webp', gridBytes, 'image/webp'),
+      ]);
+
+      final cb = DateTime.now().millisecondsSinceEpoch;
+      fileUrl = '${urls[0]}&cb=$cb';
+      listUrl = '${urls[1]}&cb=$cb';
+      gridUrl = '${urls[2]}&cb=$cb';
+    } catch (e) {
+      print('[insertPublisherPage WebP Compile Error] $e');
+    }
+
     final imageMetadata = {
       'uid': uid,
       'uploaderId': uid,
@@ -265,6 +298,9 @@ class WebFanzineRepository implements IFanzineRepository {
       'shortCode': shortCode,
       'folioContext': fanzineId,
       'usedInFanzines': [fanzineId],
+      if (fileUrl.isNotEmpty) 'fileUrl': fileUrl,
+      if (listUrl.isNotEmpty) 'listUrl': listUrl,
+      if (gridUrl.isNotEmpty) 'gridUrl': gridUrl,
     };
 
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
@@ -296,6 +332,9 @@ class WebFanzineRepository implements IFanzineRepository {
         id: pageId,
         pageNumber: afterPageNumber + 1,
         imageId: imageId,
+        imageUrl: fileUrl,
+        gridUrl: gridUrl,
+        listUrl: listUrl,
         status: 'ready',
         templateId: 'basic_text',
         width: 2000,
@@ -306,8 +345,7 @@ class WebFanzineRepository implements IFanzineRepository {
       UnsavedFanzineRegistry.pages[fanzineId] = currentPages;
       UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(currentPages);
 
-      // Save simulated image document to local cache or unsaved registry mock if needed.
-      // We will set this doc directly in Firestore anyway so that standard queries can resolve it.
+      // Save simulated image document directly so standard queries can resolve it.
       await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
       return imageId;
     }
@@ -328,6 +366,9 @@ class WebFanzineRepository implements IFanzineRepository {
 
     await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
       'imageId': imageId,
+      'imageUrl': fileUrl,
+      'gridUrl': gridUrl,
+      'listUrl': listUrl,
       'pageNumber': afterPageNumber + 1,
       'status': 'ready',
       'templateId': 'basic_text',

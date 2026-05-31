@@ -3,6 +3,7 @@ library web_firebase_interop_web;
 
 import 'dart:js_interop';
 import 'dart:typed_data';
+import 'dart:js_util' as js_util;
 import '../utils/web_firebase_interop.dart';
 
 /// Web implementation of the subscription wrapper to bridge the JS unsubscription callback.
@@ -132,6 +133,19 @@ void readInputFile(String inputId, void Function(String base64, String fileName,
   _readInputFile(inputId.toJS, ((JSString base64, JSString fileName, JSString objectUrl) {
     callback(base64.toDart, fileName.toDart, objectUrl.toDart);
   }).toJS);
+}
+
+// DYNAMIC JS BINDING RESOLUTION
+// Uses promiseToFuture and globalThis lookup to avoid compiler name mangling issues
+Future<String> renderPublisherPage(String text) async {
+  try {
+    final promise = js_util.callMethod(js_util.globalThis, 'renderPublisherPage', [text]);
+    final jsRes = await js_util.promiseToFuture(promise);
+    return jsRes.toString();
+  } catch (e) {
+    print('[renderPublisherPage js_util Error] $e');
+    rethrow;
+  }
 }
 
 class WebFieldValue {

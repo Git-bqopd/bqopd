@@ -54,6 +54,9 @@ void pickAndReadFile(String inputId, void Function(String base64, String fileNam
 /// Server VM stub for reading a selected file from input
 void readInputFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {}
 
+/// Server VM stub for high-performance canvas page rendering
+Future<String> renderPublisherPage(String text) async => '{}';
+
 /// Mock representation of WebFieldValue for the server environment.
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {};

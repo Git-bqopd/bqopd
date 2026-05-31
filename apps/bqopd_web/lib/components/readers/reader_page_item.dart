@@ -17,7 +17,6 @@ import '../panels/credits_panel.dart';
 import '../panels/youtube_panel.dart';
 import '../panels/analytics_panel.dart';
 import '../panels/publisher_text_panel.dart';
-import '../templates/basic_text_template.dart';
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
@@ -105,23 +104,27 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   Component build(BuildContext context) {
     final String imageId = component.pageData['imageId'] ?? '';
     final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
-    final String? templateId = component.pageData['templateId'];
 
     return div(classes: 'reader-list-item flex-col w-full', [
       div(classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center', [
-        if (templateId == 'basic_text')
-          BasicTextTemplate(textContent: _templateTextValue)
-        else if (url != null && url.isNotEmpty)
+        // STRIP INLINE HTML RENDERERS COMPLETELY: Renders only the WebP image with strict selection block properties
+        if (url != null && url.isNotEmpty)
           img(
               src: url,
               classes: 'w-full h-full',
               attributes: {
-                'style': 'object-fit: contain;',
+                'style': 'object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
+                'draggable': 'false',
                 'loading': 'lazy',
               }
           )
         else
-          p(classes: 'text-gray text-xs', [text('Processing Assets...')])
+          div(classes: 'flex-col gap-2 py-4 w-full h-full justify-center items-center p-8', [
+            div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 80%; height: 16px; margin-bottom: 12px;'}),
+            div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'width: 90%; height: 16px; margin-bottom: 12px;'}),
+            div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 70%; height: 16px; margin-bottom: 12px;'}),
+            div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'width: 50%; height: 16px; margin-bottom: 12px;'}),
+          ])
       ]),
 
       div(classes: 'bg-white', [

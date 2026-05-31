@@ -131,3 +131,200 @@ window.fsQuery = function(path, field, op, valueJson, orderBy) {
 
 window.fnCall = function(name, dataStr) { return functions.httpsCallable(name)(JSON.parse(dataStr)).then(function(r) { return JSON.stringify(r.data); }).catch(function(err) { console.error("fnCall error:", err); throw err; }); };
 window.stUpload = function(path, bytes, contentType) { return storage.ref(path).put(bytes, {contentType: contentType}).then(function(s) { return s.ref.getDownloadURL(); }).catch(function(err) { console.error("stUpload error:", err); throw err; }); };
+
+// --- HIGH-PERFORMANCE OFFSCREEN CANVAS COMPILER ---
+// Generates three WebP sizes on click: original, list, and grid.
+window.renderPublisherPage = async (text) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2000;
+    canvas.height = 3200;
+    const ctx = canvas.getContext('2d');
+
+    // Fill with pure white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 2000, 3200);
+
+    // Draw outer black border (11px)
+    ctx.lineWidth = 11;
+    ctx.strokeStyle = '#000000';
+    ctx.strokeRect(5.5, 5.5, 2000 - 11, 3200 - 11);
+
+    // Draw vertical dividers (Starts 99px from top, ends 99px from bottom)
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(663, 99, 11, 3200 - 198);
+    ctx.fillRect(1326, 99, 11, 3200 - 198);
+
+    const columnsX = [33, 696, 1359];
+    const colWidth = 608;
+    const maxY = 3150;
+
+    let colIndex = 0;
+    let currentY = 33;
+
+    // Text wrapping utility (declared inside render block to safely capture ctx & colWidth)
+    function wrapText(text, fontSize, fontName, bold) {
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+        const words = text.split(' ');
+        const lines = [];
+        let currentLine = "";
+
+        for (let word of words) {
+            const testLine = currentLine ? currentLine + " " + word : word;
+            if (ctx.measureText(testLine).width > colWidth) {
+                lines.push(currentLine);
+                currentLine = word;
+            } else {
+                currentLine = testLine;
+            }
+        }
+        if (currentLine) lines.push(currentLine);
+        return lines;
+    }
+
+    // Image loading utility with CORS guard (declared inside render block)
+    function loadImage(url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = url;
+        });
+    }
+
+    // Parse markdown text blocks
+    const lines = text.split('\n');
+    const blocks = [];
+    let currentParagraph = "";
+
+    function commitParagraph() {
+        const pText = currentParagraph.trim();
+        if (!pText) return;
+
+        const imageRegex = /^\{\{IMAGE(?::\s*(.*?))?\}\}$/i;
+        const match = imageRegex.exec(pText);
+        if (match) {
+            blocks.push({ type: 'image', url: match[1] ? match[1].trim() : '' });
+        } else if (pText.startsWith('###')) {
+            blocks.push({ type: 'h3', content: pText.substring(3).trim() });
+        } else if (pText.startsWith('##')) {
+            blocks.push({ type: 'h2', content: pText.substring(2).trim() });
+        } else if (pText.startsWith('#')) {
+            blocks.push({ type: 'h1', content: pText.substring(1).trim() });
+        } else if (pText.startsWith('* ') || pText.startsWith('- ')) {
+            blocks.push({ type: 'bullet', content: pText.substring(2).trim() });
+        } else {
+            blocks.push({ type: 'text', content: pText });
+        }
+        currentParagraph = "";
+    }
+
+    for (let line of lines) {
+        const cleanLine = line.trim();
+        if (cleanLine === "") {
+            commitParagraph();
+        } else if (cleanLine.startsWith('#') || cleanLine.startsWith('*') || cleanLine.startsWith('-') || cleanLine.startsWith('{{')) {
+            commitParagraph();
+            currentParagraph = cleanLine;
+            commitParagraph();
+        } else {
+            currentParagraph = currentParagraph ? currentParagraph + " " + cleanLine : cleanLine;
+        }
+    }
+    commitParagraph();
+
+    // Render blocks onto canvas
+    for (let block of blocks) {
+        if (colIndex >= 3) break;
+
+        if (block.type === 'image') {
+            const targetUrl = block.url || 'https://placehold.co/600x400/png?text=Image+Asset';
+            const img = await loadImage(targetUrl);
+            if (img) {
+                const drawHeight = colWidth * (img.height / img.width);
+
+                if (currentY + drawHeight > maxY) {
+                    colIndex++;
+                    currentY = 33;
+                }
+
+                if (colIndex < 3) {
+                    ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawHeight);
+                    currentY += drawHeight + 20;
+                }
+            }
+        } else {
+            let fontSize, fontName, bold = false, heightMultiplier = 1.5, spaceBelow = 12;
+            if (block.type === 'h1') {
+                fontSize = 42; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 16;
+            } else if (block.type === 'h2') {
+                fontSize = 36; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 14;
+            } else if (block.type === 'h3') {
+                fontSize = 28; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 12;
+            } else {
+                fontSize = 28; fontName = 'Arial'; heightMultiplier = 1.5; spaceBelow = 12;
+            }
+
+            const isBullet = block.type === 'bullet';
+            const textToWrap = isBullet ? "•  " + block.content : block.content;
+            const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
+
+            ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+            ctx.fillStyle = '#1a1a1a';
+
+            const step = fontSize * heightMultiplier;
+
+            for (let line of linesToDraw) {
+                if (currentY + fontSize > maxY) {
+                    colIndex++;
+                    currentY = 33;
+                }
+
+                if (colIndex >= 3) break;
+
+                // Justify body paragraphs
+                const isLastLine = line === linesToDraw[linesToDraw.length - 1];
+                if (!isLastLine && block.type === 'text' && linesToDraw.length > 1) {
+                    const words = line.split(' ');
+                    if (words.length > 1) {
+                        let wordsWidth = 0;
+                        for (let word of words) wordsWidth += ctx.measureText(word).width;
+                        const wordSpacing = (colWidth - wordsWidth) / (words.length - 1);
+
+                        let currentX = columnsX[colIndex];
+                        for (let word of words) {
+                            ctx.fillText(word, currentX, currentY + fontSize);
+                            currentX += ctx.measureText(word).width + wordSpacing;
+                        }
+                    } else {
+                        ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
+                    }
+                } else {
+                    ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
+                }
+                currentY += step;
+            }
+            currentY += spaceBelow;
+        }
+    }
+
+    // Expose scaled canvas exporters
+    function getScaledBase64(targetWidth, targetHeight) {
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = targetWidth;
+        scaledCanvas.height = targetHeight;
+        const sCtx = scaledCanvas.getContext('2d');
+        sCtx.drawImage(canvas, 0, 0, 2000, 3200, 0, 0, targetWidth, targetHeight);
+        return scaledCanvas.toDataURL('image/webp', 0.8).split(',')[1];
+    }
+
+    const originalBase64 = canvas.toDataURL('image/webp', 0.9).split(',')[1];
+    const listBase64 = getScaledBase64(800, 1280);
+    const gridBase64 = getScaledBase64(450, 720);
+
+    return JSON.stringify({
+        original: originalBase64,
+        list: listBase64,
+        grid: gridBase64
+    });
+};

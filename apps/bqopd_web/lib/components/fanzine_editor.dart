@@ -628,7 +628,7 @@ Start typing directly inside the text editor panel below to generate columns of 
           templateId: 'calendar_left',
         );
         pages.add(newPage);
-        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
       } else {
         await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
           'pageNumber': nextNum,
@@ -811,14 +811,7 @@ Start typing directly inside the text editor panel below to generate columns of 
 
   Component _buildCustomToggleSwitch(bool val) {
     return div(
-      [
-        div(
-          [],
-          attributes: {
-            'style': 'width: 16px; height: 16px; border-radius: 50%; background-color: white; position: absolute; top: 4px; left: ${val ? '24px' : '4px'}; transition: left 0.2s;'
-          },
-        )
-      ],
+      [],
       attributes: {
         'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
       },
@@ -827,14 +820,7 @@ Start typing directly inside the text editor panel below to generate columns of 
 
   Component _buildCustomToggleSwitchForCover(bool val) {
     return div(
-      [
-        div(
-          [],
-          attributes: {
-            'style': 'width: 12px; height: 12px; border-radius: 50%; background-color: white; position: absolute; top: 3px; left: ${val ? '18px' : '3px'}; transition: left 0.2s;'
-          },
-        )
-      ],
+      [],
       attributes: {
         'style': 'width: 33px; height: 18px; border-radius: 10px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
       },
@@ -1118,6 +1104,21 @@ Start typing directly inside the text editor panel below to generate columns of 
       return context == component.frefFanzineId || usedIn.contains(component.frefFanzineId);
     }).toList();
 
+    // 1. Stable sort to keep shortnames consistent and global
+    folioImages.sort((a, b) {
+      final aT = a['timestamp'] ?? a['createdAt'] ?? '';
+      final bT = b['timestamp'] ?? b['createdAt'] ?? '';
+      return aT.toString().compareTo(bT.toString());
+    });
+
+    final Map<String, String> imageShortNames = {};
+    for (int i = 0; i < folioImages.length; i++) {
+      final String id = folioImages[i]['id'] ?? '';
+      if (id.isNotEmpty) {
+        imageShortNames[id] = "img${(i + 1).toString().padLeft(2, '0')}";
+      }
+    }
+
     final fiveByEightDocs = folioImages.where((img) => _isImage5x8(img)).toList();
     final otherDocs = folioImages.where((img) => !_isImage5x8(img)).toList();
 
@@ -1230,7 +1231,7 @@ Start typing directly inside the text editor panel below to generate columns of 
               attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
             )
           ], attributes: const {'style': 'margin-top: 12px; margin-bottom: 8px;'}),
-          _buildUploadedImagesGrid(fiveByEightDocs, showUploadPlaceholder: _isUploading),
+          _buildUploadedImagesGrid(fiveByEightDocs, imageShortNames, showUploadPlaceholder: _isUploading),
           div([], attributes: const {'style': 'height: 16px;'})
         ],
 
@@ -1241,20 +1242,20 @@ Start typing directly inside the text editor panel below to generate columns of 
               attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
             )
           ], attributes: const {'style': 'margin-top: 12px; margin-bottom: 8px;'}),
-          _buildUploadedImagesGrid(otherDocs),
+          _buildUploadedImagesGrid(otherDocs, imageShortNames),
           div([], attributes: const {'style': 'height: 16px;'})
         ]
       ]
     ], classes: 'flex-col gap-3 text-left p-2');
   }
 
-  Component _buildUploadedImagesGrid(List<Map<String, dynamic>> docs, {bool showUploadPlaceholder = false}) {
+  Component _buildUploadedImagesGrid(List<Map<String, dynamic>> docs, Map<String, String> imageShortNames, {bool showUploadPlaceholder = false}) {
     return div(
       [
         if (showUploadPlaceholder)
           _buildShimmerPlaceholderCard(),
         for (var doc in docs)
-          _buildFolioGridItem(doc)
+          _buildFolioGridItem(doc, imageShortNames)
       ],
       attributes: const {
         'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; width: 100%; margin-top: 8px;'
@@ -1283,7 +1284,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     );
   }
 
-  Component _buildFolioGridItem(Map<String, dynamic> doc) {
+  Component _buildFolioGridItem(Map<String, dynamic> doc, Map<String, String> imageShortNames) {
     final String imageId = doc['id'] ?? '';
     final String? optimalUrl = doc['gridUrl'] ?? doc['fileUrl'];
     final String title = doc['title'] ?? doc['fileName'] ?? 'untitled';
@@ -1291,6 +1292,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     final int height = doc['height'] ?? 0;
     final bool isDirect = doc['folioContext'] == component.frefFanzineId;
     final bool isTemplate = doc['isGenerated'] == true || doc['type'] == 'template';
+    final String shortName = imageShortNames[imageId] ?? '';
 
     return div(
       [
@@ -1355,9 +1357,16 @@ Start typing directly inside the text editor panel below to generate columns of 
           },
         ),
 
-        // Footer Title (Absolute Positioned)
+        // Footer Title (Absolute Positioned) with dynamic fanzine-level shortname badge layered just above the filename text
         div(
           [
+            if (shortName.isNotEmpty)
+              div(
+                  [text(shortName)],
+                  attributes: const {
+                    'style': 'background-color: #6750A4; color: white; font-size: 8px; font-weight: bold; border-radius: 4px; padding: 1px 4px; display: inline-block; margin-bottom: 3px; text-transform: lowercase; letter-spacing: 0.5px;'
+                  }
+              ),
             span(
               [text(title.toLowerCase())],
               attributes: const {
@@ -1366,7 +1375,7 @@ Start typing directly inside the text editor panel below to generate columns of 
             )
           ],
           attributes: const {
-            'style': 'position: absolute; bottom: 0; left: 0; right: 0; background-color: rgba(0,0,0,0.65); padding: 4px 6px; pointer-events: none;'
+            'style': 'position: absolute; bottom: 0; left: 0; right: 0; background-color: rgba(0,0,0,0.65); padding: 4px 6px; pointer-events: none; text-align: center; display: flex; flex-direction: column; align-items: center;'
           },
         )
       ],
@@ -1497,7 +1506,7 @@ Start typing directly inside the text editor panel below to generate columns of 
               )
             ],
             attributes: const {
-              'style': 'position: absolute; top: 6px; right: 6px; background-color: #6750A4; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.2);'
+              'style': 'position: absolute; top: 6px; right: 6px; background-color: #6750A4; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);'
             },
           )
       ],
