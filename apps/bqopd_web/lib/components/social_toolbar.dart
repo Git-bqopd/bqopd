@@ -5,6 +5,7 @@ import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/icon_utils.dart';
+import '../repositories/web_fanzine_repository.dart';
 
 // Panel imports for local settings edit mode rendering
 import 'panels/panel_container.dart';
@@ -19,6 +20,7 @@ import 'panels/indicia_panel.dart';
 import 'panels/credits_panel.dart';
 import 'panels/youtube_panel.dart';
 import 'panels/analytics_panel.dart';
+import 'panels/publisher_text_panel.dart';
 
 /// Highly-optimized and fully structured Social Toolbar for fanzine issues and pages.
 /// Implements a double-row modular system where Row 1 reflects the standard public reader view
@@ -215,12 +217,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   void _stopListening() {
-    _userUnsub?.callAsFunction();
+    _userUnsub?.cancel();
     _userUnsub = null;
   }
 
   void _stopImageStatsListener() {
-    _imageStatsUnsub?.callAsFunction();
+    _imageStatsUnsub?.cancel();
     _imageStatsUnsub = null;
   }
 
@@ -252,6 +254,63 @@ class _SocialToolbarState extends State<SocialToolbar> {
     } else {
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({'likeCount': WebFieldValue.increment(-1)}));
       await fsDeleteDoc('Users/$uid/activity/likes/images/${component.imageId}');
+    }
+  }
+
+  /// Master transaction handling for new publisher page generation.
+  Future<void> _handleNewPageInsertion() async {
+    if (component.fanzineId == null) return;
+
+    setState(() {
+      _isSettingsEditMode = true; // Stay in edit mode
+    });
+
+    try {
+      final IFanzineRepository repo = WebFanzineRepository();
+
+      // Resolve current fanzine layout pages to determine the precise "N" after-number insertion point
+      final List<FanzinePage> pages = [];
+      final pagesStr = await fsQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber');
+      final List decoded = jsonDecode(pagesStr);
+      for (var d in decoded) {
+        pages.add(FanzinePage.fromMap(d['id'], d['data']));
+      }
+
+      // Locate current image's pageNumber in the list
+      int currentNum = 1;
+      for (var p in pages) {
+        if (p.imageId == component.imageId) {
+          currentNum = p.pageNumber;
+          break;
+        }
+      }
+
+      final initialTemplateText = """
+# THE PUBLISHER
+## New Custom Page Created
+
+Start typing directly inside the text editor panel below to generate columns of printable metadata. Use images from your local library context.
+
+{{IMAGE}}
+
+* Enter bullet lists with an asterisk
+* Customize headers with # or ##
+""";
+
+      final String newImageId = await repo.insertPublisherPage(
+        component.fanzineId!,
+        currentNum,
+        initialTemplateText,
+        pages,
+      );
+
+      // Successfully generated. Instantly open/transition focus into the new publisher page text panel!
+      setState(() {
+        _activeEditorPanel = BonusRowType.newPage;
+      });
+
+    } catch (e) {
+      print("[PUBLISHER CREATION FAILURE] $e");
     }
   }
 
@@ -503,6 +562,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
           [
             for (var tool in visibleEditorTools)
               _buildSettingsEditModeActionButton(tool),
+            _buildSettingsEditModeNewPageButton(), // New page insertion action trigger
             _buildEditorToggleButton() // Displays 'edit' button as the last button on the right (marked as active)
           ]
       );
@@ -624,6 +684,35 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
+  /// Unique settings panel button trigger specifically targeting instant 'new page' insertion.
+  Component _buildSettingsEditModeNewPageButton() {
+    final bool isActive = _activeEditorPanel == BonusRowType.newPage;
+    final resolvedIcon = cleanIconName('note_add');
+    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
+
+    return button(
+        classes: btnClasses,
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
+        },
+        events: {
+          'click': (e) => _handleNewPageInsertion()
+        },
+        [
+          div(classes: 'toolbar-icon-wrapper', [
+            span(
+                classes: 'material-symbols-outlined',
+                attributes: {
+                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
+                },
+                [text(resolvedIcon)]
+            )
+          ]),
+          span(classes: 'toolbar-label', [text('new page')])
+        ]
+    );
+  }
+
   /// Specialized toggle button for the Editor Row.
   /// Toggles the settings panel into 'edit mode' to reveal advanced options.
   Component _buildEditorToggleButton() {
@@ -701,6 +790,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
       case BonusRowType.analyticsDashboard:
         title = "Analytics Dashboard";
         inner = AnalyticsPanel(imageId: imageId);
+        break;
+      case BonusRowType.newPage:
+        title = "New Page Text Editor";
+        inner = PublisherTextPanel(imageId: imageId);
         break;
       case BonusRowType.terminal:
         title = "Terminal Game";

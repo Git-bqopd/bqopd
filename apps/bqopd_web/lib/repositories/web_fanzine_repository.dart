@@ -148,6 +148,16 @@ class WebFanzineRepository implements IFanzineRepository {
     }
 
     await fsDeleteDoc('fanzines/$fanzineId/pages/${page.id}');
+
+    // Shift/Heal subsequent pages
+    final leftPages = allPages.where((p) => p.id != page.id).toList();
+    for (int i = 0; i < leftPages.length; i++) {
+      final item = leftPages[i];
+      final int expectedNum = i + 1;
+      if (item.pageNumber != expectedNum) {
+        await fsUpdateDoc('fanzines/$fanzineId/pages/${item.id}', jsonEncode({'pageNumber': expectedNum}));
+      }
+    }
   }
 
   @override
@@ -229,5 +239,103 @@ class WebFanzineRepository implements IFanzineRepository {
   @override
   Future<void> softPublish(String fanzineId) async {
     await fsUpdateDoc('fanzines/$fanzineId', jsonEncode({'isSoftPublished': true}));
+  }
+
+  @override
+  Future<String> insertPublisherPage(String fanzineId, int afterPageNumber, String initialText, List<FanzinePage> allPages) async {
+    final uid = getCurrentUserId() ?? 'system_web';
+    final imageId = 'temp_pub_page_${DateTime.now().millisecondsSinceEpoch}';
+    final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+    final shortCode = ShortcodeGenerator.generateStandardCode();
+
+    final imageMetadata = {
+      'uid': uid,
+      'uploaderId': uid,
+      'type': 'template',
+      'templateId': 'basic_text',
+      'text': initialText,
+      'text_corrected': initialText,
+      'text_linked': initialText,
+      'title': 'Generated Page',
+      'isGenerated': true,
+      'width': 2000,
+      'height': 3200,
+      'aspectRatio': 0.625,
+      'is5x8': true,
+      'shortCode': shortCode,
+      'folioContext': fanzineId,
+      'usedInFanzines': [fanzineId],
+    };
+
+    if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
+      // In-memory list operations
+      final List<FanzinePage> currentPages = List.from(UnsavedFanzineRegistry.pages[fanzineId] ?? []);
+
+      // Shift pageNumbers after insertion point
+      for (int i = 0; i < currentPages.length; i++) {
+        final p = currentPages[i];
+        if (p.pageNumber > afterPageNumber) {
+          currentPages[i] = FanzinePage(
+            id: p.id,
+            pageNumber: p.pageNumber + 1,
+            imageId: p.imageId,
+            imageUrl: p.imageUrl,
+            gridUrl: p.gridUrl,
+            listUrl: p.listUrl,
+            status: p.status,
+            templateId: p.templateId,
+            spreadPosition: p.spreadPosition,
+            sidePreference: p.sidePreference,
+            width: p.width,
+            height: p.height,
+          );
+        }
+      }
+
+      final newPage = FanzinePage(
+        id: pageId,
+        pageNumber: afterPageNumber + 1,
+        imageId: imageId,
+        status: 'ready',
+        templateId: 'basic_text',
+        width: 2000,
+        height: 3200,
+      );
+
+      currentPages.insert(afterPageNumber, newPage);
+      UnsavedFanzineRegistry.pages[fanzineId] = currentPages;
+      UnsavedFanzineRegistry.pagesControllers[fanzineId]?.add(currentPages);
+
+      // Save simulated image document to local cache or unsaved registry mock if needed.
+      // We will set this doc directly in Firestore anyway so that standard queries can resolve it.
+      await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
+      return imageId;
+    }
+
+    // Persisted Firestore insertion
+    await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
+
+    // Shift subsequent pages in parallel
+    final List<Future<void>> updates = [];
+    for (final p in allPages) {
+      if (p.pageNumber > afterPageNumber) {
+        updates.add(fsUpdateDoc('fanzines/$fanzineId/pages/${p.id}', jsonEncode({'pageNumber': p.pageNumber + 1})));
+      }
+    }
+    if (updates.isNotEmpty) {
+      await Future.wait(updates);
+    }
+
+    await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+      'imageId': imageId,
+      'pageNumber': afterPageNumber + 1,
+      'status': 'ready',
+      'templateId': 'basic_text',
+      'width': 2000,
+      'height': 3200,
+      'createdAt': WebFieldValue.serverTimestamp(),
+    }), true);
+
+    return imageId;
   }
 }

@@ -96,7 +96,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
 
   @override
   void dispose() {
-    _imagesUnsub?.callAsFunction();
+    _imagesUnsub?.cancel();
     super.dispose();
   }
 
@@ -114,7 +114,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
 
   /// Establishes real-time connection to synchronized user media profiles.
   void _listenToUserImages() {
-    _imagesUnsub?.callAsFunction();
+    _imagesUnsub?.cancel();
     _imagesUnsub = null;
 
     final uid = getCurrentUserId();
@@ -434,7 +434,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
   }
 
   bool _isImage5x8(Map<String, dynamic> img) {
-    if (img['is5x8'] == true) return true;
+    if (img['is5x8'] == true || img['type'] == 'template') return true;
     final w = img['width'] as num?;
     final h = img['height'] as num?;
     if (w != null && h != null && h > 0) {
@@ -508,7 +508,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
           'is5x8': is5x8,
         };
 
-        await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
+        await fsSetDoc('images/$imageId', imgData.toString(), true);
 
         // Add to the folio pages immediately
         await _addExistingImage(imageId, downloadUrl, width, height);
@@ -566,7 +566,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
   void _confirmRemoveImage(String imageId, bool isDirect) {
     final String actionText = isDirect ? "Delete Completely" : "Remove from Folio";
     final String bodyText = isDirect
-        ? "This is a direct upload. Deleting it will remove it from ALL folios and your library forever."
+        ? "This is a direct upload or publisher template page. Deleting it will remove it from ALL issues and your library forever."
         : "This image is from your library. Removing it will only take it out of this specific folio.";
 
     setState(() {
@@ -602,7 +602,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
         }
       }
 
-      print('[FOLIO REMOVE] Image successfully removed/deleted.');
+      print('[FOLIO REMOVE] Image/Page successfully removed/deleted.');
     } catch (e) {
       print('[FOLIO REMOVE ERROR] $e');
     } finally {
@@ -847,6 +847,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
   Component _buildOrderPageRow(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages) {
     final String? optimalUrl = page['gridUrl'] ?? page['listUrl'] ?? page['imageUrl'];
     final bool isPending = optimalUrl == null || optimalUrl.isEmpty;
+    final String? templateId = page['templateId'];
 
     final String selectedSpreadPos = page['spreadPosition'] ?? '';
     final String selectedSidePref = page['sidePreference'] ?? 'either';
@@ -874,7 +875,13 @@ class _FanzineEditorState extends State<FanzineEditor> {
                 ),
                 div(
                   [
-                    if (!isPending)
+                    if (templateId == 'basic_text')
+                      div([
+                        span([text('description')], classes: 'material-symbols-outlined', attributes: const {
+                          'style': 'font-size: 16px; color: #6750A4;'
+                        })
+                      ], classes: 'w-full h-full flex items-center justify-center')
+                    else if (!isPending)
                       img(
                           src: optimalUrl!,
                           attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
@@ -895,7 +902,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
                   attributes: const {'style': 'width: 36px; height: 50px; position: relative; display: inline-block; vertical-align: middle; margin-right: 12px;'},
                 ),
                 span(
-                  [text(isPending ? 'Processing web asset...' : 'Archival Page')],
+                  [text(templateId == 'basic_text' ? 'Generated Text Page' : (isPending ? 'Processing web asset...' : 'Archival Page'))],
                   classes: 'text-xs font-bold text-gray-700',
                   attributes: const {'style': 'display: inline-block; vertical-align: middle;'},
                 )
@@ -1146,15 +1153,29 @@ class _FanzineEditorState extends State<FanzineEditor> {
     final int width = doc['width'] ?? 0;
     final int height = doc['height'] ?? 0;
     final bool isDirect = doc['folioContext'] == component.frefFanzineId;
+    final bool isTemplate = doc['isGenerated'] == true || doc['type'] == 'template';
 
     return div(
       [
-        // Background Image
-        if (optimalUrl != null && optimalUrl.isNotEmpty)
+        // Background Image or Template icon preview
+        if (isTemplate)
+          div([
+            span([text('description')], classes: 'material-symbols-outlined', attributes: const {
+              'style': 'font-size: 40px; color: #6750A4;'
+            }),
+            span([text('Generated Page')], attributes: const {
+              'style': 'font-size: 8px; font-weight: bold; color: #6750A4; margin-top: 4px;'
+            })
+          ], attributes: const {
+            'style': 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #ffffff;'
+          })
+        else if (optimalUrl != null && optimalUrl.isNotEmpty)
           img(
               src: optimalUrl,
               attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
-          ),
+          )
+        else
+          div([text("no preview")], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 11px;'}),
 
         // Dimensions and badges (Absolute Positioned)
         div(
@@ -1181,13 +1202,13 @@ class _FanzineEditorState extends State<FanzineEditor> {
         div(
           [
             button(
-                [span([text(isDirect ? 'delete' : 'close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+                [span([text(isDirect || isTemplate ? 'delete' : 'close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
                 attributes: {
-                  'style': 'border: none; background: rgba(0,0,0,0.7); border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: ${isDirect ? '#ff5252' : 'white'}; border: 1px solid white;'
+                  'style': 'border: none; background: rgba(0,0,0,0.7); border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: ${isDirect || isTemplate ? '#ff5252' : 'white'}; border: 1px solid white;'
                 },
                 events: {
                   'click': (e) {
-                    _confirmRemoveImage(imageId, isDirect);
+                    _confirmRemoveImage(imageId, isDirect || isTemplate);
                   }
                 }
             )

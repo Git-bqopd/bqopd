@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 
 /// Concrete Firebase implementation of the IFanzineRepository interface.
@@ -85,5 +86,56 @@ class FirebaseFanzineRepository implements IFanzineRepository {
   @override
   Future<void> softPublish(String fanzineId) async {
     await _db.collection('fanzines').doc(fanzineId).update({'isSoftPublished': true});
+  }
+
+  @override
+  Future<String> insertPublisherPage(String fanzineId, int afterPageNumber, String initialText, List<FanzinePage> allPages) async {
+    final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+    final imageId = 'temp_pub_page_${DateTime.now().millisecondsSinceEpoch}';
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'system';
+
+    final batch = _db.batch();
+    final imgRef = _db.collection('images').doc(imageId);
+
+    batch.set(imgRef, {
+      'uid': uid,
+      'uploaderId': uid,
+      'type': 'template',
+      'templateId': 'basic_text',
+      'text': initialText,
+      'text_corrected': initialText,
+      'text_linked': initialText,
+      'title': 'Generated Page',
+      'isGenerated': true,
+      'width': 2000,
+      'height': 3200,
+      'aspectRatio': 0.625,
+      'is5x8': true,
+      'shortCode': ShortcodeGenerator.generateStandardCode(),
+      'folioContext': fanzineId,
+      'usedInFanzines': [fanzineId],
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    for (final p in allPages) {
+      if (p.pageNumber > afterPageNumber) {
+        batch.update(_db.collection('fanzines').doc(fanzineId).collection('pages').doc(p.id), {
+          'pageNumber': p.pageNumber + 1
+        });
+      }
+    }
+
+    batch.set(_db.collection('fanzines').doc(fanzineId).collection('pages').doc(pageId), {
+      'imageId': imageId,
+      'pageNumber': afterPageNumber + 1,
+      'status': 'ready',
+      'templateId': 'basic_text',
+      'width': 2000,
+      'height': 3200,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+    return imageId;
   }
 }

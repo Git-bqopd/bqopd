@@ -12,6 +12,7 @@ import '../panels/indicia_panel.dart';
 import '../panels/credits_panel.dart';
 import '../panels/youtube_panel.dart';
 import '../panels/analytics_panel.dart';
+import '../panels/publisher_text_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
 /// Matches the Flutter PanelColumnRenderer logic.
@@ -38,6 +39,7 @@ class PanelColumnRenderer extends StatelessComponent {
     if (activePanel == BonusRowType.masterText) title = ""; // Omit 'Corrected Text Editor' on desktop column headers too
     if (activePanel == BonusRowType.linkedText) title = ""; // Omit 'Wiki-Link Editor' title on desktop column headers too
     if (activePanel == BonusRowType.entities) title = ""; // Omit 'Page Entities' text on desktop column headers too
+    if (activePanel == BonusRowType.newPage) title = "New Page Layout Editor";
 
     return div(classes: 'flex-col h-full', [
       // Header
@@ -86,8 +88,10 @@ class PanelColumnRenderer extends StatelessComponent {
                       YoutubePanel(imageId: imageId)
                     else if (activePanel == BonusRowType.analyticsDashboard)
                         AnalyticsPanel(imageId: imageId)
-                      else
-                        div([text('Panel type not yet implemented in web column.')])
+                      else if (activePanel == BonusRowType.newPage)
+                          PublisherTextPanel(imageId: imageId)
+                        else
+                          div([text('Panel type not yet implemented in web column.')])
     ]);
   }
 }

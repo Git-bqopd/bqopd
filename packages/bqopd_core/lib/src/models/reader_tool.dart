@@ -34,10 +34,10 @@ enum BonusRowType {
   youtube,
   indicia,
   settings,
-  // NEW: Added for enhanced analytics and sharing options
   analyticsDashboard,
   shareOptions,
-  terminal, // Restored terminal enum option
+  terminal,
+  newPage, // Added for high-fidelity Publisher template editing on web
 }
 
 /// Pure Dart data model for a dynamic toolbar button.

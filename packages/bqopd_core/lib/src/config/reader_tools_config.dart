@@ -103,7 +103,7 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.linkedText,
     ),
-    // 8. Entities (entities) - [Editor Only] (Updated to use smart_toy)
+    // 8. Entities (entities) - [Editor Only]
     ReaderTool(
       id: 'Entities',
       label: 'entities',
@@ -189,6 +189,16 @@ class ReaderToolsConfig {
       defaultIcon: 'settings_outlined',
       activeIcon: 'settings',
       bonusRow: BonusRowType.settings,
+    ),
+    // 17. New Page (new page) - [Editor Only Settings subrow]
+    ReaderTool(
+      id: 'NewPage',
+      label: 'new page',
+      description: 'Insert a blank 2000x3200 publisher text page.',
+      defaultIcon: 'note_add',
+      activeIcon: 'note_add',
+      role: ToolRole.editor,
+      bonusRow: BonusRowType.newPage,
     ),
   ];
 }

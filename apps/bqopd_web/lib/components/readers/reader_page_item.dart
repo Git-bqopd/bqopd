@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
+import '../../utils/web_firebase_interop.dart';
 import '../social_toolbar.dart';
 import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
@@ -14,6 +16,8 @@ import '../panels/indicia_panel.dart';
 import '../panels/credits_panel.dart';
 import '../panels/youtube_panel.dart';
 import '../panels/analytics_panel.dart';
+import '../panels/publisher_text_panel.dart';
+import '../templates/basic_text_template.dart';
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
@@ -46,6 +50,51 @@ class ReaderPageItem extends StatefulComponent {
 class _ReaderPageItemState extends State<ReaderPageItem> {
   BonusRowType? _activePanel;
 
+  // Real-time tracking of inlined template text contents
+  String _templateTextValue = '';
+  dynamic _imgDataUnsub;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToTemplateImageContents();
+  }
+
+  @override
+  void didUpdateComponent(ReaderPageItem oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.pageData['imageId'] != component.pageData['imageId']) {
+      _listenToTemplateImageContents();
+    }
+  }
+
+  @override
+  void dispose() {
+    _imgDataUnsub?.cancel();
+    super.dispose();
+  }
+
+  void _listenToTemplateImageContents() {
+    _imgDataUnsub?.cancel();
+    _imgDataUnsub = null;
+
+    final imageId = component.pageData['imageId'];
+    final templateId = component.pageData['templateId'];
+
+    if (imageId == null || imageId.isEmpty || templateId != 'basic_text') return;
+
+    _imgDataUnsub = fsListenDoc('images/$imageId', (String jsonStr) {
+      try {
+        final doc = jsonDecode(jsonStr);
+        if (doc['exists'] == true && mounted) {
+          setState(() {
+            _templateTextValue = doc['data']['text_corrected'] ?? doc['data']['text'] ?? '';
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
   void _handleTogglePanel(BonusRowType type) {
     setState(() {
       _activePanel = (_activePanel == type) ? null : type;
@@ -56,10 +105,13 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   Component build(BuildContext context) {
     final String imageId = component.pageData['imageId'] ?? '';
     final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
+    final String? templateId = component.pageData['templateId'];
 
     return div(classes: 'reader-list-item flex-col w-full', [
       div(classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center', [
-        if (url != null && url.isNotEmpty)
+        if (templateId == 'basic_text')
+          BasicTextTemplate(textContent: _templateTextValue)
+        else if (url != null && url.isNotEmpty)
           img(
               src: url,
               classes: 'w-full h-full',
@@ -123,7 +175,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         inner = LinkedTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:
-        title = ""; // Omit 'PAGE ENTITIES' text
+        title = ""; // Omit the 'PAGE ENTITIES' text
         inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
         break;
       case BonusRowType.indicia:
@@ -141,6 +193,10 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.analyticsDashboard:
         title = "Analytics Dashboard";
         inner = AnalyticsPanel(imageId: imageId);
+        break;
+      case BonusRowType.newPage:
+        title = "New Page Text Editor";
+        inner = PublisherTextPanel(imageId: imageId);
         break;
       case BonusRowType.terminal:
         title = "Terminal Game";

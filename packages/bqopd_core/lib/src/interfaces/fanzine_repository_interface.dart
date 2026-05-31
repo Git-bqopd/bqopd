@@ -13,4 +13,7 @@ abstract class IFanzineRepository {
   Future<void> reorderPageModel(String fanzineId, FanzinePage page, int delta, List<FanzinePage> allPages);
   Future<void> deleteAssetCompletely(String fanzineId, String imageId, bool isDirectUpload);
   Future<void> softPublish(String fanzineId);
+
+  /// Inserts a newly generated 2000x3200 publisher template page immediately in-order.
+  Future<String> insertPublisherPage(String fanzineId, int afterPageNumber, String initialText, List<FanzinePage> allPages);
 }

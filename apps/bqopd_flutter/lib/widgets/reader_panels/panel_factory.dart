@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/engagement_service.dart';
 import '../../services/view_service.dart';
-import '../../game/game_lobby.dart'; // Added GameLobby import
+import '../../game/game_lobby.dart';
 
 import 'comments_panel.dart';
 import 'credits_panel.dart';
@@ -15,6 +15,7 @@ import 'text_editor_panels.dart';
 import 'text_reader_panel.dart';
 import 'views_panel.dart';
 import 'youtube_panel.dart';
+import 'publisher_panel.dart'; // Added publisher_panel import
 
 class PanelFactory {
   static String getTitle(BonusRowType type) {
@@ -34,7 +35,8 @@ class PanelFactory {
       case BonusRowType.indicia: return "ISSUE INDICIA";
       case BonusRowType.settings: return "SETTINGS";
       case BonusRowType.editDetails: return "EDIT DETAILS";
-      case BonusRowType.terminal: return "COMBAT TERMINAL"; // Added title
+      case BonusRowType.terminal: return "COMBAT TERMINAL";
+      case BonusRowType.newPage: return "PUBLISHER EDITOR"; // Matched newPage case
     }
   }
 
@@ -45,7 +47,8 @@ class PanelFactory {
       case BonusRowType.views: return Colors.grey[50]!;
       case BonusRowType.youtube: return Colors.black;
       case BonusRowType.shareOptions: return Colors.indigo.withValues(alpha: 0.05);
-      case BonusRowType.terminal: return const Color(0xFF0D0D0D); // Terminal dark color match
+      case BonusRowType.terminal: return const Color(0xFF0D0D0D);
+      case BonusRowType.newPage: return Colors.white; // Added
       default: return Colors.white;
     }
   }
@@ -91,7 +94,7 @@ class PanelFactory {
             isInline: context.isInline
         );
       case BonusRowType.views:
-      case BonusRowType.analyticsDashboard: // Map both types to the ViewsPanel for now
+      case BonusRowType.analyticsDashboard:
         return ViewsPanel(
             imageId: context.imageId,
             viewService: context.viewService as ViewService
@@ -127,7 +130,14 @@ class PanelFactory {
       case BonusRowType.editDetails:
         return const Center(child: Text("Edit Details not implemented yet"));
       case BonusRowType.terminal:
-        return const GameLobby(); // Instantiated combat game lobby
+        return const GameLobby();
+      case BonusRowType.newPage: // Matched newPage case
+        return PublisherPanel(
+          imageId: context.imageId,
+          initialText: context.actualText,
+          fanzineId: context.fanzineId ?? '',
+          templateId: context.templateId,
+        );
     }
   }
 }

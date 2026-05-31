@@ -38,6 +38,8 @@ class StubFanzineRepository implements IFanzineRepository {
   Future<void> deleteAssetCompletely(String fanzineId, String imageId, bool isDirectUpload) async {}
   @override
   Future<void> softPublish(String fanzineId) async {}
+  @override
+  Future<String> insertPublisherPage(String fanzineId, int afterPageNumber, String initialText, List<FanzinePage> allPages) async => '';
 }
 
 class StubEngagementRepository implements IEngagementRepository {
