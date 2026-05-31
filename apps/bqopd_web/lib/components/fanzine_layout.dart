@@ -104,14 +104,10 @@ class _FanzineLayoutState extends State<FanzineLayout> {
             ]
         ),
 
-      // Column 2: List Area (The Reader) - Expanded to a spacious minimum of 600px
-      // Now acts as a fully styled flex container to center its list contents cleanly.
+      // Column 2: List Area (The Reader) - Sized responsively and styled cleanly
       if (!isGrid)
         div(
-            classes: 'list-area flex-col items-center',
-            attributes: const {
-              'style': 'flex: 0 0 600px; min-width: 600px; margin: 0; display: flex; flex-direction: column; align-items: center;'
-            },
+            classes: 'list-area ${component.isEditingMode ? 'editor-mode' : 'reader-mode'} flex-col items-center',
             [
               FanzineListRenderer(
                 fanzineId: component.frefFanzineId,

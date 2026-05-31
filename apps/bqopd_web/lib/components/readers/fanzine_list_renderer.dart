@@ -67,31 +67,24 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
 
   @override
   Component build(BuildContext context) {
-    final String headerStyle = component.isEditingMode
-        ? 'width: 600px; max-width: 100%; box-sizing: border-box;'
-        : 'width: calc((100vh - 120px) * 0.625); max-width: 100%; box-sizing: border-box;';
-
     return div(classes: 'flex-col items-center w-full', [
-      // Manila Envelope / Workspace Editor Widget: Spans 600px wide if editing, otherwise perfectly matches the outer boundaries of the padded images below.
+      // Manila Envelope / Workspace Editor Widget: Styled responsively to fill parent layouts cleanly
       div(
           id: 'fanzine-header',
-          classes: 'mb-4 flex-row justify-center w-full',
+          classes: 'fanzine-header-container mb-4 flex-row justify-center w-full',
           [
             div(
-                classes: component.isEditingMode ? 'manila-envelope-flexible' : 'manila-envelope',
-                attributes: {
-                  'style': headerStyle
-                },
+                classes: '${component.isEditingMode ? 'manila-envelope-flexible' : 'manila-envelope'} fanzine-header-wrapper',
                 [component.headerWidget]
             )
           ]
       ),
 
-      // Page Images Loop: Centered inner column constrained to the height-based aspect ratio!
+      // Page Images Loop: Centered inner column aligned perfectly with the header limits
       for (int i = 0; i < component.pages.length; i++)
         div(
             id: 'reader-page-$i',
-            classes: 'w-full flex-row justify-center', // Centers the inner column using flex-row
+            classes: 'fanzine-page-container w-full flex-row justify-center', // Centers the inner column using flex-row
             attributes: i == component.pages.length - 1
                 ? const {
               'style': 'padding-bottom: 48px; box-sizing: border-box;'
@@ -100,11 +93,9 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
               'style': 'box-sizing: border-box;'
             },
             [
-              // Inside column: Dynamically calculates the optimal width while safeguarding against overflow
+              // Inside column: Sized dynamically via CSS class and padded to stand exactly 32px narrower than the header
               div(
-                  attributes: const {
-                    'style': 'width: calc((100vh - 120px) * 0.625); max-width: 100%; padding-left: 24px; padding-right: 24px; box-sizing: border-box;'
-                  },
+                  classes: 'fanzine-page-wrapper',
                   [
                     ReaderPageItem(
                       fanzineId: component.fanzineId, // Correctly resolved field getter
