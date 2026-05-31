@@ -42,6 +42,7 @@ class DynamicToolbarButton extends StatelessWidget {
       case 'add_link': return Icons.add_link;
       case 'link_outlined': return Icons.link_outlined;
       case 'link': return Icons.link;
+      case 'smart_toy': return Icons.smart_toy; // Added for entities tool
       case 'bar_chart_outlined': return Icons.bar_chart_outlined;
       case 'bar_chart': return Icons.bar_chart;
       case 'manage_accounts_outlined': return Icons.manage_accounts_outlined;

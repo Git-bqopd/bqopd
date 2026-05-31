@@ -9,6 +9,11 @@ import '../panels/hashtag_panel.dart';
 import '../panels/master_text_panel.dart';
 import '../panels/linked_text_panel.dart';
 import '../panels/entities_panel.dart';
+import '../panels/raw_text_panel.dart';
+import '../panels/indicia_panel.dart';
+import '../panels/credits_panel.dart';
+import '../panels/youtube_panel.dart';
+import '../panels/analytics_panel.dart';
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
@@ -105,6 +110,10 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         title = "Hashtags & Voting";
         inner = HashtagPanel(imageId: imageId);
         break;
+      case BonusRowType.rawText:
+        title = "Raw OCR Text";
+        inner = RawTextPanel(imageId: imageId);
+        break;
       case BonusRowType.masterText:
         title = ""; // Omit the 'CORRECTED TEXT EDITOR' title
         inner = MasterTextPanel(imageId: imageId, fanzineId: component.fanzineId);
@@ -114,8 +123,24 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         inner = LinkedTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:
-        title = ""; // Omit the 'PAGE ENTITIES' text
+        title = ""; // Omit 'PAGE ENTITIES' text
         inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
+        break;
+      case BonusRowType.indicia:
+        title = "Issue Indicia";
+        inner = IndiciaPanel(fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
+        break;
+      case BonusRowType.credits:
+        title = "Creators";
+        inner = CreditsPanel(imageId: imageId);
+        break;
+      case BonusRowType.youtube:
+        title = "Video Resource";
+        inner = YoutubePanel(imageId: imageId);
+        break;
+      case BonusRowType.analyticsDashboard:
+        title = "Analytics Dashboard";
+        inner = AnalyticsPanel(imageId: imageId);
         break;
       case BonusRowType.terminal:
         title = "Terminal Game";

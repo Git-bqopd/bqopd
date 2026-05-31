@@ -7,6 +7,11 @@ import '../panels/comments_panel.dart';
 import '../panels/master_text_panel.dart';
 import '../panels/linked_text_panel.dart';
 import '../panels/entities_panel.dart';
+import '../panels/raw_text_panel.dart';
+import '../panels/indicia_panel.dart';
+import '../panels/credits_panel.dart';
+import '../panels/youtube_panel.dart';
+import '../panels/analytics_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
 /// Matches the Flutter PanelColumnRenderer logic.
@@ -71,8 +76,18 @@ class PanelColumnRenderer extends StatelessComponent {
             LinkedTextPanel(imageId: imageId, fanzineId: fanzineId)
           else if (activePanel == BonusRowType.entities)
               EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: isEditingMode)
-            else
-              div([text('Panel type not yet implemented in web column.')])
+            else if (activePanel == BonusRowType.rawText)
+                RawTextPanel(imageId: imageId)
+              else if (activePanel == BonusRowType.indicia)
+                  IndiciaPanel(fanzineId: fanzineId, isEditingMode: isEditingMode)
+                else if (activePanel == BonusRowType.credits)
+                    CreditsPanel(imageId: imageId)
+                  else if (activePanel == BonusRowType.youtube)
+                      YoutubePanel(imageId: imageId)
+                    else if (activePanel == BonusRowType.analyticsDashboard)
+                        AnalyticsPanel(imageId: imageId)
+                      else
+                        div([text('Panel type not yet implemented in web column.')])
     ]);
   }
 }

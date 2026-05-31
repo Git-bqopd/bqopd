@@ -103,13 +103,13 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.linkedText,
     ),
-    // 8. Entities (entities) - [Editor Only]
+    // 8. Entities (entities) - [Editor Only] (Updated to use smart_toy)
     ReaderTool(
       id: 'Entities',
       label: 'entities',
       description: 'Link detected names to internal profiles.',
-      defaultIcon: 'link_outlined',
-      activeIcon: 'link',
+      defaultIcon: 'smart_toy',
+      activeIcon: 'smart_toy',
       role: ToolRole.editor,
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
