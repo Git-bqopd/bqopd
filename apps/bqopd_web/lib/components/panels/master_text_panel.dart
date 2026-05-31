@@ -5,6 +5,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
+import '../../utils/firebase_mocks.dart';
 import '../../utils/web_utils.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
 
@@ -147,7 +148,13 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
           _statusMessage = 'Re-compiling WebP page layouts...';
         });
 
-        final resultJson = await renderPublisherPage(_textValue);
+        // Resolve and replace image shortcodes with their absolute Firebase URLs before compiling!
+        final String compiledText = await resolveAndReplaceShortcodes(
+          component.fanzineId ?? '',
+          _textValue,
+        );
+
+        final resultJson = await renderPublisherPage(compiledText);
         final decoded = jsonDecode(resultJson);
 
         final String origBase64 = decoded['original'];

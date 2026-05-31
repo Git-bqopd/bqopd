@@ -41,22 +41,27 @@ class PanelColumnRenderer extends StatelessComponent {
     if (activePanel == BonusRowType.entities) title = ""; // Omit 'Page Entities' text on desktop column headers too
     if (activePanel == BonusRowType.newPage) title = "New Page Layout Editor";
 
-    return div(classes: 'flex-col h-full', [
-      // Header
-      div(classes: 'p-4 bg-gray-100 flex-row justify-between items-center', [
-        span(classes: 'font-bold text-sm', [text(title)]),
-        button(
-            classes: 'cursor-pointer border-none bg-transparent',
-            events: {'click': (e) => onClose()},
-            [span(classes: 'material-symbols-outlined', [text('close')])]
-        )
-      ]),
+    return div(classes: 'reader-split-layout', [
+      div(
+          attributes: const {'style': 'width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden;'},
+          [
+            // Header
+            div(classes: 'p-4 bg-gray-100 flex-row justify-between items-center', attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;'}, [
+              span(classes: 'font-bold text-sm', [text(title)]),
+              button(
+                  classes: 'cursor-pointer border-none bg-transparent',
+                  events: {'click': (e) => onClose()},
+                  [span(classes: 'material-symbols-outlined', [text('close')])]
+              )
+            ]),
 
-      // Scrollable List of Panels (one per page)
-      div(classes: 'flex-1 overflow-y-auto p-4', [
-        for (var page in pages)
-          _buildPagePanel(page)
-      ])
+            // Scrollable List of Panels (one per page)
+            div(classes: 'flex-1 overflow-y-auto p-4', attributes: const {'style': 'overflow-y: auto; flex: 1; padding: 16px;'}, [
+              for (var page in pages)
+                _buildPagePanel(page)
+            ])
+          ]
+      )
     ]);
   }
 
@@ -69,7 +74,7 @@ class PanelColumnRenderer extends StatelessComponent {
     return div(classes: 'mb-8', [
       p(classes: 'text-xs font-bold text-gray mb-2', [text('PAGE $pageNum')]),
       if (activePanel == BonusRowType.textReader)
-        TextReaderPanel(imageId: imageId)
+        TextReaderPanel(imageId: imageId, fanzineId: fanzineId)
       else if (activePanel == BonusRowType.comments)
         CommentsPanel(imageId: imageId)
       else if (activePanel == BonusRowType.masterText)

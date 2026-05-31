@@ -155,7 +155,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     switch (_activePanel!) {
       case BonusRowType.textReader:
         title = ""; // Omit the 'READER' text
-        inner = TextReaderPanel(imageId: imageId);
+        inner = TextReaderPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.comments:
         title = "Comments";

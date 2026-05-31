@@ -4,13 +4,15 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import '../../utils/web_firebase_interop.dart';
+import '../../utils/firebase_mocks.dart';
 
 /// Renders page text with dynamic parser support for Wiki-Link entities.
 /// Renders verified usernames as clickable links, and unlinked entities as plain bold text.
 class TextReaderPanel extends StatefulComponent {
   final String imageId;
+  final String? fanzineId;
 
-  const TextReaderPanel({required this.imageId, super.key});
+  const TextReaderPanel({required this.imageId, this.fanzineId, super.key});
 
   @override
   State<TextReaderPanel> createState() => _TextReaderPanelState();
@@ -66,13 +68,19 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
             ? textVal
             : "Transcription pending for this page.";
 
+        // Pre-process any image shortcodes into their absolute URLs before parsing!
+        final String fullyResolvedText = await resolveAndReplaceShortcodes(
+          component.fanzineId ?? '',
+          resolvedText,
+        );
+
         setState(() {
-          _content = resolvedText;
+          _content = fullyResolvedText;
           _loading = false;
         });
 
         // Trigger loading profiles for entities in the background
-        _loadEntityProfiles(resolvedText);
+        _loadEntityProfiles(fullyResolvedText);
       } else {
         setState(() {
           _content = "Image record not found in database.";
@@ -196,6 +204,48 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     return children;
   }
 
+  List<Component> _renderLines(String textContent) {
+    final lines = textContent.split('\n');
+    final List<Component> lineComponents = [];
+
+    for (var line in lines) {
+      final cleanLine = line.trim();
+      if (cleanLine.isEmpty) {
+        lineComponents.add(div([], attributes: const {'style': 'height: 16px;'}));
+        continue;
+      }
+
+      // Check if it's an image block: {{IMAGE: url}}
+      final imageRegex = RegExp(r'^\{\{IMAGE(?::\s*(.*?))?\}\}$', caseSensitive: false);
+      final match = imageRegex.firstMatch(cleanLine);
+
+      if (match != null) {
+        final url = match.group(1)?.trim();
+        final finalUrl = (url != null && url.isNotEmpty) ? url : 'https://placehold.co/600x400/png?text=Image+Asset';
+
+        lineComponents.add(div([
+          img(
+              src: finalUrl,
+              attributes: const {
+                'style': 'max-width: 100%; height: auto; margin: 16px auto; '
+                    'display: block; border: 1px solid #e2e8f0; border-radius: 8px; '
+                    'box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);'
+              }
+          )
+        ], attributes: const {'style': 'width: 100%; text-align: center; display: block;'}));
+      } else {
+        // Render as standard paragraph line with inline wiki-linked text parsed
+        lineComponents.add(p(
+            _parseAndRenderContent(line),
+            attributes: {
+              'style': 'font-size: ${_fontSize}px; font-family: Georgia, serif; line-height: 1.6; color: #333; text-align: justify; margin: 0 0 12px 0;'
+            }
+        ));
+      }
+    }
+    return lineComponents;
+  }
+
   @override
   Component build(BuildContext context) {
     return div(
@@ -242,11 +292,9 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
                     div(classes: 'skeleton-line short shimmer-bg', []),
                   ])
                 else
-                  p(
-                      attributes: {
-                        'style': 'font-size: ${_fontSize}px; font-family: Georgia, serif; line-height: 1.6; color: #333; white-space: pre-wrap; text-align: justify; margin: 0; overflow: visible;'
-                      },
-                      _parseAndRenderContent(_content)
+                  div(
+                      _renderLines(_content),
+                      attributes: const {'style': 'width: 100%; overflow: visible; display: block;'}
                   )
               ]
           )
