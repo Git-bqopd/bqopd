@@ -5,7 +5,7 @@ import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/icon_utils.dart';
-import '../repositories/web_fanzine_repository.dart';
+import '../repositories/repositories.dart';
 
 // Panel imports for local settings edit mode rendering
 import 'panels/panel_container.dart';
@@ -257,7 +257,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     }
   }
 
-  /// Master transaction handling for new publisher page generation.
+  /// Master transaction handling for new publisher page generation (Legacy Fallback).
   Future<void> _handleNewPageInsertion() async {
     if (component.fanzineId == null) return;
 
@@ -266,14 +266,14 @@ class _SocialToolbarState extends State<SocialToolbar> {
     });
 
     try {
-      final IFanzineRepository repo = WebFanzineRepository();
+      final IFanzineRepository repo = createFanzineRepository();
 
       // Resolve current fanzine layout pages to determine the precise "N" after-number insertion point
       final List<FanzinePage> pages = [];
       final pagesStr = await fsQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber');
-      final List decoded = jsonDecode(pagesStr);
+      final List decoded = jsonDecode(pagesStr) as List;
       for (var d in decoded) {
-        pages.add(FanzinePage.fromMap(d['id'], d['data']));
+        pages.add(FanzinePage.fromMap(d['id'] as String, d['data'] as Map<String, dynamic>));
       }
 
       // Locate current image's pageNumber in the list
@@ -289,7 +289,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
 # THE PUBLISHER
 ## New Custom Page Created
 
-Start typing directly inside the text editor panel below to generate columns of printable metadata. Use images from your local library context.
+Start typing directly inside the text editor panel below to generate columns of printable markdown text.
 
 {{IMAGE}}
 
@@ -297,14 +297,13 @@ Start typing directly inside the text editor panel below to generate columns of 
 * Customize headers with # or ##
 """;
 
-      final String newImageId = await repo.insertPublisherPage(
+      await repo.insertPublisherPage(
         component.fanzineId!,
         currentNum,
         initialTemplateText,
         pages,
       );
 
-      // Successfully generated. Instantly open/transition focus into the new publisher page text panel!
       setState(() {
         _activeEditorPanel = BonusRowType.newPage;
       });
@@ -428,77 +427,9 @@ Start typing directly inside the text editor panel below to generate columns of 
     );
   }
 
-  Component _buildEditorToolsSubRow() {
-    final editorToolIds = [
-      'Raw',
-      'Master',
-      'Linked',
-      'Entities',
-      'Indicia',
-      'Credits',
-      'YouTube',
-      'Terminal'
-    ];
-
-    final visibleEditorTools = ReaderToolsConfig.tools.where((tool) {
-      if (!editorToolIds.contains(tool.id)) return false;
-
-      return ReaderToolsConfig.isToolVisibleInContext(
-        tool: tool,
-        userRole: _userRole,
-        isEditingMode: component.isEditingMode,
-        fanzineType: component.fanzineType,
-        hasYoutube: component.youtubeId != null && component.youtubeId!.isNotEmpty,
-        isGame: component.isGame,
-        isIndiciaPage: component.isIndiciaPage,
-        canOpenGrid: component.onOpenGrid != null,
-      );
-    }).toList();
-
-    return div(
-        classes: 'toolbar-container panel-container-animate mt-2',
-        attributes: {
-          'style': 'background-color: #fafafa; border-top: 1px solid #eee; border-bottom: 1px solid #eee; width: 100%; box-sizing: border-box;'
-        },
-        [
-          for (var tool in visibleEditorTools)
-            _buildEditorToolbarButton(tool)
-        ]
-    );
-  }
-
-  Component _buildEditorToolbarButton(ReaderTool tool) {
-    bool isActive = component.activeBonusRow == tool.bonusRow;
-
-    final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-    final resolvedIcon = cleanIconName(iconName);
-    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
-
-    return button(
-        classes: btnClasses,
-        events: {
-          'click': (e) {
-            if (tool.bonusRow != null) {
-              component.onToggleBonusRow(tool.bonusRow!);
-            }
-          }
-        },
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [text(resolvedIcon)]
-            )
-          ]),
-          span(classes: 'toolbar-label', [text(tool.label)])
-        ]
-    );
-  }
-
   Component _buildSettingsToggleRow() {
+    final bool isNewTextPage = _imageData['templateId'] == 'basic_text';
+
     if (!_isSettingsEditMode) {
       // STANDARD CUSTOMIZATION MODE: Turn standard main social toolbar buttons on and off
       final togglableToolIds = [
@@ -562,7 +493,8 @@ Start typing directly inside the text editor panel below to generate columns of 
           [
             for (var tool in visibleEditorTools)
               _buildSettingsEditModeActionButton(tool),
-            _buildSettingsEditModeNewPageButton(), // New page insertion action trigger
+            if (isNewTextPage)
+              _buildSettingsEditModeNewPageButton(), // Toggle editor panel for newly inserted text page
             _buildEditorToggleButton() // Displays 'edit' button as the last button on the right (marked as active)
           ]
       );
@@ -684,7 +616,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     );
   }
 
-  /// Unique settings panel button trigger specifically targeting instant 'new page' insertion.
+  /// Unique settings panel button trigger specifically targeting newly inserted 'new page' text editing.
   Component _buildSettingsEditModeNewPageButton() {
     final bool isActive = _activeEditorPanel == BonusRowType.newPage;
     final resolvedIcon = cleanIconName('note_add');
@@ -696,7 +628,11 @@ Start typing directly inside the text editor panel below to generate columns of 
           'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
         },
         events: {
-          'click': (e) => _handleNewPageInsertion()
+          'click': (e) {
+            setState(() {
+              _activeEditorPanel = (_activeEditorPanel == BonusRowType.newPage) ? null : BonusRowType.newPage;
+            });
+          }
         },
         [
           div(classes: 'toolbar-icon-wrapper', [

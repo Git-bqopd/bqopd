@@ -10,6 +10,7 @@ import '../utils/web_utils.dart';
 import '../utils/web_shortcode_service.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
+import '../repositories/repositories.dart';
 import 'segmented_button.dart';
 
 /// Refined workspace editor experience for the Jaspr web application.
@@ -130,7 +131,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
 
     _imagesUnsub = fsListenQuery('images', 'uploaderId', '==', jsonEncode(uid), '', false, (String jsonStr) {
       try {
-        final List decoded = jsonDecode(jsonStr);
+        final List decoded = jsonDecode(jsonStr) as List;
         final images = decoded.map((d) {
           final data = d['data'] as Map<String, dynamic>;
           data['id'] = d['id'];
@@ -544,7 +545,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
       UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
     } else {
       final resStr = await fsQuery('fanzines/${component.frefFanzineId}/pages', '', '', '', '');
-      final List pageDocs = jsonDecode(resStr);
+      final List pageDocs = jsonDecode(resStr) as List;
       final int nextNum = pageDocs.length + 1;
 
       await fsSetDoc('fanzines/${component.frefFanzineId}/pages/$pageId', jsonEncode({
@@ -560,6 +561,91 @@ class _FanzineEditorState extends State<FanzineEditor> {
       await fsUpdateDoc('images/$imageId', jsonEncode({
         'usedInFanzines': WebFieldValue.arrayUnion([component.frefFanzineId])
       }));
+    }
+  }
+
+  /// Triggers standard text template insertion inside the editor flatplan.
+  Future<void> _createNewTextPage() async {
+    setState(() {
+      _isUploading = true;
+    });
+    try {
+      final IFanzineRepository repo = createFanzineRepository();
+
+      final List<FanzinePage> allPages = component.pageStructure.map((p) {
+        return FanzinePage.fromMap(p['__id'] ?? p['id'] ?? '', p);
+      }).toList();
+
+      final int lastPageNum = allPages.isNotEmpty ? allPages.length : 0;
+
+      final initialText = """
+# THE PUBLISHER
+## New Custom Page Created
+
+Start typing directly inside the text editor panel below to generate columns of printable markdown text.
+
+{{IMAGE}}
+
+* Enter bullet lists with an asterisk
+* Customize headers with # or ##
+""";
+
+      await repo.insertPublisherPage(
+        component.frefFanzineId,
+        lastPageNum,
+        initialText,
+        allPages,
+      );
+
+      print('[FOLIO EDITOR] Text page created successfully.');
+    } catch (e) {
+      print('[FOLIO EDITOR ERROR] Failed to create text page: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  /// Creates a blank calendar template layout placeholder in-order.
+  Future<void> _createNewCalendarPagePlaceholder() async {
+    setState(() {
+      _isUploading = true;
+    });
+    try {
+      final String fanzineId = component.frefFanzineId;
+      final int nextNum = component.pageStructure.length + 1;
+      final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+
+      if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+        final newPage = FanzinePage(
+          id: pageId,
+          pageNumber: nextNum,
+          status: 'ready',
+          templateId: 'calendar_left',
+        );
+        pages.add(newPage);
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+      } else {
+        await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+          'pageNumber': nextNum,
+          'status': 'ready',
+          'templateId': 'calendar_left',
+          'createdAt': WebFieldValue.serverTimestamp(),
+        }), true);
+      }
+      print('[FOLIO EDITOR] Calendar page placeholder created successfully.');
+    } catch (e) {
+      print('[FOLIO EDITOR ERROR] Failed to create calendar page: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
     }
   }
 
@@ -593,12 +679,12 @@ class _FanzineEditorState extends State<FanzineEditor> {
 
       // Find any page belonging to this image in current folio and delete it
       final pagesRes = await fsQuery('fanzines/${component.frefFanzineId}/pages', 'imageId', '==', jsonEncode(imageId), '');
-      final List pageDocs = jsonDecode(pagesRes);
+      final List pageDocs = jsonDecode(pagesRes) as List;
 
       for (var pageDoc in pageDocs) {
         final pageId = pageDoc['id'] ?? '';
         if (pageId.isNotEmpty) {
-          await _deletePage(pageId);
+          await _deletePage(pageId as String);
         }
       }
 
@@ -881,28 +967,40 @@ class _FanzineEditorState extends State<FanzineEditor> {
                           'style': 'font-size: 16px; color: #6750A4;'
                         })
                       ], classes: 'w-full h-full flex items-center justify-center')
+                    else if (templateId == 'calendar_left' || templateId == 'calendar_right')
+                      div([
+                        span([text('calendar_today')], classes: 'material-symbols-outlined', attributes: const {
+                          'style': 'font-size: 16px; color: #6750A4;'
+                        })
+                      ], classes: 'w-full h-full flex items-center justify-center')
                     else if (!isPending)
-                      img(
-                          src: optimalUrl!,
-                          attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
-                      )
-                    else
-                      div(
-                        [
-                          span(
-                            [text('progress_activity')],
-                            classes: 'material-symbols-outlined text-gray-300',
-                            attributes: const {'style': 'font-size: 16px;'},
-                          )
-                        ],
-                        classes: 'shimmer-bg w-full h-full flex items-center justify-center',
-                      )
+                        img(
+                            src: optimalUrl!,
+                            attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
+                        )
+                      else
+                        div(
+                          [
+                            span(
+                              [text('progress_activity')],
+                              classes: 'material-symbols-outlined text-gray-300',
+                              attributes: const {'style': 'font-size: 16px;'},
+                            )
+                          ],
+                          classes: 'shimmer-bg w-full h-full flex items-center justify-center',
+                        )
                   ],
                   classes: 'rounded border border-gray-200 overflow-hidden bg-white',
                   attributes: const {'style': 'width: 36px; height: 50px; position: relative; display: inline-block; vertical-align: middle; margin-right: 12px;'},
                 ),
                 span(
-                  [text(templateId == 'basic_text' ? 'Generated Text Page' : (isPending ? 'Processing web asset...' : 'Archival Page'))],
+                  [
+                    text(templateId == 'basic_text'
+                        ? 'Generated Text Page'
+                        : (templateId != null && templateId.startsWith('calendar')
+                        ? 'Generated Calendar Page'
+                        : (isPending ? 'Processing web asset...' : 'Archival Page')))
+                  ],
                   classes: 'text-xs font-bold text-gray-700',
                   attributes: const {'style': 'display: inline-block; vertical-align: middle;'},
                 )
@@ -1024,7 +1122,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
     final otherDocs = folioImages.where((img) => !_isImage5x8(img)).toList();
 
     return div([
-      // 1. Side by side Action Buttons matches image_36f407.png perfectly
+      // 1. Primary actions row
       div(
         [
           button(
@@ -1062,7 +1160,46 @@ class _FanzineEditorState extends State<FanzineEditor> {
           ),
         ],
         attributes: const {
-          'style': 'display: flex; gap: 12px; justify-content: center; width: 100%; margin-top: 8px; margin-bottom: 20px;'
+          'style': 'display: flex; gap: 12px; justify-content: center; width: 100%; margin-top: 8px; margin-bottom: 12px;'
+        },
+      ),
+
+      // 2. Custom Publisher generation buttons row
+      div(
+        [
+          button(
+              [
+                span([text('note_add')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                text("new text page")
+              ],
+              attributes: {
+                'style': 'background-color: #7e57c2; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
+                if (_isUploading) 'disabled': 'true'
+              },
+              events: {
+                'click': (e) {
+                  if (!_isUploading) _createNewTextPage();
+                }
+              }
+          ),
+          button(
+              [
+                span([text('calendar_today')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                text("new calendar page")
+              ],
+              attributes: {
+                'style': 'background-color: #7e57c2; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
+                if (_isUploading) 'disabled': 'true'
+              },
+              events: {
+                'click': (e) {
+                  if (!_isUploading) _createNewCalendarPagePlaceholder();
+                }
+              }
+          ),
+        ],
+        attributes: const {
+          'style': 'display: flex; gap: 12px; justify-content: center; width: 100%; margin-top: 0px; margin-bottom: 20px;'
         },
       ),
 
