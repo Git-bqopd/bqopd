@@ -82,10 +82,10 @@ void triggerFilePicker(String inputId, void Function(String base64, String fileN
 }
 
 /// Asynchronously loads an image object to extract its native width and height metrics on client.
+/// Registers event listeners before assigning the source to eliminate race conditions.
 Future<Map<String, int>> getImageDimensions(String objectUrl) {
   final completer = Completer<Map<String, int>>();
   final img = web.document.createElement('img') as web.HTMLImageElement;
-  img.src = objectUrl;
   img.onload = (web.Event event) {
     completer.complete({
       'width': img.naturalWidth,
@@ -98,6 +98,7 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
       'height': 0,
     });
   }.toJS;
+  img.src = objectUrl;
   return completer.future;
 }
 

@@ -55,7 +55,8 @@ class WebFanzineRepository implements IFanzineRepository {
       final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
       final idx = pages.indexWhere((p) => p.id == page.id);
       if (idx != -1) {
-        pages[idx] = FanzinePage(
+        final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages);
+        updatedPages[idx] = FanzinePage(
           id: page.id,
           pageNumber: page.pageNumber,
           imageId: page.imageId,
@@ -70,8 +71,8 @@ class WebFanzineRepository implements IFanzineRepository {
           width: page.width,
           height: page.height,
         );
-        // FIXED: Use getOrCreatePagesController to guarantee stream safety
-        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+        UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
       }
       return;
     }
@@ -106,9 +107,9 @@ class WebFanzineRepository implements IFanzineRepository {
         width: width,
         height: height,
       );
-      pages.add(newPage);
-      // FIXED: Use getOrCreatePagesController to guarantee stream safety
-      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+      final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
+      UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
+      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
       return;
     }
 
@@ -126,27 +127,29 @@ class WebFanzineRepository implements IFanzineRepository {
   Future<void> removePageFromFolio(String fanzineId, FanzinePage page, List<FanzinePage> allPages) async {
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
       final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
-      pages.removeWhere((p) => p.id == page.id);
-      for (int i = 0; i < pages.length; i++) {
-        final p = pages[i];
-        pages[i] = FanzinePage(
-          id: p.id,
-          pageNumber: i + 1,
-          imageId: p.imageId,
-          imageUrl: p.imageUrl,
-          gridUrl: p.gridUrl,
-          listUrl: p.listUrl,
-          storagePath: p.storagePath,
-          status: p.status,
-          templateId: p.templateId,
-          spreadPosition: p.spreadPosition,
-          sidePreference: p.sidePreference,
-          width: p.width,
-          height: p.height,
-        );
+      final List<FanzinePage> updatedPages = [];
+      int currentNum = 1;
+      for (var p in pages) {
+        if (p.id != page.id) {
+          updatedPages.add(FanzinePage(
+            id: p.id,
+            pageNumber: currentNum++,
+            imageId: p.imageId,
+            imageUrl: p.imageUrl,
+            gridUrl: p.gridUrl,
+            listUrl: p.listUrl,
+            storagePath: p.storagePath,
+            status: p.status,
+            templateId: p.templateId,
+            spreadPosition: p.spreadPosition,
+            sidePreference: p.sidePreference,
+            width: p.width,
+            height: p.height,
+          ));
+        }
       }
-      // FIXED: Use getOrCreatePagesController to guarantee stream safety
-      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+      UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
+      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
       return;
     }
 
@@ -170,7 +173,8 @@ class WebFanzineRepository implements IFanzineRepository {
       final idx = pages.indexWhere((p) => p.id == page.id);
       if (idx != -1) {
         final p = pages[idx];
-        pages[idx] = FanzinePage(
+        final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages);
+        updatedPages[idx] = FanzinePage(
           id: p.id,
           pageNumber: shouldOrder ? 1 : 0,
           imageId: p.imageId,
@@ -185,8 +189,8 @@ class WebFanzineRepository implements IFanzineRepository {
           width: p.width,
           height: p.height,
         );
-        // FIXED: Use getOrCreatePagesController to guarantee stream safety
-        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+        UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
       }
       return;
     }
@@ -204,13 +208,14 @@ class WebFanzineRepository implements IFanzineRepository {
       final targetIdx = idx + delta;
       if (targetIdx < 0 || targetIdx >= pages.length) return;
 
-      final temp = pages[idx];
-      pages[idx] = pages[targetIdx];
-      pages[targetIdx] = temp;
+      final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages);
+      final temp = updatedPages[idx];
+      updatedPages[idx] = updatedPages[targetIdx];
+      updatedPages[targetIdx] = temp;
 
-      for (int i = 0; i < pages.length; i++) {
-        final p = pages[i];
-        pages[i] = FanzinePage(
+      for (int i = 0; i < updatedPages.length; i++) {
+        final p = updatedPages[i];
+        updatedPages[i] = FanzinePage(
           id: p.id,
           pageNumber: i + 1,
           imageId: p.imageId,
@@ -226,8 +231,8 @@ class WebFanzineRepository implements IFanzineRepository {
           height: p.height,
         );
       }
-      // FIXED: Use getOrCreatePagesController to guarantee stream safety
-      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+      UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
+      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
       return;
     }
 

@@ -261,26 +261,29 @@ class _FanzineEditorState extends State<FanzineEditor> {
     try {
       if (UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
         final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
-        pages.removeWhere((p) => p.id == pageId);
-        for (int i = 0; i < pages.length; i++) {
-          final p = pages[i];
-          pages[i] = FanzinePage(
-            id: p.id,
-            pageNumber: i + 1,
-            imageId: p.imageId,
-            imageUrl: p.imageUrl,
-            gridUrl: p.gridUrl,
-            listUrl: p.listUrl,
-            storagePath: p.storagePath,
-            status: p.status,
-            templateId: p.templateId,
-            spreadPosition: p.spreadPosition,
-            sidePreference: p.sidePreference,
-            width: p.width,
-            height: p.height,
-          );
+        final List<FanzinePage> updatedPages = [];
+        int currentNum = 1;
+        for (var p in pages) {
+          if (p.id != pageId) {
+            updatedPages.add(FanzinePage(
+              id: p.id,
+              pageNumber: currentNum++,
+              imageId: p.imageId,
+              imageUrl: p.imageUrl,
+              gridUrl: p.gridUrl,
+              listUrl: p.listUrl,
+              storagePath: p.storagePath,
+              status: p.status,
+              templateId: p.templateId,
+              spreadPosition: p.spreadPosition,
+              sidePreference: p.sidePreference,
+              width: p.width,
+              height: p.height,
+            ));
+          }
         }
-        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
+        UnsavedFanzineRegistry.pages[component.frefFanzineId] = updatedPages;
+        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(updatedPages);
         return;
       }
 
@@ -329,13 +332,14 @@ class _FanzineEditorState extends State<FanzineEditor> {
         final targetIdx = idx + delta;
         if (targetIdx < 0 || targetIdx >= pages.length) return;
 
-        final temp = pages[idx];
-        pages[idx] = pages[targetIdx];
-        pages[targetIdx] = temp;
+        final updatedPages = List<FanzinePage>.from(pages);
+        final temp = updatedPages[idx];
+        updatedPages[idx] = updatedPages[targetIdx];
+        updatedPages[targetIdx] = temp;
 
-        for (int i = 0; i < pages.length; i++) {
-          final p = pages[i];
-          pages[i] = FanzinePage(
+        for (int i = 0; i < updatedPages.length; i++) {
+          final p = updatedPages[i];
+          updatedPages[i] = FanzinePage(
             id: p.id,
             pageNumber: i + 1,
             imageId: p.imageId,
@@ -351,7 +355,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
             height: p.height,
           );
         }
-        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
+        UnsavedFanzineRegistry.pages[component.frefFanzineId] = updatedPages;
+        UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(updatedPages);
         return;
       }
 
@@ -402,8 +407,9 @@ class _FanzineEditorState extends State<FanzineEditor> {
         final pages = UnsavedFanzineRegistry.pages[component.frefFanzineId] ?? [];
         final idx = pages.indexWhere((p) => p.id == pageId);
         if (idx != -1) {
-          final p = pages[idx];
-          pages[idx] = FanzinePage(
+          final updatedPages = List<FanzinePage>.from(pages);
+          final p = updatedPages[idx];
+          updatedPages[idx] = FanzinePage(
             id: p.id,
             pageNumber: p.pageNumber,
             imageId: p.imageId,
@@ -418,7 +424,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
             width: p.width,
             height: p.height,
           );
-          UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
+          UnsavedFanzineRegistry.pages[component.frefFanzineId] = updatedPages;
+          UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(updatedPages);
         }
         return;
       }
@@ -438,22 +445,22 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (img['is5x8'] == true || img['type'] == 'template') return true;
     final w = img['width'] as num?;
     final h = img['height'] as num?;
-    if (w != null && h != null && h > 0) {
-      final ratio = w / h;
-      return ratio >= 0.58 && ratio <= 0.67;
+    if (w == null || h == null || w == 0 || h == 0) {
+      return true; // Fallback: default to true for unmeasured or uninitialized web assets
     }
-    return false;
+    final ratio = w / h;
+    return ratio >= 0.58 && ratio <= 0.67;
   }
 
   bool _isPage5x8(Map<String, dynamic> page) {
     if (page['templateId'] != null) return true;
     final w = page['width'] as num?;
     final h = page['height'] as num?;
-    if (w != null && h != null && h > 0) {
-      final ratio = w / h;
-      return ratio >= 0.58 && ratio <= 0.67;
+    if (w == null || h == null || w == 0 || h == 0) {
+      return true; // Fallback: default to true for unmeasured or uninitialized web assets
     }
-    return false;
+    final ratio = w / h;
+    return ratio >= 0.58 && ratio <= 0.67;
   }
 
   /// Triggers client native file browser completely within client Dart VM channels.
@@ -542,9 +549,11 @@ class _FanzineEditorState extends State<FanzineEditor> {
         width: width,
         height: height,
       );
-      pages.add(newPage);
-      // FIXED: Use getOrCreatePagesController to guarantee stream safety
-      UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(pages);
+
+      final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
+      UnsavedFanzineRegistry.pages[component.frefFanzineId] = updatedPages;
+      UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(updatedPages);
+      return;
     } else {
       final resStr = await fsQuery('fanzines/${component.frefFanzineId}/pages', '', '', '', '');
       final List pageDocs = jsonDecode(resStr) as List;
@@ -566,145 +575,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
     }
   }
 
-  /// Triggers standard text template insertion inside the editor flatplan.
-  Future<void> _createNewTextPage() async {
-    setState(() {
-      _isUploading = true;
-    });
-    try {
-      final IFanzineRepository repo = createFanzineRepository();
-
-      final List<FanzinePage> allPages = component.pageStructure.map((p) {
-        return FanzinePage.fromMap(p['__id'] ?? p['id'] ?? '', p);
-      }).toList();
-
-      final int lastPageNum = allPages.isNotEmpty ? allPages.length : 0;
-
-      final initialText = """
-# THE PUBLISHER
-## New Custom Page Created
-
-Start typing directly inside the text editor panel below to generate columns of printable markdown text.
-
-{{IMAGE}}
-
-* Enter bullet lists with an asterisk
-* Customize headers with # or ##
-""";
-
-      await repo.insertPublisherPage(
-        component.frefFanzineId,
-        lastPageNum,
-        initialText,
-        allPages,
-      );
-
-      print('[FOLIO EDITOR] Text page created successfully.');
-    } catch (e) {
-      print('[FOLIO EDITOR ERROR] Failed to create text page: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
-
-  /// Creates a blank calendar template layout placeholder in-order.
-  Future<void> _createNewCalendarPagePlaceholder() async {
-    setState(() {
-      _isUploading = true;
-    });
-    try {
-      final String fanzineId = component.frefFanzineId;
-      final int nextNum = component.pageStructure.length + 1;
-      final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
-
-      if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
-        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
-        final newPage = FanzinePage(
-          id: pageId,
-          pageNumber: nextNum,
-          status: 'ready',
-          templateId: 'calendar_left',
-        );
-        pages.add(newPage);
-        // FIXED: Use getOrCreatePagesController to guarantee stream safety
-        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
-      } else {
-        await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
-          'pageNumber': nextNum,
-          'status': 'ready',
-          'templateId': 'calendar_left',
-          'createdAt': WebFieldValue.serverTimestamp(),
-        }), true);
-      }
-      print('[FOLIO EDITOR] Calendar page placeholder created successfully.');
-    } catch (e) {
-      print('[FOLIO EDITOR ERROR] Failed to create calendar page: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
-
-  void _confirmRemoveImage(String imageId, bool isDirect) {
-    final String actionText = isDirect ? "Delete Completely" : "Remove from Folio";
-    final String bodyText = isDirect
-        ? "This is a direct upload or publisher template page. Deleting it will remove it from ALL issues and your library forever."
-        : "This image is from your library. Removing it will only take it out of this specific folio.";
-
-    setState(() {
-      _activeConfirmId = imageId;
-      _isConfirmDirect = isDirect;
-      _confirmTitle = actionText;
-      _confirmBody = bodyText;
-    });
-  }
-
-  Future<void> _executeImageRemoval() async {
-    final imageId = _activeConfirmId;
-    if (imageId == null) return;
-
-    setState(() {
-      _activeConfirmId = null;
-      _isUploading = true;
-    });
-
-    try {
-      if (_isConfirmDirect) {
-        await fsDeleteDoc('images/$imageId');
-      }
-
-      // Find any page belonging to this image in current folio and delete it
-      final pagesRes = await fsQuery('fanzines/${component.frefFanzineId}/pages', 'imageId', '==', jsonEncode(imageId), '');
-      final List pageDocs = jsonDecode(pagesRes) as List;
-
-      for (var pageDoc in pageDocs) {
-        final pageId = pageDoc['id'] ?? '';
-        if (pageId.isNotEmpty) {
-          await _deletePage(pageId as String);
-        }
-      }
-
-      print('[FOLIO REMOVE] Image/Page successfully removed/deleted.');
-    } catch (e) {
-      print('[FOLIO REMOVE ERROR] $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
-
   @override
-  Component build(BuildContext context) {
+  Widget build(BuildContext context) {
     return div([
       // 1. Core Tab Row
       div([
@@ -812,7 +684,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     ], classes: 'flex-col text-left p-2', attributes: const {'style': 'gap: 8px; display: flex;'});
   }
 
-  // FIXED: Changed return type from 'Widget' to 'Component' to resolve compilation error
+  // FIXED: Return type is Component to resolve web compilation compatibility
   Component _buildCustomToggleSwitch(bool val) {
     return div(
       [],
@@ -822,7 +694,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     );
   }
 
-  // FIXED: Changed return type from 'Widget' to 'Component' to resolve compilation error
+  // FIXED: Return type is Component to resolve web compilation compatibility
   Component _buildCustomToggleSwitchForCover(bool val) {
     return div(
       [],
@@ -931,6 +803,63 @@ Start typing directly inside the text editor panel below to generate columns of 
 
     final bool isPage1Cover = idx == 0 && _hasCover;
 
+    // Local variables are explicitly declared as Component to align with web target architecture
+    Component? layoutButtonsComponent;
+    if (!isPage1Cover) {
+      layoutButtonsComponent = SegmentedButton<String>(
+        segments: const ['start', 'end'],
+        selected: selectedSpreadPos,
+        labelBuilder: (val) => val,
+        onSelectionChanged: (val) {
+          _onSpreadPosChanged(page, idx, totalCount, fullPages, val);
+        },
+      );
+    } else {
+      layoutButtonsComponent = div([], attributes: const {'style': 'width: 140px;'});
+    }
+
+    Component sidePreferenceComponent = SegmentedButton<String>(
+      segments: const ['left', 'either', 'right'],
+      selected: isPage1Cover ? 'right' : selectedSidePref,
+      labelBuilder: (val) => val,
+      onSelectionChanged: (val) {
+        if (isPage1Cover) return;
+        _onSidePrefChanged(page, idx, totalCount, fullPages, val);
+      },
+    );
+
+    Component? coverSwitchComponent;
+    if (idx == 0) {
+      coverSwitchComponent = div(
+        [
+          span([text('cover')], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #49454F; margin-right: 6px;'}),
+          _buildCustomToggleSwitchForCover(_hasCover),
+        ],
+        attributes: const {
+          'style': 'display: inline-flex; align-items: center; margin-left: auto;'
+        },
+        events: {
+          'click': (e) {
+            final nextVal = !_hasCover;
+            setState(() => _hasCover = nextVal);
+
+            // Synchronously update the first page layout fields to align with the cover's active status
+            if (nextVal) {
+              _updatePageLayout(page, null, 'right');
+            } else {
+              _updatePageLayout(page, null, 'either');
+            }
+
+            if (!UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
+              fsUpdateDoc('fanzines/${component.frefFanzineId}', jsonEncode({'hasCover': nextVal}));
+            }
+          }
+        },
+      );
+    } else {
+      coverSwitchComponent = div([]);
+    }
+
     return div(
       classes: 'fanzine-page-row-card',
       attributes: const {
@@ -1017,7 +946,7 @@ Start typing directly inside the text editor panel below to generate columns of 
                   classes: 'p-1 hover:bg-red-50 rounded border-none bg-transparent cursor-pointer',
                   events: {'click': (e) => _deletePage(page['__id'] ?? '')},
                 ),
-              ], classes: 'flex-row items-center gap-1', attributes: const {'style': 'display: flex; align-items: center;'})
+              ], classes: 'flex-row items-center gap-1', attributes: const {'style': 'display: flex; gap: 8px; align-items: center;'})
             ]
         ),
 
@@ -1033,20 +962,7 @@ Start typing directly inside the text editor panel below to generate columns of 
                 attributes: const {
                   'style': 'width: 140px; display: flex; align-items: center;'
                 },
-                [
-                  if (!isPage1Cover)
-                    SegmentedButton<String>(
-                      segments: const ['start', 'end'],
-                      selected: selectedSpreadPos,
-                      labelBuilder: (val) => val,
-                      onSelectionChanged: (val) {
-                        _onSpreadPosChanged(page, idx, totalCount, fullPages, val);
-                      },
-                    )
-                  else
-                  // Preservation of the layout columns
-                    div(attributes: const {'style': 'width: 140px;'}, []),
-                ]
+                [layoutButtonsComponent]
             ),
 
             // Column 2: Side Preference (left | either | right)
@@ -1054,47 +970,11 @@ Start typing directly inside the text editor panel below to generate columns of 
                 attributes: const {
                   'style': 'width: 200px; display: flex; align-items: center;'
                 },
-                [
-                  SegmentedButton<String>(
-                    segments: const ['left', 'either', 'right'],
-                    selected: isPage1Cover ? 'right' : selectedSidePref,
-                    labelBuilder: (val) => val,
-                    onSelectionChanged: (val) {
-                      if (isPage1Cover) return;
-                      _onSidePrefChanged(page, idx, totalCount, fullPages, val);
-                    },
-                  ),
-                ]
+                [sidePreferenceComponent]
             ),
 
             // Column 3: Cover Switch (only for the first page)
-            if (idx == 0) // FIXED: Render cover switch strictly based on absolute loop index, avoiding duplicate rendering for duplicate indices in database
-              div(
-                [
-                  span([text('cover')], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #49454F; margin-right: 6px;'}),
-                  _buildCustomToggleSwitchForCover(_hasCover),
-                ],
-                attributes: const {
-                  'style': 'display: inline-flex; align-items: center; margin-left: auto;'
-                },
-                events: {
-                  'click': (e) {
-                    final nextVal = !_hasCover;
-                    setState(() => _hasCover = nextVal);
-
-                    // Synchronously update the first page layout fields to align with the cover's active status
-                    if (nextVal) {
-                      _updatePageLayout(page, null, 'right');
-                    } else {
-                      _updatePageLayout(page, null, 'either');
-                    }
-
-                    if (!UnsavedFanzineRegistry.fanzines.containsKey(component.frefFanzineId)) {
-                      fsUpdateDoc('fanzines/${component.frefFanzineId}', jsonEncode({'hasCover': nextVal}));
-                    }
-                  }
-                },
-              ),
+            coverSwitchComponent,
           ],
         )
       ],
@@ -1474,7 +1354,7 @@ Start typing directly inside the text editor panel below to generate columns of 
             )
           ],
           attributes: const {
-            'style': 'background-color: white; border-radius: 12px; width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.2);'
+            'style': 'background-color: white; border-radius: 12px; width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left;'
           },
         )
       ],
@@ -1611,6 +1491,141 @@ Start typing directly inside the text editor panel below to generate columns of 
         'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 30000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
       },
     );
+  }
+
+  Future<void> _createNewTextPage() async {
+    setState(() {
+      _isUploading = true;
+    });
+    try {
+      final IFanzineRepository repo = createFanzineRepository();
+
+      final List<FanzinePage> allPages = component.pageStructure.map((p) {
+        return FanzinePage.fromMap(p['__id'] ?? p['id'] ?? '', p);
+      }).toList();
+
+      final int lastPageNum = allPages.isNotEmpty ? allPages.length : 0;
+
+      final initialText = """
+# THE PUBLISHER
+## New Custom Page Created
+
+Start typing directly inside the text editor panel below to generate columns of printable markdown text.
+
+{{IMAGE}}
+
+* Enter bullet lists with an asterisk
+* Customize headers with # or ##
+""";
+
+      await repo.insertPublisherPage(
+        component.frefFanzineId,
+        lastPageNum,
+        initialText,
+        allPages,
+      );
+
+      print('[FOLIO EDITOR] Text page created successfully.');
+    } catch (e) {
+      print('[FOLIO EDITOR ERROR] Failed to create text page: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _createNewCalendarPagePlaceholder() async {
+    setState(() {
+      _isUploading = true;
+    });
+    try {
+      final String fanzineId = component.frefFanzineId;
+      final int nextNum = component.pageStructure.length + 1;
+      final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+
+      if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+        final newPage = FanzinePage(
+          id: pageId,
+          pageNumber: nextNum,
+          status: 'ready',
+          templateId: 'calendar_left',
+        );
+        final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
+        UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
+      } else {
+        await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+          'pageNumber': nextNum,
+          'status': 'ready',
+          'templateId': 'calendar_left',
+          'createdAt': WebFieldValue.serverTimestamp(),
+        }), true);
+      }
+      print('[FOLIO EDITOR] Calendar page placeholder created successfully.');
+    } catch (e) {
+      print('[FOLIO EDITOR ERROR] Failed to create calendar page: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  void _confirmRemoveImage(String imageId, bool isDirect) {
+    final String actionText = isDirect ? "Delete Completely" : "Remove from Folio";
+    final String bodyText = isDirect
+        ? "This is a direct upload or publisher template page. Deleting it will remove it from ALL issues and your library forever."
+        : "This image is from your library. Removing it will only take it out of this specific folio.";
+
+    setState(() {
+      _activeConfirmId = imageId;
+      _isConfirmDirect = isDirect;
+      _confirmTitle = actionText;
+      _confirmBody = bodyText;
+    });
+  }
+
+  Future<void> _executeImageRemoval() async {
+    final imageId = _activeConfirmId;
+    if (imageId == null) return;
+
+    setState(() {
+      _activeConfirmId = null;
+      _isUploading = true;
+    });
+
+    try {
+      if (_isConfirmDirect) {
+        await fsDeleteDoc('images/$imageId');
+      }
+
+      // Find any page belonging to this image in current folio and delete it
+      final pagesRes = await fsQuery('fanzines/${component.frefFanzineId}/pages', 'imageId', '==', jsonEncode(imageId), '');
+      final List pageDocs = jsonDecode(pagesRes) as List;
+
+      for (var pageDoc in pageDocs) {
+        final pageId = pageDoc['id'] ?? '';
+        if (pageId.isNotEmpty) {
+          await _deletePage(pageId as String);
+        }
+      }
+
+      print('[FOLIO REMOVE] Image/Page successfully removed/deleted.');
+    } catch (e) {
+      print('[FOLIO REMOVE ERROR] $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
   }
 
   // Fallbacks to handle legacy compilation properties safely
