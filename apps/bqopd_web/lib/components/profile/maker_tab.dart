@@ -34,7 +34,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   bool _showDrafts = false;
   bool _showMakerModal = false;
   String _makerModalMode = 'options'; // 'options', 'upload'
-
   List<Map<String, dynamic>> _userWorks = [];
   StreamSubscription? _worksSub;
   bool _loading = true;
@@ -42,7 +41,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   @override
   void initState() {
     super.initState();
-
     // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
     if (kIsWeb) {
       Future.microtask(() {
@@ -70,7 +68,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   void _listenToWorks() {
     _worksSub?.cancel();
     setState(() => _loading = true);
-
     _worksSub = component.userRepository.watchUserWorks(component.targetUserId).listen((works) {
       if (mounted) {
         setState(() {
@@ -83,6 +80,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
 
   List<Map<String, dynamic>> get _publishedWorks =>
       _userWorks.where((w) => w['isLive'] == true).toList();
+
   List<Map<String, dynamic>> get _draftWorks =>
       _userWorks.where((w) => w['isLive'] != true).toList();
 
@@ -92,17 +90,14 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     bool isUnique = false;
     String code = "";
     int retries = 0;
-
     while (!isUnique && retries < 15) {
       final String candidate = useVanity
           ? ShortcodeGenerator.generateVanityCode()
           : ShortcodeGenerator.generateStandardCode();
       final String codeUpper = candidate.toUpperCase();
-
       final docRes = await fsGetDoc('shortcodes/$codeUpper');
       final Map<String, dynamic> doc = jsonDecode(docRes);
       final isLocalCollision = UnsavedFanzineRegistry.hasCode(candidate);
-
       if (doc['exists'] != true && !isLocalCollision) {
         isUnique = true;
         code = candidate;
@@ -174,19 +169,25 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         button(
             [text("single image")],
             classes: 'profile-btn mb-4',
-            attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px;'},
+            attributes: const {
+              'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px; text-transform: none;'
+            },
             events: {'click': (e) => setState(() => _makerModalMode = 'upload')}
         ),
         button(
             [text("folio")],
             classes: 'profile-btn mb-4',
-            attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px;'},
+            attributes: const {
+              'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px; text-transform: none;'
+            },
             events: {'click': (e) => _createFolio()}
         ),
         button(
             [text("calendar")],
             classes: 'profile-btn mb-4',
-            attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px;'},
+            attributes: const {
+              'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px; text-transform: none;'
+            },
             events: {'click': (e) => _createCalendar()}
         ),
       ],
@@ -203,7 +204,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             div(
                 [
                   button(
-                      [text('close')],
+                      [text('X')],
                       classes: 'modal-close-btn',
                       attributes: const {'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'},
                       events: {'click': (e) => setState(() => _showMakerModal = false)}
@@ -217,7 +218,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             div(
                 [
                   button(
-                      [text('close')],
+                      [text('X')],
                       classes: 'modal-close-btn',
                       attributes: const {'style': 'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'},
                       events: {'click': (e) => setState(() => _showMakerModal = false)}
@@ -248,7 +249,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (works.isEmpty) {
       return div(
         [
@@ -282,7 +282,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     final String coverUrl = w['gridCoverImage'] ?? (w['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio');
-
     final String codeKey = w['shortCode'] ?? fanzineId;
     return a(
         [
@@ -319,7 +318,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     return div(
       [
         // Toolbar switch published / drafts
@@ -363,9 +361,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-center',
             attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
         ),
-
         _buildWorksGridSchema(_showDrafts ? _draftWorks : _publishedWorks),
-
         if (_showMakerModal)
           _buildMakerModalOverlay()
       ],
