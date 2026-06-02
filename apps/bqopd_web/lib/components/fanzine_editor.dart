@@ -576,7 +576,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Component build(BuildContext context) {
     return div([
       // 1. Core Tab Row
       div([
@@ -946,7 +946,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
                   classes: 'p-1 hover:bg-red-50 rounded border-none bg-transparent cursor-pointer',
                   events: {'click': (e) => _deletePage(page['__id'] ?? '')},
                 ),
-              ], classes: 'flex-row items-center gap-1', attributes: const {'style': 'display: flex; gap: 8px; align-items: center;'})
+              ], classes: 'flex-row items-center gap-1', attributes: const {'style': 'display: flex; gap: 8px; align-items: center;'}
+              )
             ]
         ),
 
