@@ -5,7 +5,6 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-
 import '../utils/web_firebase_interop.dart';
 import '../utils/firebase_mocks.dart';
 import '../utils/icon_utils.dart';
@@ -45,11 +44,14 @@ class _ProfilePageState extends State<ProfilePage> {
   List<String> _visibleTabs = [];
   String? _errorMessage;
 
-  // Sub-tabs index tracking
+  // Sub-tabs index tracking (sticky selection buffers)
   int _settingsSubTabIndex = 0; // 0: shortcodes, 1: managed profiles, 2: permissions, 3: social buttons
   int _curatorSubTabIndex = 0;  // 0: curator, 1: publisher, 2: entities, 3: ai training data
   int _indexSubTabIndex = 0;    // 0: mentions, 1: comments
   int _socialSubTabIndex = 0;   // 0: socials, 1: affiliations, 2: upcoming
+
+  // Sticky Tab Recovery Buffer
+  String? _tempSavedMainTab;
 
   // Sub-tab specific settings states
   String _loginZineShortcode = '';
@@ -116,6 +118,22 @@ class _ProfilePageState extends State<ProfilePage> {
     // DEFER data pipeline initialization ONLY on the client-side browser context.
     // This completely prevents the server-side renderer from scheduling unsupported reactive frames.
     if (kIsWeb) {
+      // Instantly hydrate cached tab settings synchronously from local storage to prevent any UI flicker
+      try {
+        final cached = getLocalPreference('profile_sticky_prefs_$_targetUid');
+        if (cached != null) {
+          final decoded = jsonDecode(cached) as Map<String, dynamic>;
+          _showDrafts = decoded['showDrafts'] as bool? ?? false;
+          _curatorSubTabIndex = decoded['curatorSubTab'] as int? ?? 0;
+          _indexSubTabIndex = decoded['indexSubTab'] as int? ?? 0;
+          _settingsSubTabIndex = decoded['settingsSubTab'] as int? ?? 0;
+          _socialSubTabIndex = decoded['socialSubTab'] as int? ?? 0;
+          _tempSavedMainTab = decoded['mainTab'] as String?;
+        }
+      } catch (e) {
+        print("Error loading local sticky preferences: $e");
+      }
+
       Future.microtask(() {
         if (mounted) {
           _initDataPipeline();
@@ -146,7 +164,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _followSub?.cancel();
     _viewerAccountSub?.cancel();
     _viewerProfileSub?.cancel();
-
     _worksSub?.callAsFunction();
     _mentionsSub?.callAsFunction();
     _commentsSub?.callAsFunction();
@@ -157,7 +174,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _initDataPipeline() {
     final currentUid = component.authState?.user?.uid;
-
     // RULE: If we hit '/profile' directly (userId is null) and we are authenticated,
     // immediately replace route path with our clean handle (e.g. '/kevin')
     if (component.userId == null && currentUid != null && kIsWeb) {
@@ -205,7 +221,7 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     }
 
-    // 3. Listen to viewer account to determine roles
+    // 3. Listen to viewer account to determine roles and customisations
     if (currentUid != null) {
       _viewerAccountSub = component.userRepository.watchUserAccount(currentUid).listen((account) {
         if (account != null) {
@@ -242,47 +258,101 @@ class _ProfilePageState extends State<ProfilePage> {
           final List managers = p['managers'] ?? [];
           return managers.contains(_targetUid);
         }).toList();
-
         setState(() {
           _allManagedProfiles = profiles;
         });
-      } catch (_) {}
+      } catch (e) {
+        print("Error parsing managed profiles: $e");
+      }
     });
   }
 
   void _rebuildTabSchema() {
     if (_profileData == null) return;
-
     final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
     final bool isViewerModerator = _viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false);
     final bool isViewerCurator = _viewerAccount?.role == 'curator' || (_viewerAccount?.roles.contains('curator') ?? false) || (_viewerAccount?.isCurator ?? false);
-
     List<String> tabs = [];
-
     if (_isMe) {
       tabs.add('settings');
     }
-
     final bool viewerHasAccess = isViewerCurator || isViewerModerator || isViewerAdmin;
     final bool ownerIsCurator = _profileData!.isCurator;
-
     if (_isMe && viewerHasAccess) {
       tabs.add('curator');
     } else if (!_isMe && viewerHasAccess && ownerIsCurator) {
       tabs.add('curator');
     }
-
     tabs.add('maker');
     tabs.add('index');
     tabs.add('collection');
 
+    int tabIndex = _currentTabIndex;
+    String? savedMainTab = _tempSavedMainTab;
+
+    // Merge in preference updates from the database stream if they exist
+    if (_isMe && _viewerAccount != null && _viewerAccount!.preferences.containsKey('profile')) {
+      final profilePrefs = Map<String, dynamic>.from(_viewerAccount!.preferences['profile'] as Map? ?? {});
+      savedMainTab = profilePrefs['mainTab'] as String?;
+      _showDrafts = profilePrefs['showDrafts'] as bool? ?? _showDrafts;
+      _curatorSubTabIndex = profilePrefs['curatorSubTab'] as int? ?? _curatorSubTabIndex;
+      _indexSubTabIndex = profilePrefs['indexSubTab'] as int? ?? _indexSubTabIndex;
+      _settingsSubTabIndex = profilePrefs['settingsSubTab'] as int? ?? _settingsSubTabIndex;
+      _socialSubTabIndex = profilePrefs['socialSubTab'] as int? ?? _socialSubTabIndex;
+    }
+
+    if (savedMainTab != null && tabs.contains(savedMainTab)) {
+      tabIndex = tabs.indexOf(savedMainTab);
+    } else {
+      final defaultIdx = tabs.indexOf('maker');
+      if (defaultIdx != -1) {
+        tabIndex = defaultIdx;
+      } else {
+        tabIndex = 0;
+      }
+    }
+
     setState(() {
       _visibleTabs = tabs;
-      if (_currentTabIndex >= tabs.length) {
-        _currentTabIndex = tabs.indexOf('maker');
-        if (_currentTabIndex == -1) _currentTabIndex = 0;
-      }
+      _currentTabIndex = tabIndex;
       _isLoading = false;
+    });
+  }
+
+  /// Saves currently active tab and subtab selection to localStorage (instant reload) and Firestore (sync).
+  void _savePrefs({String? newMainTab}) {
+    if (!_isMe) return;
+    final uid = getCurrentUserId();
+    if (uid == null) return;
+
+    final mainTab = newMainTab ?? (_currentTabIndex < _visibleTabs.length ? _visibleTabs[_currentTabIndex] : '');
+    if (mainTab.isEmpty) return;
+
+    final prefsData = {
+      'mainTab': mainTab,
+      'showDrafts': _showDrafts,
+      'curatorSubTab': _curatorSubTabIndex,
+      'indexSubTab': _indexSubTabIndex,
+      'settingsSubTab': _settingsSubTabIndex,
+      'socialSubTab': _socialSubTabIndex,
+    };
+
+    // Save locally for synchronous, zero-delay restorations
+    try {
+      saveLocalPreference('profile_sticky_prefs_$uid', jsonEncode(prefsData));
+    } catch (e) {
+      print("Local preferences cache failed: $e");
+    }
+
+    // Persist remote database updates
+    fsUpdateDoc('Users/$uid', jsonEncode({
+      'preferences.profile': prefsData
+    })).catchError((_) {
+      fsSetDoc('Users/$uid', jsonEncode({
+        'preferences': {
+          'profile': prefsData
+        }
+      }), true);
     });
   }
 
@@ -297,7 +367,6 @@ class _ProfilePageState extends State<ProfilePage> {
           data['id'] = d['id'];
           return data;
         }).toList();
-
         setState(() {
           _userWorks = works;
         });
@@ -310,7 +379,6 @@ class _ProfilePageState extends State<ProfilePage> {
   void _setupMentionsPipeline() {
     final String currentDisplayName = _profileData?.displayName ?? '';
     if (currentDisplayName.isEmpty) return;
-
     _mentionsSub?.callAsFunction();
     _mentionsSub = fsListenQuery('fanzines', 'draftEntities', 'array-contains', jsonEncode(currentDisplayName), '', false, (String jsonStr) {
       try {
@@ -320,11 +388,12 @@ class _ProfilePageState extends State<ProfilePage> {
           data['id'] = d['id'];
           return data;
         }).toList();
-
         setState(() {
           _userMentions = fanzines;
         });
-      } catch (_) {}
+      } catch (e) {
+        print("Error loading mentions: $e");
+      }
     });
   }
 
@@ -338,11 +407,12 @@ class _ProfilePageState extends State<ProfilePage> {
           data['_id'] = d['id'];
           return data;
         }).toList();
-
         setState(() {
           _userComments = list;
         });
-      } catch (_) {}
+      } catch (e) {
+        print("Error loading comments: $e");
+      }
     });
   }
 
@@ -356,11 +426,12 @@ class _ProfilePageState extends State<ProfilePage> {
           data['id'] = d['id'];
           return data;
         }).toList();
-
         setState(() {
           _allSystemUsers = users;
         });
-      } catch (_) {}
+      } catch (e) {
+        print("Error loading users: $e");
+      }
     });
   }
 
@@ -374,11 +445,12 @@ class _ProfilePageState extends State<ProfilePage> {
           data['id'] = d['id'];
           return data;
         }).toList();
-
         setState(() {
           _aiTrainingData = list;
         });
-      } catch (_) {}
+      } catch (e) {
+        print("Error loading AI training logs: $e");
+      }
     });
   }
 
@@ -392,7 +464,9 @@ class _ProfilePageState extends State<ProfilePage> {
           _registerZineShortcode = doc['data']['register_zine_shortcode'] ?? '';
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      print("Error loading global settings: $e");
+    }
   }
 
   Future<void> _saveGlobalSettings() async {
@@ -402,21 +476,20 @@ class _ProfilePageState extends State<ProfilePage> {
         'login_zine_shortcode': _loginZineShortcode.trim(),
         'register_zine_shortcode': _registerZineShortcode.trim()
       }), true);
-    } catch (_) {}
+    } catch (e) {
+      print("Error saving global settings: $e");
+    }
     setState(() => _isSavingSettings = false);
   }
 
   Future<void> _createManagedProfile() async {
     if (_newManagedFirstName.trim().isEmpty || _newManagedLastName.trim().isEmpty) return;
     setState(() => _isCreatingManagedProfile = true);
-
     try {
       final String baseHandle = "${_newManagedFirstName.trim()}-${_newManagedLastName.trim()}"
           .toLowerCase()
           .replaceAll(RegExp(r'[^a-z0-9-]'), '-');
-
       final String uniqueId = 'managed_${DateTime.now().millisecondsSinceEpoch}';
-
       final publicData = {
         'uid': uniqueId,
         'username': baseHandle,
@@ -431,14 +504,12 @@ class _ProfilePageState extends State<ProfilePage> {
         'followingCount': 0,
         'updatedAt': WebFieldValue.serverTimestamp()
       };
-
       await fsSetDoc('profiles/$uniqueId', jsonEncode(publicData), true);
       await fsSetDoc('usernames/$baseHandle', jsonEncode({
         'uid': uniqueId,
         'isManaged': true,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
-
       setState(() {
         _newManagedFirstName = '';
         _newManagedLastName = '';
@@ -454,11 +525,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _toggleSocialButtonVisibility(String toolId) async {
     final currentVal = _socialButtonVisibility[toolId] ?? true;
     final nextVal = !currentVal;
-
     setState(() {
       _socialButtonVisibility[toolId] = nextVal;
     });
-
     await fsUpdateDoc('Users/$_targetUid', jsonEncode({
       'preferences.socialButtons.$toolId': nextVal
     }));
@@ -466,12 +535,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _updateUserPermission(String uid, String newRole) async {
     final bool isCurator = newRole == 'curator' || newRole == 'admin' || newRole == 'moderator';
-
     await fsUpdateDoc('Users/$uid', jsonEncode({
       'role': newRole,
       'isCurator': isCurator
     }));
-
     await fsUpdateDoc('profiles/$uid', jsonEncode({
       'isCurator': isCurator,
       'isAdmin': newRole == 'admin'
@@ -481,12 +548,10 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _toggleFollow() async {
     final currentUid = component.authState?.user?.uid;
     if (currentUid == null) return;
-
     final nextStatus = !_isFollowing;
     setState(() {
       _isFollowing = nextStatus;
     });
-
     if (nextStatus) {
       await fsSetDoc('profiles/$currentUid/following/$_targetUid', jsonEncode({'followedAt': WebFieldValue.serverTimestamp()}), true);
       await fsSetDoc('profiles/$_targetUid/followers/$currentUid', jsonEncode({'followerAt': WebFieldValue.serverTimestamp()}), true);
@@ -504,7 +569,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<String> _generateUniqueTempShortcode() async {
     final String? email = component.authState?.user?.email;
     final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
-
     bool isUnique = false;
     String code = "";
     int retries = 0;
@@ -513,15 +577,11 @@ class _ProfilePageState extends State<ProfilePage> {
           ? ShortcodeGenerator.generateVanityCode()
           : ShortcodeGenerator.generateStandardCode();
       final String codeUpper = candidate.toUpperCase();
-
       final docRes = await fsGetDoc('shortcodes/$codeUpper');
       final Map<String, dynamic> doc = jsonDecode(docRes) as Map<String, dynamic>;
-
       final userRes = await fsGetDoc('usernames/${codeUpper.toLowerCase()}');
       final Map<String, dynamic> unDoc = jsonDecode(userRes) as Map<String, dynamic>;
-
       final isLocalCollision = UnsavedFanzineRegistry.hasCode(candidate);
-
       if (doc['exists'] != true && unDoc['exists'] != true && !isLocalCollision) {
         isUnique = true;
         code = candidate;
@@ -539,7 +599,6 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = await _generateUniqueTempShortcode();
-
       final newFanzine = Fanzine(
         id: fanzineId,
         title: 'new folio name',
@@ -554,10 +613,8 @@ class _ProfilePageState extends State<ProfilePage> {
         draftEntities: const [],
         masterCreators: const [],
       );
-
       // Register fanzine locally in memory
       UnsavedFanzineRegistry.add(newFanzine, []);
-
       setState(() {
         _showMakerModal = false;
       });
@@ -578,7 +635,6 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final fanzineId = 'calendar_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = await _generateUniqueTempShortcode();
-
       final newFanzine = Fanzine(
         id: fanzineId,
         title: 'Convention Calendar 2026',
@@ -593,10 +649,8 @@ class _ProfilePageState extends State<ProfilePage> {
         draftEntities: const [],
         masterCreators: const [],
       );
-
       final page1Id = 'page1_${DateTime.now().millisecondsSinceEpoch}';
       final page2Id = 'page2_${DateTime.now().millisecondsSinceEpoch}';
-
       final List<FanzinePage> pages = [
         FanzinePage(
           id: page1Id,
@@ -611,10 +665,8 @@ class _ProfilePageState extends State<ProfilePage> {
           status: 'ready',
         ),
       ];
-
       // Register fanzine locally in memory
       UnsavedFanzineRegistry.add(newFanzine, pages);
-
       setState(() {
         _showMakerModal = false;
       });
@@ -659,11 +711,9 @@ class _ProfilePageState extends State<ProfilePage> {
     final handle = _newCreatorHandle.trim();
     final role = _newCreatorRole.trim();
     if (handle.isEmpty) return;
-
     final cleanHandle = handle.toLowerCase().replaceAll('@', '');
     String resolvedName = handle;
     String? resolvedUid;
-
     try {
       final resStr = await fsQuery('profiles', 'username', '==', jsonEncode(cleanHandle), '');
       final List docs = jsonDecode(resStr);
@@ -676,7 +726,6 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       print("Error looking up user by handle: $e");
     }
-
     setState(() {
       _uploadCreators.add({
         'uid': resolvedUid,
@@ -698,19 +747,15 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() => _uploadError = "Please select or capture an image first.");
       return;
     }
-
     setState(() {
       _isUploadingImage = true;
       _uploadError = null;
     });
-
     try {
       final Uint8List bytes = base64Decode(_uploadImageBase64!);
       final String path = 'uploads/$_targetUid/folio_assets/img_${DateTime.now().millisecondsSinceEpoch}_$_uploadImageName';
-
       // Perform secure upload to Storage via interop
       final String downloadUrl = await stUpload(path, bytes, 'image/jpeg');
-
       final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
 
       // Strict inlined owner check for vanity eligibility to prevent other users from obtaining vanity URLs
@@ -739,11 +784,9 @@ class _ProfilePageState extends State<ProfilePage> {
         'shortCode': shortCode,
         'storagePath': path,
       };
-
       await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
 
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
-
       // Generate and register shortcode for parent fanzine!
       final fzShortCode = await WebShortcodeService.assignShortcode(
         contentType: 'fanzine',
@@ -789,7 +832,6 @@ class _ProfilePageState extends State<ProfilePage> {
         _uploadPreviewUrl = null;
         _uploadCreators = [];
       });
-
       if (mounted) {
         Router.of(context).replace('/$fzShortCode'); // Navigate directly to fanzine shortcode URL
       }
@@ -835,7 +877,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   h1([text('upload single image')], classes: 'font-bold text-base text-center mb-1', attributes: const {'style': 'color: black; margin: 0; font-size: 16px;'}),
                   p([text('Maker Pipeline')], classes: 'text-xs text-center text-gray', attributes: const {'style': 'margin: 0; color: #666; font-size: 11px;'})
                 ]),
-
                 // Centered Identity Gif
                 img(
                     src: 'assets/logo200.gif',
@@ -843,7 +884,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       'style': 'width: 70px; height: auto; display: block; margin: 12px 0;'
                     }
                 ),
-
                 // Native Envelope Action controls (Back / Publish)
                 div([
                   button(
@@ -900,12 +940,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 else
                   div(
                       [
-                        span([text('add_photo_alternate')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 48px; margin-bottom: 8px; color: #aaa;'}),
+                        span([text('add_photo_alternate')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px; margin-bottom: 8px; color: #aaa;'}),
                         span([text('Click to select image')], attributes: const {'style': 'font-size: 12px; font-weight: 500; text-transform: lowercase; color: #666;'})
                       ],
                       classes: 'flex flex-col items-center justify-center p-4 text-gray-400'
                   ),
-
                 // Invisible, absolute-positioned native file input covering the entire box
                 input(
                     id: 'maker-upload-picker',
@@ -936,7 +975,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
               }
           ),
-
           // 2. Custom Toolbar (Unifies read/create layouts) with "Upload" pre-selected and highlighted on load
           div([
             _buildUploadToolbarButton('upload', 'edit_document', true),
@@ -946,7 +984,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ], classes: 'toolbar-container w-full border-t border-b border-gray-100 py-2 my-1', attributes: const {
             'style': 'display: justify-content: center; gap: 12px; box-sizing: border-box; width: 100%; background: #fff;'
           }),
-
           // 3. Active Metadata Panel (Sliding Form Drawer)
           div(
               [
@@ -958,7 +995,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         attributes: const {'style': 'letter-spacing: 1px; text-transform: uppercase; color: #666; font-size: 11px;'}
                     )
                   ], classes: 'mb-4'),
-
                   // Text Fields
                   input(
                     attributes: const {'type': 'text', 'placeholder': 'Title', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
@@ -972,12 +1008,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     attributes: const {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'style': 'margin-bottom: 12px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
                     events: {'input': (e) => _uploadIndicia = getInputValue(e)},
                   ),
-
                   // Creators Section
                   div(
                       [
                         span([text('Creators')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 6px;'}),
-
                         if (_uploadCreators.isNotEmpty)
                           div(
                               [
@@ -1002,7 +1036,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               ],
                               classes: 'flex flex-col gap-1 w-full mb-2'
                           ),
-
                         div(
                             [
                               div(
@@ -1064,7 +1097,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  /// Visual Image Upload sticker that coordinates the structural list sections
   Component _buildMakerUploadContent() {
     return div(
         [
@@ -1093,9 +1125,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ], attributes: const {
           'style': 'width: 72px; height: 72px; border-radius: 50%; background-color: #eee; overflow: hidden; border: 2px solid #ccc; display: flex; justify-content: center; align-items: center;'
         }),
-
         span([], attributes: const {'style': 'display: inline-block; width: 16px;'}),
-
         // Edit Button / Followers Details
         div([
           if (!_isMe)
@@ -1112,7 +1142,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 classes: 'profile-btn',
                 attributes: const {'style': 'width: 100px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important;'}
             ),
-
           div([], attributes: const {'style': 'height: 4px;'}),
           div([
             span([text('${_profileData?.followerCount ?? 0} followers')], attributes: const {'style': 'text-decoration: underline; margin-right: 8px;'}),
@@ -1120,13 +1149,10 @@ class _ProfilePageState extends State<ProfilePage> {
           ], attributes: const {'style': 'font-size: 10px; font-weight: 500; color: #555; display: flex;'})
         ], attributes: const {'style': 'display: flex; flex-direction: column; align-items: flex-start; justify-content: center;'})
       ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center;'}),
-
       div([], attributes: const {'style': 'height: 12px;'}),
-
       // Underneath row: Display Name, Username and Bio
       h1([text(displayName)], attributes: const {'style': 'font-size: 18px; font-weight: 900; margin: 0; color: black; line-height: 1.2;'}),
       p([text('@$username')], attributes: const {'style': 'font-size: 12px; color: #666; margin: 2px 0 0 0;'}),
-
       if (bio.isNotEmpty) ...[
         div([], attributes: const {'style': 'height: 8px;'}),
         p([text(bio)], attributes: const {
@@ -1146,13 +1172,11 @@ class _ProfilePageState extends State<ProfilePage> {
         span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
         _buildSocialHeaderMiniTab("upcoming", 2)
       ], classes: 'py-2 bg-gray-100 rounded-md', attributes: const {'style': 'display: flex; justify-content: center; margin-bottom: 16px;'}),
-
       // Active Tab List Content
       if (_socialSubTabIndex == 0) ...[
         _buildSocialLinkButton("X / Twitter", _profileData?.xHandle, "https://x.com/"),
         _buildSocialLinkButton("Instagram", _profileData?.instagramHandle, "https://instagram.com/"),
         _buildSocialLinkButton("GitHub", _profileData?.githubHandle, "https://github.com/"),
-
         if ((_profileData?.xHandle ?? '').isEmpty &&
             (_profileData?.instagramHandle ?? '').isEmpty &&
             (_profileData?.githubHandle ?? '').isEmpty)
@@ -1170,9 +1194,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; min-height: 100px; flex: 1;'})
         else
           div([]),
-
       div([], attributes: const {'style': 'flex: 1;'}),
-
       // Logout at the bottom right
       if (_isMe)
         div([
@@ -1191,13 +1213,15 @@ class _ProfilePageState extends State<ProfilePage> {
     return span([
       text(title)
     ], classes: isSelected ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer', events: {
-      'click': (e) => setState(() => _socialSubTabIndex = idx)
+      'click': (e) {
+        setState(() => _socialSubTabIndex = idx);
+        _savePrefs();
+      }
     });
   }
 
   Component _buildSocialLinkButton(String platform, String? handle, String baseUrl) {
     if (handle == null || handle.trim().isEmpty) return div([]);
-
     return a(
         [
           span([
@@ -1216,7 +1240,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Component _buildMainNavigationTab(String name, int index) {
     final bool isActive = _currentTabIndex == index;
-
     return span([
       text(name.toLowerCase())
     ],
@@ -1228,6 +1251,7 @@ class _ProfilePageState extends State<ProfilePage> {
             setState(() {
               _currentTabIndex = index;
             });
+            _savePrefs(newMainTab: _visibleTabs[index]);
           }
         });
   }
@@ -1250,7 +1274,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Component _buildActiveActionUtilityBar(String tabName) {
     final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
-
     switch (tabName) {
       case 'maker':
         final bool viewerCanSeeDrafts = _isMe || (_viewerAccount?.role == 'admin') || (_viewerAccount?.role == 'moderator') || (_viewerAccount?.isCurator ?? false);
@@ -1276,90 +1299,122 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildPlainTextTab(
               title: "published",
               isActive: !_showDrafts,
-              onTap: () => setState(() => _showDrafts = false),
+              onTap: () {
+                setState(() => _showDrafts = false);
+                _savePrefs();
+              },
             ),
             if (viewerCanSeeDrafts) ...[
               span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
               _buildPlainTextTab(
                 title: "drafts",
                 isActive: _showDrafts,
-                onTap: () => setState(() => _showDrafts = true),
+                onTap: () {
+                  setState(() => _showDrafts = true);
+                  _savePrefs();
+                },
               ),
             ]
           ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; width: 100%;'})
         ], classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-center', attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%;'});
-
       case 'index':
         return div([
           _buildPlainTextTab(
             title: "mentions (${_userMentions.length})",
             isActive: _indexSubTabIndex == 0,
-            onTap: () => setState(() => _indexSubTabIndex = 0),
+            onTap: () {
+              setState(() => _indexSubTabIndex = 0);
+              _savePrefs();
+            },
           ),
           span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
           _buildPlainTextTab(
             title: "comments (${_userComments.length})",
             isActive: _indexSubTabIndex == 1,
-            onTap: () => setState(() => _indexSubTabIndex = 1),
+            onTap: () {
+              setState(() => _indexSubTabIndex = 1);
+              _savePrefs();
+            },
           ),
         ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; justify-content: center; align-items: center; box-sizing: border-box; width: 100%;'});
-
       case 'curator':
         return div([
           _buildPlainTextTab(
             title: "curator inbox",
             isActive: _curatorSubTabIndex == 0,
-            onTap: () => setState(() => _curatorSubTabIndex = 0),
+            onTap: () {
+              setState(() => _curatorSubTabIndex = 0);
+              _savePrefs();
+            },
           ),
           span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
           _buildPlainTextTab(
             title: "publisher queue",
             isActive: _curatorSubTabIndex == 1,
-            onTap: () => setState(() => _curatorSubTabIndex = 1),
+            onTap: () {
+              setState(() => _curatorSubTabIndex = 1);
+              _savePrefs();
+            },
           ),
           span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
           _buildPlainTextTab(
             title: "wiki entities",
             isActive: _curatorSubTabIndex == 2,
-            onTap: () => setState(() => _curatorSubTabIndex = 2),
+            onTap: () {
+              setState(() => _curatorSubTabIndex = 2);
+              _savePrefs();
+            },
           ),
           span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
           _buildPlainTextTab(
             title: "ai baseline",
             isActive: _curatorSubTabIndex == 3,
-            onTap: () => setState(() => _curatorSubTabIndex = 3),
+            onTap: () {
+              setState(() => _curatorSubTabIndex = 3);
+              _savePrefs();
+            },
           ),
         ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%;'});
-
       case 'settings':
         return div([
           _buildPlainTextTab(
             title: "toolbar buttons",
             isActive: _settingsSubTabIndex == 3,
-            onTap: () => setState(() => _settingsSubTabIndex == 3),
+            onTap: () {
+              setState(() => _settingsSubTabIndex = 3);
+              _savePrefs();
+            },
           ),
           span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
           _buildPlainTextTab(
             title: "managed profiles",
             isActive: _settingsSubTabIndex == 1,
-            onTap: () => setState(() => _settingsSubTabIndex = 1),
+            onTap: () {
+              setState(() => _settingsSubTabIndex = 1);
+              _savePrefs();
+            },
           ),
           if (isViewerAdmin) ...[
             span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
             _buildPlainTextTab(
               title: "shortcodes",
               isActive: _settingsSubTabIndex == 0,
-              onTap: () => setState(() => _settingsSubTabIndex = 0),
+              onTap: () {
+                setState(() => _settingsSubTabIndex = 0);
+                _savePrefs();
+              },
             ),
             span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
             _buildPlainTextTab(
               title: "permissions",
               isActive: _settingsSubTabIndex == 2,
-              onTap: () => setState(() => _settingsSubTabIndex = 2),
+              onTap: () {
+                setState(() => _settingsSubTabIndex = 2);
+                _savePrefs();
+              },
             ),
           ]
         ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%;'});
-
       case 'collection':
       default:
         return div([], attributes: const {'style': 'display: none;'});
@@ -1437,7 +1492,6 @@ class _ProfilePageState extends State<ProfilePage> {
         p([text('No items available in this category.')], classes: 'text-sm text-gray italic mt-4')
       ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
-
     return div([
       for (var w in works)
         _buildWorkGridTile(w)
@@ -1452,22 +1506,17 @@ class _ProfilePageState extends State<ProfilePage> {
     final String volume = w['volume'] ?? '';
     final String issue = w['issue'] ?? '';
     final String wholeNumber = w['wholeNumber'] ?? '';
-
     String displaySuffix = '';
     if (volume.isNotEmpty) displaySuffix += " Vol. $volume";
     if (issue.isNotEmpty) displaySuffix += " No. $issue";
     if (wholeNumber.isNotEmpty) displaySuffix += " ($wholeNumber)";
-
     final String coverUrl = w['gridCoverImage'] ?? (w['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio');
-
     // If this is an unsaved temporary folio, direct route through ShortLinkPage using its local code key
     final String codeKey = w['shortCode'] ?? fanzineId;
-
     // Vanity shortcode urls (/$codeKey) must be used exclusively to open folio page routes!
     final String targetRoute = '/$codeKey';
-
     return a(
         [
           // Poster image
@@ -1479,7 +1528,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ], attributes: {
             'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
           }),
-
           // Metadata footer
           div([
             span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
@@ -1502,7 +1550,6 @@ class _ProfilePageState extends State<ProfilePage> {
         p([text('No comments posted by this profile.')], classes: 'text-sm text-gray italic mt-4')
       ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
-
     return div([
       h2([text("COMMENTS POSTED")], classes: 'font-bold text-sm text-gray mb-4'),
       for (var c in _userComments)
@@ -1526,15 +1573,12 @@ class _ProfilePageState extends State<ProfilePage> {
         entityCounts[name] = (entityCounts[name] ?? 0) + 1;
       }
     }
-
     if (entityCounts.isEmpty) {
       return div([
         p([text("No entities detected in draft curator pipeline.")], classes: 'text-sm text-gray italic')
       ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
-
     final sortedNames = entityCounts.keys.toList()..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
-
     return div([
       h2([text("DETECTED DRAFT ENTITIES")], classes: 'font-bold text-sm text-gray mb-4'),
       for (var name in sortedNames)
@@ -1551,13 +1595,11 @@ class _ProfilePageState extends State<ProfilePage> {
       final int lScore = img['human_linking_score'] ?? 0;
       return cScore > 0 || lScore > 0;
     }).toList();
-
     if (trainingItems.isEmpty) {
       return div([
         p([text("No training data yet.")], classes: 'text-sm text-gray italic')
       ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
-
     return div([
       h2([text("AI REINFORCEMENT BASELINES")], classes: 'font-bold text-sm text-gray mb-2'),
       for (var item in trainingItems)
@@ -1579,7 +1621,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final togglableTools = ReaderToolsConfig.tools
         .where((t) => t.id != 'Settings' && t.role == ToolRole.public)
         .toList();
-
     return div([
       h2([text("CUSTOMIZE SOCIAL TOOLBAR BUTTONS")], classes: 'font-bold text-sm text-gray mb-4'),
       for (var tool in togglableTools)
@@ -1590,14 +1631,12 @@ class _ProfilePageState extends State<ProfilePage> {
   Component _buildToolbarButtonSettingsRow(ReaderTool tool) {
     final bool isVisible = _socialButtonVisibility[tool.id] ?? true;
     final resolvedIcon = cleanIconName(tool.defaultIcon);
-
     return div([
       div([
         span([text(resolvedIcon)], classes: 'material-symbols-outlined text-gray-500', attributes: const {'style': 'font-size: 22px;'}),
         span([], attributes: const {'style': 'display: inline-block; width: 16px;'}),
         span([text(tool.label)], attributes: const {'style': 'font-size: 14px; font-weight: bold; color: black;'})
       ], attributes: const {'style': 'display: flex; align-items: center;'}),
-
       // iOS-style Toggle Switcher
       div([
         div([], attributes: {
@@ -1635,7 +1674,6 @@ class _ProfilePageState extends State<ProfilePage> {
             events: {'click': (e) => _createManagedProfile()}
         )
       ], attributes: const {'style': 'border: 1px dashed #ccc; padding: 20px; border-radius: 8px; background-color: #fcfcfc; display: flex; flex-direction: column; gap: 12px;'}),
-
       // List of Active Managed Profiles
       if (_allManagedProfiles.isNotEmpty) ...[
         div([], attributes: const {'style': 'height: 24px;'}),
@@ -1661,17 +1699,14 @@ class _ProfilePageState extends State<ProfilePage> {
         text("Configure the default shortcode bindings representing the Global 'Book of the Week' presented to guests on sign in or registration workflows.")
       ], classes: 'text-xs text-gray italic leading-relaxed'),
       div([], attributes: const {'style': 'height: 12px;'}),
-
       div([
         span([text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray'),
         input(attributes: {'value': _loginZineShortcode}, events: {'input': (e) => _loginZineShortcode = getInputValue(e)})
       ], classes: 'flex-col gap-2'),
-
       div([
         span([text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray'),
         input(attributes: {'value': _registerZineShortcode}, events: {'input': (e) => _registerZineShortcode = getInputValue(e)})
       ], classes: 'flex-col gap-2'),
-
       div([], attributes: const {'style': 'height: 12px;'}),
       button(
           [text(_isSavingSettings ? "saving..." : "save settings")],
@@ -1690,7 +1725,6 @@ class _ProfilePageState extends State<ProfilePage> {
         p([text('No registered Users loaded.')], classes: 'text-sm text-gray italic')
       ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
     }
-
     return div([
       h2([text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4'),
       for (var u in _allSystemUsers)
@@ -1702,27 +1736,27 @@ class _ProfilePageState extends State<ProfilePage> {
     final String uid = u['uid'] ?? u['id'] ?? '';
     final String email = u['email'] ?? 'guest';
     final String currentRole = u['role'] ?? 'user';
-
     return div([
-    div([
-    span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-    span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'})
-    ], classes: 'flex-col gap-1'),
-
-    div([
-    _buildRoleBadgeSelector(uid, "admin", currentRole),
-    span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-    _buildRoleBadgeSelector(uid, "moderator", currentRole),
-    span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-    _buildRoleBadgeSelector(uid, "curator", currentRole),
-    span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-    _buildRoleBadgeSelector(uid, "user", currentRole)
-    ], attributes: const {'style': 'display: flex; gap: 8px;'});
+      div([
+        span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
+        span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'})
+      ], classes: 'flex-col gap-1'),
+      div([
+        _buildRoleBadgeSelector(uid, "admin", currentRole),
+        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+        _buildRoleBadgeSelector(uid, "moderator", currentRole),
+        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+        _buildRoleBadgeSelector(uid, "curator", currentRole),
+        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+        _buildRoleBadgeSelector(uid, "user", currentRole)
+      ], attributes: const {'style': 'display: flex; gap: 8px;'})
+    ], classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all', attributes: const {
+      'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5;'
+    });
   }
 
   Component _buildRoleBadgeSelector(String uid, String role, String activeRole) {
     final bool isSelected = activeRole == role;
-
     return button(
         [text(role)],
         classes: isSelected ? 'active m3-chip' : 'm3-chip',
@@ -1735,7 +1769,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Component _buildMakerModalOverlay() {
     final bool isUploadMode = _makerModalMode == 'upload';
-
     return div(
         [
           if (!isUploadMode)
@@ -1743,7 +1776,7 @@ class _ProfilePageState extends State<ProfilePage> {
             div(
                 [
                   button(
-                      [text('×')],
+                      [text('close')],
                       classes: 'modal-close-btn',
                       attributes: const {
                         'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'
@@ -1769,7 +1802,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 [
                   // Floating close button at the top-right of the scroll area
                   button(
-                      [text('×')],
+                      [text('close')],
                       classes: 'modal-close-btn',
                       attributes: const {
                         'style': 'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'
@@ -1800,7 +1833,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Component _buildMakerOptionsContent() {
     return div(classes: 'white-sticker p-6 w-full h-full flex flex-col justify-center items-center', [
       h1(classes: 'font-bold text-lg text-center mb-6', [text('maker options')]),
-
       button(
           [text("single image")],
           classes: 'profile-btn mb-4',
@@ -1812,7 +1844,6 @@ class _ProfilePageState extends State<ProfilePage> {
             })
           }
       ),
-
       button(
           [text("folio")],
           classes: 'profile-btn mb-4',
@@ -1821,7 +1852,6 @@ class _ProfilePageState extends State<ProfilePage> {
             'click': (e) => _createFolio()
           }
       ),
-
       button(
           [text("calendar")],
           classes: 'profile-btn mb-4',
@@ -1839,7 +1869,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final String username = _profileData?.username ?? 'archival';
     final String bio = _profileData?.bio ?? '';
     final String photoUrl = _profileData?.photoUrl ?? '';
-
     return div([
       div([
         // Row 1: The Profile Header Card (Aesthetic desktop or mobile blocks)
@@ -1850,7 +1879,6 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildRightCardSocialsPart(isMobile: false)
           ], classes: 'white-sticker-8-5')
         ], classes: 'envelope-8-5-desktop'),
-
         div([
           div([
             div([
@@ -1863,10 +1891,8 @@ class _ProfilePageState extends State<ProfilePage> {
             ], classes: 'white-sticker-mobile-8-5')
           ], classes: 'envelope-8-5-mobile-item')
         ], classes: 'envelope-8-5-mobile-container'),
-
         // Row 2: Spacer
         div([], classes: 'profile-spacer'),
-
         // Row 3: The Category Tabs
         if (_visibleTabs.isNotEmpty)
           div([
@@ -1876,24 +1902,19 @@ class _ProfilePageState extends State<ProfilePage> {
                 span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
             ]
           ], classes: 'bg-white rounded-md shadow-sm py-4', attributes: const {'style': 'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%;'}),
-
         // Row 4: Spacer
         div([], classes: 'profile-spacer'),
-
         // Row 5: The Action Utility Bar & Sub-navigation configurations
         if (_visibleTabs.isNotEmpty)
           _buildActiveActionUtilityBar(_visibleTabs[_currentTabIndex]),
-
         // Row 6: Spacer
         div([], classes: 'profile-spacer'),
-
         // Row 7: The Content Pane
         div([
           if (_visibleTabs.isNotEmpty)
             _buildActiveTabContent(_visibleTabs[_currentTabIndex])
         ], attributes: const {'style': 'width: 100%; box-sizing: border-box;'})
       ], classes: 'unified-profile-column'),
-
       if (_showMakerModal)
         _buildMakerModalOverlay(),
     ], attributes: const {

@@ -28,3 +28,11 @@ String getInputValue(dynamic event) {
 void redirectFanzinePath(dynamic context, String shortCode) {
 // No-op on the server
 }
+
+/// Platform-safe stub for saving a local preference.
+void saveLocalPreference(String key, String value) {
+// No-op on the server
+}
+
+/// Platform-safe stub for retrieving a local preference.
+String? getLocalPreference(String key) => null;

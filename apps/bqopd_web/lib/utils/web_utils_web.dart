@@ -33,9 +33,7 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
     print('[DART FILE READER] Selected file is null.');
     return;
   }
-
   print('[DART FILE READER] Loading: ${file.name} (${file.size} bytes)');
-
   final reader = web.FileReader();
   reader.onload = (web.Event event) {
     final result = reader.result;
@@ -52,17 +50,12 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
     }
     final base64 = dataUrl.substring(splitIndex + 1);
     final objectUrl = web.URL.createObjectURL(file);
-
     print('[DART FILE READER] Success. Triggering callback.');
     callback(base64, file.name, objectUrl);
-
-
   }.toJS;
-
   reader.onerror = (web.Event event) {
     print('[DART FILE READER] FileReader error encountered.');
   }.toJS;
-
   reader.readAsDataURL(file);
 }
 
@@ -77,11 +70,9 @@ void triggerFilePicker(String inputId, void Function(String base64, String fileN
       ..style.display = 'none';
     web.document.body?.append(input);
   }
-
   input.onchange = (web.Event event) {
     readSelectedFile(inputId, callback);
   }.toJS;
-
   input.click();
 }
 
@@ -110,7 +101,6 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
 /// Leverages a robust multi-tier fallback to seamlessly bridge new JS interop and legacy types.
 String getInputValue(dynamic event) {
   if (event == null) return '';
-
 // 1. Try modern js_util property access (highly robust, works on raw JS objects, JSObjects, and native browser Events)
   try {
     if (js_util.hasProperty(event, 'target')) {
@@ -125,7 +115,6 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue js_util Error] $e');
   }
-
 // 2. Fallback to dynamic property invocation (handles legacy dart:html or wrapped event variants)
   try {
     final target = (event as dynamic).target;
@@ -138,7 +127,6 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue dynamic Fallback Error] $e');
   }
-
 // 3. Fallback to package:web extension type matching
   try {
     if (event is web.Event) {
@@ -149,7 +137,6 @@ String getInputValue(dynamic event) {
       }
     }
   } catch (_) {}
-
   return '';
 }
 
@@ -164,4 +151,14 @@ void redirectFanzinePath(dynamic context, String shortCode) {
   } catch (e) {
     print('[redirectFanzinePath Error] $e');
   }
+}
+
+/// Browser-specific preference saving using package:web.
+void saveLocalPreference(String key, String value) {
+  web.window.localStorage.setItem(key, value);
+}
+
+/// Browser-specific preference retrieval using package:web.
+String? getLocalPreference(String key) {
+  return web.window.localStorage.getItem(key);
 }
