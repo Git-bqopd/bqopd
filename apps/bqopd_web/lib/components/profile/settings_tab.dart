@@ -7,32 +7,30 @@ import '../../utils/web_utils.dart';
 import '../../utils/icon_utils.dart';
 
 /// Customizable toolbar configurations, managed profiles form, global default shortcodes, and administrator role parameters.
-class SettingsTab extends StatefulComponent {
+class ProfileSettingsTab extends StatefulComponent {
   final UserAccount? viewerAccount;
   final String targetUserId;
   final bool isMe;
-  final List<Map<String, dynamic>> allManagedProfiles;
-  final List<Map<String, dynamic>> allSystemUsers;
+  final IUserRepository userRepository;
   final int initialSubTab;
-  final void Function(int) onSubTabChanged;
+  final ValueChanged<int> onSubTabChanged;
 
-  const SettingsTab({
+  const ProfileSettingsTab({
     required this.viewerAccount,
     required this.targetUserId,
     required this.isMe,
-    required this.allManagedProfiles,
-    required this.allSystemUsers,
+    required this.userRepository,
     required this.initialSubTab,
     required this.onSubTabChanged,
     super.key,
   });
 
   @override
-  State<SettingsTab> createState() => _SettingsTabState();
+  State<ProfileSettingsTab> createState() => _ProfileSettingsTabState();
 }
 
-class _SettingsTabState extends State<SettingsTab> {
-  int _activeSubTab = 0;
+class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
+  int _activeSubTab = 0; // 0: shortcodes, 1: managed profiles, 2: permissions, 3: social buttons
   Map<String, bool> _socialButtonVisibility = {};
 
   // Create Managed Profile Inputs
@@ -46,6 +44,16 @@ class _SettingsTabState extends State<SettingsTab> {
   String _registerZineShortcode = '';
   bool _isSavingSettings = false;
 
+  // Real-time Managed profiles streams
+  List<Map<String, dynamic>> _managedProfiles = [];
+  bool _loadingManaged = true;
+  FirebaseSubscription? _managedSub;
+
+  // Real-time User Accounts list
+  List<Map<String, dynamic>> _allSystemUsers = [];
+  bool _loadingUsers = true;
+  FirebaseSubscription? _usersSub;
+
   @override
   void initState() {
     super.initState();
@@ -54,17 +62,38 @@ class _SettingsTabState extends State<SettingsTab> {
       _socialButtonVisibility = Map<String, bool>.from(component.viewerAccount!.preferences['socialButtons']);
     }
     _loadGlobalSettings();
+
+    // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
+    if (kIsWeb) {
+      Future.microtask(() {
+        if (mounted) {
+          _listenToManagedProfiles();
+          _listenToSystemUsers();
+        }
+      });
+    }
   }
 
   @override
-  void didUpdateComponent(SettingsTab oldComponent) {
+  void didUpdateComponent(ProfileSettingsTab oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.initialSubTab != component.initialSubTab) {
       _activeSubTab = component.initialSubTab;
     }
+    if (oldComponent.targetUserId != component.targetUserId && kIsWeb) {
+      _listenToManagedProfiles();
+      _listenToSystemUsers();
+    }
     if (component.viewerAccount != null && component.viewerAccount!.preferences.containsKey('socialButtons')) {
       _socialButtonVisibility = Map<String, bool>.from(component.viewerAccount!.preferences['socialButtons']);
     }
+  }
+
+  @override
+  void dispose() {
+    _managedSub?.callAsFunction();
+    _usersSub?.callAsFunction();
+    super.dispose();
   }
 
   Future<void> _loadGlobalSettings() async {
@@ -80,6 +109,63 @@ class _SettingsTabState extends State<SettingsTab> {
     } catch (e) {
       print("Error loading global settings: $e");
     }
+  }
+
+  void _listenToManagedProfiles() {
+    _managedSub?.callAsFunction();
+    _managedSub = null;
+    setState(() => _loadingManaged = true);
+
+    _managedSub = fsListenQuery('profiles', 'isManaged', '==', jsonEncode(true), '', false, (String jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final profiles = decoded.map((d) {
+          final data = d['data'] as Map<String, dynamic>;
+          data['id'] = d['id'];
+          return data;
+        }).where((p) {
+          final List managers = p['managers'] ?? [];
+          return managers.contains(component.targetUserId);
+        }).toList();
+
+        if (mounted) {
+          setState(() {
+            _managedProfiles = profiles;
+            _loadingManaged = false;
+          });
+        }
+      } catch (e) {
+        print("Error parsing managed profiles: $e");
+        if (mounted) setState(() => _loadingManaged = false);
+      }
+    });
+  }
+
+  void _listenToSystemUsers() {
+    _usersSub?.callAsFunction();
+    _usersSub = null;
+    setState(() => _loadingUsers = true);
+
+    _usersSub = fsListenQuery('Users', '', '', '', '', false, (String jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final users = decoded.map((d) {
+          final data = d['data'] as Map<String, dynamic>;
+          data['id'] = d['id'];
+          return data;
+        }).toList();
+
+        if (mounted) {
+          setState(() {
+            _allSystemUsers = users;
+            _loadingUsers = false;
+          });
+        }
+      } catch (e) {
+        print("Error loading users: $e");
+        if (mounted) setState(() => _loadingUsers = false);
+      }
+    });
   }
 
   Future<void> _saveGlobalSettings() async {
@@ -162,132 +248,202 @@ class _SettingsTabState extends State<SettingsTab> {
     final togglableTools = ReaderToolsConfig.tools
         .where((t) => t.id != 'Settings' && t.role == ToolRole.public)
         .toList();
-    return div([
-      h2([text("CUSTOMIZE SOCIAL TOOLBAR BUTTONS")], classes: 'font-bold text-sm text-gray mb-4'),
-      for (var tool in togglableTools)
-        _buildToolbarButtonSettingsRow(tool)
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
+    return div(
+        [
+          h2([text("CUSTOMIZE SOCIAL TOOLBAR BUTTONS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+          for (var tool in togglableTools)
+            _buildToolbarButtonSettingsRow(tool)
+        ],
+        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
+        attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'}
+    );
   }
 
   Component _buildToolbarButtonSettingsRow(ReaderTool tool) {
     final bool isVisible = _socialButtonVisibility[tool.id] ?? true;
     final resolvedIcon = cleanIconName(tool.defaultIcon);
-    return div([
-      div([
-        span([text(resolvedIcon)], classes: 'material-symbols-outlined text-gray-500', attributes: const {'style': 'font-size: 22px;'}),
-        span([], attributes: const {'style': 'display: inline-block; width: 16px;'}),
-        span([text(tool.label)], attributes: const {'style': 'font-size: 14px; font-weight: bold; color: black;'})
-      ], attributes: const {'style': 'display: flex; align-items: center;'}),
-      div([
-        div([], attributes: {
-          'style': 'width: 20px; height: 20px; border-radius: 50%; background-color: white; transition: left 0.25s; position: absolute; '
-              'left: ${isVisible ? '22px' : '2px'};'
-        })
-      ], attributes: {
-        'style': 'width: 44px; height: 24px; border-radius: 100px; padding: 2px; position: relative; transition: background 0.25s; cursor: pointer; '
-            'background-color: ${isVisible ? '#6750A4' : '#ccc'};'
-      })
-    ], classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all', attributes: const {
-      'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; cursor: pointer;'
-    }, events: {
-      'click': (e) => _toggleSocialButtonVisibility(tool.id)
-    });
+    return div(
+        [
+          div(
+            [
+              span([text(resolvedIcon)], classes: 'material-symbols-outlined text-gray-500', attributes: const {'style': 'font-size: 22px;'}),
+              span([], attributes: const {'style': 'display: inline-block; width: 16px;'}),
+              span([text(tool.label)], attributes: const {'style': 'font-size: 14px; font-weight: bold; color: black;'})
+            ],
+            attributes: const {'style': 'display: flex; align-items: center;'},
+          ),
+          div(
+              [
+                div(
+                    [],
+                    attributes: {
+                      'style': 'width: 20px; height: 20px; border-radius: 50%; background-color: white; transition: left 0.25s; position: absolute; '
+                          'left: ${isVisible ? '22px' : '2px'}; top: 2px;'
+                    }
+                )
+              ],
+              attributes: {
+                'style': 'width: 44px; height: 24px; border-radius: 100px; padding: 2px; position: relative; transition: background 0.25s; cursor: pointer; box-sizing: border-box; '
+                    'background-color: ${isVisible ? '#6750A4' : '#ccc'};'
+              }
+          )
+        ],
+        classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all',
+        attributes: const {
+          'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; cursor: pointer; padding: 12px;'
+        },
+        events: {
+          'click': (e) => _toggleSocialButtonVisibility(tool.id)
+        }
+    );
   }
 
   Component _buildManagedProfilesSettingsView() {
-    return div([
-      div([
-        h3([text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black'),
-        div([
-          input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
-          span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
-          input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName}, events: {'input': (e) => _newManagedLastName = getInputValue(e)}),
-        ], attributes: const {'style': 'display: flex; gap: 12px;'}),
-        input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio}, events: {'input': (e) => _newManagedBio = getInputValue(e)}),
-        button(
-            [text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
-            classes: 'btn-primary nav-pill',
-            attributes: _isCreatingManagedProfile
-                ? const {'disabled': 'true', 'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px;'}
-                : const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px;'},
-            events: {'click': (e) => _createManagedProfile()}
-        )
-      ], attributes: const {'style': 'border: 1px dashed #ccc; padding: 20px; border-radius: 8px; background-color: #fcfcfc; display: flex; flex-direction: column; gap: 12px;'}),
+    return div(
+        [
+          div(
+            [
+              h3([text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin-top: 0;'}),
+              div(
+                [
+                  input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
+                  span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
+                  input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedLastName = getInputValue(e)}),
+                ],
+                attributes: const {'style': 'display: flex; gap: 12px; width: 100%; box-sizing: border-box;'},
+              ),
+              input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedBio = getInputValue(e)},),
+              button(
+                  [text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
+                  classes: 'btn-primary nav-pill',
+                  attributes: _isCreatingManagedProfile
+                      ? const {'disabled': 'true', 'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px;'}
+                      : const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px; background-color: #6750A4; color: white; border-radius: 18px; border: none; font-weight: bold; cursor: pointer;'},
+                  events: {'click': (e) => _createManagedProfile()}
+              )
+            ],
+            attributes: const {'style': 'border: 1px dashed #ccc; padding: 20px; border-radius: 8px; background-color: #fcfcfc; display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;'},
+          ),
 
-      if (component.allManagedProfiles.isNotEmpty) ...[
-        div([], attributes: const {'style': 'height: 24px;'}),
-        h3([text("PROFILES CURRENTLY UNDER YOUR MANAGEMENT")], classes: 'font-bold text-xs text-gray mt-4'),
-        div([], attributes: const {'style': 'height: 8px;'}),
-        div([
-          for (var p in component.allManagedProfiles)
-            a([
-              span([text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-              span([text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px;'})
-            ], href: '/${p['username']}', classes: 'bg-gray-50 hover:bg-gray-100 rounded-md p-4 transition-all', attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #eee; cursor: pointer;'})
-        ], attributes: const {'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;'})
-      ]
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-6');
+          if (_managedProfiles.isNotEmpty) ...[
+            div([], attributes: const {'style': 'height: 24px;'}),
+            h3([text("PROFILES CURRENTLY UNDER YOUR MANAGEMENT")], classes: 'font-bold text-xs text-gray mt-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
+            div(
+                [
+                  for (var p in _managedProfiles)
+                    a(
+                        [
+                          span([text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
+                          span([text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px;'})
+                        ],
+                        href: '/${p['username']}',
+                        classes: 'bg-gray-50 hover:bg-gray-100 rounded-md p-4 transition-all',
+                        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #eee; cursor: pointer; padding: 12px; border-radius: 6px; text-decoration: none;'}
+                    )
+                ],
+                attributes: const {'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; width: 100%; box-sizing: border-box;'}
+            )
+          ]
+        ],
+        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-6',
+        attributes: const {'style': 'display: flex; flex-direction: column; gap: 24px; padding: 24px; background: white; box-sizing: border-box;'}
+    );
   }
 
   Component _buildShortcodesSettingsView() {
-    return div([
-      h2([text("GLOBAL CONGESTION ROUTING SHORTCODES")], classes: 'font-bold text-sm text-gray mb-4'),
-      p([text("Configure the default shortcode bindings representing the Global 'Book of the Week' presented to guests on sign in or registration workflows.")], classes: 'text-xs text-gray italic leading-relaxed'),
-      div([], attributes: const {'style': 'height: 12px;'}),
-      div([
-        span([text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray'),
-        input(attributes: {'value': _loginZineShortcode}, events: {'input': (e) => _loginZineShortcode = getInputValue(e)})
-      ], classes: 'flex-col gap-2'),
-      div([
-        span([text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray'),
-        input(attributes: {'value': _registerZineShortcode}, events: {'input': (e) => _registerZineShortcode = getInputValue(e)})
-      ], classes: 'flex-col gap-2'),
-      div([], attributes: const {'style': 'height: 12px;'}),
-      button(
-          [text(_isSavingSettings ? "saving..." : "save settings")],
-          classes: 'btn-primary nav-pill',
-          attributes: _isSavingSettings
-              ? const {'disabled': 'true', 'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px;'}
-              : const {'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px;'},
-          events: {'click': (e) => _saveGlobalSettings()}
-      )
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
+    return div(
+        [
+          h2([text("GLOBAL CONGESTION ROUTING SHORTCODES")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+          p([text("Configure the default shortcode bindings representing the Global 'Book of the Week' presented to guests on sign in or registration workflows.")], classes: 'text-xs text-gray italic leading-relaxed', attributes: const {'style': 'margin: 0;'}),
+          div([], attributes: const {'style': 'height: 12px;'}),
+          div(
+              [
+                span([text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
+                input(attributes: {'value': _loginZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _loginZineShortcode = getInputValue(e)})
+              ],
+              classes: 'flex-col gap-2',
+              attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'}
+          ),
+          div(
+              [
+                span([text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
+                input(attributes: {'value': _registerZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _registerZineShortcode = getInputValue(e)})
+              ],
+              classes: 'flex-col gap-2',
+              attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'}
+          ),
+          div([], attributes: const {'style': 'height: 12px;'}),
+          button(
+              [text(_isSavingSettings ? "saving..." : "save settings")],
+              classes: 'btn-primary nav-pill',
+              attributes: _isSavingSettings
+                  ? const {'disabled': 'true', 'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px;'}
+                  : const {'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px; background-color: #6750A4; color: white; border-radius: 19px; border: none; font-weight: bold; cursor: pointer;'},
+              events: {'click': (e) => _saveGlobalSettings()}
+          )
+        ],
+        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
+        attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'}
+    );
   }
 
   Component _buildPermissionsSettingsView() {
-    if (component.allSystemUsers.isEmpty) {
-      return div([
-        p([text('No registered Users loaded.')], classes: 'text-sm text-gray italic')
-      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
+    if (_loadingUsers) {
+      return div(
+        [p([text('Loading system accounts...')])],
+        classes: 'p-16 text-center text-gray italic text-sm',
+      );
     }
-    return div([
-      h2([text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4'),
-      for (var u in component.allSystemUsers)
-        _buildUserPermissionManagerRow(u)
-    ], classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4');
+
+    if (_allSystemUsers.isEmpty) {
+      return div(
+        [p([text('No registered Users loaded.')], classes: 'text-sm text-gray italic')],
+        classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
+      );
+    }
+    return div(
+        [
+          h2([text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+          for (var u in _allSystemUsers)
+            _buildUserPermissionManagerRow(u)
+        ],
+        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
+        attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'}
+    );
   }
 
   Component _buildUserPermissionManagerRow(Map<String, dynamic> u) {
     final String uid = u['uid'] ?? u['id'] ?? '';
     final String email = u['email'] ?? 'guest';
     final String currentRole = u['role'] ?? 'user';
-    return div([
-      div([
-        span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-        span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'})
-      ], classes: 'flex-col gap-1'),
-      div([
-        _buildRoleBadgeSelector(uid, "admin", currentRole),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        _buildRoleBadgeSelector(uid, "moderator", currentRole),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        _buildRoleBadgeSelector(uid, "curator", currentRole),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        _buildRoleBadgeSelector(uid, "user", currentRole)
-      ], attributes: const {'style': 'display: flex; gap: 8px;'})
-    ], classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all', attributes: const {
-      'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5;'
-    });
+    return div(
+        [
+          div(
+              [
+                span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
+                span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'})
+              ],
+              classes: 'flex-col gap-1',
+              attributes: const {'style': 'display: flex; flex-direction: column; gap: 4px;'}
+          ),
+          div(
+              [
+                _buildRoleBadgeSelector(uid, "admin", currentRole),
+                span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
+                _buildRoleBadgeSelector(uid, "moderator", currentRole),
+                span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
+                _buildRoleBadgeSelector(uid, "curator", currentRole),
+                span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
+                _buildRoleBadgeSelector(uid, "user", currentRole)
+              ],
+              attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'}
+          )
+        ],
+        classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all',
+        attributes: const {
+          'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; padding: 12px;'
+        }
+    );
   }
 
   Component _buildRoleBadgeSelector(String uid, String role, String activeRole) {
@@ -295,7 +451,9 @@ class _SettingsTabState extends State<SettingsTab> {
     return button(
         [text(role)],
         classes: isSelected ? 'active m3-chip' : 'm3-chip',
-        attributes: const {'style': 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: none; text-transform: uppercase;'},
+        attributes: const {
+          'style': 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: none; text-transform: uppercase;'
+        },
         events: {'click': (e) => _updateUserPermission(uid, role)}
     );
   }
@@ -304,49 +462,72 @@ class _SettingsTabState extends State<SettingsTab> {
   Component build(BuildContext context) {
     final bool isViewerAdmin = component.viewerAccount?.role == 'admin' || (component.viewerAccount?.roles.contains('admin') ?? false);
 
-    return div([
-      div([
-        span([text("toolbar buttons")], classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer', events: {
-          'click': (e) {
-            setState(() => _activeSubTab = 3);
-            component.onSubTabChanged(3);
-          }
-        }),
-        span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-        span([text("managed profiles")], classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer', events: {
-          'click': (e) {
-            setState(() => _activeSubTab = 1);
-            component.onSubTabChanged(1);
-          }
-        }),
-        if (isViewerAdmin) ...[
-          span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-          span([text("shortcodes")], classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer', events: {
-            'click': (e) {
-              setState(() => _activeSubTab = 0);
-              component.onSubTabChanged(0);
-            }
-          }),
-          span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-          span([text("permissions")], classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer', events: {
-            'click': (e) {
-              setState(() => _activeSubTab = 2);
-              component.onSubTabChanged(2);
-            }
-          }),
-        ]
-      ], classes: 'bg-white rounded-md p-4 shadow-sm', attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}),
+    return div(
+      [
+        // Navigation segment
+        div(
+            [
+              span(
+                  [text("toolbar buttons")],
+                  classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+                  events: {
+                    'click': (e) {
+                      setState(() => _activeSubTab = 3);
+                      component.onSubTabChanged(3);
+                    }
+                  }
+              ),
+              span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+              span(
+                  [text("managed profiles")],
+                  classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+                  events: {
+                    'click': (e) {
+                      setState(() => _activeSubTab = 1);
+                      component.onSubTabChanged(1);
+                    }
+                  }
+              ),
+              if (isViewerAdmin) ...[
+                span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+                span(
+                    [text("shortcodes")],
+                    classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+                    events: {
+                      'click': (e) {
+                        setState(() => _activeSubTab = 0);
+                        component.onSubTabChanged(0);
+                      }
+                    }
+                ),
+                span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+                span(
+                    [text("permissions")],
+                    classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+                    events: {
+                      'click': (e) {
+                        setState(() => _activeSubTab = 2);
+                        component.onSubTabChanged(2);
+                      }
+                    }
+                ),
+              ]
+            ],
+            classes: 'bg-white rounded-md p-4 shadow-sm',
+            attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
+        ),
 
-      if (_activeSubTab == 3)
-        _buildSocialButtonsSettingsView()
-      else if (_activeSubTab == 1)
-        _buildManagedProfilesSettingsView()
-      else if (_activeSubTab == 0 && isViewerAdmin)
-          _buildShortcodesSettingsView()
-        else if (_activeSubTab == 2 && isViewerAdmin)
-            _buildPermissionsSettingsView()
-          else
-            div([])
-    ]);
+        if (_activeSubTab == 3)
+          _buildSocialButtonsSettingsView()
+        else if (_activeSubTab == 1)
+          _buildManagedProfilesSettingsView()
+        else if (_activeSubTab == 0 && isViewerAdmin)
+            _buildShortcodesSettingsView()
+          else if (_activeSubTab == 2 && isViewerAdmin)
+              _buildPermissionsSettingsView()
+            else
+              div([])
+      ],
+    );
   }
 }

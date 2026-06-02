@@ -1,61 +1,90 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:bqopd_core/bqopd_core.dart';
 import 'package:jaspr_router/jaspr_router.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
-import 'maker_upload_form.dart';
+import './maker_upload_form.dart';
 
 /// Maker Tab content displaying publications and folios.
-/// Houses the selector modal and manages state transitions between grids and custom forms.
-class MakerTab extends StatefulComponent {
-  final List<Map<String, dynamic>> userWorks;
+/// Streams live works using clean repositories instead of direct DB lookups.
+class ProfileMakerTab extends StatefulComponent {
+  final String targetUserId;
   final bool isMe;
   final bool canSeeDrafts;
-  final String targetUserId;
+  final IUserRepository userRepository;
   final AuthState? authState;
-  final bool initialShowDrafts;
-  final void Function(bool) onDraftsToggle;
 
-  const MakerTab({
-    required this.userWorks,
+  const ProfileMakerTab({
+    required this.targetUserId,
     required this.isMe,
     required this.canSeeDrafts,
-    required this.targetUserId,
+    required this.userRepository,
     this.authState,
-    required this.initialShowDrafts,
-    required this.onDraftsToggle,
     super.key,
   });
 
   @override
-  State<MakerTab> createState() => _MakerTabState();
+  State<ProfileMakerTab> createState() => _ProfileMakerTabState();
 }
 
-class _MakerTabState extends State<MakerTab> {
+class _ProfileMakerTabState extends State<ProfileMakerTab> {
   bool _showDrafts = false;
   bool _showMakerModal = false;
   String _makerModalMode = 'options'; // 'options', 'upload'
 
+  List<Map<String, dynamic>> _userWorks = [];
+  StreamSubscription? _worksSub;
+  bool _loading = true;
+
   @override
   void initState() {
     super.initState();
-    _showDrafts = component.initialShowDrafts;
-  }
 
-  @override
-  void didUpdateComponent(MakerTab oldComponent) {
-    super.didUpdateComponent(oldComponent);
-    if (oldComponent.initialShowDrafts != component.initialShowDrafts) {
-      _showDrafts = component.initialShowDrafts;
+    // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
+    if (kIsWeb) {
+      Future.microtask(() {
+        if (mounted) {
+          _listenToWorks();
+        }
+      });
     }
   }
 
+  @override
+  void didUpdateComponent(ProfileMakerTab oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.targetUserId != component.targetUserId && kIsWeb) {
+      _listenToWorks();
+    }
+  }
+
+  @override
+  void dispose() {
+    _worksSub?.cancel();
+    super.dispose();
+  }
+
+  void _listenToWorks() {
+    _worksSub?.cancel();
+    setState(() => _loading = true);
+
+    _worksSub = component.userRepository.watchUserWorks(component.targetUserId).listen((works) {
+      if (mounted) {
+        setState(() {
+          _userWorks = works;
+          _loading = false;
+        });
+      }
+    });
+  }
+
   List<Map<String, dynamic>> get _publishedWorks =>
-      component.userWorks.where((w) => w['isLive'] == true).toList();
+      _userWorks.where((w) => w['isLive'] == true).toList();
   List<Map<String, dynamic>> get _draftWorks =>
-      component.userWorks.where((w) => w['isLive'] != true).toList();
+      _userWorks.where((w) => w['isLive'] != true).toList();
 
   Future<String> _generateUniqueTempShortcode() async {
     final String? email = component.authState?.user?.email;
@@ -139,76 +168,105 @@ class _MakerTabState extends State<MakerTab> {
   }
 
   Component _buildMakerOptionsContent() {
-    return div(classes: 'white-sticker p-6 w-full h-full flex flex-col justify-center items-center', [
-      h1(classes: 'font-bold text-lg text-center mb-6', [text('maker options')]),
-      button(
-          [text("single image")],
-          classes: 'profile-btn mb-4',
-          attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
-          events: {'click': (e) => setState(() => _makerModalMode = 'upload')}
-      ),
-      button(
-          [text("folio")],
-          classes: 'profile-btn mb-4',
-          attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
-          events: {'click': (e) => _createFolio()}
-      ),
-      button(
-          [text("calendar")],
-          classes: 'profile-btn mb-4',
-          attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
-          events: {'click': (e) => _createCalendar()}
-      ),
-    ]);
+    return div(
+      [
+        h1([text('maker options')], classes: 'font-bold text-lg text-center mb-6', attributes: const {'style': 'margin-top: 0;'}),
+        button(
+            [text("single image")],
+            classes: 'profile-btn mb-4',
+            attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px;'},
+            events: {'click': (e) => setState(() => _makerModalMode = 'upload')}
+        ),
+        button(
+            [text("folio")],
+            classes: 'profile-btn mb-4',
+            attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px;'},
+            events: {'click': (e) => _createFolio()}
+        ),
+        button(
+            [text("calendar")],
+            classes: 'profile-btn mb-4',
+            attributes: const {'style': 'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px;'},
+            events: {'click': (e) => _createCalendar()}
+        ),
+      ],
+      classes: 'white-sticker p-6 w-full h-full flex flex-col justify-center items-center',
+      attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 24px; box-sizing: border-box; width: 100%; height: 100%;'},
+    );
   }
 
   Component _buildMakerModalOverlay() {
     final bool isUploadMode = _makerModalMode == 'upload';
-    return div([
-      if (!isUploadMode)
-        div([
-          button(
-              [text('close')],
-              classes: 'modal-close-btn',
-              attributes: const {'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'},
-              events: {'click': (e) => setState(() => _showMakerModal = false)}
-          ),
-          _buildMakerOptionsContent()
-        ], classes: 'manila-envelope', attributes: const {'style': 'max-width: 420px; max-height: 580px; border-radius: 12px; overflow: hidden; position: relative;'})
-      else
-        div([
-          button(
-              [text('close')],
-              classes: 'modal-close-btn',
-              attributes: const {'style': 'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'},
-              events: {'click': (e) => setState(() => _showMakerModal = false)}
-          ),
-          MakerUploadForm(
-              targetUserId: component.targetUserId,
-              authState: component.authState,
-              onBack: () => setState(() => _makerModalMode = 'options'),
-              onUploadComplete: (shortcode) {
-                setState(() => _showMakerModal = false);
-                Router.of(context).replace('/$shortcode');
-              }
-          )
-        ], classes: 'upload-list-wrapper', attributes: const {'style': 'width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; padding: 16px; position: relative; overflow-y: auto;'})
-    ], classes: 'global-modal-overlay', attributes: const {'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'});
+    return div(
+        [
+          if (!isUploadMode)
+            div(
+                [
+                  button(
+                      [text('close')],
+                      classes: 'modal-close-btn',
+                      attributes: const {'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'},
+                      events: {'click': (e) => setState(() => _showMakerModal = false)}
+                  ),
+                  _buildMakerOptionsContent()
+                ],
+                classes: 'manila-envelope',
+                attributes: const {'style': 'max-width: 420px; max-height: 580px; border-radius: 12px; overflow: hidden; position: relative;'}
+            )
+          else
+            div(
+                [
+                  button(
+                      [text('close')],
+                      classes: 'modal-close-btn',
+                      attributes: const {'style': 'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'},
+                      events: {'click': (e) => setState(() => _showMakerModal = false)}
+                  ),
+                  MakerUploadForm(
+                      targetUserId: component.targetUserId,
+                      authState: component.authState,
+                      onBack: () => setState(() => _makerModalMode = 'options'),
+                      onUploadComplete: (shortcode) {
+                        setState(() => _showMakerModal = false);
+                        Router.of(context).replace('/$shortcode');
+                      }
+                  )
+                ],
+                classes: 'upload-list-wrapper',
+                attributes: const {'style': 'width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; padding: 16px; position: relative; overflow-y: auto;'}
+            )
+        ],
+        classes: 'global-modal-overlay',
+        attributes: const {'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'}
+    );
   }
 
   Component _buildWorksGridSchema(List<Map<String, dynamic>> works) {
-    if (works.isEmpty) {
-      return div([
-        span([text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
-        p([text('No items available in this category.')], classes: 'text-sm text-gray italic mt-4')
-      ], classes: 'bg-white rounded-lg p-16 shadow-sm text-center');
+    if (_loading) {
+      return div(
+        [p([text('Loading maker assets...')])],
+        classes: 'p-16 text-center text-gray italic text-sm',
+      );
     }
-    return div([
-      for (var w in works)
-        _buildWorkGridTile(w)
-    ], attributes: const {
-      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;'
-    });
+
+    if (works.isEmpty) {
+      return div(
+        [
+          span([text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
+          p([text('No items available in this category.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
+        ],
+        classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
+      );
+    }
+    return div(
+        [
+          for (var w in works)
+            _buildWorkGridTile(w)
+        ],
+        attributes: const {
+          'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;'
+        }
+    );
   }
 
   Component _buildWorkGridTile(Map<String, dynamic> w) {
@@ -228,65 +286,89 @@ class _MakerTabState extends State<MakerTab> {
     final String codeKey = w['shortCode'] ?? fanzineId;
     return a(
         [
-          div([
-            div([text(w['type'] ?? 'ingested')], attributes: const {
-              'style': 'position: absolute; top: 8px; left: 8px; background-color: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px; font-size: 8px; font-weight: bold; text-transform: uppercase;'
-            })
-          ], attributes: {
-            'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
-          }),
-          div([
-            span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
-            if (displaySuffix.isNotEmpty)
-              span([text(displaySuffix)], attributes: const {'style': 'font-size: 11px; color: #666;'})
-          ], attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'})
+          div(
+              [
+                div([text(w['type'] ?? 'ingested')], attributes: const {
+                  'style': 'position: absolute; top: 8px; left: 8px; background-color: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px; font-size: 8px; font-weight: bold; text-transform: uppercase;'
+                })
+              ],
+              attributes: {
+                'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
+              }
+          ),
+          div(
+              [
+                span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
+                if (displaySuffix.isNotEmpty)
+                  span([text(displaySuffix)], attributes: const {'style': 'font-size: 11px; color: #666;'})
+              ],
+              attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'}
+          )
         ],
         href: '/$codeKey',
         classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
-        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer;'}
+        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'}
     );
   }
 
   @override
   Component build(BuildContext context) {
-    return div([
-      // Toolbar switch published / drafts
-      div([
-        div([
-          if (component.isMe) ...[
-            button(
-                [text("make")],
-                classes: 'profile-btn',
-                attributes: const {'style': 'width: 100px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer;'},
-                events: {'click': (e) => setState(() {
-                  _showMakerModal = true;
-                  _makerModalMode = 'options';
-                })}
-            ),
-            span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
-          ],
-          span([text("published")], classes: !_showDrafts ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer', events: {
-            'click': (e) {
-              setState(() => _showDrafts = false);
-              component.onDraftsToggle(false);
-            }
-          }),
-          if (component.canSeeDrafts) ...[
-            span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-            span([text("drafts")], classes: _showDrafts ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer', events: {
-              'click': (e) {
-                setState(() => _showDrafts = true);
-                component.onDraftsToggle(true);
-              }
-            }),
-          ]
-        ], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; width: 100%;'})
-      ], classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-center', attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}),
+    if (!kIsWeb) {
+      return div(
+        [p([text('Loading maker assets...')])],
+        classes: 'p-16 text-center text-gray italic text-sm',
+      );
+    }
 
-      _buildWorksGridSchema(_showDrafts ? _draftWorks : _publishedWorks),
+    return div(
+      [
+        // Toolbar switch published / drafts
+        div(
+            [
+              div(
+                  [
+                    if (component.isMe) ...[
+                      button(
+                          [text("make")],
+                          classes: 'profile-btn',
+                          attributes: const {'style': 'width: 100px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white;'},
+                          events: {'click': (e) => setState(() {
+                            _showMakerModal = true;
+                            _makerModalMode = 'options';
+                          })}
+                      ),
+                      span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
+                    ],
+                    span(
+                        [text("published")],
+                        classes: !_showDrafts ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+                        events: {
+                          'click': (e) => setState(() => _showDrafts = false)
+                        }
+                    ),
+                    if (component.canSeeDrafts) ...[
+                      span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+                      span(
+                          [text("drafts")],
+                          classes: _showDrafts ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+                          events: {
+                            'click': (e) => setState(() => _showDrafts = true)
+                          }
+                      ),
+                    ]
+                  ],
+                  attributes: const {'style': 'display: flex; align-items: center; justify-content: center; width: 100%;'}
+              )
+            ],
+            classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-center',
+            attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
+        ),
 
-      if (_showMakerModal)
-        _buildMakerModalOverlay()
-    ]);
+        _buildWorksGridSchema(_showDrafts ? _draftWorks : _publishedWorks),
+
+        if (_showMakerModal)
+          _buildMakerModalOverlay()
+      ],
+    );
   }
 }

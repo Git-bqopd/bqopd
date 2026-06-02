@@ -5,18 +5,26 @@ import '../utils/web_firebase_interop.dart';
 import '../utils/firebase_mocks.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 
+/// Concrete web implementation of IFanzineRepository using Firebase JS SDK Interop.
+/// Integrates seamlessly with the in-memory UnsavedFanzineRegistry for draft folios.
 class WebFanzineRepository implements IFanzineRepository {
   @override
   Stream<Fanzine> watchFanzineModel(String fanzineId) {
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
-      return UnsavedFanzineRegistry.getOrCreateFanzineController(fanzineId).stream.cast<Fanzine>();
+      return UnsavedFanzineRegistry.watchFanzine(fanzineId);
     }
 
     final controller = StreamController<Fanzine>();
     final unsub = fsListenDoc('fanzines/$fanzineId', (String jsonStr) {
-      final decoded = jsonDecode(jsonStr);
-      if (decoded['exists'] == true) {
-        controller.add(Fanzine.fromMap(decoded['id'], restoreTimestamps(decoded['data'])));
+      try {
+        final decoded = jsonDecode(jsonStr);
+        if (decoded['exists'] == true && !controller.isClosed) {
+          controller.add(Fanzine.fromMap(decoded['id'], restoreTimestamps(decoded['data'])));
+        }
+      } catch (e) {
+        if (!controller.isClosed) {
+          controller.addError(e);
+        }
       }
     });
     controller.onCancel = () { unsub.callAsFunction(); };
@@ -26,16 +34,24 @@ class WebFanzineRepository implements IFanzineRepository {
   @override
   Stream<List<FanzinePage>> watchPageModels(String fanzineId) {
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
-      return UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).stream.cast<List<FanzinePage>>();
+      return UnsavedFanzineRegistry.watchPages(fanzineId);
     }
 
     final controller = StreamController<List<FanzinePage>>();
     final unsub = fsListenQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber', false, (String jsonStr) {
-      final List decoded = jsonDecode(jsonStr);
-      final pages = decoded.map((d) {
-        return FanzinePage.fromMap(d['id'], restoreTimestamps(d['data']));
-      }).toList();
-      controller.add(pages);
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final pages = decoded.map((d) {
+          return FanzinePage.fromMap(d['id'], restoreTimestamps(d['data']));
+        }).toList();
+        if (!controller.isClosed) {
+          controller.add(pages);
+        }
+      } catch (e) {
+        if (!controller.isClosed) {
+          controller.addError(e);
+        }
+      }
     });
     controller.onCancel = () { unsub.callAsFunction(); };
     return controller.stream;
@@ -44,6 +60,89 @@ class WebFanzineRepository implements IFanzineRepository {
   @override
   Future<void> updateFanzine(String fanzineId, Map<String, dynamic> data) async {
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
+      final fz = UnsavedFanzineRegistry.fanzines[fanzineId];
+      if (fz != null) {
+        final updatedFz = Fanzine(
+          id: fz.id,
+          title: data['title'] ?? fz.title,
+          volume: data['volume'] ?? fz.volume,
+          issue: data['issue'] ?? fz.issue,
+          wholeNumber: data['wholeNumber'] ?? fz.wholeNumber,
+          type: fz.type,
+          isLive: data['isLive'] ?? fz.isLive,
+          processingStatus: data['processingStatus'] ?? fz.processingStatus,
+          ownerId: fz.ownerId,
+          editors: fz.editors,
+          twoPage: data['twoPage'] ?? fz.twoPage,
+          hasCover: data['hasCover'] ?? fz.hasCover,
+          shortCode: fz.shortCode,
+          sourceFile: fz.sourceFile,
+          draftEntities: fz.draftEntities,
+          masterCreators: fz.masterCreators,
+          masterIndicia: fz.masterIndicia,
+          indiciaPageId: fz.indiciaPageId,
+          startMonth: fz.startMonth,
+          startYear: fz.startYear,
+          isSoftPublished: fz.isSoftPublished,
+        );
+
+        // COMMIT ENTIRE CONFIGURATION AND CHANNELS TO CLOUD FIRESTORE FOR FIRST TIME
+        final fzDataToSave = {
+          'title': updatedFz.title,
+          'volume': updatedFz.volume,
+          'issue': updatedFz.issue,
+          'wholeNumber': updatedFz.wholeNumber,
+          'type': updatedFz.type.name,
+          'isLive': updatedFz.isLive,
+          'processingStatus': updatedFz.processingStatus,
+          'ownerId': updatedFz.ownerId,
+          'editorId': updatedFz.ownerId,
+          'editors': updatedFz.editors,
+          'twoPage': updatedFz.twoPage,
+          'hasCover': updatedFz.hasCover,
+          'shortCode': updatedFz.shortCode,
+          'shortCodeKey': updatedFz.shortCode?.toUpperCase(),
+          'creationDate': WebFieldValue.serverTimestamp(),
+        };
+
+        // 1. Create master fanzine doc
+        await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzDataToSave), true);
+
+        // 2. Register shortcode master registry doc
+        if (updatedFz.shortCode != null) {
+          final scData = {
+            'type': 'fanzine',
+            'contentId': fanzineId,
+            'displayCode': updatedFz.shortCode,
+            'createdAt': WebFieldValue.serverTimestamp(),
+          };
+          await fsSetDoc('shortcodes/${updatedFz.shortCode!.toUpperCase()}', jsonEncode(scData), true);
+        }
+
+        // 3. Write nested page structures contiguously to subcollections
+        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+        for (var p in pages) {
+          final pageData = {
+            'imageId': p.imageId,
+            'imageUrl': p.imageUrl,
+            'pageNumber': p.pageNumber,
+            'status': p.status,
+            'spreadPosition': p.spreadPosition,
+            'sidePreference': p.sidePreference,
+            'width': p.width,
+            'height': p.height,
+            'createdAt': WebFieldValue.serverTimestamp(),
+          };
+          await fsSetDoc('fanzines/$fanzineId/pages/${p.id}', jsonEncode(pageData), true);
+        }
+
+        // 4. Remove this fanzine from our temporary memory registry
+        UnsavedFanzineRegistry.remove(fanzineId);
+
+        // 5. Update local broad controllers to enforce smooth UX state transition
+        UnsavedFanzineRegistry.getOrCreateFanzineController(fanzineId).add(updatedFz);
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
+      }
       return;
     }
     await fsUpdateDoc('fanzines/$fanzineId', jsonEncode(data));
@@ -71,8 +170,8 @@ class WebFanzineRepository implements IFanzineRepository {
           width: page.width,
           height: page.height,
         );
-        UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
-        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
+        final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
+        UnsavedFanzineRegistry.add(fz, updatedPages);
       }
       return;
     }
@@ -108,8 +207,13 @@ class WebFanzineRepository implements IFanzineRepository {
         height: height,
       );
       final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
-      UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
-      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
+      final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
+      UnsavedFanzineRegistry.add(fz, updatedPages);
+
+      // FIXED: Associate selected non-5x8 orphan assets with the folio so they correctly appear under "INLINE ASSETS"
+      await fsUpdateDoc('images/$imageId', jsonEncode({
+        'usedInFanzines': WebFieldValue.arrayUnion([fanzineId])
+      }));
       return;
     }
 
@@ -148,14 +252,13 @@ class WebFanzineRepository implements IFanzineRepository {
           ));
         }
       }
-      UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
-      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
+      final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
+      UnsavedFanzineRegistry.add(fz, updatedPages);
       return;
     }
 
     await fsDeleteDoc('fanzines/$fanzineId/pages/${page.id}');
 
-    // Shift/Heal subsequent pages
     final leftPages = allPages.where((p) => p.id != page.id).toList();
     for (int i = 0; i < leftPages.length; i++) {
       final item = leftPages[i];
@@ -189,8 +292,8 @@ class WebFanzineRepository implements IFanzineRepository {
           width: p.width,
           height: p.height,
         );
-        UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
-        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
+        final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
+        UnsavedFanzineRegistry.add(fz, updatedPages);
       }
       return;
     }
@@ -231,8 +334,8 @@ class WebFanzineRepository implements IFanzineRepository {
           height: p.height,
         );
       }
-      UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
-      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
+      final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
+      UnsavedFanzineRegistry.add(fz, updatedPages);
       return;
     }
 
@@ -258,7 +361,6 @@ class WebFanzineRepository implements IFanzineRepository {
     final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
     final shortCode = ShortcodeGenerator.generateStandardCode();
 
-    // COMPILE TO WEBP IMMEDIATELY: Ensure the page always resolves as an image from the moment of creation!
     String fileUrl = '';
     String listUrl = '';
     String gridUrl = '';
@@ -314,10 +416,8 @@ class WebFanzineRepository implements IFanzineRepository {
     };
 
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
-      // In-memory list operations
       final List<FanzinePage> currentPages = List.from(UnsavedFanzineRegistry.pages[fanzineId] ?? []);
 
-      // Shift pageNumbers after insertion point
       for (int i = 0; i < currentPages.length; i++) {
         final p = currentPages[i];
         if (p.pageNumber > afterPageNumber) {
@@ -352,19 +452,15 @@ class WebFanzineRepository implements IFanzineRepository {
       );
 
       currentPages.insert(afterPageNumber, newPage);
-      UnsavedFanzineRegistry.pages[fanzineId] = currentPages;
-      // FIXED: Use getOrCreatePagesController to guarantee stream safety
-      UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(currentPages);
+      final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
+      UnsavedFanzineRegistry.add(fz, currentPages);
 
-      // Save simulated image document directly so standard queries can resolve it.
       await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
       return imageId;
     }
 
-    // Persisted Firestore insertion
     await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
 
-    // Shift subsequent pages in parallel
     final List<Future<void>> updates = [];
     for (final p in allPages) {
       if (p.pageNumber > afterPageNumber) {

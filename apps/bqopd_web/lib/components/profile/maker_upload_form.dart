@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:jaspr/jaspr.dart';
@@ -5,15 +6,16 @@ import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
-import '../../utils/web_shortcode_service.dart';
+import '../../repositories/repositories.dart';
 
-/// Single image submission workflow.
-/// Handles image picker triggers, creator listings with active user lookups, and WebP compile steps.
+/// Clean BLoC-driven Maker Upload Form for publishing independent/single images.
+/// Eliminates direct, low-level GCS storage uploads and Firestore mutations from the UI,
+/// routing them through the core [UploadBloc] and [IUploadRepository].
 class MakerUploadForm extends StatefulComponent {
   final String targetUserId;
   final AuthState? authState;
   final VoidCallback onBack;
-  final void Function(String shortcode) onUploadComplete;
+  final ValueChanged<String> onUploadComplete;
 
   const MakerUploadForm({
     required this.targetUserId,
@@ -28,269 +30,376 @@ class MakerUploadForm extends StatefulComponent {
 }
 
 class _MakerUploadFormState extends State<MakerUploadForm> {
-  String _uploadTitle = '';
-  String _uploadDescription = '';
-  String _uploadIndicia = '';
-  String? _uploadError;
-  bool _isUploadingImage = false;
+  late final UploadBloc _uploadBloc;
+  StreamSubscription<UploadState>? _blocSubscription;
+  UploadState _blocState = const UploadState();
 
-  String? _uploadImageBase64;
-  String? _uploadImageName;
-  String? _uploadPreviewUrl;
+  // Local controller states to manage metadata edits prior to starting upload
+  String _title = "";
+  String _caption = "";
+  String _indicia = "";
+  String _roleInput = "";
+  String _creatorHandleInput = "";
 
-  List<Map<String, dynamic>> _uploadCreators = [];
-  String _newCreatorHandle = '';
-  String _newCreatorRole = '';
+  // Temporary local storage references for selected files
+  String? _selectedFileName;
+  String? _selectedObjectUrl;
+  int _imageWidth = 0;
+  int _imageHeight = 0;
 
-  void _pickAndPreviewImage() {
-    triggerFilePicker('maker-upload-picker', (base64, fileName, objectUrl) {
-      setState(() {
-        _uploadImageBase64 = base64;
-        _uploadImageName = fileName;
-        _uploadPreviewUrl = objectUrl;
-        _uploadError = null;
-      });
+  @override
+  void initState() {
+    super.initState();
+    _initUploadBloc();
+  }
+
+  void _initUploadBloc() {
+    _uploadBloc = UploadBloc(
+      repository: createUploadRepository(),
+    );
+
+    _blocSubscription = _uploadBloc.stream.listen((state) {
+      if (mounted) {
+        setState(() {
+          _blocState = state;
+        });
+
+        // SUCCESS ROUTING TRIGGER: When the BLoC successfully publishes, retrieve the newly created shortcode
+        if (state.status == UploadStatus.success) {
+          _resolveNewShortcodeAndComplete();
+        }
+      }
     });
   }
 
-  void _onFileInputChanged() {
-    readSelectedFile('maker-upload-picker', (base64, fileName, objectUrl) {
-      setState(() {
-        _uploadImageBase64 = base64;
-        _uploadImageName = fileName;
-        _uploadPreviewUrl = objectUrl;
-        _uploadError = null;
-      });
+  @override
+  void dispose() {
+    _blocSubscription?.cancel();
+    _uploadBloc.close();
+    super.dispose();
+  }
+
+  void _triggerFileSelection() {
+    triggerFilePicker('single-asset-maker-picker', (base64, fileName, objectUrl) async {
+      try {
+        final dims = await getImageDimensions(objectUrl);
+        final Uint8List bytes = base64Decode(base64);
+
+        if (mounted) {
+          setState(() {
+            _selectedFileName = fileName;
+            _selectedObjectUrl = objectUrl;
+            _imageWidth = dims['width'] ?? 0;
+            _imageHeight = dims['height'] ?? 0;
+
+            // Default title to file name if empty
+            if (_title.isEmpty) {
+              _title = fileName.split('.').first;
+            }
+          });
+
+          // Dispatches selection directly to the core UploadBloc
+          _uploadBloc.add(ImagePicked(bytes, fileName));
+        }
+      } catch (e) {
+        print("Error analyzing file parameters: $e");
+      }
     });
   }
 
-  Future<void> _addCreator() async {
-    final handle = _newCreatorHandle.trim();
-    final role = _newCreatorRole.trim();
+  void _addCreator() {
+    final handle = _creatorHandleInput.trim();
+    final role = _roleInput.trim();
     if (handle.isEmpty) return;
 
-    final cleanHandle = handle.toLowerCase().replaceAll('@', '');
-    String resolvedName = handle;
-    String? resolvedUid;
-
-    try {
-      final resStr = await fsQuery('profiles', 'username', '==', jsonEncode(cleanHandle), '');
-      final List docs = jsonDecode(resStr);
-      if (docs.isNotEmpty) {
-        final doc = docs.first;
-        final data = doc['data'];
-        resolvedName = data['displayName'] ?? data['username'] ?? handle;
-        resolvedUid = doc['id'];
-      }
-    } catch (e) {
-      print("Error looking up user by handle: $e");
-    }
-
+    _uploadBloc.add(AddCreatorRequested(handle, role.isNotEmpty ? role : 'Contributor'));
     setState(() {
-      _uploadCreators.add({
-        'uid': resolvedUid,
-        'name': resolvedName,
-        'role': role.isNotEmpty ? role : 'Contributor',
-      });
-      _newCreatorHandle = '';
-      _newCreatorRole = '';
+      _creatorHandleInput = '';
+      _roleInput = '';
     });
   }
 
-  Future<void> _submitSingleImage() async {
-    if (_uploadTitle.trim().isEmpty) {
-      setState(() => _uploadError = "Title is required.");
-      return;
-    }
-    if (_uploadImageBase64 == null) {
-      setState(() => _uploadError = "Please select or capture an image first.");
-      return;
-    }
+  void _startPublishFlow() {
+    if (_blocState.imageBytes == null) return;
 
-    setState(() {
-      _isUploadingImage = true;
-      _uploadError = null;
-    });
-
-    try {
-      final Uint8List bytes = base64Decode(_uploadImageBase64!);
-      final String path = 'uploads/${component.targetUserId}/folio_assets/img_${DateTime.now().millisecondsSinceEpoch}_$_uploadImageName';
-      final String downloadUrl = await stUpload(path, bytes, 'image/jpeg');
-      final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
-
-      final String? email = component.authState?.user?.email;
-      final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
-
-      final shortCode = await WebShortcodeService.assignShortcode(
-        contentType: 'image',
-        contentId: imageId,
-        isVanity: useVanity,
-      ) ?? imageId.substring(imageId.length - 7).toUpperCase();
-
-      final imgData = {
-        'uid': component.targetUserId,
-        'uploaderId': component.targetUserId,
-        'fileUrl': downloadUrl,
-        'fileName': _uploadImageName,
-        'title': _uploadTitle.trim(),
-        'description': _uploadDescription.trim(),
-        'status': 'approved',
-        'tags': {},
-        'indicia': _uploadIndicia.trim(),
-        'creators': _uploadCreators,
-        'timestamp': WebFieldValue.serverTimestamp(),
-        'shortCode': shortCode,
-        'storagePath': path,
-      };
-      await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
-
-      final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
-      final fzShortCode = await WebShortcodeService.assignShortcode(
-        contentType: 'fanzine',
-        contentId: fanzineId,
-        isVanity: useVanity,
-      ) ?? fanzineId.substring(fanzineId.length - 7).toUpperCase();
-
-      final fzData = {
-        'title': _uploadTitle.trim(),
-        'ownerId': component.targetUserId,
-        'editorId': component.targetUserId,
-        'editors': [],
-        'isLive': false,
-        'processingStatus': 'complete',
-        'creationDate': WebFieldValue.serverTimestamp(),
-        'type': 'folio',
-        'shortCode': fzShortCode,
-        'shortCodeKey': fzShortCode.toUpperCase(),
-        'twoPage': false,
-      };
-      await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzData), true);
-
-      final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
-      await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
-        'imageId': imageId,
-        'imageUrl': downloadUrl,
-        'pageNumber': 1,
-        'status': 'ready',
-        'createdAt': WebFieldValue.serverTimestamp(),
-      }), true);
-
-      await fsUpdateDoc('images/$imageId', jsonEncode({
-        'usedInFanzines': WebFieldValue.arrayUnion([fanzineId])
-      }));
-
-      component.onUploadComplete(fzShortCode);
-    } catch (e) {
-      setState(() => _uploadError = e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isUploadingImage = false);
-      }
-    }
+    _uploadBloc.add(SubmitUploadRequested(
+      userId: component.targetUserId,
+      title: _title.trim(),
+      caption: _caption.trim(),
+      indicia: _indicia.trim(),
+      creators: _blocState.creators,
+    ));
   }
 
-  Component _buildUploadToolbarButton(String label, String iconName, bool isActive) {
-    return button([
-      div([
-        span(
-            [text(iconName)],
-            classes: 'material-symbols-outlined',
-            attributes: {
-              'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #6750A4;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #ccc;"
-            }
-        )
-      ], classes: 'toolbar-icon-wrapper', attributes: const {'style': 'padding: 8px; border-radius: 50%; border: 2px solid black; display: flex; justify-content: center; align-items: center; margin-bottom: 4px; pointer-events: none;'}),
-      span([text(label)], classes: 'toolbar-label', attributes: {
-        'style': 'color: ${isActive ? '#6750a4' : '#ccc'}; font-weight: ${isActive ? 'bold' : 'normal'}; font-size: 10px;'
-      })
-    ], classes: 'toolbar-btn ${isActive ? 'active' : ''}');
+  void _resolveNewShortcodeAndComplete() {
+    // Queries the latest uploaded image metadata record to retrieve the newly assigned shortcode
+    fsQuery('images', 'uploaderId', '==', jsonEncode(component.targetUserId), 'timestamp').then((jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        if (decoded.isNotEmpty) {
+          final latestImage = decoded.last;
+          final Map<String, dynamic> data = latestImage['data'] as Map<String, dynamic>;
+          final String shortcode = data['shortCode'] ?? latestImage['id'] ?? '';
+          component.onUploadComplete(shortcode);
+        } else {
+          component.onUploadComplete('');
+        }
+      } catch (e) {
+        print("Error resolving new shortcode: $e");
+        component.onUploadComplete('');
+      }
+    });
   }
 
   @override
   Component build(BuildContext context) {
-    return div([
-      // Envelope Header details
-      div([
-        div([
-          div([
-            h1([text('upload single image')], classes: 'font-bold text-base text-center mb-1', attributes: const {'style': 'color: black; margin: 0; font-size: 16px;'}),
-            p([text('Maker Pipeline')], classes: 'text-xs text-center text-gray', attributes: const {'style': 'margin: 0; color: #666; font-size: 11px;'})
-          ]),
-          img(src: 'assets/logo200.gif', attributes: const {'style': 'width: 70px; height: auto; display: block; margin: 12px 0;'}),
-          div([
-            button(
-                [text(_isUploadingImage ? "publishing..." : "publish")],
-                classes: 'btn-primary',
-                attributes: _isUploadingImage ? const {'disabled': 'true', 'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%;'} : const {'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%; background-color: #6750A4; color: white;'},
-                events: {'click': (e) => _submitSingleImage()}
-            ),
-            button(
-                [text("back")],
-                classes: 'profile-btn',
-                attributes: const {'style': 'width: 100%; padding: 8px; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 8px; background: white; color: black; cursor: pointer;'},
-                events: {'click': (e) => component.onBack()}
-            )
-          ], classes: 'flex-col w-full gap-2')
-        ], classes: 'white-sticker', attributes: const {'style': 'width: 90%; height: 85%; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; border-radius: 8px;'})
-      ], classes: 'manila-envelope w-full mb-4', attributes: const {'style': 'border-radius: 8px; padding: 16px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; aspect-ratio: 5 / 8;'}),
+    final status = _blocState.status;
+    final isUploading = status == UploadStatus.submitting;
+    final errorMessage = _blocState.errorMessage;
+    final hasImage = _blocState.imageBytes != null;
 
-      // Form item details
-      div([
-        div([
-          if (_uploadPreviewUrl != null)
-            img(src: _uploadPreviewUrl!, attributes: const {'style': 'width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;'})
-          else
-            div([
-              span([text('add_photo_alternate')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 48px; margin-bottom: 8px; color: #aaa;'}),
-              span([text('Click to select image')], attributes: const {'style': 'font-size: 12px; font-weight: 500; color: #666;'})
-            ], classes: 'flex flex-col items-center justify-center p-4 text-gray-400'),
-          input(
-              id: 'maker-upload-picker',
-              attributes: const {'type': 'file', 'accept': 'image/*', 'style': 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;'},
-              events: {
-                'change': (e) => _onFileInputChanged(),
-                'click': (e) => (e as dynamic).stopPropagation()
+    return div(
+        [
+          // Navigation Header row
+          div(
+            [
+              button(
+                  [
+                    span([text('arrow_back')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 4px;'}),
+                    text('options')
+                  ],
+                  classes: 'profile-btn mb-0',
+                  attributes: const {'style': 'display: inline-flex; align-items: center; border: 1px solid #ddd; background: white; cursor: pointer; padding: 4px 12px; font-weight: bold; font-size: 11px; height: 32px;'},
+                  events: {'click': (e) => component.onBack()}
+              ),
+              h2([text("publish single image")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin: 0; margin-left: auto; text-transform: lowercase; font-variant: small-caps;'})
+            ],
+            attributes: const {'style': 'display: flex; align-items: center; width: 100%; margin-bottom: 20px;'},
+          ),
+
+          div(
+              [
+                // 1. Selector container
+                div(
+                    [
+                      if (_selectedObjectUrl != null)
+                        img(
+                            src: _selectedObjectUrl!,
+                            attributes: const {
+                              'style': 'width: 100%; height: 100%; object-fit: contain; display: block;'
+                            }
+                        )
+                      else
+                        div(
+                            [
+                              span([text('add_photo_alternate')], classes: 'material-symbols-outlined text-gray-400', attributes: const {'style': 'font-size: 48px;'}),
+                              p([text("Click to select image file from device")], attributes: const {'style': 'font-size: 11px; color: #777; font-weight: bold; margin-top: 8px; margin-bottom: 0;'})
+                            ],
+                            attributes: const {
+                              'style': 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; box-sizing: border-box;'
+                            }
+                        )
+                    ],
+                    attributes: {
+                      'style': 'width: 100%; aspect-ratio: 16/10; border: 2px dashed #ccc; border-radius: 8px; background-color: #fcfcfc; overflow: hidden; position: relative; cursor: pointer; display: flex; align-items: center; justify-content: center; box-sizing: border-box;',
+                    },
+                    events: {
+                      'click': (e) {
+                        if (!isUploading) _triggerFileSelection();
+                      }
+                    }
+                ),
+
+                if (_selectedFileName != null)
+                  div(
+                      [
+                        span([text('file_present')], classes: 'material-symbols-outlined text-gray-500', attributes: const {'style': 'font-size: 16px; margin-right: 4px;'}),
+                        span([text("Selected: $_selectedFileName ($_imageWidth × $_imageHeight)")])
+                      ],
+                      attributes: const {
+                        'style': 'display: flex; align-items: center; font-size: 11px; color: #555; margin-top: 6px; padding: 0 4px;'
+                      }
+                  ),
+
+                div([], attributes: const {'style': 'height: 16px;'}),
+
+                // 2. Details Inputs Form
+                div(
+                    [
+                      span([text("IMAGE TITLE")], classes: 'text-xs font-bold text-gray-600', attributes: const {'style': 'margin-bottom: 4px; display: block;'}),
+                      input(
+                          attributes: {
+                            'type': 'text',
+                            'placeholder': 'Give this image a creative title',
+                            'value': _title,
+                            'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 13px; background: white;',
+                            if (isUploading) 'disabled': 'true'
+                          },
+                          events: {
+                            'input': (e) {
+                              setState(() {
+                                _title = getInputValue(e);
+                              });
+                            }
+                          }
+                      )
+                    ],
+                    attributes: const {'style': 'margin-bottom: 12px;'}
+                ),
+
+                div(
+                    [
+                      span([text("CAPTION / DESCRIPTION")], classes: 'text-xs font-bold text-gray-600', attributes: const {'style': 'margin-bottom: 4px; display: block;'}),
+                      input(
+                          attributes: {
+                            'type': 'text',
+                            'placeholder': 'Write a caption for your work (optional)',
+                            'value': _caption,
+                            'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 13px; background: white;',
+                            if (isUploading) 'disabled': 'true'
+                          },
+                          events: {
+                            'input': (e) {
+                              setState(() {
+                                _caption = getInputValue(e);
+                              });
+                            }
+                          }
+                      )
+                    ],
+                    attributes: const {'style': 'margin-bottom: 12px;'}
+                ),
+
+                div(
+                    [
+                      span([text("INDICIA / HISTORICAL DESCRIPTION")], classes: 'text-xs font-bold text-gray-600', attributes: const {'style': 'margin-bottom: 4px; display: block;'}),
+                      textarea(
+                          classes: 'border border-gray-300 rounded-md',
+                          attributes: {
+                            'placeholder': 'Add archival notes, context, or indicia annotations for this print...',
+                            'style': 'width: 100%; min-height: 80px; padding: 10px; box-sizing: border-box; font-size: 13px; background: white; margin-bottom: 0;',
+                            if (isUploading) 'disabled': 'true'
+                          },
+                          events: {
+                            'input': (e) {
+                              setState(() {
+                                _indicia = getInputValue(e);
+                              });
+                            }
+                          },
+                          [text(_indicia)]
+                      )
+                    ],
+                    attributes: const {'style': 'margin-bottom: 20px;'}
+                ),
+
+                // Creators Section
+                div(
+                    [
+                      span([text("CREATORS & CONTRIBUTORS")], classes: 'text-xs font-bold text-gray-600', attributes: const {'style': 'margin-bottom: 6px; display: block;'}),
+
+                      // Existing Creators list
+                      if (_blocState.creators.isNotEmpty)
+                        div(
+                            [
+                              for (int i = 0; i < _blocState.creators.length; i++)
+                                div(
+                                    [
+                                      span([text('${_blocState.creators[i]['name']} (${_blocState.creators[i]['role']})')]),
+                                      button(
+                                          [span([text('remove_circle')], classes: 'material-symbols-outlined text-red-500', attributes: const {'style': 'font-size: 16px;'})],
+                                          classes: 'cursor-pointer border-none bg-transparent',
+                                          events: {
+                                            'click': (e) => _uploadBloc.add(RemoveCreatorRequested(i))
+                                          }
+                                      )
+                                    ],
+                                    attributes: const {
+                                      'style': 'display: flex; align-items: center; justify-content: space-between; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 6px; padding: 6px 12px; margin-bottom: 6px; font-size: 12px;'
+                                    }
+                                )
+                            ]
+                        ),
+
+                      // Creator Composer fields
+                      div(
+                          [
+                            input(
+                                attributes: {
+                                  'type': 'text',
+                                  'placeholder': '@handle',
+                                  'value': _creatorHandleInput,
+                                  'style': 'flex: 1; padding: 8px 12px; font-size: 12px; margin-bottom: 0; background: white;'
+                                },
+                                events: {'input': (e) => _creatorHandleInput = getInputValue(e)}
+                            ),
+                            input(
+                                attributes: {
+                                  'type': 'text',
+                                  'placeholder': 'Role',
+                                  'value': _roleInput,
+                                  'style': 'flex: 1; padding: 8px 12px; font-size: 12px; margin-bottom: 0; background: white;'
+                                },
+                                events: {'input': (e) => _roleInput = getInputValue(e)}
+                            ),
+                            button(
+                                [span([text('add_circle')], classes: 'material-symbols-outlined text-green-600', attributes: const {'style': 'font-size: 24px;'})],
+                                classes: 'cursor-pointer border-none bg-transparent',
+                                events: {
+                                  'click': (e) => _addCreator()
+                                }
+                            )
+                          ],
+                          attributes: const {
+                            'style': 'display: flex; gap: 8px; align-items: center; margin-top: 6px;'
+                          }
+                      )
+                    ],
+                    attributes: const {'style': 'margin-bottom: 24px;'}
+                ),
+
+                // 3. Status and Trigger Area
+                if (errorMessage != null)
+                  p([text(errorMessage)], attributes: const {'style': 'font-size: 12px; color: #ef4444; font-weight: bold; margin-bottom: 12px;'}),
+
+                if (isUploading)
+                  div(
+                      [
+                        div([], attributes: const {
+                          'style': 'height: 4px; background-color: #6750A4; width: 50%; border-radius: 2px; animation: shimmerKeyframe 1.2s infinite linear;'
+                        })
+                      ],
+                      attributes: const {
+                        'style': 'width: 100%; height: 4px; background-color: #eee; border-radius: 2px; overflow: hidden; margin-bottom: 16px;'
+                      }
+                  ),
+
+                button(
+                    [
+                      if (isUploading)
+                        span([text('progress_activity')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px; animation: spin 1s linear infinite;'})
+                      else
+                        span([text('cloud_upload')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                      text(isUploading ? "publishing image..." : "publish to gallery")
+                    ],
+                    classes: 'btn-primary w-full',
+                    attributes: {
+                      if (!hasImage || isUploading) 'disabled': 'true',
+                      'style': 'height: 44px; display: flex; align-items: center; justify-content: center; font-weight: bold;'
+                    },
+                    events: {
+                      'click': (e) => _startPublishFlow()
+                    }
+                )
+              ],
+              classes: 'white-sticker p-6 w-full flex-col',
+              attributes: const {
+                'style': 'display: flex; flex-direction: column; width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 12px; background: white;'
               }
           )
-        ], classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center relative', attributes: const {'style': 'width: 100%; aspect-ratio: 5 / 8; position: relative; cursor: pointer;'}, events: {'click': (e) => _pickAndPreviewImage()}),
-
-        div([
-          _buildUploadToolbarButton('upload', 'edit_document', true),
-          _buildUploadToolbarButton('like', 'favorite_border', false),
-          _buildUploadToolbarButton('comments', 'chat_bubble_outline', false),
-          _buildUploadToolbarButton('tags', 'tag', false),
-        ], classes: 'toolbar-container w-full border-t border-b border-gray-100 py-2 my-1'),
-
-        div([
-          div([
-            span([text("UPLOAD METADATA")], classes: 'text-xs font-bold text-gray')
-          ], classes: 'mb-4'),
-          input(attributes: const {'type': 'text', 'placeholder': 'Title'}, events: {'input': (e) => _uploadTitle = getInputValue(e)}),
-          input(attributes: const {'type': 'text', 'placeholder': 'Caption / Description (optional)'}, events: {'input': (e) => _uploadDescription = getInputValue(e)}),
-          input(attributes: const {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)'}, events: {'input': (e) => _uploadIndicia = getInputValue(e)}),
-
-          div([
-            span([text('Creators')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 6px;'}),
-            if (_uploadCreators.isNotEmpty)
-              div([
-                for (int i = 0; i < _uploadCreators.length; i++)
-                  div([
-                    span([text('${_uploadCreators[i]['name']} (${_uploadCreators[i]['role']})')]),
-                    span([text('remove_circle')], classes: 'material-symbols-outlined text-red-500 cursor-pointer', events: {'click': (e) => setState(() => _uploadCreators.removeAt(i))})
-                  ], classes: 'flex flex-row items-center justify-between bg-gray-50 border border-gray-150 p-1.5 rounded')
-              ], classes: 'flex flex-col gap-1 w-full mb-2'),
-            div([
-              div([
-                input(attributes: {'type': 'text', 'placeholder': '@handle', 'value': _newCreatorHandle}, events: {'input': (e) => _newCreatorHandle = getInputValue(e)})
-              ], classes: 'flex-1'),
-              div([
-                input(attributes: {'type': 'text', 'placeholder': 'Role', 'value': _newCreatorRole}, events: {'input': (e) => _newCreatorRole = getInputValue(e)})
-              ], classes: 'flex-1'),
-              span([text('add_circle')], classes: 'material-symbols-outlined text-green-600 cursor-pointer', events: {'click': (e) => _addCreator()})
-            ], classes: 'flex flex-row items-center gap-2 w-full')
-          ])
-        ], classes: 'p-4 mt-1 panel-container-animate')
-      ], classes: 'reader-list-item flex-col w-full bg-white rounded-lg overflow-hidden')
-    ]);
+        ],
+        classes: 'flex-col items-center justify-start w-full',
+        attributes: const {'style': 'display: flex; flex-direction: column;'}
+    );
   }
 }
