@@ -63,6 +63,11 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       _creatorProfiles = component.preloadedCreatorProfiles ?? {};
       _imageStats = component.preloadedImageStats ?? {};
       _loading = false;
+      // CRITICAL FIX: Even with preloaded data, we still need client-side real-time sync listeners
+      if (kIsWeb) {
+        _listenToFanzineDoc();
+        _listenToPagesDoc();
+      }
     } else if (kIsWeb) {
       _loadData();
       _listenToFanzineDoc();

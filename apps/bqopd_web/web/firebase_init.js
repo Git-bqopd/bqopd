@@ -185,7 +185,9 @@ window.renderPublisherPage = async (text) => {
     function loadImage(url) {
         return new Promise((resolve) => {
             const img = new Image();
-            img.crossOrigin = "anonymous";
+            if (url.startsWith('http://') || url.startsWith('https://')) {
+                img.crossOrigin = "anonymous";
+            }
             img.onload = () => resolve(img);
             img.onerror = () => resolve(null);
             img.src = url;
@@ -238,18 +240,51 @@ window.renderPublisherPage = async (text) => {
         if (colIndex >= 3) break;
 
         if (block.type === 'image') {
-            const targetUrl = block.url || 'https://placehold.co/600x400/png?text=Image+Asset';
-            const img = await loadImage(targetUrl);
-            if (img) {
-                const drawHeight = colWidth * (img.height / img.width);
+            const targetUrl = block.url;
+            let img = null;
+            if (targetUrl && targetUrl.trim().length > 0) {
+                img = await loadImage(targetUrl);
+            }
 
-                if (currentY + drawHeight > maxY) {
-                    colIndex++;
-                    currentY = 33;
-                }
+            const drawHeight = 400; // Standardized local placeholder height
 
-                if (colIndex < 3) {
-                    ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawHeight);
+            if (currentY + drawHeight > maxY) {
+                colIndex++;
+                currentY = 33;
+            }
+
+            if (colIndex < 3) {
+                if (img) {
+                    const drawRatioHeight = colWidth * (img.height / img.width);
+                    ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawRatioHeight);
+                    currentY += drawRatioHeight + 20;
+                } else {
+                    // FIXED: Draw a beautiful local vector wireframe placeholder to prevent CORS canvas tainting entirely!
+                    ctx.fillStyle = '#f3f4f6';
+                    ctx.fillRect(columnsX[colIndex], currentY, colWidth, drawHeight);
+
+                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = '#d1d5db';
+                    ctx.strokeRect(columnsX[colIndex] + 10, currentY + 10, colWidth - 20, drawHeight - 20);
+
+                    // Draw soft elegant wireframe diagonal lines
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(columnsX[colIndex] + 10, currentY + 10);
+                    ctx.lineTo(columnsX[colIndex] + colWidth - 10, currentY + drawHeight - 10);
+                    ctx.moveTo(columnsX[colIndex] + colWidth - 10, currentY + 10);
+                    ctx.lineTo(columnsX[colIndex] + 10, currentY + drawHeight - 10);
+                    ctx.stroke();
+
+                    // Text inside placeholder
+                    ctx.font = 'bold 24px Arial';
+                    ctx.fillStyle = '#9ca3af';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
+
+                    // Reset alignment back to default
+                    ctx.textAlign = 'left';
+
                     currentY += drawHeight + 20;
                 }
             }

@@ -519,10 +519,12 @@ class _FanzineEditorState extends State<FanzineEditor> {
         // FIXED: Serialize imgData cleanly using jsonEncode instead of imgData.toString()
         await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
 
-        // Add to the folio pages immediately
-        await _addExistingImage(imageId, downloadUrl, width, height);
+        // Add to the folio pages immediately IF AND ONLY IF it matches the 5x8 page aspect ratio
+        if (is5x8) {
+          await _addExistingImage(imageId, downloadUrl, width, height);
+        }
 
-        print('[FOLIO UPLOAD] Image successfully processed and added.');
+        print('[FOLIO UPLOAD] Image successfully processed.');
       } catch (e) {
         print('[FOLIO UPLOAD ERROR] $e');
       } finally {
@@ -553,6 +555,12 @@ class _FanzineEditorState extends State<FanzineEditor> {
       final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
       UnsavedFanzineRegistry.pages[component.frefFanzineId] = updatedPages;
       UnsavedFanzineRegistry.getOrCreatePagesController(component.frefFanzineId).add(updatedPages);
+
+      // FIXED: Associate the newly created page with this unsaved folio in the database
+      // so it correctly propagates to the "FULL PAGES (5X8)" tab.
+      await fsUpdateDoc('images/$imageId', jsonEncode({
+        'usedInFanzines': WebFieldValue.arrayUnion([component.frefFanzineId])
+      }));
       return;
     } else {
       final resStr = await fsQuery('fanzines/${component.frefFanzineId}/pages', '', '', '', '');
@@ -575,28 +583,248 @@ class _FanzineEditorState extends State<FanzineEditor> {
     }
   }
 
-  @override
-  Component build(BuildContext context) {
-    return div([
-      // 1. Core Tab Row
-      div([
-        _buildTabButton('settings', 0),
-        span([text('|')], classes: 'px-4 text-gray text-xs'),
-        _buildTabButton('order', 1),
-        span([text('|')], classes: 'px-4 text-gray text-xs'),
-        _buildTabButton('upload', 2),
-      ], classes: 'flex-row justify-center items-center py-2 bg-gray-100'),
+  Future<void> _createNewTextPage() async {
+    setState(() {
+      _isUploading = true;
+    });
+    try {
+      final IFanzineRepository repo = createFanzineRepository();
 
-      // 2. Active Tab Sheet - Height Auto adaptive
-      div([
-        if (_activeTab == 0) _buildSettingsTab(),
-        if (_activeTab == 1) _buildOrderTab(),
-        if (_activeTab == 2) _buildUploadTab(),
-      ], classes: 'flex-col p-4'),
+      final List<FanzinePage> allPages = component.pageStructure.map((p) {
+        return FanzinePage.fromMap(p['__id'] ?? p['id'] ?? '', p);
+      }).toList();
 
-      if (_showOrphanSelector) _buildOrphanSelectorModal(),
-      if (_activeConfirmId != null) _buildConfirmModal(),
-    ], classes: 'white-sticker-flexible w-full mt-2');
+      final int lastPageNum = allPages.isNotEmpty ? allPages.length : 0;
+
+      final initialText = """
+# THE PUBLISHER
+## New Custom Page Created
+
+Start typing directly inside the text editor panel below to generate columns of printable markdown text.
+
+{{IMAGE}}
+
+* Enter bullet lists with an asterisk
+* Customize headers with # or ##
+""";
+
+      await repo.insertPublisherPage(
+        component.frefFanzineId,
+        lastPageNum,
+        initialText,
+        allPages,
+      );
+
+      print('[FOLIO EDITOR] Text page created successfully.');
+    } catch (e) {
+      print('[FOLIO EDITOR ERROR] Failed to create text page: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _createNewCalendarPagePlaceholder() async {
+    setState(() {
+      _isUploading = true;
+    });
+    try {
+      final String fanzineId = component.frefFanzineId;
+      final int nextNum = component.pageStructure.length + 1;
+      final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+
+      if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
+        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+        final newPage = FanzinePage(
+          id: pageId,
+          pageNumber: nextNum,
+          status: 'ready',
+          templateId: 'calendar_left',
+        );
+        final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
+        UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
+        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
+      } else {
+        await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+          'pageNumber': nextNum,
+          'status': 'ready',
+          'templateId': 'calendar_left',
+          'createdAt': WebFieldValue.serverTimestamp(),
+        }), true);
+      }
+      print('[FOLIO EDITOR] Calendar page placeholder created successfully.');
+    } catch (e) {
+      print('[FOLIO EDITOR ERROR] Failed to create calendar page: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  void _confirmRemoveImage(String imageId, bool isDirect) {
+    final String actionText = isDirect ? "Delete Completely" : "Remove from Folio";
+    final String bodyText = isDirect
+        ? "This is a direct upload or publisher template page. Deleting it will remove it from ALL issues and your library forever."
+        : "This image is from your library. Removing it will only take it out of this specific folio.";
+
+    setState(() {
+      _activeConfirmId = imageId;
+      _isConfirmDirect = isDirect;
+      _confirmTitle = actionText;
+      _confirmBody = bodyText;
+    });
+  }
+
+  Future<void> _executeImageRemoval() async {
+    final imageId = _activeConfirmId;
+    if (imageId == null) return;
+
+    setState(() {
+      _activeConfirmId = null;
+      _isUploading = true;
+    });
+
+    try {
+      if (_isConfirmDirect) {
+        await fsDeleteDoc('images/$imageId');
+      }
+
+      // Find any page belonging to this image in current folio and delete it
+      final pagesRes = await fsQuery('fanzines/${component.frefFanzineId}/pages', 'imageId', '==', jsonEncode(imageId), '');
+      final List pageDocs = jsonDecode(pagesRes) as List;
+
+      for (var pageDoc in pageDocs) {
+        final pageId = pageDoc['id'] ?? '';
+        if (pageId.isNotEmpty) {
+          await _deletePage(pageId as String);
+        }
+      }
+
+      print('[FOLIO REMOVE] Image/Page successfully removed/deleted.');
+    } catch (e) {
+      print('[FOLIO REMOVE ERROR] $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _addSelectedOrphans() async {
+    if (_selectedOrphanIds.isEmpty) return;
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      for (final imageId in _selectedOrphanIds) {
+        final imgData = _userImages.firstWhere((img) => img['id'] == imageId);
+        final String? url = imgData['fileUrl'] ?? imgData['gridUrl'];
+        final int width = imgData['width'] ?? 0;
+        final int height = imgData['height'] ?? 0;
+
+        if (url != null) {
+          if (_isImage5x8(imgData)) {
+            await _addExistingImage(imageId, url, width, height);
+          } else {
+            // FIXED: Associate selected non-5x8 orphan assets with the folio so they correctly appear under "INLINE ASSETS"
+            await fsUpdateDoc('images/$imageId', jsonEncode({
+              'usedInFanzines': WebFieldValue.arrayUnion([component.frefFanzineId])
+            }));
+          }
+        }
+      }
+
+      setState(() {
+        _showOrphanSelector = false;
+        _selectedOrphanIds.clear();
+      });
+    } catch (e) {
+      print('[ORPHAN SELECTOR ERROR] $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  void _onSpreadPosChanged(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages, String clickedVal) {
+    final String currentSpreadPos = page['spreadPosition'] ?? '';
+
+    if (clickedVal == 'start') {
+      if (currentSpreadPos == 'start') {
+        // Toggle OFF: disassemble both this and the next page
+        _disassembleSpread(idx, idx + 1, fullPages, 'either', 'either');
+      } else {
+        // Toggle ON: must not be the last image
+        if (idx < totalCount - 1) {
+          _assembleSpread(idx, idx + 1, fullPages);
+        }
+      }
+    } else if (clickedVal == 'end') {
+      if (currentSpreadPos == 'end') {
+        // Toggle OFF: disassemble both this and the previous page
+        _disassembleSpread(idx, idx - 1, fullPages, 'either', 'either');
+      } else {
+        // Toggle ON: must not be the first image
+        if (idx > 0) {
+          _assembleSpread(idx - 1, idx, fullPages);
+        }
+      }
+    }
+  }
+
+  void _onSidePrefChanged(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages, String clickedVal) {
+    final String currentSpreadPos = page['spreadPosition'] ?? '';
+
+    if (currentSpreadPos == 'start') {
+      if (clickedVal != 'left') {
+        // Spread is broken: disassembled both this and the next page
+        _disassembleSpread(idx, idx + 1, fullPages, clickedVal, 'either');
+      } else {
+        _updatePageLayout(page, 'start', 'left');
+      }
+    } else if (currentSpreadPos == 'end') {
+      if (clickedVal != 'right') {
+        // Spread is broken: disassembled both this and the previous page
+        _disassembleSpread(idx, idx - 1, fullPages, clickedVal, 'either');
+      } else {
+        _updatePageLayout(page, 'end', 'right');
+      }
+    } else {
+      // Independent preference change
+      _updatePageLayout(page, null, clickedVal);
+    }
+  }
+
+  void _assembleSpread(int startIdx, int endIdx, List<Map<String, dynamic>> fullPages) {
+    if (startIdx < 0 || endIdx >= fullPages.length) return;
+    final startPage = fullPages[startIdx];
+    final endPage = fullPages[endIdx];
+
+    _updatePageLayout(startPage, 'start', 'left');
+    _updatePageLayout(endPage, 'end', 'right');
+  }
+
+  void _disassembleSpread(int activeIdx, int siblingIdx, List<Map<String, dynamic>> fullPages, String activeTargetSide, String siblingTargetSide) {
+    final activePage = fullPages[activeIdx];
+    _updatePageLayout(activePage, null, activeTargetSide);
+
+    if (siblingIdx >= 0 && siblingIdx < fullPages.length) {
+      final siblingPage = fullPages[siblingIdx];
+      _updatePageLayout(siblingPage, null, siblingTargetSide);
+    }
   }
 
   Component _buildTabButton(String label, int index) {
@@ -684,7 +912,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
     ], classes: 'flex-col text-left p-2', attributes: const {'style': 'gap: 8px; display: flex;'});
   }
 
-  // FIXED: Return type is Component to resolve web compilation compatibility
   Component _buildCustomToggleSwitch(bool val) {
     return div(
       [],
@@ -694,7 +921,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
     );
   }
 
-  // FIXED: Return type is Component to resolve web compilation compatibility
   Component _buildCustomToggleSwitchForCover(bool val) {
     return div(
       [],
@@ -723,74 +949,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
       for (int i = 0; i < fullPages.length; i++)
         _buildOrderPageRow(fullPages[i], i, fullPages.length, fullPages)
     ], classes: 'flex-col gap-3 text-left p-2');
-  }
-
-  void _onSpreadPosChanged(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages, String clickedVal) {
-    final String currentSpreadPos = page['spreadPosition'] ?? '';
-
-    if (clickedVal == 'start') {
-      if (currentSpreadPos == 'start') {
-        // Toggle OFF: disassemble both this and the next page
-        _disassembleSpread(idx, idx + 1, fullPages, 'either', 'either');
-      } else {
-        // Toggle ON: must not be the last image
-        if (idx < totalCount - 1) {
-          _assembleSpread(idx, idx + 1, fullPages);
-        }
-      }
-    } else if (clickedVal == 'end') {
-      if (currentSpreadPos == 'end') {
-        // Toggle OFF: disassemble both this and the previous page
-        _disassembleSpread(idx, idx - 1, fullPages, 'either', 'either');
-      } else {
-        // Toggle ON: must not be the first image
-        if (idx > 0) {
-          _assembleSpread(idx - 1, idx, fullPages);
-        }
-      }
-    }
-  }
-
-  void _onSidePrefChanged(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages, String clickedVal) {
-    final String currentSpreadPos = page['spreadPosition'] ?? '';
-
-    if (currentSpreadPos == 'start') {
-      if (clickedVal != 'left') {
-        // Spread is broken: disassembled both this and the next page
-        _disassembleSpread(idx, idx + 1, fullPages, clickedVal, 'either');
-      } else {
-        _updatePageLayout(page, 'start', 'left');
-      }
-    } else if (currentSpreadPos == 'end') {
-      if (clickedVal != 'right') {
-        // Spread is broken: disassembled both this and the previous page
-        _disassembleSpread(idx, idx - 1, fullPages, clickedVal, 'either');
-      } else {
-        _updatePageLayout(page, 'end', 'right');
-      }
-    } else {
-      // Independent preference change
-      _updatePageLayout(page, null, clickedVal);
-    }
-  }
-
-  void _assembleSpread(int startIdx, int endIdx, List<Map<String, dynamic>> fullPages) {
-    if (startIdx < 0 || endIdx >= fullPages.length) return;
-    final startPage = fullPages[startIdx];
-    final endPage = fullPages[endIdx];
-
-    _updatePageLayout(startPage, 'start', 'left');
-    _updatePageLayout(endPage, 'end', 'right');
-  }
-
-  void _disassembleSpread(int activeIdx, int siblingIdx, List<Map<String, dynamic>> fullPages, String activeTargetSide, String siblingTargetSide) {
-    final activePage = fullPages[activeIdx];
-    _updatePageLayout(activePage, null, activeTargetSide);
-
-    if (siblingIdx >= 0 && siblingIdx < fullPages.length) {
-      final siblingPage = fullPages[siblingIdx];
-      _updatePageLayout(siblingPage, null, siblingTargetSide);
-    }
   }
 
   Component _buildOrderPageRow(Map<String, dynamic> page, int idx, int totalCount, List<Map<String, dynamic>> fullPages) {
@@ -875,7 +1033,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
             [
               div([
                 span(
-                  [text('${idx + 1}.')], // FIXED: Use absolute visual loop index instead of database metadata pageNum
+                  [text('${idx + 1}.')], // Use absolute visual loop index instead of database metadata pageNum
                   classes: 'font-black text-xs text-gray-400',
                   attributes: const {'style': 'width: 20px; text-align: right; margin-right: 8px; display: inline-block;'},
                 ),
@@ -931,13 +1089,13 @@ class _FanzineEditorState extends State<FanzineEditor> {
                 button(
                   [span([text('arrow_upward')], classes: 'material-symbols-outlined text-sm')],
                   classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: (idx == 0) ? {'disabled': 'true'} : const {}, // FIXED: Disable up arrow strictly at first visual index
+                  attributes: (idx == 0) ? {'disabled': 'true'} : const {}, // Disable up arrow strictly at first visual index
                   events: {'click': (e) => _reorderPage(page, -1)},
                 ),
                 button(
                   [span([text('arrow_downward')], classes: 'material-symbols-outlined text-sm')],
                   classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: (idx >= totalCount - 1) ? {'disabled': 'true'} : const {}, // FIXED: Disable down arrow strictly at final visual index
+                  attributes: (idx >= totalCount - 1) ? {'disabled': 'true'} : const {}, // Disable down arrow strictly at final visual index
                   events: {'click': (e) => _reorderPage(page, 1)},
                 ),
                 span([text('|')], classes: 'px-1 text-gray-300', attributes: const {'style': 'margin: 0 4px;'}),
@@ -1413,40 +1571,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
     );
   }
 
-  Future<void> _addSelectedOrphans() async {
-    if (_selectedOrphanIds.isEmpty) return;
-
-    setState(() {
-      _isUploading = true;
-    });
-
-    try {
-      for (final imageId in _selectedOrphanIds) {
-        final imgData = _userImages.firstWhere((img) => img['id'] == imageId);
-        final String? url = imgData['fileUrl'] ?? imgData['gridUrl'];
-        final int width = imgData['width'] ?? 0;
-        final int height = imgData['height'] ?? 0;
-
-        if (url != null) {
-          await _addExistingImage(imageId, url, width, height);
-        }
-      }
-
-      setState(() {
-        _showOrphanSelector = false;
-        _selectedOrphanIds.clear();
-      });
-    } catch (e) {
-      print('[ORPHAN SELECTOR ERROR] $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
-
   Component _buildConfirmModal() {
     return div(
       [
@@ -1494,142 +1618,27 @@ class _FanzineEditorState extends State<FanzineEditor> {
     );
   }
 
-  Future<void> _createNewTextPage() async {
-    setState(() {
-      _isUploading = true;
-    });
-    try {
-      final IFanzineRepository repo = createFanzineRepository();
+  @override
+  Component build(BuildContext context) {
+    return div([
+      // 1. Core Tab Row
+      div([
+        _buildTabButton('settings', 0),
+        span([text('|')], classes: 'px-4 text-gray text-xs'),
+        _buildTabButton('order', 1),
+        span([text('|')], classes: 'px-4 text-gray text-xs'),
+        _buildTabButton('upload', 2),
+      ], classes: 'flex-row justify-center items-center py-2 bg-gray-100'),
 
-      final List<FanzinePage> allPages = component.pageStructure.map((p) {
-        return FanzinePage.fromMap(p['__id'] ?? p['id'] ?? '', p);
-      }).toList();
+      // 2. Active Tab Sheet - Height Auto adaptive
+      div([
+        if (_activeTab == 0) _buildSettingsTab(),
+        if (_activeTab == 1) _buildOrderTab(),
+        if (_activeTab == 2) _buildUploadTab(),
+      ], classes: 'flex-col p-4'),
 
-      final int lastPageNum = allPages.isNotEmpty ? allPages.length : 0;
-
-      final initialText = """
-# THE PUBLISHER
-## New Custom Page Created
-
-Start typing directly inside the text editor panel below to generate columns of printable markdown text.
-
-{{IMAGE}}
-
-* Enter bullet lists with an asterisk
-* Customize headers with # or ##
-""";
-
-      await repo.insertPublisherPage(
-        component.frefFanzineId,
-        lastPageNum,
-        initialText,
-        allPages,
-      );
-
-      print('[FOLIO EDITOR] Text page created successfully.');
-    } catch (e) {
-      print('[FOLIO EDITOR ERROR] Failed to create text page: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
+      if (_showOrphanSelector) _buildOrphanSelectorModal(),
+      if (_activeConfirmId != null) _buildConfirmModal(),
+    ], classes: 'white-sticker-flexible w-full mt-2');
   }
-
-  Future<void> _createNewCalendarPagePlaceholder() async {
-    setState(() {
-      _isUploading = true;
-    });
-    try {
-      final String fanzineId = component.frefFanzineId;
-      final int nextNum = component.pageStructure.length + 1;
-      final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
-
-      if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
-        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
-        final newPage = FanzinePage(
-          id: pageId,
-          pageNumber: nextNum,
-          status: 'ready',
-          templateId: 'calendar_left',
-        );
-        final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
-        UnsavedFanzineRegistry.pages[fanzineId] = updatedPages;
-        UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(updatedPages);
-      } else {
-        await fsSetDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
-          'pageNumber': nextNum,
-          'status': 'ready',
-          'templateId': 'calendar_left',
-          'createdAt': WebFieldValue.serverTimestamp(),
-        }), true);
-      }
-      print('[FOLIO EDITOR] Calendar page placeholder created successfully.');
-    } catch (e) {
-      print('[FOLIO EDITOR ERROR] Failed to create calendar page: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
-
-  void _confirmRemoveImage(String imageId, bool isDirect) {
-    final String actionText = isDirect ? "Delete Completely" : "Remove from Folio";
-    final String bodyText = isDirect
-        ? "This is a direct upload or publisher template page. Deleting it will remove it from ALL issues and your library forever."
-        : "This image is from your library. Removing it will only take it out of this specific folio.";
-
-    setState(() {
-      _activeConfirmId = imageId;
-      _isConfirmDirect = isDirect;
-      _confirmTitle = actionText;
-      _confirmBody = bodyText;
-    });
-  }
-
-  Future<void> _executeImageRemoval() async {
-    final imageId = _activeConfirmId;
-    if (imageId == null) return;
-
-    setState(() {
-      _activeConfirmId = null;
-      _isUploading = true;
-    });
-
-    try {
-      if (_isConfirmDirect) {
-        await fsDeleteDoc('images/$imageId');
-      }
-
-      // Find any page belonging to this image in current folio and delete it
-      final pagesRes = await fsQuery('fanzines/${component.frefFanzineId}/pages', 'imageId', '==', jsonEncode(imageId), '');
-      final List pageDocs = jsonDecode(pagesRes) as List;
-
-      for (var pageDoc in pageDocs) {
-        final pageId = pageDoc['id'] ?? '';
-        if (pageId.isNotEmpty) {
-          await _deletePage(pageId as String);
-        }
-      }
-
-      print('[FOLIO REMOVE] Image/Page successfully removed/deleted.');
-    } catch (e) {
-      print('[FOLIO REMOVE ERROR] $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
-
-  // Fallbacks to handle legacy compilation properties safely
-  String? get _newCreator_Handle => null;
-  String? get _newCreator_Role => null;
 }
