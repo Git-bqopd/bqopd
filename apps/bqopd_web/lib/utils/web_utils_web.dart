@@ -2,6 +2,8 @@ import 'package:web/web.dart' as web;
 import 'dart:js_interop';
 import 'dart:async';
 import 'dart:js_util' as js_util;
+import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 
 /// Browser-specific implementation using package:web.
 void scrollToElement(String id) {
@@ -14,7 +16,7 @@ void scrollToElement(String id) {
   }
 }
 
-/// Reads the selected file from the DOM <input> element directly using pure Dart and package:web.
+/// Reads the selected file from the DOM  element directly using pure Dart and package:web.
 void readSelectedFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
   final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
   if (input == null) {
@@ -41,7 +43,7 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
       print('[DART FILE READER] FileReader result is null.');
       return;
     }
-    // Result is a JSString when reading as DataURL
+// Result is a JSString when reading as DataURL
     final dataUrl = (result as JSString).toDart;
     final splitIndex = dataUrl.indexOf(',');
     if (splitIndex == -1) {
@@ -53,6 +55,8 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
 
     print('[DART FILE READER] Success. Triggering callback.');
     callback(base64, file.name, objectUrl);
+
+
   }.toJS;
 
   reader.onerror = (web.Event event) {
@@ -107,7 +111,7 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
 String getInputValue(dynamic event) {
   if (event == null) return '';
 
-  // 1. Try modern js_util property access (highly robust, works on raw JS objects, JSObjects, and native browser Events)
+// 1. Try modern js_util property access (highly robust, works on raw JS objects, JSObjects, and native browser Events)
   try {
     if (js_util.hasProperty(event, 'target')) {
       final target = js_util.getProperty(event, 'target');
@@ -122,7 +126,7 @@ String getInputValue(dynamic event) {
     print('[getInputValue js_util Error] $e');
   }
 
-  // 2. Fallback to dynamic property invocation (handles legacy dart:html or wrapped event variants)
+// 2. Fallback to dynamic property invocation (handles legacy dart:html or wrapped event variants)
   try {
     final target = (event as dynamic).target;
     if (target != null) {
@@ -135,7 +139,7 @@ String getInputValue(dynamic event) {
     print('[getInputValue dynamic Fallback Error] $e');
   }
 
-  // 3. Fallback to package:web extension type matching
+// 3. Fallback to package:web extension type matching
   try {
     if (event is web.Event) {
       final target = event.target;
@@ -147,4 +151,17 @@ String getInputValue(dynamic event) {
   } catch (_) {}
 
   return '';
+}
+
+/// Checks the current browser URL path and performs a client-side route replacement
+/// to the vanity url if accessed via the legacy /reader/:fanzineId route.
+void redirectFanzinePath(dynamic context, String shortCode) {
+  try {
+    final currentPath = web.window.location.pathname;
+    if (currentPath.startsWith('/reader/') && context is BuildContext) {
+      Router.of(context).replace('/$shortCode');
+    }
+  } catch (e) {
+    print('[redirectFanzinePath Error] $e');
+  }
 }

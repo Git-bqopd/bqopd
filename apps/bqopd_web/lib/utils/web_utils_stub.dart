@@ -23,3 +23,8 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) async {
 String getInputValue(dynamic event) {
   return '';
 }
+
+/// Server-side stub for redirecting legacy reader paths.
+void redirectFanzinePath(dynamic context, String shortCode) {
+// No-op on the server
+}

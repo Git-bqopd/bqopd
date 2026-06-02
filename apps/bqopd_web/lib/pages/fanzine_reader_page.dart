@@ -8,6 +8,7 @@ import '../components/fanzine_header.dart';
 import '../components/fanzine_editor.dart';
 import '../components/fanzine_layout.dart';
 import '../utils/firebase_mocks.dart';
+import '../utils/web_utils.dart';
 
 /// Jaspr Web Reader Page utilizing Set-based likedImageIds to optimize performance.
 class FanzineReaderPage extends StatefulComponent {
@@ -63,8 +64,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       _creatorProfiles = component.preloadedCreatorProfiles ?? {};
       _imageStats = component.preloadedImageStats ?? {};
       _loading = false;
-      // CRITICAL FIX: Even with preloaded data, we still need client-side real-time sync listeners
+
+      // Sync vanity redirect immediately on client loads
       if (kIsWeb) {
+        final shortCode = _fanzine?['shortCode'];
+        if (shortCode != null && shortCode.toString().isNotEmpty) {
+          redirectFanzinePath(context, shortCode.toString());
+        }
         _listenToFanzineDoc();
         _listenToPagesDoc();
       }
@@ -160,8 +166,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       try {
         final decoded = jsonDecode(jsonStr);
         if (decoded['exists'] == true && mounted) {
+          final fzData = decoded['data'];
+          final shortCode = fzData['shortCode'];
+          if (shortCode != null && shortCode.toString().isNotEmpty) {
+            redirectFanzinePath(context, shortCode.toString());
+          }
           setState(() {
-            _fanzine = decoded['data'];
+            _fanzine = fzData;
             // Reset override once committed data streams back
             _overriddenTwoPage = null;
           });
@@ -283,6 +294,11 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
 
       if (fzDoc['exists']) {
         _fanzine = fzDoc['data'];
+
+        final shortCode = _fanzine?['shortCode'];
+        if (shortCode != null && shortCode.toString().isNotEmpty) {
+          redirectFanzinePath(context, shortCode.toString());
+        }
 
         final pagesRes = await fsQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber');
         final List pagesList = jsonDecode(pagesRes);

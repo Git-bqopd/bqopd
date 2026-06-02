@@ -802,93 +802,280 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  @override
-  Component build(BuildContext context) {
-    if (_isLoading) {
-      return div([
-        div([
-          div([], classes: 'shimmer-bg w-16 h-16 rounded-full', attributes: const {'style': 'margin-bottom: 12px;'}),
-          p([text("Connecting to bqopd database...")], classes: 'text-sm text-gray font-bold italic')
-        ], classes: 'flex-col items-center justify-center gap-3')
-      ], attributes: const {'style': 'min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #f3f4f6;'});
-    }
-
-    if (_errorMessage != null) {
-      return div([
-        PageWrapper(
-            child: div([
-              h1([text("Access Restricted")], classes: 'font-bold text-lg text-red-500'),
-              p([text(_errorMessage!)]),
-              a([text("Log In Here")], href: '/login', classes: 'nav-pill')
-            ], classes: 'flex-col items-center gap-4')
-        )
-      ], attributes: const {'style': 'min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #f3f4f6;'});
-    }
-
-    final String displayName = _profileData?.displayName ?? _profileData?.username ?? 'Archival Human';
-    final String username = _profileData?.username ?? 'archival';
-    final String bio = _profileData?.bio ?? '';
-    final String photoUrl = _profileData?.photoUrl ?? '';
-
-    return div([
-      div([
-        // Row 1: The Profile Header Card (Aesthetic desktop or mobile blocks)
-        div([
+  Component _buildUploadToolbarButton(String label, String iconName, bool isActive) {
+    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
+    return button(
+        [
           div([
-            _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: false),
-            div([], classes: 'profile-desktop-divider'),
-            _buildRightCardSocialsPart(isMobile: false)
-          ], classes: 'white-sticker-8-5')
-        ], classes: 'envelope-8-5-desktop'),
+            span(
+                [text(iconName)],
+                classes: 'material-symbols-outlined',
+                attributes: {
+                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #6750A4;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #ccc;"
+                }
+            )
+          ], classes: 'toolbar-icon-wrapper', attributes: const {'style': 'padding: 8px; border-radius: 50%; border: 2px solid black; display: flex; justify-content: center; align-items: center; margin-bottom: 4px; pointer-events: none;'}),
+          span([text(label)], classes: 'toolbar-label', attributes: {
+            'style': 'color: ${isActive ? '#6750a4' : '#ccc'}; font-weight: ${isActive ? 'bold' : 'normal'}; font-size: 10px;'
+          })
+        ],
+        classes: btnClasses,
+        events: const {}
+    );
+  }
 
-        div([
+  /// First Cell Header: Manila Envelope containing our visual upload metadata actions
+  Component _buildUploadHeaderWidget() {
+    return div(
+        [
+          div(
+              [
+                // Top Title Context
+                div([
+                  h1([text('upload single image')], classes: 'font-bold text-base text-center mb-1', attributes: const {'style': 'color: black; margin: 0; font-size: 16px;'}),
+                  p([text('Maker Pipeline')], classes: 'text-xs text-center text-gray', attributes: const {'style': 'margin: 0; color: #666; font-size: 11px;'})
+                ]),
+
+                // Centered Identity Gif
+                img(
+                    src: 'assets/logo200.gif',
+                    attributes: const {
+                      'style': 'width: 70px; height: auto; display: block; margin: 12px 0;'
+                    }
+                ),
+
+                // Native Envelope Action controls (Back / Publish)
+                div([
+                  button(
+                      [text(_isUploadingImage ? "publishing..." : "publish")],
+                      classes: 'btn-primary',
+                      attributes: _isUploadingImage
+                          ? const {'disabled': 'true', 'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%;'}
+                          : const {'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%; background-color: #6750A4; color: white;'},
+                      events: {
+                        'click': (e) => _submitSingleImage()
+                      }
+                  ),
+                  button(
+                      [text("back")],
+                      classes: 'profile-btn',
+                      attributes: const {'style': 'width: 100%; padding: 8px; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 8px; background: white; color: black; cursor: pointer;'},
+                      events: {'click': (e) => setState(() {
+                        _makerModalMode = 'options';
+                        _uploadImageBase64 = null;
+                        _uploadImageName = null;
+                        _uploadPreviewUrl = null;
+                        _uploadCreators = [];
+                      })}
+                  )
+                ], classes: 'flex-col w-full gap-2', attributes: const {'style': 'display: flex; flex-direction: column; width: 100%;'})
+              ],
+              classes: 'white-sticker',
+              attributes: const {
+                'style': 'width: 90%; height: 85%; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; border-radius: 8px;'
+              }
+          )
+        ],
+        classes: 'manila-envelope w-full mb-4',
+        attributes: const {
+          'style': 'border-radius: 8px; padding: 16px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; aspect-ratio: 5 / 8;'
+        }
+    );
+  }
+
+  /// Second Cell: Strictly 5:8 Image frame and standard social buttons underneath
+  Component _buildUploadPageItemWidget() {
+    return div(
+        [
+          // 1. The 5:8 Preview Sheet Container (Visual parity with ReaderPageItem)
+          div(
+              [
+                if (_uploadPreviewUrl != null)
+                  img(
+                      src: _uploadPreviewUrl!,
+                      attributes: const {
+                        'style': 'width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;'
+                      }
+                  )
+                else
+                  div(
+                      [
+                        span([text('add_photo_alternate')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 48px; margin-bottom: 8px; color: #aaa;'}),
+                        span([text('Click to select image')], attributes: const {'style': 'font-size: 12px; font-weight: 500; text-transform: lowercase; color: #666;'})
+                      ],
+                      classes: 'flex flex-col items-center justify-center p-4 text-gray-400'
+                  ),
+
+                // Invisible, absolute-positioned native file input covering the entire box
+                input(
+                    id: 'maker-upload-picker',
+                    classes: 'maker-upload-file-input',
+                    attributes: const {
+                      'type': 'file',
+                      'accept': 'image/*',
+                      'style': 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;'
+                    },
+                    events: {
+                      'change': (e) {
+                        _onFileInputChanged();
+                      },
+                      'click': (e) {
+                        // Prevent bubble up so it doesn't trigger parent click twice
+                        (e as dynamic).stopPropagation();
+                      }
+                    }
+                )
+              ],
+              classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center relative',
+              attributes: const {
+                'style': 'width: 100%; aspect-ratio: 5 / 8; background-color: #f5f5f5; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer;'
+              },
+              events: {
+                'click': (e) {
+                  _pickAndPreviewImage();
+                }
+              }
+          ),
+
+          // 2. Custom Toolbar (Unifies read/create layouts) with "Upload" pre-selected and highlighted on load
           div([
-            div([
-              _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: true)
-            ], classes: 'white-sticker-mobile-8-5')
-          ], classes: 'envelope-8-5-mobile-item'),
-          div([
-            div([
-              _buildRightCardSocialsPart(isMobile: true)
-            ], classes: 'white-sticker-mobile-8-5')
-          ], classes: 'envelope-8-5-mobile-item')
-        ], classes: 'envelope-8-5-mobile-container'),
+            _buildUploadToolbarButton('upload', 'edit_document', true),
+            _buildUploadToolbarButton('like', 'favorite_border', false),
+            _buildUploadToolbarButton('comments', 'chat_bubble_outline', false),
+            _buildUploadToolbarButton('tags', 'tag', false),
+          ], classes: 'toolbar-container w-full border-t border-b border-gray-100 py-2 my-1', attributes: const {
+            'style': 'display: justify-content: center; gap: 12px; box-sizing: border-box; width: 100%; background: #fff;'
+          }),
 
-        // Row 2: Spacer
-        div([], classes: 'profile-spacer'),
+          // 3. Active Metadata Panel (Sliding Form Drawer)
+          div(
+              [
+                div([
+                  div([
+                    span(
+                        [text("UPLOAD METADATA")],
+                        classes: 'text-xs font-bold text-gray',
+                        attributes: const {'style': 'letter-spacing: 1px; text-transform: uppercase; color: #666; font-size: 11px;'}
+                    )
+                  ], classes: 'mb-4'),
 
-        // Row 3: The Category Tabs
-        if (_visibleTabs.isNotEmpty)
-          div([
-            for (int i = 0; i < _visibleTabs.length; i++) ...[
-              _buildMainNavigationTab(_visibleTabs[i], i),
-              if (i < _visibleTabs.length - 1)
-                span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-            ]
-          ], classes: 'bg-white rounded-md shadow-sm py-4', attributes: const {'style': 'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%;'}),
+                  // Text Fields
+                  input(
+                    attributes: const {'type': 'text', 'placeholder': 'Title', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
+                    events: {'input': (e) => _uploadTitle = getInputValue(e)},
+                  ),
+                  input(
+                    attributes: const {'type': 'text', 'placeholder': 'Caption / Description (optional)', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
+                    events: {'input': (e) => _uploadDescription = getInputValue(e)},
+                  ),
+                  input(
+                    attributes: const {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'style': 'margin-bottom: 12px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
+                    events: {'input': (e) => _uploadIndicia = getInputValue(e)},
+                  ),
 
-        // Row 4: Spacer
-        div([], classes: 'profile-spacer'),
+                  // Creators Section
+                  div(
+                      [
+                        span([text('Creators')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 6px;'}),
 
-        // Row 5: The Action Utility Bar & Sub-navigation configurations
-        if (_visibleTabs.isNotEmpty)
-          _buildActiveActionUtilityBar(_visibleTabs[_currentTabIndex]),
+                        if (_uploadCreators.isNotEmpty)
+                          div(
+                              [
+                                for (int i = 0; i < _uploadCreators.length; i++)
+                                  div(
+                                      [
+                                        span([text('${_uploadCreators[i]['name']} (${_uploadCreators[i]['role']})')]),
+                                        span(
+                                            [text('remove_circle')],
+                                            classes: 'material-symbols-outlined text-red-500 cursor-pointer',
+                                            attributes: const {'style': 'font-size: 16px; margin-left: 6px;'},
+                                            events: {
+                                              'click': (e) => setState(() {
+                                                _uploadCreators.removeAt(i);
+                                              })
+                                            }
+                                        )
+                                      ],
+                                      classes: 'flex flex-row items-center justify-between bg-gray-50 border border-gray-150 p-1.5 rounded',
+                                      attributes: const {'style': 'font-size: 11px; font-weight: 500; margin-bottom: 3px;'}
+                                  )
+                              ],
+                              classes: 'flex flex-col gap-1 w-full mb-2'
+                          ),
 
-        // Row 6: Spacer
-        div([], classes: 'profile-spacer'),
+                        div(
+                            [
+                              div(
+                                  [
+                                    input(
+                                      attributes: {
+                                        'type': 'text',
+                                        'placeholder': '@handle',
+                                        'value': _newCreatorHandle,
+                                        'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
+                                      },
+                                      events: {'input': (e) => _newCreatorHandle = getInputValue(e)},
+                                    )
+                                  ],
+                                  classes: 'flex-1'
+                              ),
+                              div(
+                                  [
+                                    input(
+                                      attributes: {
+                                        'type': 'text',
+                                        'placeholder': 'Role',
+                                        'value': _newCreatorRole,
+                                        'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
+                                      },
+                                      events: {'input': (e) => _newCreatorRole = getInputValue(e)},
+                                    )
+                                  ],
+                                  classes: 'flex-1'
+                              ),
+                              span(
+                                  [text('add_circle')],
+                                  classes: 'material-symbols-outlined text-green-600 cursor-pointer',
+                                  attributes: const {'style': 'font-size: 22px; padding: 2px;'},
+                                  events: {
+                                    'click': (e) => _addCreator()
+                                  }
+                              )
+                            ],
+                            classes: 'flex flex-row items-center gap-2 w-full',
+                            attributes: const {'style': 'box-sizing: border-box;'}
+                        )
+                      ],
+                      classes: 'w-full text-left flex flex-col',
+                      attributes: const {'style': 'margin-top: 8px; margin-bottom: 16px;'}
+                  )
+                ], classes: 'flex-col')
+              ],
+              classes: 'p-4 mt-1 panel-container-animate',
+              attributes: const {
+                'style': 'background-color: #ffffff; border-top: 1px solid #eee; width: 100%; box-sizing: border-box; text-align: left;'
+              }
+          )
+        ],
+        classes: 'reader-list-item flex-col w-full bg-white rounded-lg overflow-hidden',
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; width: 100%; box-sizing: border-box; border: 1px solid #eee; background-color: white; border-radius: 8px;'
+        }
+    );
+  }
 
-        // Row 7: The Content Pane
-        div([
-          if (_visibleTabs.isNotEmpty)
-            _buildActiveTabContent(_visibleTabs[_currentTabIndex])
-        ], attributes: const {'style': 'width: 100%; box-sizing: border-box;'})
-      ], classes: 'unified-profile-column'),
-
-      if (_showMakerModal)
-        _buildMakerModalOverlay(),
-    ], attributes: const {
-      'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 16px; padding-bottom: 80px; box-sizing: border-box;'
-    });
+  /// Visual Image Upload sticker that coordinates the structural list sections
+  Component _buildMakerUploadContent() {
+    return div(
+        [
+          _buildUploadHeaderWidget(),
+          _buildUploadPageItemWidget(),
+        ],
+        classes: 'flex-col w-full',
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; width: 100%; gap: 16px; box-sizing: border-box;'
+        }
+    );
   }
 
   Component _buildLeftCardDetailsPart(String displayName, String username, String bio, String photoUrl, {required bool isMobile}) {
@@ -1149,7 +1336,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _buildPlainTextTab(
             title: "toolbar buttons",
             isActive: _settingsSubTabIndex == 3,
-            onTap: () => setState(() => _settingsSubTabIndex = 3),
+            onTap: () => setState(() => _settingsSubTabIndex == 3),
           ),
           span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
           _buildPlainTextTab(
@@ -1275,18 +1462,11 @@ class _ProfilePageState extends State<ProfilePage> {
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio');
 
-    // Route dynamically based on ownership and draft status
-    final String activeTab = _visibleTabs.isNotEmpty ? _visibleTabs[_currentTabIndex] : 'maker';
-    final bool isDraft = w['isLive'] != true;
-    final bool canEdit = _isMe || (_viewerAccount?.role == 'admin') || (_viewerAccount?.role == 'moderator') || (_viewerAccount?.isCurator ?? false);
-
     // If this is an unsaved temporary folio, direct route through ShortLinkPage using its local code key
     final String codeKey = w['shortCode'] ?? fanzineId;
-    final String targetRoute = (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId))
-        ? '/$codeKey'
-        : ((canEdit && (isDraft || _showDrafts || activeTab == 'curator'))
-        ? '/editor/$fanzineId'
-        : '/reader/$fanzineId');
+
+    // Vanity shortcode urls (/$codeKey) must be used exclusively to open folio page routes!
+    final String targetRoute = '/$codeKey';
 
     return a(
         [
@@ -1429,7 +1609,7 @@ class _ProfilePageState extends State<ProfilePage> {
             'background-color: ${isVisible ? '#6750A4' : '#ccc'};'
       })
     ], classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all', attributes: const {
-      'style': 'display: center; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; cursor: pointer;'
+      'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; cursor: pointer;'
     }, events: {
       'click': (e) => _toggleSocialButtonVisibility(tool.id)
     });
@@ -1524,21 +1704,20 @@ class _ProfilePageState extends State<ProfilePage> {
     final String currentRole = u['role'] ?? 'user';
 
     return div([
-      div([
-        span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-        span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'})
-      ], classes: 'flex-col gap-1'),
+    div([
+    span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
+    span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'})
+    ], classes: 'flex-col gap-1'),
 
-      div([
-        _buildRoleBadgeSelector(uid, "admin", currentRole),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        _buildRoleBadgeSelector(uid, "moderator", currentRole),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        _buildRoleBadgeSelector(uid, "curator", currentRole),
-        span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
-        _buildRoleBadgeSelector(uid, "user", currentRole)
-      ], attributes: const {'style': 'display: flex; gap: 8px;'})
-    ], classes: 'bg-gray-50 rounded-lg p-4 border border-gray-100 flex-row justify-between items-center', attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 16px;'});
+    div([
+    _buildRoleBadgeSelector(uid, "admin", currentRole),
+    span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+    _buildRoleBadgeSelector(uid, "moderator", currentRole),
+    span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+    _buildRoleBadgeSelector(uid, "curator", currentRole),
+    span([], attributes: const {'style': 'display: inline-block; width: 8px;'}),
+    _buildRoleBadgeSelector(uid, "user", currentRole)
+    ], attributes: const {'style': 'display: flex; gap: 8px;'});
   }
 
   Component _buildRoleBadgeSelector(String uid, String role, String activeRole) {
@@ -1558,59 +1737,63 @@ class _ProfilePageState extends State<ProfilePage> {
     final bool isUploadMode = _makerModalMode == 'upload';
 
     return div(
-        classes: 'global-modal-overlay',
-        attributes: const {
-          'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'
-        },
         [
           if (!isUploadMode)
           // Options Mode: Keep the beautiful classic Manila Envelope modal box
             div(
-                classes: 'manila-envelope',
-                attributes: const {
-                  'style': 'max-width: 420px; max-height: 580px; border-radius: 12px; overflow: hidden; position: relative;'
-                },
                 [
                   button(
+                      [text('×')],
                       classes: 'modal-close-btn',
                       attributes: const {
                         'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'
                       },
                       events: {
                         'click': (e) {
-                          _showMakerModal = false;
+                          setState(() {
+                            _showMakerModal = false;
+                          });
                         }
-                      },
-                      [text('×')]
+                      }
                   ),
                   _buildMakerOptionsContent()
-                ]
+                ],
+                classes: 'manila-envelope',
+                attributes: const {
+                  'style': 'max-width: 420px; max-height: 580px; border-radius: 12px; overflow: hidden; position: relative;'
+                }
             )
           else
           // Upload Mode: Full scrollable single-item list layout container
             div(
-                classes: 'upload-list-wrapper',
-                attributes: const {
-                  'style': 'width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; padding: 16px; position: relative; overflow-y: auto;'
-                },
                 [
                   // Floating close button at the top-right of the scroll area
                   button(
+                      [text('×')],
                       classes: 'modal-close-btn',
                       attributes: const {
                         'style': 'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'
                       },
                       events: {
                         'click': (e) {
-                          _showMakerModal = false;
+                          setState(() {
+                            _showMakerModal = false;
+                          });
                         }
-                      },
-                      [text('×')]
+                      }
                   ),
                   _buildMakerUploadContent()
-                ]
+                ],
+                classes: 'upload-list-wrapper',
+                attributes: const {
+                  'style': 'width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; padding: 16px; position: relative; overflow-y: auto;'
+                }
             )
-        ]
+        ],
+        classes: 'global-modal-overlay',
+        attributes: const {
+          'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'
+        }
     );
   }
 
@@ -1650,279 +1833,71 @@ class _ProfilePageState extends State<ProfilePage> {
     ]);
   }
 
-  Component _buildUploadToolbarButton(String label, String iconName, bool isActive) {
-    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
-    return button(
-        classes: btnClasses,
-        events: const {},
-        [
-          div(classes: 'toolbar-icon-wrapper', attributes: const {'style': 'padding: 8px; border-radius: 50%; border: 2px solid black; display: flex; justify-content: center; align-items: center; margin-bottom: 4px; pointer-events: none;'}, [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #6750A4;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; color: #ccc;"
-                },
-                [text(iconName)]
-            )
-          ]),
-          span(classes: 'toolbar-label', attributes: {
-            'style': 'color: ${isActive ? '#6750a4' : '#ccc'}; font-weight: ${isActive ? 'bold' : 'normal'}; font-size: 10px;'
-          }, [text(label)])
-        ]
-    );
-  }
+  @override
+  Component build(BuildContext context) {
+    final String displayName = _profileData?.displayName ?? _profileData?.username ?? 'Archival Human';
+    final String username = _profileData?.username ?? 'archival';
+    final String bio = _profileData?.bio ?? '';
+    final String photoUrl = _profileData?.photoUrl ?? '';
 
-  /// First Cell Header: Manila Envelope containing our visual upload metadata actions
-  Component _buildUploadHeaderWidget() {
-    return div(
-        classes: 'manila-envelope w-full mb-4',
-        attributes: const {
-          'style': 'border-radius: 8px; padding: 16px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; aspect-ratio: 5 / 8;'
-        },
-        [
-          div(
-              classes: 'white-sticker',
-              attributes: const {
-                'style': 'width: 90%; height: 85%; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; border-radius: 8px;'
-              },
-              [
-                // Top Title Context
-                div([
-                  h1(classes: 'font-bold text-base text-center mb-1', attributes: const {'style': 'color: black; margin: 0; font-size: 16px;'}, [text('upload single image')]),
-                  p(classes: 'text-xs text-center text-gray', attributes: const {'style': 'margin: 0; color: #666; font-size: 11px;'}, [text('Maker Pipeline')])
-                ]),
+    return div([
+      div([
+        // Row 1: The Profile Header Card (Aesthetic desktop or mobile blocks)
+        div([
+          div([
+            _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: false),
+            div([], classes: 'profile-desktop-divider'),
+            _buildRightCardSocialsPart(isMobile: false)
+          ], classes: 'white-sticker-8-5')
+        ], classes: 'envelope-8-5-desktop'),
 
-                // Centered Identity Gif
-                img(
-                    src: 'assets/logo200.gif',
-                    attributes: const {
-                      'style': 'width: 70px; height: auto; display: block; margin: 12px 0;'
-                    }
-                ),
+        div([
+          div([
+            div([
+              _buildLeftCardDetailsPart(displayName, username, bio, photoUrl, isMobile: true)
+            ], classes: 'white-sticker-mobile-8-5')
+          ], classes: 'envelope-8-5-mobile-item'),
+          div([
+            div([
+              _buildRightCardSocialsPart(isMobile: true)
+            ], classes: 'white-sticker-mobile-8-5')
+          ], classes: 'envelope-8-5-mobile-item')
+        ], classes: 'envelope-8-5-mobile-container'),
 
-                // Native Envelope Action controls (Back / Publish)
-                div(classes: 'flex-col w-full gap-2', attributes: const {'style': 'display: flex; flex-direction: column; width: 100%;'}, [
-                  button(
-                      [text(_isUploadingImage ? "publishing..." : "publish")],
-                      classes: 'btn-primary',
-                      attributes: _isUploadingImage
-                          ? const {'disabled': 'true', 'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%;'}
-                          : const {'style': 'padding: 10px; border-radius: 8px; font-weight: bold; width: 100%; background-color: #6750A4; color: white;'},
-                      events: {
-                        'click': (e) => _submitSingleImage()
-                      }
-                  ),
-                  button(
-                      [text("back")],
-                      classes: 'profile-btn',
-                      attributes: const {'style': 'width: 100%; padding: 8px; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 8px; background: white; color: black; cursor: pointer;'},
-                      events: {'click': (e) => setState(() {
-                        _makerModalMode = 'options';
-                        _uploadImageBase64 = null;
-                        _uploadImageName = null;
-                        _uploadPreviewUrl = null;
-                        _uploadCreators = [];
-                      })}
-                  )
-                ])
-              ]
-          )
-        ]
-    );
-  }
+        // Row 2: Spacer
+        div([], classes: 'profile-spacer'),
 
-  /// Second Cell: Strictly 5:8 Image frame and standard social buttons underneath
-  Component _buildUploadPageItemWidget() {
-    return div(
-        classes: 'reader-list-item flex-col w-full bg-white rounded-lg overflow-hidden',
-        attributes: const {
-          'style': 'display: flex; flex-direction: column; width: 100%; box-sizing: border-box; border: 1px solid #eee; background-color: white; border-radius: 8px;'
-        },
-        [
-          // 1. The 5:8 Preview Sheet Container (Visual parity with ReaderPageItem)
-          div(
-              classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center relative',
-              attributes: const {
-                'style': 'width: 100%; aspect-ratio: 5 / 8; background-color: #f5f5f5; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer;'
-              },
-              events: {
-                'click': (e) {
-                  _pickAndPreviewImage();
-                }
-              },
-              [
-                if (_uploadPreviewUrl != null)
-                  img(
-                      src: _uploadPreviewUrl!,
-                      attributes: const {
-                        'style': 'width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0;'
-                      }
-                  )
-                else
-                  div(
-                      classes: 'flex flex-col items-center justify-center p-4 text-gray-400',
-                      [
-                        span([text('add_photo_alternate')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 48px; margin-bottom: 8px; color: #aaa;'}),
-                        span([text('Click to select image')], attributes: const {'style': 'font-size: 12px; font-weight: 500; text-transform: lowercase; color: #666;'})
-                      ]
-                  ),
+        // Row 3: The Category Tabs
+        if (_visibleTabs.isNotEmpty)
+          div([
+            for (int i = 0; i < _visibleTabs.length; i++) ...[
+              _buildMainNavigationTab(_visibleTabs[i], i),
+              if (i < _visibleTabs.length - 1)
+                span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+            ]
+          ], classes: 'bg-white rounded-md shadow-sm py-4', attributes: const {'style': 'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%;'}),
 
-                // Invisible, absolute-positioned native file input covering the entire box
-                input(
-                    id: 'maker-upload-picker',
-                    classes: 'maker-upload-file-input',
-                    attributes: const {
-                      'type': 'file',
-                      'accept': 'image/*',
-                      'style': 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;'
-                    },
-                    events: {
-                      'change': (e) {
-                        _onFileInputChanged();
-                      },
-                      'click': (e) {
-                        // Prevent bubble up so it doesn't trigger parent click twice
-                        (e as dynamic).stopPropagation();
-                      }
-                    }
-                )
-              ]
-          ),
+        // Row 4: Spacer
+        div([], classes: 'profile-spacer'),
 
-          // 2. Custom Toolbar (Unifies read/create layouts) with "Upload" pre-selected and highlighted on load
-          div(classes: 'toolbar-container w-full border-t border-b border-gray-100 py-2 my-1', attributes: const {
-            'style': 'display: flex; justify-content: center; gap: 12px; box-sizing: border-box; width: 100%; background: #fff;'
-          }, [
-            _buildUploadToolbarButton('upload', 'edit_document', true),
-            _buildUploadToolbarButton('like', 'favorite_border', false),
-            _buildUploadToolbarButton('comments', 'chat_bubble_outline', false),
-            _buildUploadToolbarButton('tags', 'tag', false),
-          ]),
+        // Row 5: The Action Utility Bar & Sub-navigation configurations
+        if (_visibleTabs.isNotEmpty)
+          _buildActiveActionUtilityBar(_visibleTabs[_currentTabIndex]),
 
-          // 3. Active Metadata Panel (Sliding Form Drawer)
-          div(
-              classes: 'p-4 mt-1 panel-container-animate',
-              attributes: const {
-                'style': 'background-color: #ffffff; border-top: 1px solid #eee; width: 100%; box-sizing: border-box; text-align: left;'
-              },
-              [
-                div(classes: 'flex-col', [
-                  div(classes: 'mb-4', [
-                    span(
-                        classes: 'text-xs font-bold text-gray',
-                        attributes: const {'style': 'letter-spacing: 1px; text-transform: uppercase; color: #666; font-size: 11px;'},
-                        [text("UPLOAD METADATA")]
-                    )
-                  ]),
+        // Row 6: Spacer
+        div([], classes: 'profile-spacer'),
 
-                  // Text Fields
-                  input(
-                    attributes: const {'type': 'text', 'placeholder': 'Title', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
-                    events: {'input': (e) => _uploadTitle = getInputValue(e)},
-                  ),
-                  input(
-                    attributes: const {'type': 'text', 'placeholder': 'Caption / Description (optional)', 'style': 'margin-bottom: 10px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
-                    events: {'input': (e) => _uploadDescription = getInputValue(e)},
-                  ),
-                  input(
-                    attributes: const {'type': 'text', 'placeholder': 'Indicia / Copyright (optional)', 'style': 'margin-bottom: 12px; border-radius: 8px; padding: 12px; border: 1px solid #ccc; font-size: 14px;'},
-                    events: {'input': (e) => _uploadIndicia = getInputValue(e)},
-                  ),
+        // Row 7: The Content Pane
+        div([
+          if (_visibleTabs.isNotEmpty)
+            _buildActiveTabContent(_visibleTabs[_currentTabIndex])
+        ], attributes: const {'style': 'width: 100%; box-sizing: border-box;'})
+      ], classes: 'unified-profile-column'),
 
-                  // Creators Section
-                  div(
-                      classes: 'w-full text-left flex flex-col',
-                      attributes: const {'style': 'margin-top: 8px; margin-bottom: 16px;'},
-                      [
-                        span([text('Creators')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: #333; margin-bottom: 6px;'}),
-
-                        if (_uploadCreators.isNotEmpty)
-                          div(
-                              classes: 'flex flex-col gap-1 w-full mb-2',
-                              [
-                                for (int i = 0; i < _uploadCreators.length; i++)
-                                  div(
-                                      classes: 'flex flex-row items-center justify-between bg-gray-50 border border-gray-150 p-1.5 rounded',
-                                      attributes: const {'style': 'font-size: 11px; font-weight: 500; margin-bottom: 3px;'},
-                                      [
-                                        span([text('${_uploadCreators[i]['name']} (${_uploadCreators[i]['role']})')]),
-                                        span(
-                                            classes: 'material-symbols-outlined text-red-500 cursor-pointer',
-                                            attributes: const {'style': 'font-size: 16px; margin-left: 6px;'},
-                                            events: {
-                                              'click': (e) => setState(() {
-                                                _uploadCreators.removeAt(i);
-                                              })
-                                            },
-                                            [text('remove_circle')]
-                                        )
-                                      ]
-                                  )
-                              ]
-                          ),
-
-                        div(
-                            classes: 'flex flex-row items-center gap-2 w-full',
-                            attributes: const {'style': 'box-sizing: border-box;'},
-                            [
-                              div(
-                                  classes: 'flex-1',
-                                  [
-                                    input(
-                                      attributes: {
-                                        'type': 'text',
-                                        'placeholder': '@handle',
-                                        'value': _newCreatorHandle,
-                                        'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
-                                      },
-                                      events: {'input': (e) => _newCreatorHandle = getInputValue(e)},
-                                    )
-                                  ]
-                              ),
-                              div(
-                                  classes: 'flex-1',
-                                  [
-                                    input(
-                                      attributes: {
-                                        'type': 'text',
-                                        'placeholder': 'Role',
-                                        'value': _newCreatorRole,
-                                        'style': 'margin-bottom: 0; padding: 6px 10px; font-size: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc;'
-                                      },
-                                      events: {'input': (e) => _newCreatorRole = getInputValue(e)},
-                                    )
-                                  ]
-                              ),
-                              span(
-                                  classes: 'material-symbols-outlined text-green-600 cursor-pointer',
-                                  attributes: const {'style': 'font-size: 22px; padding: 2px;'},
-                                  events: {
-                                    'click': (e) => _addCreator()
-                                  },
-                                  [text('add_circle')]
-                              )
-                            ]
-                        )
-                      ]
-                  )
-                ])
-              ]
-          )
-        ]
-    );
-  }
-
-  // Visual Image Upload sticker that coordinates the structural list sections
-  Component _buildMakerUploadContent() {
-    return div(
-        classes: 'flex-col w-full',
-        attributes: const {
-          'style': 'display: flex; flex-direction: column; width: 100%; gap: 16px; box-sizing: border-box;'
-        },
-        [
-          _buildUploadHeaderWidget(),
-          _buildUploadPageItemWidget(),
-        ]
-    );
+      if (_showMakerModal)
+        _buildMakerModalOverlay(),
+    ], attributes: const {
+      'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 16px; padding-bottom: 80px; box-sizing: border-box;'
+    });
   }
 }

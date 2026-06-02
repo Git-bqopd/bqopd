@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
@@ -53,6 +54,10 @@ class _ShortLinkPageState extends State<ShortLinkPage>
   Map<String, Map<String, dynamic>> _creatorProfiles = {};
   Map<String, Map<String, dynamic>> _imageStats = {};
 
+  // Real-time account listener to determine active viewer permissions
+  UserAccount? _viewerAccount;
+  StreamSubscription? _accountSub;
+
   @override
   Future<void> preloadState() async {
     print('[SHORTLINK STATE] preloadState starting on server for code: "${component.code}"');
@@ -89,6 +94,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       print('[SHORTLINK STATE WARNING] Preloaded server state was completely EMPTY in client. Hydrating fallback resolver.');
       _resolveOnClient();
     }
+    _listenToViewerAccount();
   }
 
   @override
@@ -97,6 +103,32 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     if (oldComponent.code != component.code && kIsWeb) {
       print('[SHORTLINK STATE] Code changed to "${component.code}". Re-triggering resolution.');
       _resolveOnClient();
+    }
+    if (oldComponent.authState?.user?.uid != component.authState?.user?.uid && kIsWeb) {
+      _listenToViewerAccount();
+    }
+  }
+
+  @override
+  void dispose() {
+    _accountSub?.cancel();
+    super.dispose();
+  }
+
+  void _listenToViewerAccount() {
+    _accountSub?.cancel();
+    _accountSub = null;
+    if (kIsWeb) {
+      final uid = component.authState?.user?.uid ?? getCurrentUserId();
+      if (uid != null) {
+        _accountSub = component.userRepository.watchUserAccount(uid).listen((account) {
+          if (mounted) {
+            setState(() {
+              _viewerAccount = account;
+            });
+          }
+        });
+      }
     }
   }
 
@@ -167,6 +199,22 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       // Auto-detect if this is a temporary, unsaved fanzine from our memory layer
       final bool isUnsavedTemp = UnsavedFanzineRegistry.fanzines.containsKey(_targetFanzineId);
 
+      // Determine editing permissions
+      final currentUid = component.authState?.user?.uid ?? getCurrentUserId();
+      final ownerId = _fanzineData?['ownerId'] ?? _fanzineData?['editorId'] ?? '';
+      final editors = (_fanzineData?['editors'] as List?)?.map((e) => e.toString()).toList() ?? [];
+
+      final bool isOwnerOrEditor = currentUid != null && (currentUid == ownerId || editors.contains(currentUid));
+      final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
+      final bool isViewerModerator = _viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false);
+      final bool isViewerCurator = _viewerAccount?.role == 'curator' || (_viewerAccount?.roles.contains('curator') ?? false) || (_viewerAccount?.isCurator ?? false);
+
+      final bool canEdit = isOwnerOrEditor || isViewerAdmin || isViewerModerator || isViewerCurator;
+      final bool isDraft = _fanzineData?['isLive'] != true;
+
+      // Automatically launch directly into edit mode if they are authorized and the fanzine is currently a draft/folio
+      final bool shouldEdit = isUnsavedTemp || (canEdit && isDraft);
+
       return FanzineReaderPage(
         fanzineId: _targetFanzineId!,
         initialPageNumber: initialPage,
@@ -176,7 +224,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         preloadedImageStats: _imageStats,
         authState: component.authState,
         authBloc: component.authBloc,
-        isEditingMode: isUnsavedTemp, // Auto-launch directly into the Editor for temporary creations!
+        isEditingMode: shouldEdit, // Auto-launch directly into the Editor for temporary creations or owner draft works!
       );
     }
 
