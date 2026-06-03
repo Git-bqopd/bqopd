@@ -40,12 +40,10 @@ class WebUserRepository implements IUserRepository {
     final publicFields = ['username', 'displayName', 'bio', 'photoUrl', 'xHandle', 'instagramHandle', 'githubHandle', 'updatedAt'];
     final Map<String, dynamic> publicData = {};
     final Map<String, dynamic> privateData = {};
-
     data.forEach((key, value) {
       if (publicFields.contains(key)) publicData[key] = value;
       else privateData[key] = value;
     });
-
     if (publicData.isNotEmpty) await fsSetDoc('profiles/$uid', jsonEncode(publicData), true);
     if (privateData.isNotEmpty) await fsSetDoc('Users/$uid', jsonEncode(privateData), true);
   }
@@ -55,7 +53,11 @@ class WebUserRepository implements IUserRepository {
     final controller = StreamController<List<Map<String, dynamic>>>();
     final unsub = fsListenQuery('fanzines', 'editorId', '==', jsonEncode(uid), '', false, (String jsonStr) {
       final List decoded = jsonDecode(jsonStr);
-      controller.add(decoded.map((d) => d['data'] as Map<String, dynamic>).toList());
+      controller.add(decoded.map((d) {
+        final data = restoreTimestamps(d['data'] as Map<String, dynamic>);
+        data['id'] = d['id'];
+        return data;
+      }).toList());
     });
     controller.onCancel = () { unsub.callAsFunction(); };
     return controller.stream;
@@ -66,7 +68,11 @@ class WebUserRepository implements IUserRepository {
     final controller = StreamController<List<Map<String, dynamic>>>();
     final unsub = fsListenQuery('fanzines', 'mentionedUsers', 'array-contains', jsonEncode('user:$uid'), '', false, (String jsonStr) {
       final List decoded = jsonDecode(jsonStr);
-      controller.add(decoded.map((d) => d['data'] as Map<String, dynamic>).toList());
+      controller.add(decoded.map((d) {
+        final data = restoreTimestamps(d['data'] as Map<String, dynamic>);
+        data['id'] = d['id'];
+        return data;
+      }).toList());
     });
     controller.onCancel = () { unsub.callAsFunction(); };
     return controller.stream;

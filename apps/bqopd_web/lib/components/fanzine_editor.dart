@@ -19,7 +19,6 @@ class FanzineEditor extends StatefulComponent {
   final List<Map<String, dynamic>> pageStructure;
   final AuthState? authState;
   final AuthBloc? authBloc;
-
   // Layout preference triggers
   final bool? twoPage;
   final void Function(bool)? onTwoPageChanged;
@@ -46,7 +45,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
   late final FanzineEditorBloc _bloc;
   StreamSubscription<FanzineEditorState>? _blocSubscription;
   FanzineEditorState _blocState = FanzineEditorInitial();
-
   int _activeTab = 0; // 0: settings, 1: order, 2: upload
 
   @override
@@ -57,17 +55,14 @@ class _FanzineEditorState extends State<FanzineEditor> {
       pipelineRepository: createPipelineRepository(),
       fanzineId: _frefFrefFanzineIdSafe,
     );
-
     // Initial load requested
     _bloc.add(LoadFanzineRequested(_frefFrefFanzineIdSafe));
-
     // Listen to bloc state mutations
     _blocSubscription = _bloc.stream.listen((state) {
       if (mounted) {
         setState(() {
           _blocState = state;
         });
-
         // Inform parent layout of spread layout shifts
         if (state is FanzineEditorLoaded && component.onTwoPageChanged != null) {
           component.onTwoPageChanged!(state.fanzine.twoPage);
@@ -98,7 +93,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
   @override
   Component build(BuildContext context) {
     final state = _blocState;
-
     if (state is FanzineEditorLoading || state is FanzineEditorInitial) {
       return div(
         [
@@ -107,7 +101,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
         classes: 'white-sticker-flexible w-full mt-2 p-8 text-center text-gray italic',
       );
     }
-
     if (state is FanzineEditorFailure) {
       return div(
         [
@@ -117,12 +110,10 @@ class _FanzineEditorState extends State<FanzineEditor> {
         classes: 'white-sticker-flexible w-full mt-2 p-8 text-center',
       );
     }
-
     if (state is FanzineEditorLoaded) {
       final fanzine = state.fanzine;
       final pages = state.pages;
       final isProcessing = state.isProcessing;
-
       return div(
         [
           // 1. Core Segmented Tab selection Row
@@ -136,16 +127,14 @@ class _FanzineEditorState extends State<FanzineEditor> {
             ],
             classes: 'flex-row justify-center items-center py-2 bg-gray-100',
           ),
-
           // 2. Active Tab body panel
           div(
             [
               if (_activeTab == 0)
-                EditorSettingsTab(fanzine: fanzine, bloc: _bloc, isSaving: isProcessing),
+                EditorSettingsTab(fanzine: fanzine, pages: pages, bloc: _bloc, isSaving: isProcessing),
               if (_activeTab == 1)
                 EditorOrderTab(fanzine: fanzine, pages: pages, bloc: _bloc),
               if (_activeTab == 2)
-              // FIXED: Changed EditorUploadTab instantiation to matching UploadTab class name
                 UploadTab(fanzine: fanzine, pages: pages, bloc: _bloc, isUploading: isProcessing),
             ],
             classes: 'flex-col p-4',
@@ -154,7 +143,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
         classes: 'white-sticker-flexible w-full mt-2',
       );
     }
-
     return div([]);
   }
 }

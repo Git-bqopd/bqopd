@@ -60,6 +60,21 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     }
   }
 
+  @override
+  void didUpdateComponent(FanzineLayout oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    // Reactively swap visual workspace if editing modes shift after auth settlement
+    if (oldComponent.isEditingMode != component.isEditingMode) {
+      setState(() {
+        if (component.isEditingMode) {
+          _viewMode = FanzineViewMode.single;
+        } else {
+          _viewMode = FanzineViewMode.grid;
+        }
+      });
+    }
+  }
+
   void _switchToSingle(int index) {
     setState(() {
       _targetIndex = index;
@@ -103,7 +118,6 @@ class _FanzineLayoutState extends State<FanzineLayout> {
               )
             ]
         ),
-
       // Column 2: List Area (The Reader) - Sized responsively and styled cleanly
       if (!isGrid)
         div(
@@ -125,7 +139,6 @@ class _FanzineLayoutState extends State<FanzineLayout> {
               )
             ]
         ),
-
       // Column 3: Social/Interaction Panel
       if (showThirdColumn)
         div(

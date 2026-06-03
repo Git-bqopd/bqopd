@@ -8,11 +8,13 @@ import '../../utils/web_utils.dart';
 /// Features local text state synchronization to prevent trailing-space trimming bugs on input.
 class EditorSettingsTab extends StatefulComponent {
   final Fanzine fanzine;
+  final List<FanzinePage> pages;
   final FanzineEditorBloc bloc;
   final bool isSaving;
 
   const EditorSettingsTab({
     required this.fanzine,
+    required this.pages,
     required this.bloc,
     required this.isSaving,
     super.key,
@@ -50,15 +52,29 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
   }
 
   void _handleSaveAndNavigate() {
-    // 1. Dispatch the master save & commit events to the BLoC
+    // 1. Locate the first page in the folio page list and assign its thumbnail to 'gridCoverImage'
+    String? firstPageImage;
+    if (component.pages.isNotEmpty) {
+      final sortedPages = List<FanzinePage>.from(component.pages)
+        ..sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+      final firstPage = sortedPages.firstWhere(
+            (p) => (p.gridUrl != null && p.gridUrl!.isNotEmpty) || (p.imageUrl != null && p.imageUrl!.isNotEmpty),
+        orElse: () => sortedPages.first,
+      );
+      firstPageImage = firstPage.gridUrl ?? firstPage.imageUrl;
+    }
+
+    // 2. Dispatch the master save & commit events to the BLoC
     component.bloc.add(UpdateFanzineMetadata(
       _title,
       _volume,
       _issue,
       _wholeNumber,
+      gridCoverImage: firstPageImage,
     ));
 
-    // 2. Safely route the user back to their personal profile dashboard
+    // 3. Safely route the user back to their personal profile dashboard
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) {
         Router.of(context).push('/profile');
@@ -71,7 +87,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
     final String currentShortcode = component.fanzine.shortCode != null
         ? component.fanzine.shortCode!.toUpperCase().replaceAll('BQOPD', 'bqopd')
         : 'pending...';
-
     return div(
       [
         // Shortcode indicator
@@ -79,7 +94,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
           [text('shortcode: $currentShortcode')],
           classes: 'text-xs text-gray-500 font-semibold mb-1 text-left',
         ),
-
         // Fanzine Title Input
         div(
           [
@@ -101,7 +115,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
           ],
           classes: 'flex-col mb-1',
         ),
-
         // Volume / Issue / Whole Number Row
         div(
           [
@@ -126,7 +139,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
               ],
               classes: 'flex-1 flex-col',
             ),
-
             // Issue
             div(
               [
@@ -148,7 +160,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
               ],
               classes: 'flex-1 flex-col',
             ),
-
             // Whole Number
             div(
               [
@@ -174,7 +185,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
           classes: 'flex-row gap-2 mb-1',
           attributes: const {'style': 'display: flex; gap: 8px; width: 100%; box-sizing: border-box;'},
         ),
-
         // Two-Page Spread Custom Toggle Switch
         div(
           [
@@ -199,7 +209,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
             }
           },
         ),
-
         // Save metadata button
         button(
           [text(component.isSaving ? 'saving folio...' : 'save folio')],

@@ -55,13 +55,28 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     _resolveDisplayUrl();
   }
 
+  @override
+  void didUpdateComponent(FanzineHeader oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    // Reactively re-resolve the display url if authentication state settles
+    if (oldComponent.authState != component.authState) {
+      _resolveDisplayUrl();
+    }
+  }
+
   Future<void> _resolveDisplayUrl() async {
     if (!kIsWeb) return;
-
     final uid = getCurrentUserId();
     if (uid == null) {
-      _displayUrl = 'login / register';
-      _username = null;
+      if (mounted) {
+        setState(() {
+          _displayUrl = 'login / register';
+          _username = null;
+        });
+      } else {
+        _displayUrl = 'login / register';
+        _username = null;
+      }
     } else {
       try {
         final res = await fsGetDoc('profiles/$uid');
@@ -92,7 +107,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
       _showLogin = false;
       _showRegister = false;
     }
-
     final navLink = button(
       classes: 'nav-pill',
       events: {
@@ -141,10 +155,8 @@ class _FanzineHeaderState extends State<FanzineHeader> {
         )
       ]);
     }
-
-    final indiciaText = component.fanzineData?['masterIndicia'] ?? "© 2026 BQOPD Collective.";
+    final indiciaText = component.fanzineData?['masterIndicia'] ?? "  2026 BQOPD Collective.";
     final creators = component.fanzineData?['masterCreators'] as List? ?? [];
-
     final stickerView = div(
         classes: 'fh-sticker-view flex-col items-center w-full h-full p-2',
         [
@@ -236,21 +248,18 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               },
               [text('×')]
           ),
-
           img(
               src: 'assets/logo200.gif',
               attributes: {
                 'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
               }
           ),
-
           div(
               attributes: {
                 'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
               },
               [text('bqopd')]
           ),
-
           div(
               classes: 'flex-col w-full',
               attributes: {
@@ -300,7 +309,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 ),
               ]
           ),
-
           if (_error != null)
             p(
                 classes: 'error-msg',
@@ -309,7 +317,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 },
                 [text(_error!)]
             ),
-
           div(
               attributes: {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
@@ -357,21 +364,18 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               },
               [text('×')]
           ),
-
           img(
               src: 'assets/logo200.gif',
               attributes: {
                 'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
               }
           ),
-
           div(
               attributes: {
                 'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
               },
               [text('bqopd')]
           ),
-
           div(
               classes: 'flex-col w-full',
               attributes: {
@@ -430,7 +434,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 ),
               ]
           ),
-
           if (_error != null)
             p(
                 classes: 'error-msg',
@@ -439,7 +442,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 },
                 [text(_error!)]
             ),
-
           div(
               attributes: {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
@@ -476,7 +478,6 @@ class _FanzineHeaderState extends State<FanzineHeader> {
 
   Component _buildCreatorsTab(List creators) {
     if (creators.isEmpty) return p(classes: 'text-xs text-center text-gray', [text('No creators listed.')]);
-
     return div(classes: 'creator-list', [
       div(attributes: {'style': 'display: inline-flex; flex-direction: column; align-items: flex-start;'}, [
         for (var c in creators)

@@ -38,6 +38,11 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   StreamSubscription? _worksSub;
   bool _loading = true;
 
+  // Holds the ID of the folio currently queued for deletion
+  String? _pendingDeleteId;
+  // Holds the shortcode of the folio currently queued for deletion
+  String? _pendingDeleteShortcode;
+
   @override
   void initState() {
     super.initState();
@@ -78,11 +83,47 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     });
   }
 
-  List<Map<String, dynamic>> get _publishedWorks =>
-      _userWorks.where((w) => w['isLive'] == true).toList();
+  DateTime? _parseDateValue(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is Map) {
+      if (value['__type'] == 'timestamp' && value['iso'] != null) {
+        return DateTime.tryParse(value['iso'].toString());
+      }
+    }
+    if (value is String) return DateTime.tryParse(value);
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    try {
+      return (value as dynamic).toDate() as DateTime;
+    } catch (_) {}
+    return null;
+  }
 
-  List<Map<String, dynamic>> get _draftWorks =>
-      _userWorks.where((w) => w['isLive'] != true).toList();
+  List<Map<String, dynamic>> get _publishedWorks {
+    final list = _userWorks.where((w) => w['isLive'] == true).toList();
+    list.sort((a, b) {
+      final aTime = _parseDateValue(a['publishedAt'] ?? a['updatedAt'] ?? a['creationDate'] ?? a['timestamp']);
+      final bTime = _parseDateValue(b['publishedAt'] ?? b['updatedAt'] ?? b['creationDate'] ?? b['timestamp']);
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime); // Descending (most recent first)
+    });
+    return list;
+  }
+
+  List<Map<String, dynamic>> get _draftWorks {
+    final list = _userWorks.where((w) => w['isLive'] != true).toList();
+    list.sort((a, b) {
+      final aTime = _parseDateValue(a['updatedAt'] ?? a['creationDate'] ?? a['timestamp']);
+      final bTime = _parseDateValue(b['updatedAt'] ?? b['creationDate'] ?? b['timestamp']);
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime); // Descending (most recent first)
+    });
+    return list;
+  }
 
   Future<String> _generateUniqueTempShortcode() async {
     final String? email = component.authState?.user?.email;
@@ -242,6 +283,58 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     );
   }
 
+  /// Renders a design-consistent modal overlay to confirm destructive folio deletions
+  /// without using browser native alert or confirm popup systems.
+  Component _buildDeleteConfirmModal() {
+    return div(
+        classes: 'global-modal-overlay',
+        attributes: const {'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'},
+        [
+          div(
+              classes: 'white-sticker p-6',
+              attributes: const {'style': 'max-width: 400px; padding: 24px; border-radius: 12px; display: flex; flex-direction: column; gap: 16px; background: white; text-align: left; box-sizing: border-box;'},
+              [
+                h3([text("Delete Folio?")], attributes: const {'style': 'margin-top: 0; font-size: 18px; font-weight: bold; color: black;'}),
+                p([text("Are you sure you want to delete this folio forever? This will remove all associated pages and database configurations.")], attributes: const {'style': 'font-size: 13.5px; color: #555; line-height: 1.5; margin: 0;'}),
+                div(
+                    attributes: const {'style': 'display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;'},
+                    [
+                      button(
+                          [text("cancel")],
+                          classes: 'profile-btn',
+                          attributes: const {'style': 'padding: 8px 16px; font-size: 12px; border: 1px solid #ddd; background: white; cursor: pointer; height: 32px;'},
+                          events: {'click': (e) => setState(() {
+                            _pendingDeleteId = null;
+                            _pendingDeleteShortcode = null;
+                          })}
+                      ),
+                      button(
+                          [text("delete")],
+                          classes: 'profile-btn',
+                          attributes: const {'style': 'padding: 8px 16px; font-size: 12px; border: 1px solid #ff5252; background: #ff5252; color: white; cursor: pointer; height: 32px;'},
+                          events: {'click': (e) async {
+                            final fid = _pendingDeleteId;
+                            final sc = _pendingDeleteShortcode;
+                            setState(() {
+                              _pendingDeleteId = null;
+                              _pendingDeleteShortcode = null;
+                            });
+                            if (fid != null) {
+                              await fsDeleteDoc('fanzines/$fid');
+                              if (sc != null && sc.isNotEmpty) {
+                                await fsDeleteDoc('shortcodes/${sc.toUpperCase()}');
+                              }
+                            }
+                          }}
+                      )
+                    ]
+                )
+              ]
+          )
+        ]
+    );
+  }
+
   Component _buildWorksGridSchema(List<Map<String, dynamic>> works) {
     if (_loading) {
       return div(
@@ -275,6 +368,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     final String volume = w['volume'] ?? '';
     final String issue = w['issue'] ?? '';
     final String wholeNumber = w['wholeNumber'] ?? '';
+    final String shortCode = w['shortCode'] ?? '';
     String displaySuffix = '';
     if (volume.isNotEmpty) displaySuffix += " Vol. $volume";
     if (issue.isNotEmpty) displaySuffix += " No. $issue";
@@ -289,7 +383,28 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
               [
                 div([text(w['type'] ?? 'ingested')], attributes: const {
                   'style': 'position: absolute; top: 8px; left: 8px; background-color: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px; font-size: 8px; font-weight: bold; text-transform: uppercase;'
-                })
+                }),
+                // Display delete action button only if the viewer owns this folio
+                if (component.isMe)
+                  button(
+                      [span([text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+                      attributes: const {
+                        'style': 'position: absolute; top: 8px; right: 8px; border: none; background: rgba(0,0,0,0.7); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; border: 1px solid rgba(255,255,255,0.4); z-index: 10;'
+                      },
+                      events: {
+                        'click': (dynamic e) {
+                          // Prevent triggering the link navigation of the surrounding <a> card element
+                          try {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          } catch (_) {}
+                          setState(() {
+                            _pendingDeleteId = fanzineId;
+                            _pendingDeleteShortcode = shortCode;
+                          });
+                        }
+                      }
+                  )
               ],
               attributes: {
                 'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
@@ -306,7 +421,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         ],
         href: '/$codeKey',
         classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
-        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'}
+        attributes: const {'style': 'display: flex; flex-decoration: none; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none; position: relative;'}
     );
   }
 
@@ -363,7 +478,9 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         ),
         _buildWorksGridSchema(_showDrafts ? _draftWorks : _publishedWorks),
         if (_showMakerModal)
-          _buildMakerModalOverlay()
+          _buildMakerModalOverlay(),
+        if (_pendingDeleteId != null)
+          _buildDeleteConfirmModal()
       ],
     );
   }
