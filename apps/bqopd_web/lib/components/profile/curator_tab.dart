@@ -309,7 +309,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
 
       if (mounted) {
         setState(() => _loadingWorks = false);
-        Router.of(context).push('/editor/$fanzineId');
+        Router.of(context).push('/$shortCode');
       }
     } catch (e) {
       print("Error creating archival zine: $e");
@@ -780,6 +780,9 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     final String displayYear = (component.fanzineData['startYear'] ?? '').toString();
     final int resolvedPageCount = component.fanzineData['pageCount'] ?? _pagesCount;
 
+    // Resolve shortcode URL binding cleanly similar to the other workspaces
+    final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
+
     // Build fallback formatted date if startYear is absent
     String resolvedYear = displayYear;
     if (resolvedYear.isEmpty && component.fanzineData['creationDate'] != null) {
@@ -830,7 +833,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
               attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'}
           )
         ],
-        href: '/editor/$fanzineId', // Direct routing back into the editor workspace using the real fanzine document ID!
+        href: '/$codeKey', // Unified routing pattern matching standard vanity/shortcode pathways!
         classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
         attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'}
     );
@@ -923,7 +926,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   }
 
   /// Triggers managed profile generation and maps registration hooks, matching Flutter's workflow
-  Future<void> _triggerCreateProfile() async {
+  Future<void> _createProfile() async {
     setState(() => _loading = true);
     try {
       final handle = normalizeHandle(component.name);
@@ -948,7 +951,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
         'bio': 'Managed curator profile page for canonical entity: ${component.name}.',
         'isManaged': true,
         'isCurator': false,
-        'isAdmin': false,
         'managers': [uid],
         'followerCount': 0,
         'followingCount': 0,
@@ -1080,7 +1082,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                       [text('create')],
                       classes: 'profile-btn',
                       attributes: const {'style': 'padding: 4px 10px; font-size: 11px; background: white; border: 1px solid #ccc; font-weight: bold; border-radius: 0px; cursor: pointer;'},
-                      events: {'click': (e) => _triggerCreateProfile()}
+                      events: {'click': (e) => _createProfile()}
                   ),
                   button(
                       [text('alias')],
