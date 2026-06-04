@@ -40,7 +40,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   // 0: curator, 1: publisher, 2: entities, 3: ai training data
   int _activeSubTab = 0;
   bool _showCatalogDrawer = false;
-
   List<Map<String, dynamic>> _userWorks = [];
   bool _loadingWorks = true;
   StreamSubscription? _worksSub;
@@ -179,6 +178,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     _trainingFirebaseSub?.callAsFunction();
     _trainingFirebaseSub = null;
     setState(() => _loadingTraining = true);
+
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
 
     _trainingFirebaseSub = fsListenQuery('images', 'isTrainingData', '==', 'true', '', false, (String jsonStr) {
@@ -210,7 +210,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   /// Reads selected PDF from the device, uploads to Storage, and triggers backend ingest.
   void _triggerPdfUpload() {
     if (!kIsWeb) return;
-
     CuratorUploadHelper.pickAndUploadPdf(
       onStatus: (message) {
         if (mounted) {
@@ -229,15 +228,12 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         try {
           // Build storage path
           final String path = 'uploads/raw_pdfs/$fileName';
-
           // Execute GCS upload
           await stUpload(path, bytes, 'application/pdf');
-
           if (mounted) {
             setState(() {
               _uploadStatusMessage = 'PDF Upload complete! Processing backend ingest pipeline...';
             });
-
             // Hide progress after short delay
             Future.delayed(const Duration(seconds: 3), () {
               if (mounted) {
@@ -281,7 +277,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     setState(() => _loadingWorks = true);
     try {
       final fanzineId = 'ingested_${DateTime.now().millisecondsSinceEpoch}';
-
       // Auto-generate standard shortcode
       final shortCode = ShortcodeGenerator.generateStandardCode();
 
@@ -375,6 +370,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (works.isEmpty) {
       return div(
         [
@@ -384,6 +380,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         [
           for (var w in works)
@@ -434,7 +431,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 ]),
               ]
           ),
-
           table(
               classes: 'stats-table text-left w-full',
               [
@@ -467,6 +463,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (_aiTrainingData.isEmpty) {
       return div(
         [
@@ -475,6 +472,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         [
           h2([text("AI REINFORCEMENT BASELINES")], classes: 'font-bold text-sm text-gray mb-2', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
@@ -669,6 +667,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
 /// Dynamically queries Page 1 in Firestore if fanzineData['gridCoverImage'] is null.
 class CuratorWorkGridTile extends StatefulComponent {
   final Map<String, dynamic> fanzineData;
+
   const CuratorWorkGridTile({required this.fanzineData, super.key});
 
   @override
@@ -776,7 +775,6 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
   Component build(BuildContext context) {
     final String fanzineId = component.fanzineData['id'] ?? '';
     final String title = component.fanzineData['title'] ?? 'Untitled Fanzine';
-    final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
     final String coverUrl = _resolvedCoverUrl ?? 'https://placehold.co/450x720/png?text=Loading...';
     final String fanzineType = component.fanzineData['type'] ?? 'ingested';
     final String displayYear = (component.fanzineData['startYear'] ?? '').toString();
@@ -832,7 +830,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
               attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'}
           )
         ],
-        href: '/editor/$codeKey', // Direct routing back into the editor workspace
+        href: '/editor/$fanzineId', // Direct routing back into the editor workspace using the real fanzine document ID!
         classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
         attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'}
     );
@@ -994,7 +992,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       // Check if target exists first
       final checkRes = await fsGetDoc('usernames/$cleanTarget');
       final targetDoc = jsonDecode(checkRes);
-
       if (targetDoc['exists'] != true) {
         print("[ERROR] Target handle @$cleanTarget does not exist.");
         setState(() {
@@ -1050,12 +1047,10 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
             )
         ])
       ]),
-
       // Appearance instances
       td([
         span([text('${component.count} occurrences')], attributes: const {'style': 'font-size: 12px; font-weight: 500; color: #4b5563;'})
       ]),
-
       // Linked Profile mapping Status
       td([
         if (_exists && _profileId != null)
@@ -1074,7 +1069,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
               attributes: const {'style': 'font-size: 11px; color: #999; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;'}
           )
       ]),
-
       // Interactive Action Triggers
       td([
         if (!_exists)
