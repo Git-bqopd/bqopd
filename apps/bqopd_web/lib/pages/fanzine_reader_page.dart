@@ -7,6 +7,7 @@ import '../utils/web_firebase_interop.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
 import '../components/fanzine_editor.dart';
+import '../components/fanzine_curator.dart'; // Import newly created FanzineCurator
 import '../components/fanzine_layout.dart';
 import '../utils/firebase_mocks.dart';
 import '../utils/web_utils.dart';
@@ -47,13 +48,11 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Map<String, Map<String, dynamic>> _imageStats = {};
   bool _loading = true;
 
-  // HIGH-PERFORMANCE CENTRALIZED STATE
   Set<String> _likedImageIds = {};
   dynamic _likesUnsub;
   dynamic _fanzineUnsub;
   dynamic _pagesUnsub;
 
-  // Reactive state override
   bool? _overriddenTwoPage;
 
   @override
@@ -65,7 +64,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       _creatorProfiles = component.preloadedCreatorProfiles ?? {};
       _imageStats = component.preloadedImageStats ?? {};
       _loading = false;
-
       if (kIsWeb) {
         final shortCode = _fanzine?['shortCode'];
         if (shortCode != null && shortCode.toString().isNotEmpty) {
@@ -129,8 +127,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   void _listenToFanzineDoc() {
     _cancelSubscription(_fanzineUnsub);
     _fanzineUnsub = null;
-
-    // Resolve locally from memory first if unsaved using high-performance behavior streams
     if (UnsavedFanzineRegistry.fanzines.containsKey(component.fanzineId)) {
       _fanzineUnsub = UnsavedFanzineRegistry.watchFanzine(component.fanzineId).listen((fz) {
         if (mounted) {
@@ -187,8 +183,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   void _listenToPagesDoc() {
     _cancelSubscription(_pagesUnsub);
     _pagesUnsub = null;
-
-    // Resolve locally from memory first if unsaved using high-performance behavior streams
     if (UnsavedFanzineRegistry.fanzines.containsKey(component.fanzineId)) {
       _pagesUnsub = UnsavedFanzineRegistry.watchPages(component.fanzineId).listen((pgs) {
         if (mounted) {
@@ -299,7 +293,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           data['__id'] = p['id'];
           return data;
         }).toList();
-
         final creators = _fanzine!['masterCreators'] as List? ?? [];
         final Map<String, Map<String, dynamic>> profiles = {};
         final Map<String, Map<String, dynamic>> stats = {};
@@ -309,7 +302,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             .cast<String>()
             .toSet();
         final List<Future<void>> parallelFetches = [];
-
         for (final uid in uidsToFetch) {
           parallelFetches.add(
             fsGetDoc('profiles/$uid').then((pRes) {
@@ -318,7 +310,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             }),
           );
         }
-
         for (final page in _pages) {
           final imageId = page['imageId'] as String?;
           if (imageId != null && imageId.isNotEmpty) {
@@ -365,8 +356,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       );
     }
 
+    final String fanzineType = _fanzine!['type'] ?? 'ingested';
+    final bool isCuratorZine = fanzineType == 'ingested';
+
     final Component listHeader = component.isEditingMode
-        ? FanzineEditor(
+        ? (isCuratorZine
+        ? FanzineCurator(
       frefFanzineId: component.fanzineId,
       shortCode: _fanzine!['shortCode'],
       fanzineData: _fanzine,
@@ -382,6 +377,22 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         });
       },
     )
+        : FanzineEditor(
+      frefFanzineId: component.fanzineId,
+      shortCode: _fanzine!['shortCode'],
+      fanzineData: _fanzine,
+      creatorProfiles: _creatorProfiles,
+      imageStats: _imageStats,
+      pageStructure: _pages,
+      authState: component.authState,
+      authBloc: component.authBloc,
+      twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
+      onTwoPageChanged: (val) {
+        setState(() {
+          _overriddenTwoPage = val;
+        });
+      },
+    ))
         : FanzineHeader(
       fanzineId: component.fanzineId,
       shortCode: _fanzine!['shortCode'],
