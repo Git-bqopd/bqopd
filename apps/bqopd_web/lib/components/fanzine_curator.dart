@@ -5,9 +5,9 @@ import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../repositories/repositories.dart';
 import '../utils/web_firebase_interop.dart';
-import './editor/settings_tab.dart';
-import './editor/order_tab.dart';
-import './editor/upload_tab.dart';
+import './curator/curator_settings_tab.dart';
+import './curator/curator_order_tab.dart';
+import './curator/curator_upload_tab.dart';
 
 /// Local utility to normalize handles inside the curator scope.
 String normalizeHandle(String input) {
@@ -16,6 +16,7 @@ String normalizeHandle(String input) {
 
 /// A standalone, 4-tab workstation editor specifically designed for curators.
 /// Separated from FanzineEditor to avoid architectural overlap and regressions.
+/// Uses decoupled Curator-only Settings, Order, and Upload tab components.
 class FanzineCurator extends StatefulComponent {
   final String frefFanzineId;
   final String? shortCode;
@@ -132,11 +133,11 @@ class _FanzineCuratorState extends State<FanzineCurator> {
           div(
             [
               if (_activeTab == 0)
-                EditorSettingsTab(fanzine: fanzine, pages: pages, bloc: _bloc, isSaving: isProcessing),
+                CuratorSettingsTab(fanzine: fanzine, pages: pages, bloc: _bloc, isSaving: isProcessing),
               if (_activeTab == 1)
-                EditorOrderTab(fanzine: fanzine, pages: pages, bloc: _bloc),
+                CuratorOrderTab(fanzine: fanzine, pages: pages, bloc: _bloc),
               if (_activeTab == 2)
-                UploadTab(fanzine: fanzine, pages: pages, bloc: _bloc, isUploading: isProcessing),
+                CuratorUploadTab(fanzine: fanzine, pages: pages, bloc: _bloc, isUploading: isProcessing),
               if (_activeTab == 3)
                 EditorOcrEntitiesTab(frefFanzineId: _frefFrefFanzineIdSafe, fanzine: fanzine, pages: pages, bloc: _bloc),
             ],
