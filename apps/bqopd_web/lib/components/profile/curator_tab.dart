@@ -40,6 +40,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   // 0: curator, 1: publisher, 2: entities, 3: ai training data
   int _activeSubTab = 0;
   bool _showCatalogDrawer = false;
+
   List<Map<String, dynamic>> _userWorks = [];
   bool _loadingWorks = true;
   StreamSubscription? _worksSub;
@@ -229,7 +230,8 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           // Build storage path
           final String path = 'uploads/raw_pdfs/$fileName';
           // Execute GCS upload
-          await stUpload(path, bytes, 'application/pdf');
+          await stUpload(path, bytes, 'image/jpeg');
+
           if (mounted) {
             setState(() {
               _uploadStatusMessage = 'PDF Upload complete! Processing backend ingest pipeline...';
@@ -352,7 +354,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           await fsDeleteDoc('shortcodes/${shortCode.toUpperCase()}');
         }
       }
-
       // 2. Clear fanzine record
       await fsDeleteDoc('fanzines/$fid');
       _showToast("Fanzine deleted successfully.");
@@ -370,7 +371,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (works.isEmpty) {
       return div(
         [
@@ -380,7 +380,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
-
     return div(
         [
           for (var w in works)
@@ -463,7 +462,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (_aiTrainingData.isEmpty) {
       return div(
         [
@@ -472,7 +470,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
-
     return div(
         [
           h2([text("AI REINFORCEMENT BASELINES")], classes: 'font-bold text-sm text-gray mb-2', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
@@ -509,7 +506,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     return div(
       [
         // Navigation segment
@@ -529,7 +525,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   }
               ),
               span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
               // 'curator' text subtab with no icon
               span(
                   [text("curator")],
@@ -541,7 +536,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   }
               ),
               span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
               // 'publisher' text subtab
               span(
                   [text("publisher")],
@@ -553,7 +547,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   }
               ),
               span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
               // 'entities' text subtab
               span(
                   [text("entities")],
@@ -565,7 +558,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   }
               ),
               span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
               // 'ai training data' text subtab
               span(
                   [text("ai training data")],
@@ -581,7 +573,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             // Updated to 'justify-content: center;' to perfectly center the entire sub-tab selector list
             attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
         ),
-
         // Action Toolbar: Only visible when Catalog is toggled on to control PDF uploads
         if (_showCatalogDrawer)
           div(
@@ -632,7 +623,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 )
               ]
           ),
-
         // Sub-Tab Content Router
         if (_activeSubTab == 0)
         // curator: shows draft PDFs (sourceFile != null && isLive != true)
@@ -644,7 +634,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             _buildCuratorEntitiesList()
           else
             _buildAITrainingDataPortal(),
-
         // Safe Confirmation dialog modal
         if (_pendingDeleteId != null)
           ConfirmModal(
@@ -702,7 +691,6 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
         });
       }
     }
-
     final fallbackUrl = component.fanzineData['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio';
@@ -784,8 +772,11 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
 
     // Build fallback formatted date if startYear is absent
+    final String? publishedDateVal = component.fanzineData['publishedDate'];
     String resolvedYear = displayYear;
-    if (resolvedYear.isEmpty && component.fanzineData['creationDate'] != null) {
+    if (publishedDateVal != null && publishedDateVal.isNotEmpty) {
+      resolvedYear = publishedDateVal.split('-').first;
+    } else if (resolvedYear.isEmpty && component.fanzineData['creationDate'] != null) {
       try {
         final dateMap = component.fanzineData['creationDate'];
         if (dateMap is Map && dateMap['iso'] != null) {
@@ -806,7 +797,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
                     [
                       // Badge 1: Type & Page count
                       div(
-                          [text("$fanzineType • $resolvedPageCount pages")],
+                          [text("$fanzineType   $resolvedPageCount pages")],
                           attributes: const {
                             'style': 'background-color: rgba(33, 33, 33, 0.85); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center; text-transform: lowercase;'
                           }
@@ -891,7 +882,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   void _startObserver() {
     final handle = normalizeHandle(component.name);
     setState(() => _loading = true);
-
     _listener = fsListenDoc('usernames/$handle', (jsonStr) {
       try {
         final doc = jsonDecode(jsonStr);

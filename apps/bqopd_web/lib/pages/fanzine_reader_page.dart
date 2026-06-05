@@ -47,12 +47,10 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Map<String, Map<String, dynamic>> _creatorProfiles = {};
   Map<String, Map<String, dynamic>> _imageStats = {};
   bool _loading = true;
-
   Set<String> _likedImageIds = {};
   dynamic _likesUnsub;
   dynamic _fanzineUnsub;
   dynamic _pagesUnsub;
-
   bool? _overriddenTwoPage;
 
   @override
@@ -153,6 +151,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               'startMonth': fz.startMonth,
               'startYear': fz.startYear,
               'isSoftPublished': fz.isSoftPublished,
+              'series': fz.series,
+              'publishedDate': fz.publishedDate,
             };
             _overriddenTwoPage = null;
           });
@@ -258,15 +258,17 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           'startMonth': fz.startMonth,
           'startYear': fz.startYear,
           'isSoftPublished': fz.isSoftPublished,
+          'series': fz.series,
+          'publishedDate': fz.publishedDate,
         };
         final pgs = UnsavedFanzineRegistry.pages[component.fanzineId] ?? [];
         _pages = pgs.map((p) => {
           '__id': p.id,
+          'pageNumber': p.pageNumber,
           'imageId': p.imageId,
           'imageUrl': p.imageUrl,
           'gridUrl': p.gridUrl,
           'listUrl': p.listUrl,
-          'pageNumber': p.pageNumber,
           'status': p.status,
           'spreadPosition': p.spreadPosition,
           'sidePreference': p.sidePreference,
@@ -355,7 +357,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         attributes: const {'style': 'min-height: 100vh;'},
       );
     }
-
     final String fanzineType = _fanzine!['type'] ?? 'ingested';
     final bool isCuratorZine = fanzineType == 'ingested';
 

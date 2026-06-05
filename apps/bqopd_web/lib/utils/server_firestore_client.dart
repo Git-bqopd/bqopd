@@ -20,6 +20,100 @@ class ServerFirestoreClient {
     return '?key=$apiKey';
   }
 
+  // Robust safe Firestore parsing utilities to prevent TypeErrors in UI components
+  static String? parseDateString(dynamic val) {
+    if (val == null) return null;
+    if (val is String) {
+      if (val.contains('-') && val.length >= 10) {
+        return val.substring(0, 10);
+      }
+      return val;
+    }
+    if (val is DateTime) {
+      return "${val.year}-${val.month.toString().padLeft(2, '0')}-${val.day.toString().padLeft(2, '0')}";
+    }
+
+    // Handle JS Timestamp or objects with toDate()
+    try {
+      final date = val.toDate();
+      if (date is DateTime) {
+        return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      }
+    } catch (_) {}
+
+    // Handle JS/Dart objects with seconds property
+    try {
+      final secs = val.seconds;
+      if (secs != null) {
+        final dt = DateTime.fromMillisecondsSinceEpoch((secs as num).toInt() * 1000).toUtc();
+        return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+      }
+    } catch (_) {}
+
+    if (val is Map) {
+      final seconds = val['seconds'] ?? val['_seconds'];
+      if (seconds != null) {
+        try {
+          final dt = DateTime.fromMillisecondsSinceEpoch((seconds as num).toInt() * 1000).toUtc();
+          return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+        } catch (_) {}
+      }
+      final formatted = val['formatted'] ?? val['date'] ?? val['iso'];
+      if (formatted != null) return formatted.toString();
+    }
+
+    final str = val.toString();
+    if (str.startsWith('Timestamp(')) {
+      try {
+        final regExp = RegExp(r'seconds=(\d+)');
+        final match = regExp.firstMatch(str);
+        if (match != null) {
+          final secs = int.parse(match.group(1)!);
+          final dt = DateTime.fromMillisecondsSinceEpoch(secs * 1000).toUtc();
+          return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+        }
+      } catch (_) {}
+    }
+    if (str.contains('-') && str.length >= 10) {
+      return str.substring(0, 10);
+    }
+    return null;
+  }
+
+  static String? parseSeriesString(dynamic val) {
+    if (val == null) return null;
+    if (val is String) return val;
+    if (val is Map) {
+      final name = val['name'] ?? val['title'] ?? val['id'];
+      if (name != null) return name.toString();
+    }
+    try {
+      final path = val.path;
+      if (path != null) {
+        return path.toString().split('/').last;
+      }
+    } catch (_) {}
+    try {
+      final id = val.id;
+      if (id != null) {
+        return id.toString();
+      }
+    } catch (_) {}
+    return val.toString();
+  }
+
+  /// Sanitizes raw Firestore map payloads to format complex types into clean strings.
+  static Map<String, dynamic> sanitizeFanzineData(Map<String, dynamic> data) {
+    final copy = Map<String, dynamic>.from(data);
+    if (copy.containsKey('publishedDate')) {
+      copy['publishedDate'] = parseDateString(copy['publishedDate']);
+    }
+    if (copy.containsKey('series')) {
+      copy['series'] = parseSeriesString(copy['series']);
+    }
+    return copy;
+  }
+
   /// Decodes Firestore's strongly typed REST JSON format into clean Dart types.
   static dynamic _decodeValue(Map<String, dynamic> val) {
     if (val.containsKey('stringValue')) return val['stringValue'];
@@ -62,7 +156,7 @@ class ServerFirestoreClient {
         final fields = data['fields'] as Map<String, dynamic>? ?? {};
         final decoded = decodeFields(fields);
         decoded['id'] = data['name'].toString().split('/').last;
-        return decoded;
+        return sanitizeFanzineData(decoded);
       } else {
         print('[REST CLIENT ERROR] GET /$path failed: Status ${response.statusCode}\nBody: ${response.body}');
       }
@@ -89,7 +183,7 @@ class ServerFirestoreClient {
           final fields = data['fields'] as Map<String, dynamic>? ?? {};
           final decoded = decodeFields(fields);
           decoded['id'] = data['name'].toString().split('/').last;
-          return decoded;
+          return sanitizeFanzineData(decoded);
         }).toList();
       } else {
         print('[REST CLIENT ERROR] GET COLLECTION /$path failed: Status ${response.statusCode}\nBody: ${response.body}');
@@ -141,7 +235,7 @@ class ServerFirestoreClient {
             final fields = doc['fields'] as Map<String, dynamic>? ?? {};
             final decoded = decodeFields(fields);
             decoded['id'] = doc['name'].toString().split('/').last;
-            decodedDocs.add(decoded);
+            decodedDocs.add(sanitizeFanzineData(decoded));
           }
         }
         return decodedDocs;
@@ -179,8 +273,7 @@ class ServerFirestoreClient {
         final fz = UnsavedFanzineRegistry.getByCode(code)!;
         payload['targetFanzineId'] = fz.id;
         payload['status'] = 'fanzine';
-
-        payload['fanzineData'] = {
+        payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData({
           'id': fz.id,
           'title': fz.title,
           'volume': fz.volume,
@@ -202,7 +295,9 @@ class ServerFirestoreClient {
           'startMonth': fz.startMonth,
           'startYear': fz.startYear,
           'isSoftPublished': fz.isSoftPublished,
-        };
+          'series': fz.series,
+          'publishedDate': fz.publishedDate,
+        });
 
         final pgs = UnsavedFanzineRegistry.pages[fz.id] ?? [];
         payload['pages'] = pgs.map((p) => {
@@ -283,7 +378,7 @@ class ServerFirestoreClient {
 
         if (fzDoc['exists'] == true) {
           final Map<String, dynamic> fzData = fzDoc['data'] as Map<String, dynamic>? ?? {};
-          payload['fanzineData'] = restoreTimestamps(fzData);
+          payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(restoreTimestamps(fzData));
 
           final pagesList = pagesListRaw.map((p) {
             final mapItem = p as Map<String, dynamic>;
@@ -419,7 +514,7 @@ class ServerFirestoreClient {
         final pagesList = fzDataResults[1] as List<Map<String, dynamic>>;
 
         if (fanzineData != null) {
-          payload['fanzineData'] = fanzineData;
+          payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(fanzineData);
 
           pagesList.sort((a, b) {
             final int pA = a['pageNumber'] ?? 0;

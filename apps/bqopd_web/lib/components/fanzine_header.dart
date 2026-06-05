@@ -59,9 +59,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
   void didUpdateComponent(FanzineHeader oldComponent) {
     super.didUpdateComponent(oldComponent);
     // Reactively re-resolve the display url if authentication state settles
-    if (oldComponent.authState != component.authState) {
-      _resolveDisplayUrl();
-    }
+    if (oldComponent.authState != component.authState) {       _resolveDisplayUrl();     }
   }
 
   Future<void> _resolveDisplayUrl() async {
@@ -107,6 +105,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
       _showLogin = false;
       _showRegister = false;
     }
+
     final navLink = button(
       classes: 'nav-pill',
       events: {
@@ -155,8 +154,10 @@ class _FanzineHeaderState extends State<FanzineHeader> {
         )
       ]);
     }
+
     final indiciaText = component.fanzineData?['masterIndicia'] ?? "  2026 BQOPD Collective.";
     final creators = component.fanzineData?['masterCreators'] as List? ?? [];
+
     final stickerView = div(
         classes: 'fh-sticker-view flex-col items-center w-full h-full p-2',
         [
@@ -198,6 +199,12 @@ class _FanzineHeaderState extends State<FanzineHeader> {
         ]),
         div(classes: 'flex-col flex-1 p-4 overflow-y-auto', [
           div(classes: _activeTab == 0 ? '' : 'hidden', [
+            if (component.fanzineData?['publishedDate'] != null && component.fanzineData!['publishedDate'].toString().isNotEmpty)
+              p(
+                  classes: 'text-xs font-bold mb-2',
+                  attributes: {'style': 'font-family: Georgia; line-height: 1.5; color: #666; text-align: left;'},
+                  [text('published date: ${component.fanzineData!['publishedDate']}')]
+              ),
             p(
               classes: 'text-xs text-justify',
               attributes: {'style': 'font-family: Georgia; line-height: 1.5;'},
