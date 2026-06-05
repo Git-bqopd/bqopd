@@ -33,6 +33,8 @@ class Fanzine extends Equatable {
   final bool isSoftPublished;
   final String? series;
   final String? publishedDate;
+  final String? publishedDateMode; // 'day', 'month', 'year'
+  final bool publishedDateGuess;
 
   const Fanzine({
     required this.id,
@@ -58,6 +60,8 @@ class Fanzine extends Equatable {
     this.isSoftPublished = false,
     this.series,
     this.publishedDate,
+    this.publishedDateMode = 'year',
+    this.publishedDateGuess = false,
   });
 
   factory Fanzine.fromMap(String id, Map<String, dynamic> data) {
@@ -94,6 +98,8 @@ class Fanzine extends Equatable {
       isSoftPublished: data['isSoftPublished'] ?? false,
       series: data['series'],
       publishedDate: data['publishedDate'],
+      publishedDateMode: data['publishedDateMode'] ?? 'year',
+      publishedDateGuess: data['publishedDateGuess'] ?? false,
     );
   }
 
@@ -102,6 +108,7 @@ class Fanzine extends Equatable {
     id, title, volume, issue, wholeNumber, type, isLive, processingStatus,
     ownerId, editors, twoPage, hasCover, shortCode, sourceFile,
     draftEntities, masterCreators, masterIndicia, indiciaPageId,
-    startMonth, startYear, isSoftPublished, series, publishedDate
+    startMonth, startYear, isSoftPublished, series, publishedDate,
+    publishedDateMode, publishedDateGuess
   ];
 }

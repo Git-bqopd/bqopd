@@ -6,6 +6,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
+import '../segmented_button.dart';
 
 /// Decoupled default fanzine series metadata choices.
 const Map<String, String> _defaultSeriesOptions = {
@@ -46,6 +47,8 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
   String _wholeNumber = '';
   String _series = '';
   String _publishedDate = '';
+  String _publishedDateMode = 'year';
+  bool _publishedDateGuess = false;
 
   // Series List Manager State
   bool _showSeriesManager = false;
@@ -91,6 +94,8 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
     _wholeNumber = component.fanzine.wholeNumber ?? '';
     _series = component.fanzine.series ?? '';
     _publishedDate = component.fanzine.publishedDate ?? '';
+    _publishedDateMode = component.fanzine.publishedDateMode ?? 'year';
+    _publishedDateGuess = component.fanzine.publishedDateGuess;
   }
 
   void _listenToSeries() {
@@ -135,7 +140,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
 
   Future<void> _addSeries() async {
     final key = _newSeriesKey.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '-');
-    final name = _newSeriesName.trim(); // Allowed capitalization by removing .toLowerCase()
+    final name = _newSeriesName.trim();
     if (key.isEmpty || name.isEmpty) return;
 
     try {
@@ -172,7 +177,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
 
   Future<void> _updateSeries(String oldKey, String newKey, String name) async {
     final cleanNewKey = newKey.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '-');
-    final cleanName = name.trim(); // Allowed capitalization by removing .toLowerCase()
+    final cleanName = name.trim();
     if (oldKey.isEmpty || cleanNewKey.isEmpty || cleanName.isEmpty) return;
 
     try {
@@ -283,6 +288,8 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
       gridCoverImage: firstPageImage,
       series: _series.isEmpty ? '' : _series,
       publishedDate: _publishedDate.isEmpty ? '' : _publishedDate,
+      publishedDateMode: _publishedDateMode,
+      publishedDateGuess: _publishedDateGuess,
     ));
 
     // Route user back to profile
@@ -652,23 +659,80 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
               span([text('published date:')], attributes: const {
                 'style': 'font-size: 11px; font-weight: bold; color: #555; display: block; margin-bottom: 4px; text-align: left;'
               }),
-              input(
-                attributes: {
-                  'type': 'date',
-                  'value': _publishedDate,
-                  'style': 'width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 12px; box-sizing: border-box; font-size: 14px; background-color: white; outline: none; cursor: pointer;'
-                },
-                events: {
-                  'change': (e) {
-                    setState(() {
-                      _publishedDate = getInputValue(e);
-                    });
+              div(
+                  [
+                    // Left element: Date Input
+                    div(
+                        [
+                          input(
+                            attributes: {
+                              'type': 'date',
+                              'value': _publishedDate,
+                              'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 12px; box-sizing: border-box; font-size: 14px; background-color: white; outline: none; cursor: pointer; height: 36px;'
+                            },
+                            events: {
+                              'change': (e) {
+                                setState(() {
+                                  _publishedDate = getInputValue(e);
+                                });
+                              }
+                            },
+                          )
+                        ],
+                        attributes: const {'style': 'flex: 1.5; min-width: 150px;'}
+                    ),
+                    // Middle element: Date Display Mode Segmented Button (day, month, year)
+                    div(
+                        [
+                          SegmentedButton<String>(
+                            segments: const ['day', 'month', 'year'],
+                            selected: _publishedDateMode,
+                            labelBuilder: (val) => val,
+                            onSelectionChanged: (val) {
+                              setState(() {
+                                _publishedDateMode = val;
+                              });
+                            },
+                          )
+                        ],
+                        attributes: const {'style': 'flex: 2; min-width: 200px; display: flex; align-items: center;'}
+                    ),
+                    // Right element: Guess Checkbox
+                    div(
+                        [
+                          input(
+                            type: InputType.checkbox,
+                            attributes: {
+                              'id': 'curator-guess-checkbox',
+                              if (_publishedDateGuess) 'checked': 'true',
+                              'style': 'cursor: pointer; width: 16px; height: 16px; margin: 0 6px 0 0; outline: none;'
+                            },
+                            events: {
+                              'change': (e) {
+                                setState(() {
+                                  _publishedDateGuess = !_publishedDateGuess;
+                                });
+                              }
+                            },
+                          ),
+                          label(
+                              attributes: {
+                                'for': 'curator-guess-checkbox',
+                                'style': 'font-size: 11px; font-weight: bold; color: #555; cursor: pointer; user-select: none;'
+                              },
+                              [text('guess?')]
+                          )
+                        ],
+                        attributes: const {'style': 'display: inline-flex; align-items: center; margin-left: auto; white-space: nowrap; height: 36px;'}
+                    )
+                  ],
+                  attributes: const {
+                    'style': 'display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px; align-items: center; width: 100%;'
                   }
-                },
               )
             ],
             classes: 'flex-col',
-            attributes: const {'style': 'margin-bottom: 4px;'}
+            attributes: const {'style': 'margin-bottom: 12px;'}
         ),
         // Two-Page Spread Layout Option Toggle
         div(
@@ -694,6 +758,30 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
             }
           },
         ),
+        // Visibility Option Toggle
+        div(
+          [
+            span(
+                [
+                  text(component.fanzine.isLive
+                      ? 'visible'
+                      : 'hidden')
+                ],
+                classes: 'text-xs font-medium',
+                attributes: const {'style': 'color: #4a4a4a;'}
+            ),
+            _buildCustomToggleSwitch(component.fanzine.isLive)
+          ],
+          classes: 'flex-row items-center justify-between cursor-pointer',
+          attributes: const {
+            'style': 'padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;'
+          },
+          events: {
+            'click': (e) {
+              component.bloc.add(ToggleIsLiveRequested(!component.fanzine.isLive));
+            }
+          },
+        ),
         // Save Button
         button(
           [text(component.isSaving ? 'saving folio...' : 'save folio')],
@@ -713,9 +801,16 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
 
   Component _buildCustomToggleSwitch(bool val) {
     return div(
-      [],
+      [
+        div(
+          [],
+          attributes: {
+            'style': 'width: 18px; height: 18px; border-radius: 50%; background-color: white; position: absolute; top: 3px; left: ${val ? "23px" : "3px"}; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.35);'
+          },
+        )
+      ],
       attributes: {
-        'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
+        'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? "#6750A4" : "#ccc"}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
       },
     );
   }

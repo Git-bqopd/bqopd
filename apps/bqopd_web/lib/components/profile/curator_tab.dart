@@ -14,6 +14,50 @@ import '../../repositories/repositories.dart';
 import '../editor/modals/confirm_modal.dart';
 import 'curator_upload_helper.dart'; // Server-safe conditional upload utility
 
+/// Helper to formatted date dynamically based on precision mode and estimated guess toggle.
+String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
+  if (dateStr == null || dateStr.trim().isEmpty) return '';
+  try {
+    final parts = dateStr.split('-');
+    if (parts.isEmpty) return '';
+    final year = parts[0];
+    final monthInt = parts.length > 1 ? int.tryParse(parts[1]) : null;
+    final dayInt = parts.length > 2 ? int.tryParse(parts[2]) : null;
+
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    String result = '';
+    if (mode == 'day') {
+      if (monthInt != null && monthInt >= 1 && monthInt <= 12) {
+        final monthName = months[monthInt - 1];
+        final day = dayInt != null ? '$dayInt, ' : '';
+        result = '$monthName $day$year';
+      } else {
+        result = dateStr;
+      }
+    } else if (mode == 'month') {
+      if (monthInt != null && monthInt >= 1 && monthInt <= 12) {
+        final monthName = months[monthInt - 1];
+        result = '$monthName, $year';
+      } else {
+        result = year;
+      }
+    } else {
+      result = year;
+    }
+
+    if (isGuess) {
+      result += '?';
+    }
+    return result;
+  } catch (_) {
+    return dateStr + (isGuess ? '?' : '');
+  }
+}
+
 /// Local utility to normalize user-provided names/handles by converting them to lowercase
 /// and removing any whitespace or special characters to match standard database indexes.
 String normalizeHandle(String input) {
@@ -771,16 +815,21 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     // Resolve shortcode URL binding cleanly similar to the other workspaces
     final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
 
-    // Build fallback formatted date if startYear is absent
+    // Format publishing date nicely using precision choices and guess configurations
     final String? publishedDateVal = component.fanzineData['publishedDate'];
-    String resolvedYear = displayYear;
+    final String? publishedDateMode = component.fanzineData['publishedDateMode'] ?? 'year';
+    final bool publishedDateGuess = component.fanzineData['publishedDateGuess'] ?? false;
+
+    String resolvedYear = '';
     if (publishedDateVal != null && publishedDateVal.isNotEmpty) {
-      resolvedYear = publishedDateVal.split('-').first;
-    } else if (resolvedYear.isEmpty && component.fanzineData['creationDate'] != null) {
+      resolvedYear = formatDisplayDate(publishedDateVal, publishedDateMode, publishedDateGuess);
+    } else if (displayYear.isNotEmpty) {
+      resolvedYear = displayYear + (publishedDateGuess ? '?' : '');
+    } else if (component.fanzineData['creationDate'] != null) {
       try {
         final dateMap = component.fanzineData['creationDate'];
         if (dateMap is Map && dateMap['iso'] != null) {
-          resolvedYear = DateTime.parse(dateMap['iso'].toString()).year.toString();
+          resolvedYear = DateTime.parse(dateMap['iso'].toString()).year.toString() + (publishedDateGuess ? '?' : '');
         }
       } catch (_) {}
     }
