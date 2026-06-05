@@ -146,21 +146,32 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
 
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
 
-    // Query ALL fanzines to allow comprehensive, multi-issue curation
-    _worksFirebaseSub = fsListenQuery('fanzines', '', '', '', 'creationDate', true, (String jsonStr) {
-      try {
-        final List decoded = jsonDecode(jsonStr);
-        final list = decoded.map((d) {
-          final data = d['data'] as Map<String, dynamic>;
-          data['id'] = d['id'];
-          return data;
-        }).toList();
-        if (!controller.isClosed) {
-          controller.add(list);
+    // Query ALL fanzines without complex field orderings to prevent index exceptions
+    _worksFirebaseSub = fsListenQuery('fanzines', '', '', '', '', false, (String jsonStr) {
+      scheduleMicrotask(() {
+        try {
+          final List decoded = jsonDecode(jsonStr);
+          final list = decoded.map((d) {
+            final rawData = d['data'];
+            final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
+            data['id'] = d['id'];
+            return data;
+          }).toList();
+
+          // Sort list manually in memory to conform with Rule 2
+          list.sort((a, b) {
+            final aT = a['creationDate'] ?? a['createdAt'] ?? '';
+            final bT = b['creationDate'] ?? b['createdAt'] ?? '';
+            return bT.toString().compareTo(aT.toString());
+          });
+
+          if (!controller.isClosed) {
+            controller.add(list);
+          }
+        } catch (e) {
+          print("Error streaming global fanzines: $e");
         }
-      } catch (e) {
-        print("Error streaming global fanzines: $e");
-      }
+      });
     });
 
     _worksSub = controller.stream.listen((works) {
@@ -191,23 +202,26 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     for (var fid in activeIds) {
       if (!_fanzinePagesSubscriptions.containsKey(fid)) {
         _fanzinePagesSubscriptions[fid] = fsListenQuery('fanzines/$fid/pages', '', '', '', '', false, (jsonStr) {
-          try {
-            final List decoded = jsonDecode(jsonStr);
-            int errors = 0;
-            for (var d in decoded) {
-              final data = d['data'] as Map<String, dynamic>? ?? {};
-              if (data['status'] == 'error') {
-                errors++;
+          scheduleMicrotask(() {
+            try {
+              final List decoded = jsonDecode(jsonStr);
+              int errors = 0;
+              for (var d in decoded) {
+                final rawData = d['data'];
+                final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
+                if (data['status'] == 'error') {
+                  errors++;
+                }
               }
+              if (mounted) {
+                setState(() {
+                  _fanzineErrorCounts[fid] = errors;
+                });
+              }
+            } catch (e) {
+              print("Error counting page errors: $e");
             }
-            if (mounted) {
-              setState(() {
-                _fanzineErrorCounts[fid] = errors;
-              });
-            }
-          } catch (e) {
-            print("Error counting page errors: $e");
-          }
+          });
         });
       }
     }
@@ -222,19 +236,22 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
 
     _trainingFirebaseSub = fsListenQuery('images', 'isTrainingData', '==', 'true', '', false, (String jsonStr) {
-      try {
-        final List decoded = jsonDecode(jsonStr);
-        final list = decoded.map((d) {
-          final data = d['data'] as Map<String, dynamic>;
-          data['id'] = d['id'];
-          return data;
-        }).toList();
-        if (!controller.isClosed) {
-          controller.add(list);
+      scheduleMicrotask(() {
+        try {
+          final List decoded = jsonDecode(jsonStr);
+          final list = decoded.map((d) {
+            final rawData = d['data'];
+            final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
+            data['id'] = d['id'];
+            return data;
+          }).toList();
+          if (!controller.isClosed) {
+            controller.add(list);
+          }
+        } catch (e) {
+          print("Error streaming AI training images: $e");
         }
-      } catch (e) {
-        print("Error streaming AI training images: $e");
-      }
+      });
     });
 
     _trainingSub = controller.stream.listen((list) {
@@ -700,7 +717,8 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
 
       if (decodedPages.isNotEmpty) {
         final firstPage = decodedPages.firstWhere((p) => p['data']['pageNumber'] == 1, orElse: () => decodedPages.first);
-        final data = firstPage['data'];
+        final rawData = firstPage['data'];
+        final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
         final url = data['gridUrl'] ?? data['thumbnailUrl'] ?? data['imageUrl'];
         if (url != null && url.toString().isNotEmpty) {
           if (mounted) {
@@ -721,7 +739,8 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
           final bT = b['data']?['timestamp'] ?? 0;
           return bT.toString().compareTo(bT.toString());
         });
-        final firstImg = decodedImages.first['data'];
+        final firstImgRaw = decodedImages.first['data'];
+        final Map<String, dynamic> firstImg = firstImgRaw is Map ? Map<String, dynamic>.from(firstImgRaw) : {};
         final url = firstImg['gridUrl'] ?? firstImg['fileUrl'];
         if (url != null && url.toString().isNotEmpty) {
           if (mounted) {
@@ -778,7 +797,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
         [
           div(
               [
-                // High fidelity layered metadata badge overlays matching image_76d06c.png
+                // High fidelity layered metadata badge overlays
                 div(
                     attributes: const {
                       'style': 'position: absolute; top: 12px; left: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; pointer-events: none;'
@@ -791,7 +810,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
                             'style': 'background-color: rgba(33, 33, 33, 0.85); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center; text-transform: lowercase;'
                           }
                       ),
-                      // Badge 2: Year info printed just under status and page count (image_76d06c.png)
+                      // Badge 2: Year info
                       if (resolvedYear.isNotEmpty)
                         div(
                             [text(resolvedYear)],

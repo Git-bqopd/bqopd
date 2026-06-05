@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'dart:async'; // REQUIRED for scheduleMicrotask
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/firebase_mocks.dart';
-import '../../utils/web_utils.dart'; // REQUIRED for getInputValue!
+import '../../utils/web_utils.dart';
 
 /// Local utility to normalize user-provided names/handles by converting them to lowercase
 /// and removing any whitespace or special characters to match standard database indexes.
@@ -29,6 +30,9 @@ class CuratorEntitiesDirectory extends StatefulComponent {
 }
 
 class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
+  // Sets the initial page limit to 100 to drastically reduce initial rendering and fetch overhead
+  int _visibleCount = 100;
+
   @override
   Component build(BuildContext context) {
     if (component.isLoading) {
@@ -45,10 +49,15 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
     for (var fz in component.userWorks) {
       // Pull only from draft fanzines (isLive != true)
       if (fz['isLive'] == true) continue;
-      final List entities = fz['draftEntities'] ?? [];
-      for (var ent in entities) {
-        if (ent != null) {
-          entityCounts[ent.toString()] = (entityCounts[ent.toString()] ?? 0) + 1;
+
+      // Defensively parse and sanitize entities list
+      final rawEntities = fz['draftEntities'];
+      if (rawEntities is List) {
+        for (var ent in rawEntities) {
+          if (ent != null && ent.toString().trim().isNotEmpty) {
+            final String entStr = ent.toString().trim();
+            entityCounts[entStr] = (entityCounts[entStr] ?? 0) + 1;
+          }
         }
       }
     }
@@ -67,6 +76,9 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
     final sortedNames = entityCounts.keys.toList()
       ..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
 
+    // Limit the current rendering pass to the value of _visibleCount
+    final displayedNames = sortedNames.take(_visibleCount).toList();
+
     return div(
       classes: 'bg-white rounded-lg p-6 shadow-sm border border-gray-200 w-full mt-4',
       [
@@ -76,7 +88,7 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
           [
             div([
               h2([text("CANONICAL ENTITIES DIRECTORY")], attributes: const {'style': 'margin: 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;'}),
-              span([text("Manage alternative name aliases and create curator-owned wiki profile pages.")], attributes: const {'style': 'font-size: 11px; color: #666;'})
+              span([text("Manage alternative name aliases and create curator-owned wiki profile pages. (showing ${displayedNames.length} of ${sortedNames.length})")], attributes: const {'style': 'font-size: 11px; color: #666;'})
             ]),
           ],
         ),
@@ -92,7 +104,7 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
               ])
             ]),
             tbody([
-              for (var name in sortedNames)
+              for (var name in displayedNames)
                 EntityRowComponent(
                   name: name,
                   count: entityCounts[name]!,
@@ -100,7 +112,34 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
                 )
             ])
           ],
-        )
+        ),
+
+        // Interactive trigger to increment visible elements, avoiding heavy list builds
+        if (sortedNames.length > _visibleCount)
+          div(
+              attributes: const {
+                'style': 'display: flex; justify-content: center; margin-top: 20px; border-top: 1px solid #f0f0f0; padding-top: 16px;'
+              },
+              [
+                button(
+                    [
+                      span([text('expand_more')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; margin-right: 6px; vertical-align: middle;'}),
+                      text('load more (+100)')
+                    ],
+                    classes: 'profile-btn',
+                    attributes: const {
+                      'style': 'padding: 8px 24px; font-size: 12px; font-weight: bold; cursor: pointer; border: 1px solid #ccc; background: white; display: inline-flex; align-items: center; justify-content: center;'
+                    },
+                    events: {
+                      'click': (e) {
+                        setState(() {
+                          _visibleCount += 100;
+                        });
+                      }
+                    }
+                )
+              ]
+          )
       ],
     );
   }
@@ -128,9 +167,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   bool _isAlias = false;
   String? _redirectHandle;
 
-  // Real-time listener subscription hook
-  FirebaseSubscription? _listener;
-
   // Inline alias editor toggle state
   bool _showAliasInput = false;
   String _targetAliasInputText = '';
@@ -138,36 +174,36 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      _startObserver();
-    }
+    _fetchStatus();
   }
 
   @override
   void didUpdateComponent(EntityRowComponent oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.name != component.name && kIsWeb) {
-      _listener?.callAsFunction();
-      _startObserver();
+    if (oldComponent.name != component.name) {
+      _fetchStatus();
     }
   }
 
-  @override
-  void dispose() {
-    _listener?.callAsFunction();
-    super.dispose();
-  }
+  /// High-performance one-time asynchronous check replacing heavy active listener streams
+  Future<void> _fetchStatus() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+    });
 
-  void _startObserver() {
-    final handle = normalizeHandle(component.name);
-    setState(() => _loading = true);
-    _listener = fsListenDoc('usernames/$handle', (jsonStr) {
-      try {
-        final doc = jsonDecode(jsonStr);
-        if (doc['exists'] == true) {
-          final data = doc['data'] as Map<String, dynamic>? ?? {};
-          final bool isAlias = data['isAlias'] == true;
-          if (mounted) {
+    try {
+      final handle = normalizeHandle(component.name);
+      final jsonStr = await fsGetDoc('usernames/$handle');
+
+      scheduleMicrotask(() {
+        if (!mounted) return;
+        try {
+          final doc = jsonDecode(jsonStr);
+          if (doc['exists'] == true) {
+            final rawData = doc['data'];
+            final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
+            final bool isAlias = data['isAlias'] == true;
             setState(() {
               _exists = true;
               _isAlias = isAlias;
@@ -175,9 +211,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
               _redirectHandle = data['redirect'];
               _loading = false;
             });
-          }
-        } else {
-          if (mounted) {
+          } else {
             setState(() {
               _exists = false;
               _isAlias = false;
@@ -186,12 +220,17 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
               _loading = false;
             });
           }
+        } catch (e) {
+          print("Error parsing username details inside _fetchStatus: $e");
+          setState(() => _loading = false);
         }
-      } catch (e) {
-        print("Error observing username details: $e");
-        if (mounted) setState(() => _loading = false);
+      });
+    } catch (e) {
+      print("Error fetching username details: $e");
+      if (mounted) {
+        setState(() => _loading = false);
       }
-    });
+    }
   }
 
   /// Triggers managed profile generation and maps registration hooks, matching Flutter's workflow
@@ -243,9 +282,10 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       await fsSetDoc('profiles/$profileId', jsonEncode(profileData), true);
       await fsSetDoc('usernames/$handle', jsonEncode(usernameData), true);
       await fsSetDoc('shortcodes/${handle.toUpperCase()}', jsonEncode(shortcodeData), true);
+
+      _fetchStatus();
     } catch (e) {
       print("Failed creating managed entity profile: $e");
-    } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -284,15 +324,11 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
         _showAliasInput = false;
         _targetAliasInputText = '';
       });
+      _fetchStatus();
     } catch (e) {
       print("Failed submitting alias redirection: $e");
-    } finally {
-      if (mounted) setState(() => _loadingValue());
+      if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _loadingValue() {
-    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -362,7 +398,9 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                 ] else
                 // Inline alias compositor input
                   div(
-                      attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'},
+                      attributes: const {
+                        'style': 'display: flex; gap: 4px; align-items: center;'
+                      },
                       [
                         input(
                             attributes: const {
