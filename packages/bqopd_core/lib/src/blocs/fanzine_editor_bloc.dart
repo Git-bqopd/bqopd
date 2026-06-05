@@ -38,10 +38,12 @@ class UpdateFanzineMetadata extends FanzineEditorEvent {
   final String issue;
   final String wholeNumber;
   final String? gridCoverImage;
-  UpdateFanzineMetadata(this.title, this.volume, this.issue, this.wholeNumber, {this.gridCoverImage});
+  final String? series;
+  final String? publishedDate;
+  UpdateFanzineMetadata(this.title, this.volume, this.issue, this.wholeNumber, {this.gridCoverImage, this.series, this.publishedDate});
 
   @override
-  List<Object?> get props => [title, volume, issue, wholeNumber, gridCoverImage];
+  List<Object?> get props => [title, volume, issue, wholeNumber, gridCoverImage, series, publishedDate];
 }
 
 class ToggleTwoPageRequested extends FanzineEditorEvent {
@@ -232,6 +234,12 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
       };
       if (event.gridCoverImage != null) {
         data['gridCoverImage'] = event.gridCoverImage!;
+      }
+      if (event.series != null) {
+        data['series'] = event.series!;
+      }
+      if (event.publishedDate != null) {
+        data['publishedDate'] = event.publishedDate!;
       }
       await _repository.updateFanzine(fanzineId, data);
     } catch (e) {

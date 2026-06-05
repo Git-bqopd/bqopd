@@ -84,6 +84,8 @@ class WebFanzineRepository implements IFanzineRepository {
           startMonth: fz.startMonth,
           startYear: fz.startYear,
           isSoftPublished: fz.isSoftPublished,
+          series: data['series'] ?? fz.series,
+          publishedDate: data['publishedDate'] ?? fz.publishedDate,
         );
 
         // COMMIT ENTIRE CONFIGURATION AND CHANNELS TO CLOUD FIRESTORE FOR FIRST TIME
@@ -103,6 +105,8 @@ class WebFanzineRepository implements IFanzineRepository {
           'shortCode': updatedFz.shortCode,
           'shortCodeKey': updatedFz.shortCode?.toUpperCase(),
           'creationDate': WebFieldValue.serverTimestamp(),
+          'series': updatedFz.series,
+          'publishedDate': updatedFz.publishedDate,
         };
 
         // 1. Create master fanzine doc
