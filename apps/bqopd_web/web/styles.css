@@ -567,6 +567,8 @@ a:hover {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
+    margin-top: 12px;
+    font-family: inherit;
 }
 
 .stats-table th, .stats-table td {
@@ -661,6 +663,35 @@ a:hover {
         min-width: 0 !important; /* No min-width on mobile! */
         max-width: none !important;
     }
+}
+
+/* --- BOX SPECIFIC TABLE STYLES --- */
+.stats-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280; /* text-gray-500 */
+  padding: 8px 12px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.stats-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.stats-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+.profile-btn {
+  transition: all 0.2s ease;
+}
+
+.profile-btn:hover {
+  background-color: #f3f4f6 !important;
+  border-color: #000 !important;
 }
 
 /* --- HEADER/WIDGET & PAGE WIDTH RULES --- */

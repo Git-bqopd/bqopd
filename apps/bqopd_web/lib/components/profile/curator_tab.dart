@@ -142,7 +142,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     super.dispose();
   }
 
-  /// Streams ALL unpublished and draft fanzines globally to match the Flutter curator dataset
+  /// Streams ALL fanzines globally to match the Flutter curator dataset
   void _listenToWorks() {
     _worksSub?.cancel();
     _worksFirebaseSub?.callAsFunction();
@@ -408,6 +408,24 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
+  /// Renders the correct workspace based on the active sub-tab.
+  /// Isolating this helper prevents Jaspr's diffing engine from mismatching stateful elements.
+  Component _buildActiveSubTabContent() {
+    switch (_activeSubTab) {
+      case 0:
+      // curator: shows draft PDFs (sourceFile != null && isLive != true)
+        return _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] != null && w['isLive'] != true).toList());
+      case 1:
+      // publisher: shows folios and published fanzines (sourceFile == null || isLive == true)
+        return _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] == null || w['isLive'] == true).toList());
+      case 2:
+        return _buildCuratorEntitiesList();
+      case 3:
+      default:
+        return _buildAITrainingDataPortal();
+    }
+  }
+
   Component _buildWorksGridSchema(List<Map<String, dynamic>> works) {
     if (_loadingWorks) {
       return div(
@@ -490,7 +508,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                     EntityRowComponent(
                       name: name,
                       count: entityCounts[name]!,
-                      key: ValueKey(name),
+                      key: ValueKey('entity_row_$name'),
                     )
                 ])
               ]
@@ -667,17 +685,8 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 )
               ]
           ),
-        // Sub-Tab Content Router
-        if (_activeSubTab == 0)
-        // curator: shows draft PDFs (sourceFile != null && isLive != true)
-          _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] != null && w['isLive'] != true).toList())
-        else if (_activeSubTab == 1)
-        // publisher: shows folios and published fanzines (sourceFile == null || isLive == true)
-          _buildWorksGridSchema(_userWorks.where((w) => w['sourceFile'] == null || w['isLive'] == true).toList())
-        else if (_activeSubTab == 2)
-            _buildCuratorEntitiesList()
-          else
-            _buildAITrainingDataPortal(),
+        // Sub-Tab Content Router: Render using isolated safe switcher to prevent DOM reuse collisions
+        _buildActiveSubTabContent(),
         // Safe Confirmation dialog modal
         if (_pendingDeleteId != null)
           ConfirmModal(
@@ -779,7 +788,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
         decodedImages.sort((a, b) {
           final aT = a['data']?['timestamp'] ?? 0;
           final bT = b['data']?['timestamp'] ?? 0;
-          return bT.toString().compareTo(aT.toString());
+          return bT.toString().compareTo(bT.toString());
         });
         final firstImg = decodedImages.first['data'];
         final url = firstImg['gridUrl'] ?? firstImg['fileUrl'];
