@@ -91,24 +91,31 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         // Parse wiki links [[Label]] or [[Label|user:uid]]
         final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
         final matches = regex.allMatches(_rawFullText);
-        final List<EntityLink> parsed = [];
+
+        // Use a map to filter out duplicate keys, keeping linked occurrences as higher priority
+        final Map<String, EntityLink> uniqueEntities = {};
 
         for (final m in matches) {
           final label = m.group(1)?.trim() ?? '';
           final ref = m.group(2)?.trim();
           final raw = m.group(0) ?? '';
+
           if (label.isNotEmpty) {
-            parsed.add(EntityLink(label: label, ref: ref, rawMatch: raw));
+            final key = label.toLowerCase();
+            // If the entity doesn't exist yet OR if this match has a target ref while the previous one didn't, insert/upgrade it
+            if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
+              uniqueEntities[key] = EntityLink(label: label, ref: ref, rawMatch: raw);
+            }
           }
         }
 
         setState(() {
-          _entities = parsed;
+          _entities = uniqueEntities.values.toList();
           _loading = false;
         });
 
         // Load profiles for linked entities in parallel
-        _loadEntityProfiles(parsed);
+        _loadEntityProfiles(_entities);
       } else {
         setState(() {
           _entities = [];
@@ -366,6 +373,9 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       classes: 'hover:shadow-md transition-all',
       attributes: const {
         'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 12px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
+      },
+      events: {
+        'click': (e) => _onEntityTap(entity),
       },
     );
   }
