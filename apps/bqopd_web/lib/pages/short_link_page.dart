@@ -212,6 +212,32 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       final bool canEdit = isOwnerOrEditor || isViewerAdmin || isViewerModerator || isViewerCurator;
       final bool isDraft = _fanzineData?['isLive'] != true;
 
+      // Visibility Gate: If the fanzine is set to hidden (isDraft / isLive != true)
+      // and the current visitor does NOT have editor or administrator privileges, block access.
+      if (isDraft && !canEdit && !isUnsavedTemp) {
+        return div(
+            classes: 'flex flex-col items-center justify-center w-full px-4 text-center bg-gray-50',
+            attributes: const {'style': 'min-height: 100vh;'},
+            [
+              div(
+                  classes: 'max-w-md w-full bg-white border border-gray-200 rounded-xl p-8 shadow-sm flex flex-col items-center',
+                  [
+                    div(classes: 'text-5xl mb-4', [text('🔒')]),
+                    h3(classes: 'text-xl font-bold text-gray-800 mb-2', [text('This Fanzine is Private')]),
+                    p(classes: 'text-gray-500 mb-6 text-sm', [
+                      text('The editor or curator has set this fanzine visibility to hidden. Only creators with management access can view it.')
+                    ]),
+                    a(
+                        href: '/',
+                        classes: 'inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow transition duration-200',
+                        [text('Return Home')]
+                    )
+                  ]
+              )
+            ]
+        );
+      }
+
       // Automatically launch directly into edit mode if they are authorized and the fanzine is currently a draft/folio
       final bool shouldEdit = isUnsavedTemp || (canEdit && isDraft);
 
