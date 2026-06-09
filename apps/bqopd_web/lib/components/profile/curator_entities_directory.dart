@@ -342,6 +342,8 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       ]);
     }
 
+    final String handle = _isAlias ? (_redirectHandle ?? '') : normalizeHandle(component.name);
+
     return tr([
       // Canonical Display Label
       td([
@@ -360,13 +362,13 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       ]),
       // Linked Profile mapping Status
       td([
-        if (_exists && _profileId != null)
+        if (_exists)
           a(
               [
                 span([text('account_circle')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px;'}),
-                text(_isAlias ? 'view target profile' : 'view profile')
+                text('@$handle')
               ],
-              href: '/profile?userId=$_profileId',
+              href: '/$handle',
               classes: 'text-green-600 hover:underline inline-flex items-center',
               attributes: const {'style': 'font-size: 12px; font-weight: bold; color: #16a34a; text-decoration: none;'}
           )

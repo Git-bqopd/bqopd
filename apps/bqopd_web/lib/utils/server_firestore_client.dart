@@ -467,9 +467,15 @@ class ServerFirestoreClient {
       final usernameDoc = initialChecks[1] as Map<String, dynamic>?;
 
       if (scDoc != null) {
-        payload['targetFanzineId'] = scDoc['contentId'];
-        payload['status'] = 'fanzine';
-        print('[RESOLVE REST] Successfully mapped code "$code" to target Fanzine ID: "${scDoc['contentId']}"');
+        final type = scDoc['type'] ?? 'fanzine';
+        if (type == 'user') {
+          payload['targetUserId'] = scDoc['contentId'];
+          payload['status'] = 'user';
+        } else {
+          payload['targetFanzineId'] = scDoc['contentId'];
+          payload['status'] = 'fanzine';
+        }
+        print('[RESOLVE REST] Successfully mapped code "$code" (type: $type) to contentId: "${scDoc['contentId']}"');
       }
 
       if (payload.isEmpty && usernameDoc != null) {
