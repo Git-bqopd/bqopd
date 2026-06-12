@@ -114,48 +114,6 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
     });
   }
 
-  Component _buildWorkGridTile(Map<String, dynamic> w) {
-    final String fanzineId = w['id'] ?? '';
-    final String title = w['title'] ?? 'Untitled Fanzine';
-    final String volume = w['volume'] ?? '';
-    final String issue = w['issue'] ?? '';
-    final String wholeNumber = w['wholeNumber'] ?? '';
-    String displaySuffix = '';
-    if (volume.isNotEmpty) displaySuffix += " Vol. $volume";
-    if (issue.isNotEmpty) displaySuffix += " No. $issue";
-    if (wholeNumber.isNotEmpty) displaySuffix += " ($wholeNumber)";
-    final String coverUrl = w['gridCoverImage'] ?? (w['sourceFile'] != null
-        ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
-        : 'https://placehold.co/450x720/png?text=Folio');
-
-    final String codeKey = w['shortCode'] ?? fanzineId;
-    return a(
-        [
-          div(
-              [
-                div([text(w['type'] ?? 'ingested')], attributes: const {
-                  'style': 'position: absolute; top: 8px; left: 8px; background-color: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px; font-size: 8px; font-weight: bold; text-transform: uppercase;'
-                })
-              ],
-              attributes: {
-                'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
-              }
-          ),
-          div(
-              [
-                span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
-                if (displaySuffix.isNotEmpty)
-                  span([text(displaySuffix)], attributes: const {'style': 'font-size: 11px; color: #666;'})
-              ],
-              attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'}
-          )
-        ],
-        href: '/$codeKey',
-        classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
-        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'}
-    );
-  }
-
   Component _buildWorksGridSchema() {
     if (_loadingMentions) {
       return div(
@@ -176,7 +134,7 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
     return div(
         [
           for (var w in _mentions)
-            _buildWorkGridTile(w)
+            MentionsWorkGridTile(fanzineData: w, key: ValueKey('mentions_tile_${w['id']}'))
         ],
         attributes: const {
           'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;'
@@ -234,36 +192,219 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
       );
     }
 
+    final currentUid = getCurrentUserId();
+    final bool isMe = currentUid != null && currentUid == component.targetUserId;
+
+    final bool showMentions = isMe || _mentions.isNotEmpty;
+    final bool showComments = isMe || _comments.isNotEmpty;
+
+    if (!showMentions && !showComments) {
+      return div([]);
+    }
+
+    // Safely auto-route if one of the sub-tabs is hidden
+    int activeSubTab = _activeSubTab;
+    if (!showMentions) {
+      activeSubTab = 1;
+    } else if (!showComments) {
+      activeSubTab = 0;
+    }
+
+    final List<Component> subTabSpans = [];
+    if (showMentions) {
+      subTabSpans.add(
+          span(
+              [text("mentions (${_mentions.length})")],
+              classes: activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+              events: {
+                'click': (e) => setState(() => _activeSubTab = 0)
+              }
+          )
+      );
+    }
+    if (showMentions && showComments) {
+      subTabSpans.add(span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}));
+    }
+    if (showComments) {
+      subTabSpans.add(
+          span(
+              [text("comments (${_comments.length})")],
+              classes: activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+              events: {
+                'click': (e) => setState(() => _activeSubTab = 1)
+              }
+          )
+      );
+    }
+
     return div(
       [
-        // Subtab row selector
-        div(
-            [
-              span(
-                  [text("mentions (${_mentions.length})")],
-                  classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-                  events: {
-                    'click': (e) => setState(() => _activeSubTab = 0)
-                  }
-              ),
-              span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-              span(
-                  [text("comments (${_comments.length})")],
-                  classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-                  events: {
-                    'click': (e) => setState(() => _activeSubTab = 1)
-                  }
-              ),
-            ],
-            classes: 'bg-white rounded-md p-4 shadow-sm',
-            attributes: const {'style': 'display: flex; justify-content: center; align-items: center; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
-        ),
+        // Subtab row selector (always visible if at least one sub-tab is qualified)
+        if (subTabSpans.isNotEmpty)
+          div(
+              subTabSpans,
+              classes: 'bg-white rounded-md p-4 shadow-sm',
+              attributes: const {'style': 'display: flex; justify-content: center; align-items: center; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
+          ),
 
-        if (_activeSubTab == 0)
+        if (activeSubTab == 0 && showMentions)
           _buildWorksGridSchema()
-        else
+        else if (activeSubTab == 1 && showComments)
           _buildCommentsListSubView()
+        else
+          div([])
       ],
+    );
+  }
+}
+
+/// Dynamic, self-resolving grid tile for showing mentioned fanzines.
+/// Seamlessly loads the cover image (Page 1) dynamically from pages or images if not cached in gridCoverImage.
+class MentionsWorkGridTile extends StatefulComponent {
+  final Map<String, dynamic> fanzineData;
+
+  const MentionsWorkGridTile({
+    required this.fanzineData,
+    super.key,
+  });
+
+  @override
+  State<MentionsWorkGridTile> createState() => _MentionsWorkGridTileState();
+}
+
+class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
+  String? _resolvedCoverUrl;
+  int _pagesCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveThumbnail();
+  }
+
+  @override
+  void didUpdateComponent(MentionsWorkGridTile oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.fanzineData['id'] != component.fanzineData['id']) {
+      _resolveThumbnail();
+    }
+  }
+
+  Future<void> _resolveThumbnail() async {
+    final String fanzineId = component.fanzineData['id'] ?? '';
+    final String? coverUrl = component.fanzineData['gridCoverImage'];
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _resolvedCoverUrl = coverUrl;
+        });
+      }
+      return;
+    }
+
+    final fallbackUrl = component.fanzineData['sourceFile'] != null
+        ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
+        : 'https://placehold.co/450x720/png?text=Folio';
+
+    if (!kIsWeb || fanzineId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _resolvedCoverUrl ??= fallbackUrl;
+        });
+      }
+      return;
+    }
+
+    try {
+      // 1. Query pages subcollection for page number 1 and calculate page total length
+      final pagesRes = await fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber');
+      final List decodedPages = jsonDecode(pagesRes);
+      if (mounted) {
+        setState(() {
+          _pagesCount = decodedPages.length;
+        });
+      }
+      if (decodedPages.isNotEmpty) {
+        final firstPage = decodedPages.firstWhere((p) => p['data']['pageNumber'] == 1, orElse: () => decodedPages.first);
+        final rawData = firstPage['data'];
+        final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
+        final url = data['gridUrl'] ?? data['thumbnailUrl'] ?? data['imageUrl'];
+        if (url != null && url.toString().isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _resolvedCoverUrl = url.toString();
+            });
+          }
+          return;
+        }
+      }
+      // 2. Fallback: Query associated master images under this folioContext
+      final imagesRes = await fsQuery('images', 'folioContext', '==', jsonEncode(fanzineId), '');
+      final List decodedImages = jsonDecode(imagesRes);
+      if (decodedImages.isNotEmpty) {
+        decodedImages.sort((a, b) {
+          final aT = a['data']?['timestamp'] ?? 0;
+          final bT = b['data']?['timestamp'] ?? 0;
+          return bT.toString().compareTo(bT.toString());
+        });
+        final firstImgRaw = decodedImages.first['data'];
+        final Map<String, dynamic> firstImg = firstImgRaw is Map ? Map<String, dynamic>.from(firstImgRaw) : {};
+        final url = firstImg['gridUrl'] ?? firstImg['fileUrl'];
+        if (url != null && url.toString().isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _resolvedCoverUrl = url.toString();
+            });
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      print("[MentionsWorkGridTile] Error resolving cover thumbnail: $e");
+    }
+    if (mounted && _resolvedCoverUrl == null) {
+      setState(() {
+        _resolvedCoverUrl = fallbackUrl;
+      });
+    }
+  }
+
+  @override
+  Component build(BuildContext context) {
+    final String fanzineId = component.fanzineData['id'] ?? '';
+    final String title = component.fanzineData['title'] ?? 'Untitled Fanzine';
+    final String coverUrl = _resolvedCoverUrl ?? 'https://placehold.co/450x720/png?text=Loading...';
+    final String volume = component.fanzineData['volume'] ?? '';
+    final String issue = component.fanzineData['issue'] ?? '';
+    final String wholeNumber = component.fanzineData['wholeNumber'] ?? '';
+
+    String displaySuffix = '';
+    if (volume.isNotEmpty) displaySuffix += " Vol. $volume";
+    if (issue.isNotEmpty) displaySuffix += " No. $issue";
+    if (wholeNumber.isNotEmpty) displaySuffix += " ($wholeNumber)";
+
+    final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
+
+    return a(
+        [
+          div(
+              [], // Removed status/type badge to keep the cover preview completely clean as requested!
+              attributes: {
+                'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
+              }
+          ),
+          div(
+              [
+                span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
+                if (displaySuffix.isNotEmpty)
+                  span([text(displaySuffix)], attributes: const {'style': 'font-size: 11px; color: #666;'})
+              ],
+              attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'}
+          )
+        ],
+        href: '/$codeKey',
+        classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
+        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'}
     );
   }
 }

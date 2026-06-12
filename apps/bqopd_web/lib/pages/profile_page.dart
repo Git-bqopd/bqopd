@@ -4,8 +4,8 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../utils/web_firebase_interop.dart';
-import '../utils/web_utils.dart';
+import '../../utils/web_firebase_interop.dart';
+import '../../utils/web_utils.dart';
 
 // Decoupled sub-tab widgets
 import '../components/profile/profile_card.dart';
@@ -45,6 +45,18 @@ class _ProfilePageState extends State<ProfilePage> {
   UserAccount? _viewerAccount;
   StreamSubscription? _viewerAccountSub;
   StreamSubscription? _viewerRedirectSub;
+
+  // Subscriptions for counting target user's public content
+  StreamSubscription? _rawWorksSub;
+  FirebaseSubscription? _rawImagesSub;
+  StreamSubscription? _rawMentionsSub;
+  FirebaseSubscription? _rawCommentsSub;
+
+  List<Map<String, dynamic>> _userWorks = [];
+  int _publicWorksCount = 0;
+  int _publicImagesCount = 0;
+  int _publicMentionsCount = 0;
+  int _publicCommentsCount = 0;
 
   int _settingsSubTabIndex = 0;
 
@@ -167,6 +179,55 @@ class _ProfilePageState extends State<ProfilePage> {
     ));
 
     _listenToViewerAccount();
+
+    // Setup public metric monitors to reactively filter tabs on someone else's profile
+    if (!_isMe) {
+      _rawWorksSub = component.userRepository.watchUserWorks(_targetUid).listen((works) {
+        if (mounted) {
+          setState(() {
+            _userWorks = works;
+            _publicWorksCount = works.where((w) => w['isLive'] == true).length;
+          });
+        }
+      });
+
+      _rawImagesSub = fsListenQuery('images', 'uploaderId', '==', jsonEncode(_targetUid), '', false, (jsonStr) {
+        try {
+          final List decoded = jsonDecode(jsonStr);
+          int approvedCount = 0;
+          for (var d in decoded) {
+            final data = d['data'] as Map<String, dynamic>? ?? {};
+            if (data['status'] == 'approved' || data['status'] != 'pending') {
+              approvedCount++;
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _publicImagesCount = approvedCount;
+            });
+          }
+        } catch (_) {}
+      });
+
+      _rawMentionsSub = component.userRepository.watchUserMentions(_targetUid).listen((mentions) {
+        if (mounted) {
+          setState(() {
+            _publicMentionsCount = mentions.length;
+          });
+        }
+      });
+
+      _rawCommentsSub = fsListenQuery('artifacts/bqopd/public/data/comments', 'userId', '==', jsonEncode(_targetUid), '', false, (jsonStr) {
+        try {
+          final List decoded = jsonDecode(jsonStr);
+          if (mounted) {
+            setState(() {
+              _publicCommentsCount = decoded.length;
+            });
+          }
+        } catch (_) {}
+      });
+    }
   }
 
   void _cleanupDataPipeline() {
@@ -178,6 +239,15 @@ class _ProfilePageState extends State<ProfilePage> {
     _viewerAccountSub = null;
     _viewerRedirectSub?.cancel();
     _viewerRedirectSub = null;
+
+    _rawWorksSub?.cancel();
+    _rawWorksSub = null;
+    _rawImagesSub?.callAsFunction();
+    _rawImagesSub = null;
+    _rawMentionsSub?.cancel();
+    _rawMentionsSub = null;
+    _rawCommentsSub?.callAsFunction();
+    _rawCommentsSub = null;
   }
 
   void _listenToViewerAccount() {
@@ -326,6 +396,52 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final userData = state.userData!;
 
+    // Dynamic Hiding Filter logic
+    final List<String> originalTabs = state.visibleTabs;
+    final List<String> filteredTabs = [];
+
+    for (var tab in originalTabs) {
+      if (_isMe) {
+        // Profile owners see every tab regardless of contents
+        filteredTabs.add(tab);
+      } else {
+        // Guest/Viewer constraints: Hide empty workspaces
+        if (tab == 'collection') {
+          continue; // Always hide the placeholder collection tab for guests
+        }
+        if (tab == 'maker') {
+          if (_publicWorksCount > 0 || _publicImagesCount > 0) {
+            filteredTabs.add(tab);
+          }
+          continue;
+        }
+        if (tab == 'index') {
+          if (_publicMentionsCount > 0 || _publicCommentsCount > 0) {
+            filteredTabs.add(tab);
+          }
+          continue;
+        }
+        if (tab == 'curator') {
+          final draftsCount = _userWorks.where((w) => w['isLive'] != true).length;
+          if (draftsCount > 0) {
+            filteredTabs.add(tab);
+          }
+          continue;
+        }
+        filteredTabs.add(tab);
+      }
+    }
+
+    String activeTabName = '';
+    if (state.currentTabIndex < originalTabs.length) {
+      activeTabName = originalTabs[state.currentTabIndex];
+    }
+
+    int resolvedTabIndex = filteredTabs.indexOf(activeTabName);
+    if (resolvedTabIndex == -1) {
+      resolvedTabIndex = 0;
+    }
+
     return div(
       [
         div(
@@ -343,12 +459,12 @@ class _ProfilePageState extends State<ProfilePage> {
             div([], classes: 'profile-spacer'),
 
             // 2. Tab selection bar
-            if (state.visibleTabs.isNotEmpty)
+            if (filteredTabs.isNotEmpty)
               div(
                 [
-                  for (int i = 0; i < state.visibleTabs.length; i++) ...[
-                    _buildMainNavigationTab(state.visibleTabs[i], i),
-                    if (i < state.visibleTabs.length - 1)
+                  for (int i = 0; i < filteredTabs.length; i++) ...[
+                    _buildMainNavigationTab(filteredTabs[i], originalTabs.indexOf(filteredTabs[i])),
+                    if (i < filteredTabs.length - 1)
                       span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
                   ]
                 ],
@@ -361,8 +477,8 @@ class _ProfilePageState extends State<ProfilePage> {
             div([], classes: 'profile-spacer'),
 
             // 3. Main content tab view
-            if (state.visibleTabs.isNotEmpty)
-              _buildContentBody(state.visibleTabs[state.currentTabIndex])
+            if (filteredTabs.isNotEmpty)
+              _buildContentBody(filteredTabs[resolvedTabIndex])
           ],
           classes: 'unified-profile-column',
         )
