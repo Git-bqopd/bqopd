@@ -73,7 +73,7 @@ class ProfileCuratorTab extends StatefulComponent {
 }
 
 class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
-  // 0: curator, 1: publisher, 2: entities, 3: ai training data
+  // 0: curator, 1: curator list, 2: entities, 3: ai training data
   int _activeSubTab = 0;
   bool _showCatalogModal = false;
   List<Map<String, dynamic>> _userWorks = [];
@@ -139,6 +139,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     _worksFirebaseSub?.callAsFunction();
     _worksFirebaseSub = null;
     setState(() => _loadingWorks = true);
+
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
 
     // Query ALL fanzines without complex field orderings to prevent index exceptions
@@ -159,6 +160,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             final bT = b['creationDate'] ?? b['createdAt'] ?? '';
             return bT.toString().compareTo(aT.toString());
           });
+
           if (!controller.isClosed) {
             controller.add(list);
           }
@@ -226,6 +228,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     _trainingFirebaseSub?.callAsFunction();
     _trainingFirebaseSub = null;
     setState(() => _loadingTraining = true);
+
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
 
     _trainingFirebaseSub = fsListenQuery('images', 'isTrainingData', '==', 'true', '', false, (String jsonStr) {
@@ -238,6 +241,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             data['id'] = d['id'];
             return data;
           }).toList();
+
           if (!controller.isClosed) {
             controller.add(list);
           }
@@ -280,6 +284,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           final String path = 'uploads/raw_pdfs/$fileName';
           // Execute GCS upload
           await stUpload(path, bytes, 'image/jpeg');
+
           if (mounted) {
             setState(() {
               _uploadStatusMessage = 'PDF Upload complete! Processing backend ingest pipeline...';
@@ -344,6 +349,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         'editorId': uid,
         'editors': [],
         'isLive': false,
+        'inCurator': true, // Defaults to true
         'processingStatus': 'images_ready',
         'creationDate': WebFieldValue.serverTimestamp(),
         'type': 'ingested',
@@ -354,6 +360,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         'draftEntities': [],
         'masterCreators': [],
       };
+
       await fsSetDoc('fanzines/$fanzineId', jsonEncode(data), true);
 
       if (mounted) {
@@ -384,11 +391,13 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   Future _deleteFanzine() async {
     final fid = _pendingDeleteId;
     if (fid == null) return;
+
     setState(() {
       _pendingDeleteId = null;
       _pendingDeleteTitle = null;
       _loadingWorks = true;
     });
+
     try {
       // 1. Fetch shortcode from fanzine doc to purge
       final docRes = await fsGetDoc('fanzines/$fid');
@@ -409,6 +418,40 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
+  /// Toggles the 'inCurator' state of a fanzine in Firestore
+  Future _toggleInCurator(String fanzineId, bool currentVal) async {
+    if (fanzineId.isEmpty) return;
+    final bool newVal = !currentVal;
+    try {
+      await fsSetDoc('fanzines/$fanzineId', jsonEncode({'inCurator': newVal}), true);
+    } catch (e) {
+      _showToast("Error updating curator state: $e", isError: true);
+    }
+  }
+
+  /// Helper to determine if a fanzine is curated/owned by the target user profile.
+  bool _isCuratedByUser(Map<String, dynamic> w) {
+    final owner = w['ownerId'] ?? w['editorId'] ?? w['uploaderId'] ?? '';
+    final List editors = w['editors'] ?? [];
+
+    // If it has no owner/editor/uploader, it's a global/system fanzine curated via the Jaspr app ingest pipeline,
+    // meaning we want to show it to the active curator so they can curate it and toggle it.
+    if (owner == '' && editors.isEmpty) {
+      return true;
+    }
+
+    return owner == component.targetUserId ||
+        editors.contains(component.targetUserId) ||
+        w['editorId'] == component.targetUserId ||
+        w['uploaderId'] == component.targetUserId ||
+        owner == 'system';
+  }
+
+  /// Helper to check if a fanzine belongs exclusively to the curated / ingested queue.
+  bool _isCuratedFanzine(Map<String, dynamic> w) {
+    return w['sourceFile'] != null || w['type'] == 'ingested';
+  }
+
   /// Custom comparison logic to sort fanzines based on publishedDate (newest first).
   /// Falls back smoothly to creation/upload timestamps if publishedDate is empty.
   int _comparePublishedDates(Map<String, dynamic> a, Map<String, dynamic> b) {
@@ -420,6 +463,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       final bT = b['creationDate'] ?? b['createdAt'] ?? '';
       return bT.toString().compareTo(aT.toString());
     }
+
     if (aDate.isEmpty) return 1; // Send unpopulated dates to bottom
     if (bDate.isEmpty) return -1; // Pull populated dates to top
 
@@ -431,21 +475,150 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   Component _buildActiveSubTabContent() {
     switch (_activeSubTab) {
       case 0:
-      // curator: shows draft PDFs (sourceFile != null && isLive != true) sorted by publishedDate
-        final list = _userWorks.where((w) => w['sourceFile'] != null && w['isLive'] != true).toList();
+      // curator: shows fanzines where 'inCurator' is true AND is curated by the target user profile
+        final list = _userWorks.where((w) {
+          return _isCuratedFanzine(w) && _isCuratedByUser(w) && (w['inCurator'] ?? true) == true;
+        }).toList();
         list.sort((a, b) => _comparePublishedDates(a, b));
         return _buildWorksGridSchema(list);
       case 1:
-      // publisher: shows folios and published fanzines (sourceFile == null || isLive == true) sorted by publishedDate
-        final list = _userWorks.where((w) => w['sourceFile'] == null || w['isLive'] == true).toList();
+      // curator list: shows all curated fanzines with type == 'ingested' no matter their status
+        final list = _userWorks.where((w) {
+          return _isCuratedFanzine(w) && _isCuratedByUser(w);
+        }).toList();
         list.sort((a, b) => _comparePublishedDates(a, b));
-        return _buildWorksGridSchema(list);
+        return _buildCuratorListSubView(list);
       case 2:
-        return CuratorEntitiesDirectory(userWorks: _userWorks, isLoading: _loadingWorks);
+      // entities: shows entities from fanzines curated by this profile where 'inCurator' is true
+        final filteredWorks = _userWorks.where((w) {
+          return _isCuratedFanzine(w) && _isCuratedByUser(w) && (w['inCurator'] ?? true) == true;
+        }).toList();
+        return CuratorEntitiesDirectory(userWorks: filteredWorks, isLoading: _loadingWorks);
       case 3:
       default:
         return _buildAITrainingDataPortal();
     }
+  }
+
+  Component _buildCuratorListSubView(List<Map<String, dynamic>> works) {
+    if (_loadingWorks) {
+      return div(
+        [p([text('Loading curated list...')])],
+        classes: 'p-16 text-center text-gray italic text-sm',
+      );
+    }
+    if (works.isEmpty) {
+      return div(
+        [
+          span([text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
+          p([text('No curated fanzines found for this profile.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
+        ],
+        classes: 'bg-white rounded-lg p-16 shadow-sm text-center border border-gray-100 flex flex-col items-center justify-center w-full mt-4',
+      );
+    }
+    return div(
+      classes: 'bg-white rounded-lg p-6 shadow-sm border border-gray-200 w-full mt-4',
+      [
+        div(
+          attributes: const {'style': 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; padding-bottom: 12px;'},
+          [
+            div([
+              h2([text("CURATED FANZINES")], attributes: const {'style': 'margin: 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;'}),
+              span([text("A complete historical log of all ingested fanzines curated by this profile.")], attributes: const {'style': 'font-size: 11px; color: #666;'})
+            ]),
+          ],
+        ),
+        table(
+          classes: 'stats-table text-left w-full',
+          [
+            thead([
+              tr([
+                th([text('Fanzine Title')]),
+                th([text('Visibility')]),
+                th([text('Pipeline Status')]),
+                th([text('In Curator')], attributes: const {'style': 'text-align: center; width: 110px;'}),
+              ])
+            ]),
+            tbody([
+              for (var w in works)
+                _buildCuratorListRow(w)
+            ])
+          ],
+        ),
+      ],
+    );
+  }
+
+  Component _buildCuratorListRow(Map<String, dynamic> w) {
+    final String title = w['title'] ?? 'Untitled';
+    final bool isLive = w['isLive'] == true;
+    final String processingStatus = w['processingStatus'] ?? 'idle';
+    final String fanzineId = w['id'] ?? '';
+    final bool inCurator = w['inCurator'] ?? true;
+
+    return tr([
+      td([
+        div(
+            attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px;'},
+            [
+              span([text(title)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; color: black;'}),
+              if (fanzineId.isNotEmpty)
+                span([text('ID: $fanzineId')], attributes: const {'style': 'font-size: 9px; color: #888; font-family: monospace;'})
+            ]
+        )
+      ]),
+      td([
+        span(
+            [text(isLive ? 'visible' : 'hidden')],
+            attributes: {
+              'style': 'font-size: 11px; font-weight: bold; text-transform: uppercase; color: ${isLive ? "#16a34a" : "#ca8a04"};'
+            }
+        )
+      ]),
+      td([
+        span(
+            [text(processingStatus)],
+            attributes: const {'style': 'font-size: 11px; font-weight: 500; font-family: monospace; color: #4b5563;'}
+        )
+      ]),
+      td(
+        [
+          label(
+              attributes: const {
+                'style': 'position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle;'
+              },
+              [
+                input(
+                    type: InputType.checkbox,
+                    attributes: {
+                      'style': 'opacity: 0; width: 0; height: 0;',
+                      if (inCurator) 'checked': 'true',
+                    },
+                    events: {
+                      'change': (dynamic e) {
+                        _toggleInCurator(fanzineId, inCurator);
+                      }
+                    }
+                ),
+                span(
+                    attributes: {
+                      'style': 'position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: ${inCurator ? "#16a34a" : "#ccc"}; transition: .3s; border-radius: 24px;'
+                    },
+                    [
+                      span(
+                          [],
+                          attributes: {
+                            'style': 'position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .3s; border-radius: 50%; transform: ${inCurator ? "translateX(20px)" : "translateX(0px)"};'
+                          }
+                      )
+                    ]
+                )
+              ]
+          )
+        ],
+        attributes: const {'style': 'text-align: center; vertical-align: middle;'},
+      )
+    ]);
   }
 
   Component _buildWorksGridSchema(List<Map<String, dynamic>> works) {
@@ -597,67 +770,66 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       [
         // Navigation segment
         div(
-            classes: 'bg-white rounded-md p-4 shadow-sm',
-            attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'},
-            [
-              // Catalog trigger button (Now triggers a premium options modal)
-              button(
-                  classes: 'transition-all cursor-pointer flex items-center',
-                  attributes: {
-                    'style': 'height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid #ccc; background: ${_showCatalogModal ? "black" : "transparent"}; color: ${_showCatalogModal ? "white" : "black"}; font-size: 13px; text-transform: lowercase; font-family: inherit; cursor: pointer; border-radius: 0; font-weight: normal;'
-                  },
-                  events: {
-                    'click': (e) => setState(() => _showCatalogModal = true)
-                  },
-                  [text("catalog")]
-              ),
-              span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-              // 'curator' text subtab
-              span(
-                  classes: _activeSubTab == 0
-                      ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
-                      : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
-                  events: {
-                    'click': (e) => setState(() => _activeSubTab = 0)
-                  },
-                  [text("curator")]
-              ),
-              span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-              // 'publisher' text subtab
-              span(
-                  classes: _activeSubTab == 1
-                      ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
-                      : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
-                  events: {
-                    'click': (e) => setState(() => _activeSubTab = 1)
-                  },
-                  [text("publisher")]
-              ),
-              span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-              // 'entities' text subtab
-              span(
-                  classes: _activeSubTab == 2
-                      ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
-                      : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
-                  events: {
-                    'click': (e) => setState(() => _activeSubTab = 2)
-                  },
-                  [text("entities")]
-              ),
-              span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-              // 'ai training data' text subtab
-              span(
-                  classes: _activeSubTab == 3
-                      ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
-                      : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
-                  events: {
-                    'click': (e) => setState(() => _activeSubTab = 3)
-                  },
-                  [text("ai training data")]
-              ),
-            ]
+          [
+            // Catalog trigger button (Now triggers a premium options modal)
+            button(
+              [text("catalog")],
+              classes: 'transition-all cursor-pointer flex items-center',
+              attributes: {
+                'style': 'height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid #ccc; background: ${_showCatalogModal ? "black" : "transparent"}; color: ${_showCatalogModal ? "white" : "black"}; font-size: 13px; text-transform: lowercase; font-family: inherit; cursor: pointer; border-radius: 0; font-weight: normal;'
+              },
+              events: {
+                'click': (e) => setState(() => _showCatalogModal = true)
+              },
+            ),
+            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+            // 'curator' text subtab
+            span(
+              [text("curator")],
+              classes: _activeSubTab == 0
+                  ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
+                  : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
+              events: {
+                'click': (e) => setState(() => _activeSubTab = 0)
+              },
+            ),
+            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+            // 'curator list' text subtab
+            span(
+              [text("curator list")],
+              classes: _activeSubTab == 1
+                  ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
+                  : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
+              events: {
+                'click': (e) => setState(() => _activeSubTab = 1)
+              },
+            ),
+            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+            // 'entities' text subtab
+            span(
+              [text("entities")],
+              classes: _activeSubTab == 2
+                  ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
+                  : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
+              events: {
+                'click': (e) => setState(() => _activeSubTab = 2)
+              },
+            ),
+            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+            // 'ai training data' text subtab
+            span(
+              [text("ai training data")],
+              classes: _activeSubTab == 3
+                  ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
+                  : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
+              events: {
+                'click': (e) => setState(() => _activeSubTab = 3)
+              },
+            ),
+          ],
+          classes: 'bg-white rounded-md p-4 shadow-sm',
+          attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'},
         ),
-
         // Prominent live upload status bar
         if (_uploadStatusMessage.isNotEmpty)
           div(
@@ -665,19 +837,16 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
               attributes: const {'style': 'margin-bottom: 16px;'},
               [
                 span(
-                    attributes: const {'style': 'font-style: italic; font-weight: bold; color: #16a34a; font-size: 13px;'},
-                    [text(_uploadStatusMessage)]
+                  [text(_uploadStatusMessage)],
+                  attributes: const {'style': 'font-style: italic; font-weight: bold; color: #16a34a; font-size: 13px;'},
                 )
               ]
           ),
-
         // Sub-Tab Content Routing
         _buildActiveSubTabContent(),
-
         // Dynamic Modal Overlays
         if (_showCatalogModal)
           _buildCatalogModalOverlay(),
-
         // Delete verification dialog modal
         if (_pendingDeleteId != null)
           ConfirmModal(
@@ -700,7 +869,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
 class EditorOcrEntitiesTab extends StatefulComponent {
   final String frefFanzineId;
   final Fanzine fanzine;
-  final List<FanzinePage> pages;
+  final List pages;
   final FanzineEditorBloc bloc;
 
   const EditorOcrEntitiesTab({
@@ -753,19 +922,16 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
         int raw = 0;
         int master = 0;
         int linked = 0;
-
         for (var doc in decoded) {
           final data = doc['data'] as Map<String, dynamic>? ?? {};
           final rawText = data['text_raw']?.toString() ?? '';
           final correctedText = data['text_corrected']?.toString() ?? '';
           final needsAi = data['needs_ai_cleaning'] == true;
           final needsLink = data['needs_linking'] == true;
-
           if (rawText.isNotEmpty && rawText != "[No text detected]") raw++;
           if (correctedText.isNotEmpty && !needsAi) master++;
           if (needsLink) linked++;
         }
-
         if (mounted) {
           setState(() {
             _rawDone = raw;
@@ -784,75 +950,77 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
   @override
   Component build(BuildContext context) {
     final draftEntities = component.fanzine.draftEntities;
-
     return div(
-      classes: 'flex-col text-left gap-4',
-      attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px;'},
       [
         div(
-          classes: 'flex-row justify-around items-center py-2 bg-gray-50 rounded-md border border-gray-150',
-          attributes: const {'style': 'display: flex; flex-direction: row; justify-content: space-around; align-items: center; padding: 12px 0;'},
           [
             _buildCounterSquare("Raw Done", _rawDone, '#2563eb'),
             _buildCounterSquare("Master Verified", _masterVerified, '#16a34a'),
             _buildCounterSquare("Linked Pending", _linkedPending, '#ea580c'),
           ],
+          classes: 'flex-row justify-around items-center py-2 bg-gray-50 rounded-md border border-gray-150',
+          attributes: const {'style': 'display: flex; flex-direction: row; justify-content: space-around; align-items: center; padding: 12px 0;'},
         ),
-
         div(
-          classes: 'flex-row gap-3 mt-2',
-          attributes: const {'style': 'display: flex; flex-direction: row; gap: 12px; justify-content: center;'},
           [
             button(
-                classes: 'profile-btn',
-                attributes: const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; font-weight: bold; border-radius: 18px; border: 1px solid #16a34a; color: #16a34a; background: white; cursor: pointer;'},
-                events: {'click': (e) => component.bloc.add(TriggerAiCleanRequested())},
-                [
-                  span(classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; margin-right: 6px;'}, [text('auto_fix_high')]),
-                  text("Step 2: AI Clean")
-                ]
+              [
+                span([text('auto_fix_high')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; margin-right: 6px;'}),
+                text("Step 2: AI Clean")
+              ],
+              classes: 'profile-btn',
+              attributes: const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; font-weight: bold; border-radius: 18px; border: 1px solid #16a34a; color: #16a34a; background: white; cursor: pointer;'},
+              events: {'click': (e) => component.bloc.add(TriggerAiCleanRequested())},
             ),
             button(
-                classes: 'profile-btn',
-                attributes: const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; font-weight: bold; border-radius: 18px; border: 1px solid #ea580c; color: #ea580c; background: white; cursor: pointer;'},
-                events: {'click': (e) => component.bloc.add(TriggerGenerateLinksRequested())},
-                [
-                  span(classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; margin-right: 6px;'}, [text('link')]),
-                  text("Step 3: Generate Links")
-                ]
+              [
+                span([text('link')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; margin-right: 6px;'}),
+                text("Step 3: Generate Links")
+              ],
+              classes: 'profile-btn',
+              attributes: const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; font-weight: bold; border-radius: 18px; border: 1px solid #ea580c; color: #ea580c; background: white; cursor: pointer;'},
+              events: {'click': (e) => component.bloc.add(TriggerGenerateLinksRequested())},
             ),
           ],
+          classes: 'flex-row gap-3 mt-2',
+          attributes: const {'style': 'display: flex; flex-direction: row; gap: 12px; justify-content: center;'},
         ),
-
         div([], attributes: const {'style': 'height: 1px; background-color: #eee; margin: 8px 0;'}),
-
         h3([text("Detected Entities Archive")], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-1'),
         if (draftEntities.isEmpty)
           p([text("No entities registered in this issue's index pipeline yet.")], classes: 'text-xs text-gray italic text-center py-4')
         else
           div(
-            classes: 'flex-col gap-2',
-            attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'},
             [
               for (var entity in draftEntities)
                 OcrWorkspaceEntityRow(name: entity, key: ValueKey(entity)),
             ],
+            classes: 'flex-col gap-2',
+            attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'},
           ),
       ],
+      classes: 'flex-col text-left gap-4',
+      attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px;'},
     );
   }
 
   Component _buildCounterSquare(String label, int val, String color) {
     return div(
-      attributes: const {'style': 'display: flex; flex-direction: column; align-items: center;'},
       [
-        span([text(_calculating ? "..." : "$val")], attributes: {
-          'style': 'font-size: 24px; font-weight: 900; color: $color; line-height: 1;'
-        }),
-        span([text(label.toLowerCase())], attributes: const {
-          'style': 'font-size: 10px; color: #666; font-weight: bold; margin-top: 4px;'
-        }),
+        span(
+            [text(_calculating ? "..." : "$val")],
+            attributes: {
+              'style': 'font-size: 24px; font-weight: 900; color: $color; line-height: 1;'
+            }
+        ),
+        span(
+            [text(label.toLowerCase())],
+            attributes: const {
+              'style': 'font-size: 10px; color: #666; font-weight: bold; margin-top: 4px;'
+            }
+        ),
       ],
+      attributes: const {'style': 'display: flex; flex-direction: column; align-items: center;'},
     );
   }
 }
@@ -925,7 +1093,7 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
     });
   }
 
-  Future<void> _createProfile() async {
+  Future _createProfile() async {
     setState(() => _loading = true);
     try {
       final handle = normalizeHandle(component.name);
@@ -976,10 +1144,9 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
     }
   }
 
-  Future<void> _submitAliasRedirect() async {
+  Future _submitAliasRedirect() async {
     final cleanTarget = normalizeHandle(_targetAliasInputText);
     if (cleanTarget.isEmpty) return;
-
     setState(() => _loading = true);
     try {
       final aliasHandle = normalizeHandle(component.name);
@@ -987,7 +1154,6 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
 
       final checkRes = await fsGetDoc('usernames/$cleanTarget');
       final targetDoc = jsonDecode(checkRes);
-
       if (targetDoc['exists'] != true) {
         setState(() {
           _loading = false;
@@ -1017,85 +1183,88 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
   Component build(BuildContext context) {
     if (_loading) {
       return div(
-          attributes: const {'style': 'padding: 8px;'},
-          [span([text("syncing... @${normalizeHandle(component.name)}")], attributes: const {'style': 'font-style: italic; color: #999; font-size: 12px;'})]
+        [
+          span(
+              [text("syncing... @${normalizeHandle(component.name)}")],
+              attributes: const {'style': 'font-style: italic; color: #999; font-size: 12px;'}
+          )
+        ],
+        attributes: const {'style': 'padding: 8px;'},
       );
     }
-
     return div(
-      classes: 'flex-row justify-between items-center bg-gray-50 border border-gray-150 p-2 rounded-md',
-      attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box; width: 100%; margin-bottom: 6px;'},
       [
         div(
-          classes: 'flex-col',
-          attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px;'},
           [
             span([text(component.name)], attributes: const {'style': 'font-weight: bold; font-size: 13px; color: black;'}),
             if (_isAlias && _redirectHandle != null)
               span([text("aliases to @$_redirectHandle")], attributes: const {'style': 'font-size: 10px; color: #2563eb; font-weight: bold;'})
           ],
+          classes: 'flex-col',
+          attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px;'},
         ),
-
         div(
-          [
-            if (_exists)
-              a(
+            [
+              if (_exists)
+                a(
+                  [
+                    span([text('account_circle')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
+                    text("view profile")
+                  ],
                   href: '/profile?userId=$_profileId',
                   attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #16a34a; text-decoration: none; display: inline-flex; align-items: center;'},
-                  [
-                    span(classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}, [text('account_circle')]),
-                    text("view profile")
-                  ]
-              )
-            else if (!_showAliasInput) ...[
-              button(
+                )
+              else if (!_showAliasInput) ...[
+                button(
+                  [text("create")],
                   classes: 'profile-btn',
                   attributes: const {'style': 'padding: 4px 8px; font-size: 10px; font-weight: bold; background: white; border: 1px solid #ccc; cursor: pointer;'},
                   events: {'click': (e) => _createProfile()},
-                  [text("create")]
-              ),
-              span([], attributes: const {'style': 'display: inline-block; width: 6px;'}),
-              button(
+                ),
+                span([], attributes: const {'style': 'display: inline-block; width: 6px;'}),
+                button(
+                  [text("alias")],
                   classes: 'profile-btn',
                   attributes: const {'style': 'padding: 4px 8px; font-size: 10px; font-weight: bold; background: white; border: 1px solid #ccc; cursor: pointer;'},
                   events: {'click': (e) => setState(() => _showAliasInput = true)},
-                  [text("alias")]
-              ),
-            ] else
-              div(
-                attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'},
-                [
-                  input(
-                      type: InputType.text,
-                      attributes: const {
-                        'placeholder': 'target handle...',
-                        'style': 'padding: 4px 6px; border: 1px solid #ccc; font-size: 10px; width: 100px; height: 24px; box-sizing: border-box;'
-                      },
-                      events: {
-                        'input': (e) {
-                          _targetAliasInputText = (e.target as dynamic).value ?? '';
+                ),
+              ] else
+                div(
+                  [
+                    input(
+                        type: InputType.text,
+                        attributes: const {
+                          'placeholder': 'target handle...',
+                          'style': 'padding: 4px 6px; border: 1px solid #ccc; font-size: 10px; width: 100px; height: 24px; box-sizing: border-box;'
+                        },
+                        events: {
+                          'input': (e) {
+                            _targetAliasInputText = (e.target as dynamic).value ?? '';
+                          }
                         }
-                      }
-                  ),
-                  button(
+                    ),
+                    button(
+                      [
+                        span([text('done')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 13px;'})
+                      ],
                       attributes: const {'style': 'border: none; background: transparent; color: #16a34a; cursor: pointer;'},
                       events: {'click': (e) => _submitAliasRedirect()},
+                    ),
+                    button(
                       [
-                        span(classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 13px;'}, [text('done')])
-                      ]
-                  ),
-                  button(
+                        span([text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 13px;'})
+                      ],
                       attributes: const {'style': 'border: none; background: transparent; color: #ef4444; cursor: pointer;'},
                       events: {'click': (e) => setState(() => _showAliasInput = false)},
-                      [
-                        span(classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 13px;'}, [text('close')])
-                      ]
-                  ),
-                ],
-              ),
-          ],
+                    ),
+                  ],
+                  attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'},
+                ),
+            ]
         ),
       ],
+      classes: 'flex-row justify-between items-center bg-gray-50 border border-gray-150 p-2 rounded-md',
+      attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box; width: 100%; margin-bottom: 6px;'},
     );
   }
 }
@@ -1134,7 +1303,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     }
   }
 
-  Future<void> _resolveThumbnail() async {
+  Future _resolveThumbnail() async {
     final String fanzineId = component.fanzineData['id'] ?? '';
     final String? coverUrl = component.fanzineData['gridCoverImage'];
     if (coverUrl != null && coverUrl.isNotEmpty) {
@@ -1143,11 +1312,11 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
           _resolvedCoverUrl = coverUrl;
         });
       }
+      return;
     }
     final fallbackUrl = component.fanzineData['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio';
-
     if (!kIsWeb || fanzineId.isEmpty) {
       if (mounted) {
         setState(() {
@@ -1218,15 +1387,12 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     final String fanzineType = component.fanzineData['type'] ?? 'ingested';
     final String displayYear = (component.fanzineData['startYear'] ?? '').toString();
     final int resolvedPageCount = component.fanzineData['pageCount'] ?? _pagesCount;
-
     // Resolve shortcode URL binding cleanly similar to the other workspaces
     final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
-
     // Format publishing date nicely using precision choices and guess configurations
     final String? publishedDateVal = component.fanzineData['publishedDate'];
     final String? publishedDateMode = component.fanzineData['publishedDateMode'] ?? 'year';
     final bool publishedDateGuess = component.fanzineData['publishedDateGuess'] ?? false;
-
     String resolvedYear = '';
     if (publishedDateVal != null && publishedDateVal.isNotEmpty) {
       resolvedYear = formatDisplayDate(publishedDateVal, publishedDateMode, publishedDateGuess);
@@ -1240,68 +1406,67 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
         }
       } catch (_) {}
     }
-
     return a(
-        classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
-        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'},
-        href: '/$codeKey', // Unified routing pattern matching standard vanity/shortcode pathways!
-        [
-          div(
-              attributes: {
-                'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
-              },
-              [
-                // High fidelity layered metadata badge overlays (narrowed to make room for delete action)
-                div(
-                    attributes: const {
-                      'style': 'position: absolute; top: 12px; left: 12px; right: 44px; display: flex; flex-direction: column; gap: 4px; pointer-events: none;'
-                    },
-                    [
-                      // Badge 1: Type & Page count
-                      div(
-                          attributes: const {
-                            'style': 'background-color: rgba(33, 33, 33, 0.85); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center; text-transform: lowercase;'
-                          },
-                          [text("$fanzineType • $resolvedPageCount pages")]
-                      ),
-                      // Badge 2: Year info
-                      if (resolvedYear.isNotEmpty)
-                        div(
-                            attributes: const {
-                              'style': 'background-color: rgba(0, 0, 0, 0.7); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center;'
-                            },
-                            [text(resolvedYear)]
-                        )
-                    ]
-                ),
-                // High-fidelity delete button positioned top-right of the card thumbnail
-                if (component.onDelete != null)
-                  button(
+      [
+        div(
+          [
+            // High fidelity layered metadata badge overlays (narrowed to make room for delete action)
+            div(
+                [
+                  // Badge 1: Type & Page count
+                  div(
+                      [text("$fanzineType   $resolvedPageCount pages")],
                       attributes: const {
-                        'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(0, 0, 0, 0.7); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; border: 1px solid rgba(255, 255, 255, 0.4); z-index: 10; pointer-events: auto;'
-                      },
-                      events: {
-                        'click': (dynamic e) {
-                          try {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          } catch (_) {}
-                          component.onDelete!(fanzineId, title);
+                        'style': 'background-color: rgba(33, 33, 33, 0.85); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center; text-transform: lowercase;'
+                      }
+                  ),
+                  // Badge 2: Year info
+                  if (resolvedYear.isNotEmpty)
+                    div(
+                        [text(resolvedYear)],
+                        attributes: const {
+                          'style': 'background-color: rgba(0, 0, 0, 0.7); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center;'
                         }
-                      },
-                      [
-                        span(classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'}, [text('delete')])
-                      ]
-                  )
-              ]
-          ),
-          div(
-              attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'},
-              [
-                span(attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}, [text(title)]),
-              ]
-          )
-        ]
+                    )
+                ],
+                attributes: const {
+                  'style': 'position: absolute; top: 12px; left: 12px; right: 44px; display: flex; flex-direction: column; gap: 4px; pointer-events: none;'
+                }
+            ),
+            // High-fidelity delete button positioned top-right of the card thumbnail
+            if (component.onDelete != null)
+              button(
+                [
+                  span([text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})
+                ],
+                attributes: const {
+                  'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(0, 0, 0, 0.7); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; border: 1px solid rgba(255, 255, 255, 0.4); z-index: 10; pointer-events: auto;'
+                },
+                events: {
+                  'click': (dynamic e) {
+                    try {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    } catch (_) {}
+                    component.onDelete!(fanzineId, title);
+                  }
+                },
+              )
+          ],
+          attributes: {
+            'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
+          },
+        ),
+        div(
+          [
+            span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
+          ],
+          attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'},
+        )
+      ],
+      classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
+      attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'},
+      href: '/$codeKey', // Unified routing pattern matching standard vanity/shortcode pathways!
     );
   }
 }
