@@ -38,11 +38,15 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   String _newManagedLastName = '';
   String _newManagedBio = '';
   bool _isCreatingManagedProfile = false;
+  String? _managedProfileFeedback;
+  bool _isManagedProfileError = false;
 
   // Global shortcode configurations
   String _loginZineShortcode = '';
   String _registerZineShortcode = '';
   bool _isSavingSettings = false;
+  String? _settingsFeedback;
+  bool _isSettingsError = false;
 
   // Real-time Managed profiles streams
   List<Map<String, dynamic>> _managedProfiles = [];
@@ -53,6 +57,10 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   List<Map<String, dynamic>> _allSystemUsers = [];
   bool _loadingUsers = true;
   FirebaseSubscription? _usersSub;
+
+  // Notification feedbacks for operations
+  String? _permissionFeedback;
+  String? _permissionFeedbackUid;
 
   @override
   void initState() {
@@ -169,26 +177,49 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   Future<void> _saveGlobalSettings() async {
-    setState(() => _isSavingSettings = true);
+    setState(() {
+      _isSavingSettings = true;
+      _settingsFeedback = "Saving global settings...";
+      _isSettingsError = false;
+    });
     try {
       await fsSetDoc('app_settings/main_settings', jsonEncode({
         'login_zine_shortcode': _loginZineShortcode.trim(),
         'register_zine_shortcode': _registerZineShortcode.trim()
       }), true);
+      setState(() {
+        _settingsFeedback = 'Global settings updated successfully!';
+        _isSettingsError = false;
+      });
     } catch (e) {
       print("Error saving global settings: $e");
+      setState(() {
+        _settingsFeedback = 'Failed to save settings: ${e.toString()}';
+        _isSettingsError = true;
+      });
     }
     setState(() => _isSavingSettings = false);
   }
 
   Future<void> _createManagedProfile() async {
-    if (_newManagedFirstName.trim().isEmpty || _newManagedLastName.trim().isEmpty) return;
-    setState(() => _isCreatingManagedProfile = true);
+    if (_newManagedFirstName.trim().isEmpty || _newManagedLastName.trim().isEmpty) {
+      setState(() {
+        _managedProfileFeedback = "First name and Last name are required.";
+        _isManagedProfileError = true;
+      });
+      return;
+    }
+    setState(() {
+      _isCreatingManagedProfile = true;
+      _managedProfileFeedback = "Generating managed profile identity...";
+      _isManagedProfileError = false;
+    });
     try {
       final String baseHandle = "${_newManagedFirstName.trim()}-${_newManagedLastName.trim()}"
           .toLowerCase()
           .replaceAll(RegExp(r'[^a-z0-9-]'), '-');
       final String uniqueId = 'managed_${DateTime.now().millisecondsSinceEpoch}';
+
       final publicData = {
         'uid': uniqueId,
         'username': baseHandle,
@@ -203,21 +234,40 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'followingCount': 0,
         'updatedAt': WebFieldValue.serverTimestamp()
       };
+
+      // 1. Commit managed profile doc to profiles
       await fsSetDoc('profiles/$uniqueId', jsonEncode(publicData), true);
+
+      // 2. Claim username reference
       await fsSetDoc('usernames/$baseHandle', jsonEncode({
         'uid': uniqueId,
         'isManaged': true,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
+
+      // 3. Register uppercase shortcode lookup (FIXES vanity path resolution inside Jaspr)
+      await fsSetDoc('shortcodes/${baseHandle.toUpperCase()}', jsonEncode({
+        'type': 'user',
+        'contentId': uniqueId,
+        'displayCode': baseHandle,
+        'createdAt': WebFieldValue.serverTimestamp()
+      }), true);
+
       setState(() {
         _newManagedFirstName = '';
         _newManagedLastName = '';
         _newManagedBio = '';
         _isCreatingManagedProfile = false;
+        _managedProfileFeedback = "Managed profile @$baseHandle initialized successfully!";
+        _isManagedProfileError = false;
       });
     } catch (e) {
       print("Error creating managed profile: $e");
-      setState(() => _isCreatingManagedProfile = false);
+      setState(() {
+        _isCreatingManagedProfile = false;
+        _managedProfileFeedback = "Failed to initialize: ${e.toString()}";
+        _isManagedProfileError = true;
+      });
     }
   }
 
@@ -233,15 +283,28 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   Future<void> _updateUserPermission(String uid, String newRole) async {
-    final bool isCurator = newRole == 'curator' || newRole == 'admin' || newRole == 'moderator';
-    await fsUpdateDoc('Users/$uid', jsonEncode({
-      'role': newRole,
-      'isCurator': isCurator
-    }));
-    await fsUpdateDoc('profiles/$uid', jsonEncode({
-      'isCurator': isCurator,
-      'isAdmin': newRole == 'admin'
-    }));
+    setState(() {
+      _permissionFeedbackUid = uid;
+      _permissionFeedback = "Updating access levels...";
+    });
+    try {
+      final bool isCurator = newRole == 'curator' || newRole == 'admin' || newRole == 'moderator';
+      await fsUpdateDoc('Users/$uid', jsonEncode({
+        'role': newRole,
+        'isCurator': isCurator
+      }));
+      await fsUpdateDoc('profiles/$uid', jsonEncode({
+        'isCurator': isCurator,
+        'isAdmin': newRole == 'admin'
+      }));
+      setState(() {
+        _permissionFeedback = "Access privileges saved!";
+      });
+    } catch (e) {
+      setState(() {
+        _permissionFeedback = "Update failed: ${e.toString()}";
+      });
+    }
   }
 
   Component _buildSocialButtonsSettingsView() {
@@ -251,6 +314,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     return div(
         [
           h2([text("CUSTOMIZE SOCIAL TOOLBAR BUTTONS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+          p([text("Toggle standard main social buttons on or off to custom-tailor what reader tools display on public gallery interfaces.")], classes: 'text-xs text-gray italic leading-relaxed mb-4', attributes: const {'style': 'margin: 0 0 16px 0;'}),
           for (var tool in togglableTools)
             _buildToolbarButtonSettingsRow(tool)
         ],
@@ -304,6 +368,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           div(
             [
               h3([text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin-top: 0;'}),
+              p([text("Initialize dedicated gallery portfolios representing historical creators or archives you manage.")], classes: 'text-xs text-gray italic mb-2', attributes: const {'style': 'margin: 0 0 8px 0;'}),
               div(
                 [
                   input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
@@ -313,6 +378,12 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                 attributes: const {'style': 'display: flex; gap: 12px; width: 100%; box-sizing: border-box;'},
               ),
               input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedBio = getInputValue(e)},),
+
+              if (_managedProfileFeedback != null)
+                p([text(_managedProfileFeedback!)], attributes: {
+                  'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isManagedProfileError ? "#ef4444" : "#16a34a"}'
+                }),
+
               button(
                   [text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
                   classes: 'btn-primary nav-pill',
@@ -373,6 +444,12 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'}
           ),
           div([], attributes: const {'style': 'height: 12px;'}),
+
+          if (_settingsFeedback != null)
+            p([text(_settingsFeedback!)], attributes: {
+              'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isSettingsError ? "#ef4444" : "#16a34a"}'
+            }),
+
           button(
               [text(_isSavingSettings ? "saving..." : "save settings")],
               classes: 'btn-primary nav-pill',
@@ -404,6 +481,12 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     return div(
         [
           h2([text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+
+          if (_permissionFeedback != null)
+            p([text(_permissionFeedback!)], attributes: const {
+              'style': 'font-size: 12px; font-weight: bold; color: #6750A4; margin-bottom: 12px;'
+            }),
+
           for (var u in _allSystemUsers)
             _buildUserPermissionManagerRow(u)
         ],
@@ -416,12 +499,16 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     final String uid = u['uid'] ?? u['id'] ?? '';
     final String email = u['email'] ?? 'guest';
     final String currentRole = u['role'] ?? 'user';
+    final bool isUserActiveInPerm = _permissionFeedbackUid == uid;
+
     return div(
         [
           div(
               [
                 span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-                span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'})
+                span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'}),
+                if (isUserActiveInPerm && _permissionFeedback != null)
+                  span([text(_permissionFeedback!)], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #6750A4; margin-top: 2px;'})
               ],
               classes: 'flex-col gap-1',
               attributes: const {'style': 'display: flex; flex-direction: column; gap: 4px;'}
@@ -462,60 +549,83 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   Component build(BuildContext context) {
     final bool isViewerAdmin = component.viewerAccount?.role == 'admin' || (component.viewerAccount?.roles.contains('admin') ?? false);
 
+    // Build sub-tab segments list in the exact requested order
+    final List<Component> subTabs = [];
+
+    // 1. Shortcodes segment
+    if (isViewerAdmin) {
+      subTabs.add(span(
+          [text("shortcodes")],
+          classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+          events: {
+            'click': (e) {
+              setState(() => _activeSubTab = 0);
+              component.onSubTabChanged(0);
+            }
+          }
+      ));
+    }
+
+    // 2. Managed Profiles segment
+    if (component.isMe || isViewerAdmin) {
+      subTabs.add(span(
+          [text("managed profiles")],
+          classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+          events: {
+            'click': (e) {
+              setState(() => _activeSubTab = 1);
+              component.onSubTabChanged(1);
+            }
+          }
+      ));
+    }
+
+    // 3. Permissions segment
+    if (isViewerAdmin) {
+      subTabs.add(span(
+          [text("permissions")],
+          classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+          events: {
+            'click': (e) {
+              setState(() => _activeSubTab = 2);
+              component.onSubTabChanged(2);
+            }
+          }
+      ));
+    }
+
+    // 4. Social Buttons segment (renamed from "toolbar buttons")
+    if (component.isMe) {
+      subTabs.add(span(
+          [text("social buttons")],
+          classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+          events: {
+            'click': (e) {
+              setState(() => _activeSubTab = 3);
+              component.onSubTabChanged(3);
+            }
+          }
+      ));
+    }
+
+    // Assemble tabs with dividers elegantly
+    final List<Component> navItems = [];
+    for (int i = 0; i < subTabs.length; i++) {
+      navItems.add(subTabs[i]);
+      if (i < subTabs.length - 1) {
+        navItems.add(span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}));
+      }
+    }
+
     return div(
       [
-        // Navigation segment
-        div(
-            [
-              span(
-                  [text("toolbar buttons")],
-                  classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-                  events: {
-                    'click': (e) {
-                      setState(() => _activeSubTab = 3);
-                      component.onSubTabChanged(3);
-                    }
-                  }
-              ),
-              span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-              span(
-                  [text("managed profiles")],
-                  classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-                  events: {
-                    'click': (e) {
-                      setState(() => _activeSubTab = 1);
-                      component.onSubTabChanged(1);
-                    }
-                  }
-              ),
-              if (isViewerAdmin) ...[
-                span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-                span(
-                    [text("shortcodes")],
-                    classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-                    events: {
-                      'click': (e) {
-                        setState(() => _activeSubTab = 0);
-                        component.onSubTabChanged(0);
-                      }
-                    }
-                ),
-                span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
-                span(
-                    [text("permissions")],
-                    classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-                    events: {
-                      'click': (e) {
-                        setState(() => _activeSubTab = 2);
-                        component.onSubTabChanged(2);
-                      }
-                    }
-                ),
-              ]
-            ],
-            classes: 'bg-white rounded-md p-4 shadow-sm',
-            attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
-        ),
+        // Dynamic, divider-aware navigation segment row
+        if (navItems.isNotEmpty)
+          div(
+              navItems,
+              classes: 'bg-white rounded-md p-4 shadow-sm',
+              attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
+          ),
 
         if (_activeSubTab == 3)
           _buildSocialButtonsSettingsView()
