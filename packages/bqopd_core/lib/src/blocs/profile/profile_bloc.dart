@@ -37,7 +37,14 @@ class _ProfileDataUpdated extends ProfileEvent {
   final bool isViewerCurator;
   final String? initialTab;
 
-  _ProfileDataUpdated(this.profile, this.currentAuthId, this.isViewerAdmin, this.isViewerModerator, this.isViewerCurator, this.initialTab);
+  _ProfileDataUpdated(
+      this.profile,
+      this.currentAuthId,
+      this.isViewerAdmin,
+      this.isViewerModerator,
+      this.isViewerCurator,
+      this.initialTab,
+      );
 }
 
 class _FollowStatusUpdated extends ProfileEvent {
@@ -112,7 +119,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   ProfileBloc({
     required IUserRepository userRepository,
     required IEngagementRepository engagementRepository,
-  }) : _userRepository = userRepository,
+  })  : _userRepository = userRepository,
         _engagementRepository = engagementRepository,
         super(const ProfileState(isLoading: true)) {
     on<LoadProfileRequested>(_onLoadRequested);
@@ -140,12 +147,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     _userSub = _userRepository.watchUser(event.userId).listen((profile) {
       if (profile != null) {
         add(_ProfileDataUpdated(
-            profile,
-            event.currentAuthId,
-            event.isViewerAdmin,
-            event.isViewerModerator,
-            event.isViewerCurator,
-            event.initialTab
+          profile,
+          event.currentAuthId,
+          event.isViewerAdmin,
+          event.isViewerModerator,
+          event.isViewerCurator,
+          event.initialTab,
         ));
       }
     });
@@ -179,7 +186,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     if (event.initialTab != null && tabs.contains(event.initialTab)) {
       startTab = tabs.indexOf(event.initialTab!);
-    } else if (state.currentTabIndex < tabs.length && state.currentTabIndex != 0) {
+    } else if (state.userData != null && state.currentTabIndex < tabs.length) {
+      // FIX: If we already have user data loaded in the previous state, we preserve the active
+      // currentTabIndex exactly as-is, preventing index-0 (settings) from reverting to maker.
       startTab = state.currentTabIndex;
     }
 
