@@ -148,7 +148,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     for (final match in matches) {
       // Add standard text leading up to the entity match
       if (match.start > currentIndex) {
-        children.add(text(textContent.substring(currentIndex, match.start)));
+        children.add(Component.text(textContent.substring(currentIndex, match.start)));
       }
 
       final String display = match.group(1)?.trim() ?? '';
@@ -160,11 +160,11 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         final String? username = profile?['username'];
 
         if (profile != null && username != null && username.isNotEmpty) {
-          // Rule 1: Connected to an @username handle -> Bold, Underlined, and Clickable
+          // Rule 1: Connected to an @username handle -> Regular (non-bold) weight, Underlined, Clickable, and BLACK in Impact
           children.add(a(
               href: '/$username',
               attributes: {
-                'style': 'font-weight: bold; text-decoration: underline; color: #3f51b5; cursor: pointer;'
+                'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
               },
               events: {
                 'click': (e) {
@@ -172,24 +172,24 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
                   Router.of(context).push('/$username');
                 }
               },
-              [text(display)]
+              [Component.text(display)]
           ));
         } else {
-          // Rule 2: Connected to a profile ID but NO handle -> Bold, NOT underlined, NOT a link
+          // Rule 2: Connected to a profile ID but NO handle -> Regular weight, NOT underlined, NOT a link in Impact (black)
           children.add(span(
               attributes: const {
-                'style': 'font-weight: bold; text-decoration: none; color: inherit; cursor: default;'
+                'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
               },
-              [text(display)]
+              [Component.text(display)]
           ));
         }
       } else {
-        // Rule 3: Unlinked standard brackets -> Bold, NOT underlined, NOT a link
+        // Rule 3: Unlinked standard brackets -> Regular weight, NOT underlined, NOT a link in Impact (black)
         children.add(span(
             attributes: const {
-              'style': 'font-weight: bold; text-decoration: none; color: inherit; cursor: default;'
+              'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
             },
-            [text(display)]
+            [Component.text(display)]
         ));
       }
 
@@ -198,7 +198,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
 
     // Add remaining plain text trailing after final entity
     if (currentIndex < textContent.length) {
-      children.add(text(textContent.substring(currentIndex)));
+      children.add(Component.text(textContent.substring(currentIndex)));
     }
 
     return children;
@@ -208,6 +208,10 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     final lines = textContent.split('\n');
     final List<Component> lineComponents = [];
 
+    // Core layout processing match regular expressions
+    final imageRegex = RegExp(r'^\{\{IMAGE(?::\s*(.*?))?\}\}$', caseSensitive: false);
+    final headerRegex = RegExp(r'^(#{1,6})\s+(.*)$');
+
     for (var line in lines) {
       final cleanLine = line.trim();
       if (cleanLine.isEmpty) {
@@ -215,12 +219,11 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         continue;
       }
 
-      // Check if it's an image block: {{IMAGE: url}}
-      final imageRegex = RegExp(r'^\{\{IMAGE(?::\s*(.*?))?\}\}$', caseSensitive: false);
-      final match = imageRegex.firstMatch(cleanLine);
+      final imageMatch = imageRegex.firstMatch(cleanLine);
+      final headerMatch = headerRegex.firstMatch(cleanLine);
 
-      if (match != null) {
-        final url = match.group(1)?.trim();
+      if (imageMatch != null) {
+        final url = imageMatch.group(1)?.trim();
         final finalUrl = (url != null && url.isNotEmpty) ? url : 'https://placehold.co/600x400/png?text=Image+Asset';
 
         lineComponents.add(div([
@@ -232,13 +235,59 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
                     'box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);'
               }
           )
-        ], attributes: const {'style': 'width: 100%; text-align: center; display: block;'}));
+        ], attributes: const {'style': 'width: 100%; text-align: center; display: block;'} ));
+      } else if (headerMatch != null) {
+        // --- MATCHED MARKDOWN HEADER BLOCK -> USE IMPACT ---
+        final level = headerMatch.group(1)!.length;
+        final content = headerMatch.group(2)!.trim();
+
+        // Calculate dynamic sizing adjustments relative to your current scale factor button state
+        final double headerSize = _fontSize + (4.0 * (7 - level));
+
+        final headingChildren = _parseAndRenderContent(content);
+        final headingAttributes = {
+          'style': 'font-size: ${headerSize}px; '
+              'font-family: Impact, Charcoal, "Arial Black", sans-serif; '
+              'line-height: 1.0; '
+              'color: #111; '
+              'margin: 20px 0 10px 0; '
+              'font-weight: normal; '
+              'letter-spacing: 0.5px;'
+        };
+
+        // Leverage native Jaspr tag builders to bypass raw DomComponent constructors
+        switch (level) {
+          case 1:
+            lineComponents.add(h1(headingChildren, attributes: headingAttributes));
+            break;
+          case 2:
+            lineComponents.add(h2(headingChildren, attributes: headingAttributes));
+            break;
+          case 3:
+            lineComponents.add(h3(headingChildren, attributes: headingAttributes));
+            break;
+          case 4:
+            lineComponents.add(h4(headingChildren, attributes: headingAttributes));
+            break;
+          case 5:
+            lineComponents.add(h5(headingChildren, attributes: headingAttributes));
+            break;
+          case 6:
+          default:
+            lineComponents.add(h6(headingChildren, attributes: headingAttributes));
+            break;
+        }
       } else {
-        // Render as standard paragraph line with inline wiki-linked text parsed
+        // --- STANDARD PARAGRAPH BLOCK -> USE ARIAL ---
         lineComponents.add(p(
             _parseAndRenderContent(line),
             attributes: {
-              'style': 'font-size: ${_fontSize}px; font-family: Georgia, serif; line-height: 1.6; color: #333; text-align: justify; margin: 0 0 12px 0;'
+              'style': 'font-size: ${_fontSize}px; '
+                  'font-family: Arial, Helvetica, sans-serif; '
+                  'line-height: 1.4; '
+                  'color: #2D3748; '
+                  'text-align: justify; '
+                  'margin: 0 0 14px 0;'
             }
         ));
       }
@@ -266,7 +315,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
                       'style': 'margin-bottom: 0; margin-left: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
                     },
                     events: {'click': (e) => setState(() => _fontSize = (_fontSize > 10) ? _fontSize - 2 : 10)},
-                    [text('A-')]
+                    [Component.text('A-')]
                 ),
                 button(
                     classes: 'nav-pill',
@@ -274,7 +323,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
                       'style': 'margin-bottom: 0; margin-left: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
                     },
                     events: {'click': (e) => setState(() => _fontSize = (_fontSize < 48) ? _fontSize + 2 : 48)},
-                    [text('A+')]
+                    [Component.text('A+')]
                 ),
               ]
           ),

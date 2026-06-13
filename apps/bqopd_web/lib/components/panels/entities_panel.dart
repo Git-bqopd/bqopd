@@ -30,6 +30,7 @@ class EntityLink {
   final String label;
   final String? ref; // user:uid
   final String rawMatch;
+
   EntityLink({required this.label, this.ref, required this.rawMatch});
 }
 
@@ -44,6 +45,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   String _handleInput = '';
   bool _modalSaving = false;
   String? _modalError;
+  String? _suggestedHandle; // Holds the automatically detected suggestion if previously linked
 
   final IUserRepository _userRepo = createUserRepository();
   final IUploadRepository _uploadRepo = createUploadRepository();
@@ -64,6 +66,10 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
     }
   }
 
+  String _normalize(String input) {
+    return input.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+  }
+
   Future<void> _loadTextData() async {
     if (component.imageId.isEmpty) {
       setState(() {
@@ -72,20 +78,16 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       });
       return;
     }
-
     if (!mounted) return;
     setState(() => _loading = true);
-
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
       if (doc['exists'] && mounted) {
         final data = doc['data'] as Map<String, dynamic>;
-
         final textLinked = data['text_linked'] ?? '';
         final textCorrected = data['text_corrected'] ?? data['text'] ?? '';
         final textRaw = data['text_raw'] ?? '';
-
         _rawFullText = textLinked.isNotEmpty ? textLinked : (textCorrected.isNotEmpty ? textCorrected : textRaw);
 
         // Parse wiki links [[Label]] or [[Label|user:uid]]
@@ -94,12 +96,10 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
 
         // Use a map to filter out duplicate keys, keeping linked occurrences as higher priority
         final Map<String, EntityLink> uniqueEntities = {};
-
         for (final m in matches) {
           final label = m.group(1)?.trim() ?? '';
           final ref = m.group(2)?.trim();
           final raw = m.group(0) ?? '';
-
           if (label.isNotEmpty) {
             final key = label.toLowerCase();
             // If the entity doesn't exist yet OR if this match has a target ref while the previous one didn't, insert/upgrade it
@@ -108,12 +108,10 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
             }
           }
         }
-
         setState(() {
           _entities = uniqueEntities.values.toList();
           _loading = false;
         });
-
         // Load profiles for linked entities in parallel
         _loadEntityProfiles(_entities);
       } else {
@@ -134,7 +132,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   Future<void> _loadEntityProfiles(List<EntityLink> links) async {
     final Map<String, Map<String, dynamic>> tempProfiles = {};
     final List<Future<void>> fetches = [];
-
     for (var link in links) {
       if (link.ref != null && link.ref!.startsWith('user:')) {
         final uid = link.ref!.substring(5);
@@ -151,13 +148,78 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         }
       }
     }
-
     if (fetches.isNotEmpty) {
       await Future.wait(fetches);
       if (mounted) {
         setState(() {
           _loadedProfiles = tempProfiles;
         });
+      }
+    }
+  }
+
+  Future<void> _findSuggestedHandle(EntityLink entity) async {
+    if (!mounted) return;
+    setState(() {
+      _suggestedHandle = null;
+    });
+
+    final String label = entity.label;
+    final String handle = _normalize(label);
+
+    // 1. Check if usernames/$handle exists
+    try {
+      final String userRes = await fsGetDoc('usernames/$handle');
+      final Map<String, dynamic> doc = jsonDecode(userRes);
+      if (doc['exists'] == true) {
+        final Map<String, dynamic> data = doc['data'] as Map<String, dynamic>? ?? {};
+        String targetHandle = handle;
+        if (data['isAlias'] == true && data['redirect'] != null) {
+          targetHandle = data['redirect'];
+        }
+        if (mounted) {
+          setState(() {
+            _suggestedHandle = targetHandle;
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      print('[EntitiesPanel _findSuggestedHandle] Error checking usernames: $e');
+    }
+
+    // 2. Scan other images/pages in the same fanzine for linked occurrences of this exact label
+    if (component.fanzineId != null && component.fanzineId!.isNotEmpty) {
+      try {
+        final imagesRes = await fsQuery('images', 'usedInFanzines', 'array-contains', jsonEncode(component.fanzineId), '');
+        final List decodedImages = jsonDecode(imagesRes);
+        for (var imgDoc in decodedImages) {
+          final Map<String, dynamic> imgData = imgDoc['data'] as Map<String, dynamic>? ?? {};
+          final String textLinked = imgData['text_linked'] ?? '';
+          if (textLinked.isNotEmpty) {
+            final regex = RegExp(r'\[\[(' + RegExp.escape(label) + r')\|user:(.*?)\]\]', caseSensitive: false);
+            final match = regex.firstMatch(textLinked);
+            if (match != null) {
+              final String targetUid = match.group(2)?.trim() ?? '';
+              if (targetUid.isNotEmpty) {
+                final profileRes = await fsGetDoc('profiles/$targetUid');
+                final Map<String, dynamic> pDoc = jsonDecode(profileRes);
+                if (pDoc['exists'] == true) {
+                  final Map<String, dynamic> pData = pDoc['data'] as Map<String, dynamic>? ?? {};
+                  final String? username = pData['username'];
+                  if (username != null && username.isNotEmpty && mounted) {
+                    setState(() {
+                      _suggestedHandle = username;
+                    });
+                    return;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('[EntitiesPanel _findSuggestedHandle] Error checking fanzine pages: $e');
       }
     }
   }
@@ -169,13 +231,14 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         final uid = entity.ref!.substring(5);
         initialHandle = _loadedProfiles[uid]?['username'] ?? '';
       }
-
       setState(() {
         _editingEntity = entity;
         _handleInput = initialHandle;
         _modalError = null;
         _modalSaving = false;
+        _suggestedHandle = null;
       });
+      _findSuggestedHandle(entity);
     } else {
       if (entity.ref != null && entity.ref!.startsWith('user:')) {
         final uid = entity.ref!.substring(5);
@@ -190,22 +253,18 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   Future<void> _saveEntityLink() async {
     final entity = _editingEntity;
     if (entity == null || _modalSaving) return;
-
     final cleanHandle = _handleInput.trim().toLowerCase().replaceAll('@', '');
     if (cleanHandle.isEmpty) {
       setState(() => _modalError = 'Please enter a valid username.');
       return;
     }
-
     setState(() {
       _modalSaving = true;
       _modalError = null;
     });
-
     try {
       // Find matching profile username cleanly via abstract repository
       final result = await _uploadRepo.lookupUserByHandle(cleanHandle);
-
       if (result == null) {
         setState(() {
           _modalError = 'Profile @$cleanHandle not found in database.';
@@ -213,32 +272,26 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         });
         return;
       }
-
       final targetUid = result['uid'];
-
       // Update string text replacement
       final String replacement = "[[${entity.label}|user:$targetUid]]";
       final String updatedText = _rawFullText.replaceAll(entity.rawMatch, replacement);
-
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({
         'text_linked': updatedText,
         'needs_linking': false,
       }));
-
       // Bubble up manual entities list to parent fanzine
       if (component.fanzineId != null) {
         await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode({
           'draftEntities': WebFieldValue.arrayUnion([entity.label])
         }));
       }
-
       setState(() {
         _editingEntity = null;
         _handleInput = '';
         _modalSaving = false;
         _modalError = null;
       });
-
       _loadTextData();
     } catch (e) {
       setState(() {
@@ -251,27 +304,22 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   Future<void> _unlinkEntity() async {
     final entity = _editingEntity;
     if (entity == null || _modalSaving) return;
-
     setState(() {
       _modalSaving = true;
       _modalError = null;
     });
-
     try {
       final String replacement = "[[${entity.label}]]";
       final String updatedText = _rawFullText.replaceAll(entity.rawMatch, replacement);
-
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({
         'text_linked': updatedText,
       }));
-
       setState(() {
         _editingEntity = null;
         _handleInput = '';
         _modalSaving = false;
         _modalError = null;
       });
-
       _loadTextData();
     } catch (e) {
       setState(() {
@@ -295,19 +343,16 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
       );
     }
-
     if (_entities.isEmpty) {
       return div(
         [text('No entity links found in page text.')],
         classes: 'p-6 text-center text-gray italic text-xs',
       );
     }
-
     return div(
       [
         for (var entity in _entities)
           _buildEntityCard(entity),
-
         if (_editingEntity != null)
           _buildEditModal()
       ],
@@ -319,12 +364,10 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   Component _buildEntityCard(EntityLink entity) {
     final String? uid = entity.ref != null && entity.ref!.startsWith('user:') ? entity.ref!.substring(5) : null;
     final Map<String, dynamic>? profile = uid != null ? _loadedProfiles[uid] : null;
-
     final bool isLinked = profile != null;
     final String labelText = isLinked ? (profile['displayName'] ?? entity.label) : entity.label;
     final String? username = isLinked ? profile['username'] : null;
     final String? photoUrl = isLinked ? profile['photoUrl'] : null;
-
     return div(
       [
         div(
@@ -346,7 +389,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
               classes: 'user-avatar-container',
               attributes: const {'style': 'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'},
             ),
-
             div(
               [
                 div([text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2;'}),
@@ -360,7 +402,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           classes: 'user-tile',
           attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'},
         ),
-
         if (component.isEditingMode)
           span(classes: 'material-symbols-outlined text-gray', attributes: const {'style': 'font-size: 18px; color: #79747E;'}, [
             text(isLinked ? 'edit_note' : 'link_off')
@@ -400,7 +441,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                             ],
                             attributes: const {'style': 'font-size: 12px; color: #555; line-height: 1.4; margin: 0;'}
                         ),
-
                         div(
                           [
                             input(
@@ -414,6 +454,29 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                                   'input': (e) => _handleInput = getInputValue(e)
                                 }
                             ),
+                            if (_suggestedHandle != null)
+                              div(
+                                [
+                                  span([text('Suggested Link:')], attributes: const {'style': 'font-size: 10px; color: #666; margin-bottom: 4px;'}),
+                                  button(
+                                      [text('@$_suggestedHandle')],
+                                      classes: 'profile-btn',
+                                      attributes: const {
+                                        'type': 'button',
+                                        'style': 'padding: 8px 12px; font-size: 12px; border: 1px dashed #6750A4; color: #6750A4; border-radius: 6px; background: rgba(103, 80, 164, 0.05); cursor: pointer; font-weight: bold; width: 100%; text-align: left; display: flex; align-items: center; justify-content: flex-start;'
+                                      },
+                                      events: {
+                                        'click': (e) {
+                                          setState(() {
+                                            _handleInput = '@$_suggestedHandle';
+                                          });
+                                        }
+                                      }
+                                  )
+                                ],
+                                classes: 'flex-col mt-2',
+                                attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; align-items: flex-start; margin-top: 8px;'},
+                              ),
                             if (_modalError != null)
                               p([text(_modalError!)], classes: 'error-msg mt-2', attributes: const {'style': 'font-size: 11px; margin-top: 4px; color: #ef4444;'})
                           ],
@@ -424,7 +487,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                       classes: 'flex-col w-full text-left',
                       attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; text-align: left;'},
                     ),
-
                     div(
                       [
                         if (_editingEntity!.ref != null)
