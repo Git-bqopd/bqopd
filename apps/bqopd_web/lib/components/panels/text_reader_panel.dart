@@ -248,7 +248,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         final headingAttributes = {
           'style': 'font-size: ${headerSize}px; '
               'font-family: Impact, Charcoal, "Arial Black", sans-serif; '
-              'line-height: 1.0; '
+              'line-height: 1.2; '
               'color: #111; '
               'margin: 20px 0 10px 0; '
               'font-weight: normal; '
@@ -284,7 +284,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
             attributes: {
               'style': 'font-size: ${_fontSize}px; '
                   'font-family: Arial, Helvetica, sans-serif; '
-                  'line-height: 1.4; '
+                  'line-height: 1.6; '
                   'color: #2D3748; '
                   'text-align: justify; '
                   'margin: 0 0 14px 0;'
