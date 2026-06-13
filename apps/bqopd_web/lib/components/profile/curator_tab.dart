@@ -15,6 +15,15 @@ import '../editor/modals/confirm_modal.dart';
 import 'curator_upload_helper.dart'; // Server-safe conditional upload utility
 import 'curator_entities_directory.dart'; // Decoupled entities component
 
+/// Local utility to normalize handles inside the curator scope consistently with settings and database.
+String normalizeHandle(String input) {
+  return input
+      .trim()
+      .toLowerCase()
+      .replaceAll(' ', '-')
+      .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+}
+
 /// Helper to formatted date dynamically based on precision mode and estimated guess toggle.
 String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
   if (dateStr == null || dateStr.trim().isEmpty) return '';

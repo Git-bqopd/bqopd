@@ -9,9 +9,13 @@ import './curator/curator_settings_tab.dart';
 import './curator/curator_order_tab.dart';
 import './curator/curator_upload_tab.dart';
 
-/// Local utility to normalize handles inside the curator scope.
+/// Local utility to normalize handles inside the curator scope consistently with settings and database.
 String normalizeHandle(String input) {
-  return input.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+  return input
+      .trim()
+      .toLowerCase()
+      .replaceAll(' ', '-')
+      .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
 }
 
 /// A standalone, 4-tab workstation editor specifically designed for curators.
@@ -517,6 +521,8 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
       );
     }
 
+    final String handle = _isAlias ? (_redirectHandle ?? '') : normalizeHandle(component.name);
+
     return div(
       classes: 'flex-row justify-between items-center bg-gray-50 border border-gray-150 p-2 rounded-md',
       attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box; width: 100%; margin-bottom: 6px;'},
@@ -537,9 +543,10 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
               a(
                   [
                     span([text('account_circle')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
-                    text("view profile")
+                    text("@$handle")
                   ],
-                  href: '/profile?userId=$_profileId',
+                  href: '/$handle',
+                  classes: 'text-green-600 hover:underline inline-flex items-center',
                   attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #16a34a; text-decoration: none; display: inline-flex; align-items: center;'}
               )
             else if (!_showAliasInput) ...[

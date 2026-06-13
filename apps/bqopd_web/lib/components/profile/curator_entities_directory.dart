@@ -7,10 +7,14 @@ import '../../utils/web_firebase_interop.dart';
 import '../../utils/firebase_mocks.dart';
 import '../../utils/web_utils.dart';
 
-/// Local utility to normalize user-provided names/handles by converting them to lowercase
-/// and removing any whitespace or special characters to match standard database indexes.
+/// Local utility to normalize user-provided names/handles consistently across settings,
+/// curators, and directories. Maps spaces to hyphens and strips non-alphanumeric/hyphen/underscore characters.
 String normalizeHandle(String input) {
-  return input.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+  return input
+      .trim()
+      .toLowerCase()
+      .replaceAll(' ', '-')
+      .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
 }
 
 /// A standalone entities list component designed specifically for curators.

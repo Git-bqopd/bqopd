@@ -5,6 +5,16 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 import '../../utils/icon_utils.dart';
+import '../editor/modals/confirm_modal.dart';
+
+/// Unified utility to normalize handles consistently across settings, curator, and entities directory.
+String normalizeHandle(String input) {
+  return input
+      .trim()
+      .toLowerCase()
+      .replaceAll(' ', '-')
+      .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+}
 
 /// Customizable toolbar configurations, managed profiles form, global default shortcodes, and administrator role parameters.
 class ProfileSettingsTab extends StatefulComponent {
@@ -40,6 +50,11 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   bool _isCreatingManagedProfile = false;
   String? _managedProfileFeedback;
   bool _isManagedProfileError = false;
+
+  // Deletion Modal State
+  String? _pendingDeleteProfileId;
+  String? _pendingDeleteProfileUsername;
+  String? _pendingDeleteProfileDisplayName;
 
   // Global shortcode configurations
   String _loginZineShortcode = '';
@@ -124,17 +139,31 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     _managedSub = null;
     setState(() => _loadingManaged = true);
 
-    _managedSub = fsListenQuery('profiles', 'isManaged', '==', jsonEncode(true), '', false, (String jsonStr) {
+    // WIDE-OPEN QUERY: Removed 'isManaged' == true filter to fetch no matter any setting or status
+    _managedSub = fsListenQuery('profiles', '', '', '', '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
-        final profiles = decoded.map((d) {
-          final data = d['data'] as Map<String, dynamic>;
-          data['id'] = d['id'];
-          return data;
-        }).where((p) {
-          final List managers = p['managers'] ?? [];
-          return managers.contains(component.targetUserId);
-        }).toList();
+        final Map<String, Map<String, dynamic>> uniqueProfiles = {};
+
+        for (var d in decoded) {
+          final data = d['data'] as Map<String, dynamic>? ?? {};
+          final String id = d['id'] as String? ?? '';
+          if (id.isEmpty) continue;
+          data['id'] = id;
+
+          final List managers = data['managers'] ?? [];
+          final String username = (data['username'] ?? '').toString().trim().toLowerCase();
+
+          // Check if targetUserId is explicitly assigned as a manager of this profile
+          if (managers.contains(component.targetUserId)) {
+            final String key = username.isNotEmpty ? username : id;
+            if (!uniqueProfiles.containsKey(key)) {
+              uniqueProfiles[key] = data;
+            }
+          }
+        }
+
+        final profiles = uniqueProfiles.values.toList();
 
         if (mounted) {
           setState(() {
@@ -215,9 +244,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _isManagedProfileError = false;
     });
     try {
-      final String baseHandle = "${_newManagedFirstName.trim()}-${_newManagedLastName.trim()}"
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+      final String baseHandle = normalizeHandle("${_newManagedFirstName.trim()} ${_newManagedLastName.trim()}");
       final String uniqueId = 'managed_${DateTime.now().millisecondsSinceEpoch}';
 
       final publicData = {
@@ -266,6 +293,40 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       setState(() {
         _isCreatingManagedProfile = false;
         _managedProfileFeedback = "Failed to initialize: ${e.toString()}";
+        _isManagedProfileError = true;
+      });
+    }
+  }
+
+  Future<void> _deleteManagedProfile(String id, String username) async {
+    setState(() {
+      _managedProfileFeedback = "Deleting managed profile @$username...";
+      _isManagedProfileError = false;
+    });
+
+    try {
+      final cleanUsername = username.trim().toLowerCase();
+      final profileDocId = id.isNotEmpty ? id : cleanUsername;
+
+      print("[SETTINGS TAB] Deleting profiles/$profileDocId, usernames/$cleanUsername, shortcodes/${cleanUsername.toUpperCase()}");
+
+      final List<Future<void>> deletions = [
+        fsDeleteDoc('profiles/$profileDocId'),
+      ];
+      if (cleanUsername.isNotEmpty) {
+        deletions.add(fsDeleteDoc('usernames/$cleanUsername'));
+        deletions.add(fsDeleteDoc('shortcodes/${cleanUsername.toUpperCase()}'));
+      }
+      await Future.wait(deletions);
+
+      setState(() {
+        _managedProfileFeedback = "Managed profile @$username deleted successfully.";
+        _isManagedProfileError = false;
+      });
+    } catch (e) {
+      print("[SETTINGS TAB] Error deleting managed profile: $e");
+      setState(() {
+        _managedProfileFeedback = "Failed to delete: ${e.toString()}";
         _isManagedProfileError = true;
       });
     }
@@ -402,14 +463,46 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
             div(
                 [
                   for (var p in _managedProfiles)
-                    a(
+                    div(
+                        attributes: const {
+                          'style': 'position: relative; display: flex; flex-direction: column; border: 1px solid #eee; border-radius: 6px; background-color: #f9f9f9; box-sizing: border-box; overflow: hidden;'
+                        },
                         [
-                          span([text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-                          span([text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px;'})
-                        ],
-                        href: '/${p['username']}',
-                        classes: 'bg-gray-50 hover:bg-gray-100 rounded-md p-4 transition-all',
-                        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #eee; cursor: pointer; padding: 12px; border-radius: 6px; text-decoration: none;'}
+                          // Clickable link part
+                          a(
+                              [
+                                span([text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'}),
+                                span([text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'})
+                              ],
+                              href: '/${p['username']}',
+                              classes: 'hover:bg-gray-100 transition-all flex-1',
+                              attributes: const {
+                                'style': 'display: flex; flex-direction: column; padding: 14px 12px; text-decoration: none;'
+                              }
+                          ),
+                          // Absolute positioned Delete Button on the card
+                          button(
+                              [
+                                span([text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})
+                              ],
+                              attributes: const {
+                                'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(0,0,0,0.04); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; transition: background 0.15s;'
+                              },
+                              events: {
+                                'click': (dynamic e) {
+                                  try {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  } catch (_) {}
+                                  setState(() {
+                                    _pendingDeleteProfileId = p['id'] ?? p['uid'];
+                                    _pendingDeleteProfileUsername = p['username'];
+                                    _pendingDeleteProfileDisplayName = p['displayName'] ?? p['username'];
+                                  });
+                                }
+                              }
+                          )
+                        ]
                     )
                 ],
                 attributes: const {'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; width: 100%; box-sizing: border-box;'}
@@ -636,7 +729,33 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           else if (_activeSubTab == 2 && isViewerAdmin)
               _buildPermissionsSettingsView()
             else
-              div([])
+              div([]),
+
+        // Layered Delete Confirmation Modal
+        if (_pendingDeleteProfileId != null)
+          ConfirmModal(
+            title: 'Delete Managed Profile?',
+            message: 'Are you sure you want to delete the profile for "${_pendingDeleteProfileDisplayName}" (@${_pendingDeleteProfileUsername}) forever? This will delete their profile and release the handle.',
+            confirmLabel: 'DELETE',
+            isDestructive: true,
+            onCancel: () {
+              setState(() {
+                _pendingDeleteProfileId = null;
+                _pendingDeleteProfileUsername = null;
+                _pendingDeleteProfileDisplayName = null;
+              });
+            },
+            onConfirm: () {
+              final id = _pendingDeleteProfileId!;
+              final username = _pendingDeleteProfileUsername!;
+              _deleteManagedProfile(id, username);
+              setState(() {
+                _pendingDeleteProfileId = null;
+                _pendingDeleteProfileUsername = null;
+                _pendingDeleteProfileDisplayName = null;
+              });
+            },
+          )
       ],
     );
   }
