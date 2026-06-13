@@ -175,6 +175,7 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
   int _masterVerified = 0;
   int _linkedPending = 0;
   bool _calculating = true;
+  List<String> _liveEntities = [];
   FirebaseSubscription? _imagesSub;
 
   @override
@@ -202,12 +203,13 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
 
   void _listenToOcrProgress() {
     setState(() => _calculating = true);
-    _imagesSub = fsListenQuery('images', 'usedInFanzines', 'array-contains', jsonEncode(component.frefFanzineId), '', false, (jsonStr) {
+    _imagesSub = fsListenQuery('images', 'usedInFanzines', 'array-contains', jsonEncode(component.frefFanzineId), '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
         int raw = 0;
         int master = 0;
         int linked = 0;
+        final Set<String> aggregatedEntities = {};
 
         for (var doc in decoded) {
           final data = doc['data'] as Map<String, dynamic>? ?? {};
@@ -219,6 +221,41 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
           if (rawText.isNotEmpty && rawText != "[No text detected]") raw++;
           if (correctedText.isNotEmpty && !needsAi) master++;
           if (needsLink) linked++;
+
+          // Aggregate corrected entities from each page image doc dynamically
+          final imageEntities = data['detected_entities'];
+          if (imageEntities is List) {
+            for (var ent in imageEntities) {
+              if (ent != null && ent.toString().trim().isNotEmpty) {
+                aggregatedEntities.add(ent.toString().trim());
+              }
+            }
+          }
+        }
+
+        final sortedEntities = aggregatedEntities.toList()..sort();
+
+        // Check if the freshly aggregated list differs from current fanzine draftEntities
+        final List<String> fzDraftEntities = List<String>.from(component.fanzine.draftEntities);
+        fzDraftEntities.sort();
+
+        bool hasChanged = sortedEntities.length != fzDraftEntities.length;
+        if (!hasChanged) {
+          for (int i = 0; i < sortedEntities.length; i++) {
+            if (sortedEntities[i] != fzDraftEntities[i]) {
+              hasChanged = true;
+              break;
+            }
+          }
+        }
+
+        // Clean up obsolete/removed original entities and update fanzine metadata in Firestore
+        if (hasChanged) {
+          fsUpdateDoc('fanzines/${component.frefFanzineId}', jsonEncode({
+            'draftEntities': sortedEntities
+          })).catchError((e) {
+            print("Error auto-syncing aggregated draftEntities: $e");
+          });
         }
 
         if (mounted) {
@@ -226,6 +263,7 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
             _rawDone = raw;
             _masterVerified = master;
             _linkedPending = linked;
+            _liveEntities = sortedEntities;
             _calculating = false;
           });
         }
@@ -238,7 +276,8 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
 
   @override
   Component build(BuildContext context) {
-    final draftEntities = component.fanzine.draftEntities;
+    // Rely dynamically on newly corrected _liveEntities, falling back to draftEntities while calculating
+    final draftEntities = _calculating ? component.fanzine.draftEntities : _liveEntities;
 
     return div(
       classes: 'flex-col text-left gap-4',
