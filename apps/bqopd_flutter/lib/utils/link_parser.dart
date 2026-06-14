@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class LinkParser {
-  static final RegExp _wikiLinkRegex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+  static final RegExp _wikiLinkRegex = RegExp(r'\[\[(.*?)\]\]');
   static final RegExp _headerRegex = RegExp(r'^(#{1,6})\s+(.*)$', multiLine: true);
 
   static TextSpan renderLinks(
@@ -16,16 +16,13 @@ class LinkParser {
       }) {
     final List<InlineSpan> spans = [];
     final lines = text.split('\n');
-
     for (int i = 0; i < lines.length; i++) {
       String line = lines[i];
       final headerMatch = _headerRegex.firstMatch(line);
-
       if (headerMatch != null) {
         final content = headerMatch.group(2) ?? '';
         final level = headerMatch.group(1)?.length ?? 1;
         final double fontSize = (baseStyle?.fontSize ?? 16.0) + (4.0 * (6 - level));
-
         spans.add(TextSpan(
           children: _parseLineForLinks(
               context,
@@ -49,13 +46,28 @@ class LinkParser {
     final List<InlineSpan> spans = [];
     int currentIndex = 0;
     final matches = _wikiLinkRegex.allMatches(lineText);
-
     for (final match in matches) {
       if (match.start > currentIndex) {
         spans.add(TextSpan(text: lineText.substring(currentIndex, match.start), style: style));
       }
-      final String display = match.group(1) ?? '';
-      final String? ref = match.group(2);
+      final content = match.group(1) ?? '';
+      final parts = content.split('|');
+      String display = '';
+      String? ref;
+
+      if (parts.length == 1) {
+        display = parts[0].trim();
+      } else if (parts.length == 2) {
+        if (parts[1].contains(':')) {
+          display = parts[0].trim();
+          ref = parts[1].trim();
+        } else {
+          display = parts[1].trim();
+        }
+      } else if (parts.length >= 3) {
+        display = parts[1].trim();
+        ref = parts[2].trim();
+      }
 
       spans.add(TextSpan(
         text: display,

@@ -43,12 +43,18 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
   }
 
   Future<void> _loadEntityProfiles() async {
-    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+    final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(_processedText);
     final Set<String> uidsToFetch = {};
-
     for (final m in matches) {
-      final ref = m.group(2)?.trim();
+      final content = m.group(1) ?? '';
+      final parts = content.split('|');
+      String? ref;
+      if (parts.length == 2 && parts[1].contains(':')) {
+        ref = parts[1].trim();
+      } else if (parts.length >= 3) {
+        ref = parts[2].trim();
+      }
       if (ref != null && ref.startsWith('user:')) {
         final uid = ref.substring(5);
         if (!_loadedProfiles.containsKey(uid)) {
@@ -56,7 +62,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         }
       }
     }
-
     if (uidsToFetch.isEmpty) {
       if (mounted) {
         setState(() {
@@ -65,17 +70,14 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       }
       return;
     }
-
     if (mounted) {
       setState(() {
         _loadingProfiles = true;
       });
     }
-
     try {
       final List<Future<void>> fetches = [];
       final Map<String, Map<String, dynamic>> fetchedProfiles = {};
-
       for (var uid in uidsToFetch) {
         fetches.add(
           FirebaseFirestore.instance.collection('profiles').doc(uid).get().then((doc) {
@@ -87,9 +89,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           }),
         );
       }
-
       await Future.wait(fetches);
-
       if (mounted) {
         setState(() {
           _loadedProfiles.addAll(fetchedProfiles);
@@ -108,11 +108,9 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
 
   List<InlineSpan> _parseAndRenderContent(BuildContext context, String textContent, TextStyle baseStyle) {
     final List<InlineSpan> spans = [];
-    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
-
+    final regex = RegExp(r'\[\[(.*?)\]\]');
     int currentIndex = 0;
     final matches = regex.allMatches(textContent);
-
     for (final match in matches) {
       // Add standard text leading up to the entity match
       if (match.start > currentIndex) {
@@ -121,15 +119,29 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           style: baseStyle,
         ));
       }
+      final content = match.group(1) ?? '';
+      final parts = content.split('|');
+      String display = '';
+      String? ref;
 
-      final String display = match.group(1)?.trim() ?? '';
-      final String? ref = match.group(2)?.trim();
+      if (parts.length == 1) {
+        display = parts[0].trim();
+      } else if (parts.length == 2) {
+        if (parts[1].contains(':')) {
+          display = parts[0].trim();
+          ref = parts[1].trim();
+        } else {
+          display = parts[1].trim();
+        }
+      } else if (parts.length >= 3) {
+        display = parts[1].trim();
+        ref = parts[2].trim();
+      }
 
       if (ref != null && ref.startsWith('user:')) {
         final uid = ref.substring(5);
         final profile = _loadedProfiles[uid];
         final String? username = profile?['username'];
-
         if (profile != null && username != null && username.isNotEmpty) {
           // Rule 1: Connected to an @username handle -> Bold, Underlined, and Clickable
           spans.add(TextSpan(
@@ -162,10 +174,8 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           ),
         ));
       }
-
       currentIndex = match.end;
     }
-
     // Add remaining plain text
     if (currentIndex < textContent.length) {
       spans.add(TextSpan(
@@ -173,7 +183,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         style: baseStyle,
       ));
     }
-
     return spans;
   }
 
@@ -187,7 +196,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         ),
       );
     }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -202,7 +210,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
               height: 1.6,
               color: Colors.black87,
             );
-
             return SelectableText.rich(
               TextSpan(
                 children: _parseAndRenderContent(context, _processedText, baseStyle),
@@ -218,7 +225,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
 
 class _FontSizeSlider extends StatelessWidget {
   final ValueNotifier<double> fontSizeNotifier;
-
   const _FontSizeSlider({required this.fontSizeNotifier});
 
   @override

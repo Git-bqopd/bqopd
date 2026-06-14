@@ -48,22 +48,18 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       });
       return;
     }
-
     if (!mounted) return;
     setState(() => _loading = true);
-
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
       if (doc['exists'] && mounted) {
         final data = doc['data'];
-
         // Match the Gold Master fallback hierarchy
         final String? textVal = data['text_linked'] ??
             data['text_corrected'] ??
             data['text_raw'] ??
             data['text']; // Legacy fallback
-
         final resolvedText = (textVal != null && textVal.trim().isNotEmpty)
             ? textVal
             : "Transcription pending for this page.";
@@ -96,12 +92,18 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
   }
 
   Future<void> _loadEntityProfiles(String textContent) async {
-    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+    final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(textContent);
     final Set<String> uidsToFetch = {};
-
     for (final m in matches) {
-      final ref = m.group(2)?.trim();
+      final content = m.group(1) ?? '';
+      final parts = content.split('|');
+      String? ref;
+      if (parts.length == 2 && parts[1].contains(':')) {
+        ref = parts[1].trim();
+      } else if (parts.length >= 3) {
+        ref = parts[2].trim();
+      }
       if (ref != null && ref.startsWith('user:')) {
         final uid = ref.substring(5);
         if (!_loadedProfiles.containsKey(uid)) {
@@ -109,12 +111,9 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         }
       }
     }
-
     if (uidsToFetch.isEmpty) return;
-
     final List<Future<void>> fetches = [];
     final Map<String, Map<String, dynamic>> fetchedProfiles = {};
-
     for (var uid in uidsToFetch) {
       fetches.add(
           fsGetDoc('profiles/$uid').then((res) {
@@ -127,7 +126,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           })
       );
     }
-
     if (fetches.isNotEmpty) {
       await Future.wait(fetches);
       if (mounted) {
@@ -140,25 +138,37 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
 
   List<Component> _parseAndRenderContent(String textContent) {
     final List<Component> children = [];
-    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
-
+    final regex = RegExp(r'\[\[(.*?)\]\]');
     int currentIndex = 0;
     final matches = regex.allMatches(textContent);
-
     for (final match in matches) {
       // Add standard text leading up to the entity match
       if (match.start > currentIndex) {
         children.add(Component.text(textContent.substring(currentIndex, match.start)));
       }
+      final content = match.group(1) ?? '';
+      final parts = content.split('|');
+      String display = '';
+      String? ref;
 
-      final String display = match.group(1)?.trim() ?? '';
-      final String? ref = match.group(2)?.trim();
+      if (parts.length == 1) {
+        display = parts[0].trim();
+      } else if (parts.length == 2) {
+        if (parts[1].contains(':')) {
+          display = parts[0].trim();
+          ref = parts[1].trim();
+        } else {
+          display = parts[1].trim();
+        }
+      } else if (parts.length >= 3) {
+        display = parts[1].trim();
+        ref = parts[2].trim();
+      }
 
       if (ref != null && ref.startsWith('user:')) {
         final uid = ref.substring(5);
         final profile = _loadedProfiles[uid];
         final String? username = profile?['username'];
-
         if (profile != null && username != null && username.isNotEmpty) {
           // Rule 1: Connected to an @username handle -> Regular (non-bold) weight, Underlined, Clickable, and BLACK in Impact
           children.add(a(
@@ -192,22 +202,18 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
             [Component.text(display)]
         ));
       }
-
       currentIndex = match.end;
     }
-
     // Add remaining plain text trailing after final entity
     if (currentIndex < textContent.length) {
       children.add(Component.text(textContent.substring(currentIndex)));
     }
-
     return children;
   }
 
   List<Component> _renderLines(String textContent) {
     final lines = textContent.split('\n');
     final List<Component> lineComponents = [];
-
     // Core layout processing match regular expressions
     final imageRegex = RegExp(r'^\{\{IMAGE(?::\s*(.*?))?\}\}$', caseSensitive: false);
     final headerRegex = RegExp(r'^(#{1,6})\s+(.*)$');
@@ -218,14 +224,12 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         lineComponents.add(div([], attributes: const {'style': 'height: 16px;'}));
         continue;
       }
-
       final imageMatch = imageRegex.firstMatch(cleanLine);
       final headerMatch = headerRegex.firstMatch(cleanLine);
 
       if (imageMatch != null) {
         final url = imageMatch.group(1)?.trim();
         final finalUrl = (url != null && url.isNotEmpty) ? url : 'https://placehold.co/600x400/png?text=Image+Asset';
-
         lineComponents.add(div([
           img(
               src: finalUrl,
@@ -240,10 +244,8 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         // --- MATCHED MARKDOWN HEADER BLOCK -> USE IMPACT ---
         final level = headerMatch.group(1)!.length;
         final content = headerMatch.group(2)!.trim();
-
         // Calculate dynamic sizing adjustments relative to your current scale factor button state
         final double headerSize = _fontSize + (4.0 * (7 - level));
-
         final headingChildren = _parseAndRenderContent(content);
         final headingAttributes = {
           'style': 'font-size: ${headerSize}px; '
@@ -327,7 +329,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
                 ),
               ]
           ),
-
           div(
               attributes: const {
                 'style': 'margin-top: 36px; width: 100%; box-sizing: border-box; overflow: visible;'

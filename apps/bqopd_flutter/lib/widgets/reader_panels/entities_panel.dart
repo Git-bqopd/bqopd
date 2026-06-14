@@ -6,16 +6,18 @@ import '../../services/user_bootstrap.dart';
 
 class EntitiesPanel extends StatelessWidget {
   final String text;
-
   const EntitiesPanel({super.key, required this.text});
 
   List<String> _parseEntities(String content) {
-    final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+    final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(content);
     final Set<String> results = {};
     for (final m in matches) {
-      final name = m.group(1);
-      if (name != null && name.isNotEmpty) results.add(name);
+      final inside = m.group(1) ?? '';
+      final parts = inside.split('|');
+      if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+        results.add(parts[0].trim());
+      }
     }
     return results.toList();
   }
@@ -23,7 +25,6 @@ class EntitiesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entities = _parseEntities(text);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

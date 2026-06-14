@@ -1,15 +1,12 @@
 import 'dart:math' as math;
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
 import '../calendar_editor_widget.dart';
 import '../templates/basic_text_template.dart';
 
 // --- RAW TEXT PANEL ---
 class RawTextPanel extends StatelessWidget {
   final String text;
-
   const RawTextPanel({super.key, required this.text});
 
   @override
@@ -135,10 +132,8 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
     if (s1 == s2) return 0;
     if (s1.isEmpty) return s2.length;
     if (s2.isEmpty) return s1.length;
-
     List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
     List<int> v1 = List<int>.filled(s2.length + 1, 0);
-
     for (int i = 0; i < s1.length; i++) {
       v1[0] = i + 1;
       for (int j = 0; j < s2.length; j++) {
@@ -155,13 +150,10 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
   Future<void> _save() async {
     if (widget.imageId.isEmpty) return;
     setState(() => _s = true);
-
     try {
       final Map<String, dynamic> updates = {};
-
       // Calculate how much work the human had to do
       int score = _calculateEditDistance(widget.aiBaselineText, _c.text);
-
       if (widget.mode == 'master') {
         updates['text_corrected'] = _c.text;
         updates['needs_linking'] = true;
@@ -176,27 +168,25 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
           if (score > 0) updates['isTrainingData'] = true;
         }
 
-        // FIXED: Parse manual [[Entity]] brackets and instantly bubble them up to the Fanzine!
-        final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+        // Parse manual [[Entity]] brackets and instantly bubble them up to the Fanzine!
+        final regex = RegExp(r'\[\[(.*?)\]\]');
         final matches = regex.allMatches(_c.text);
         final List<String> manualEntities = [];
-
         for (final m in matches) {
-          final name = m.group(1);
-          if (name != null && name.isNotEmpty) manualEntities.add(name);
+          final content = m.group(1) ?? '';
+          final parts = content.split('|');
+          if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+            manualEntities.add(parts[0].trim());
+          }
         }
-
         updates['detected_entities'] = manualEntities;
-
         if (widget.fanzineId.isNotEmpty && manualEntities.isNotEmpty) {
           FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).update({
             'draftEntities': FieldValue.arrayUnion(manualEntities)
           });
         }
       }
-
       await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update(updates);
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved! (Score: $score)')));
     } finally {
@@ -215,9 +205,7 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
         ),
       );
     }
-
     final bool isMaster = widget.mode == 'master';
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

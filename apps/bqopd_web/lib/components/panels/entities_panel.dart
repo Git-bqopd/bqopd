@@ -27,7 +27,7 @@ class EntitiesPanel extends StatefulComponent {
 }
 
 class EntityLink {
-  final String label;
+  final String label; // The Canonical Name
   final String? ref; // user:uid
   final String rawMatch;
 
@@ -90,21 +90,27 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         final textRaw = data['text_raw'] ?? '';
         _rawFullText = textLinked.isNotEmpty ? textLinked : (textCorrected.isNotEmpty ? textCorrected : textRaw);
 
-        // Parse wiki links [[Label]] or [[Label|user:uid]]
-        final regex = RegExp(r'\[\[(.*?)(?:\|(.*?))?\]\]');
+        // Parse wiki links [[Label]] with support for programmatically split parts (up to 3-part layout structures)
+        final regex = RegExp(r'\[\[(.*?)\]\]');
         final matches = regex.allMatches(_rawFullText);
-
         // Use a map to filter out duplicate keys, keeping linked occurrences as higher priority
         final Map<String, EntityLink> uniqueEntities = {};
         for (final m in matches) {
-          final label = m.group(1)?.trim() ?? '';
-          final ref = m.group(2)?.trim();
+          final content = m.group(1) ?? '';
+          final parts = content.split('|');
           final raw = m.group(0) ?? '';
-          if (label.isNotEmpty) {
-            final key = label.toLowerCase();
+          if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+            final canonical = parts[0].trim();
+            String? ref;
+            if (parts.length == 2 && parts[1].contains(':')) {
+              ref = parts[1].trim();
+            } else if (parts.length >= 3) {
+              ref = parts[2].trim();
+            }
+            final key = canonical.toLowerCase();
             // If the entity doesn't exist yet OR if this match has a target ref while the previous one didn't, insert/upgrade it
             if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
-              uniqueEntities[key] = EntityLink(label: label, ref: ref, rawMatch: raw);
+              uniqueEntities[key] = EntityLink(label: canonical, ref: ref, rawMatch: raw);
             }
           }
         }
@@ -112,6 +118,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           _entities = uniqueEntities.values.toList();
           _loading = false;
         });
+
         // Load profiles for linked entities in parallel
         _loadEntityProfiles(_entities);
       } else {
@@ -163,7 +170,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
     setState(() {
       _suggestedHandle = null;
     });
-
     final String label = entity.label;
     final String handle = _normalize(label);
 
@@ -273,19 +279,35 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         return;
       }
       final targetUid = result['uid'];
-      // Update string text replacement
-      final String replacement = "[[${entity.label}|user:$targetUid]]";
+
+      // Reconstruct replacement based on original match structure
+      final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
+      final parts = content.split('|');
+      String replacement;
+      if (parts.length == 3) {
+        // Joe Smith|Joe|user:old_uid -> Joe Smith|Joe|user:targetUid
+        replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
+      } else if (parts.length == 2 && !parts[1].contains(':')) {
+        // Joe Smith|Joe -> Joe Smith|Joe|user:targetUid
+        replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
+      } else {
+        // Joe Smith or Joe Smith|user:old_uid -> Joe Smith|user:targetUid
+        replacement = "[[${entity.label}|user:$targetUid]]";
+      }
+
       final String updatedText = _rawFullText.replaceAll(entity.rawMatch, replacement);
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({
         'text_linked': updatedText,
         'needs_linking': false,
       }));
-      // Bubble up manual entities list to parent fanzine
+
+      // Bubble up manual entities to the parent fanzine
       if (component.fanzineId != null) {
         await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode({
           'draftEntities': WebFieldValue.arrayUnion([entity.label])
         }));
       }
+
       setState(() {
         _editingEntity = null;
         _handleInput = '';
@@ -309,11 +331,22 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       _modalError = null;
     });
     try {
-      final String replacement = "[[${entity.label}]]";
+      final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
+      final parts = content.split('|');
+      String replacement;
+      if (parts.length == 3) {
+        // Joe Smith|Joe|user:uid -> Joe Smith|Joe
+        replacement = "[[${parts[0].trim()}|${parts[1].trim()}]]";
+      } else {
+        // Joe Smith|user:uid -> Joe Smith
+        replacement = "[[${entity.label}]]";
+      }
+
       final String updatedText = _rawFullText.replaceAll(entity.rawMatch, replacement);
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({
         'text_linked': updatedText,
       }));
+
       setState(() {
         _editingEntity = null;
         _handleInput = '';
@@ -368,6 +401,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
     final String labelText = isLinked ? (profile['displayName'] ?? entity.label) : entity.label;
     final String? username = isLinked ? profile['username'] : null;
     final String? photoUrl = isLinked ? profile['photoUrl'] : null;
+
     return div(
       [
         div(
