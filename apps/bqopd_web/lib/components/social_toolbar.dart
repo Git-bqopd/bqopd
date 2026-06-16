@@ -23,7 +23,7 @@ import 'panels/analytics_panel.dart';
 import 'panels/publisher_text_panel.dart';
 
 /// Highly-optimized and fully structured Social Toolbar for fanzine issues and pages.
-/// Implements a double-row modular system where Row 1 reflects the standard public reader view
+/// Implements a multi-row modular system where Row 1 reflects the standard public reader view
 /// and the Settings panel toggles into "edit mode" to reveal all curator-only editor tools.
 class SocialToolbar extends StatefulComponent {
   final String imageId;
@@ -68,12 +68,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
   int _commentCount = 0;
   int _viewCount = 0;
   bool _isLiked = false;
-  String _userRole = 'user';
   Map<String, bool> _socialButtonVisibility = {};
   Map<String, dynamic> _imageData = {}; // Dynamic image doc metadata
 
   // Controls the customisation panel mode (toggled via the 'edit' button)
   bool _isSettingsEditMode = false;
+  // Controls the new templates social panel row (opened via the 'templates' button)
+  bool _showTemplatesRow = false;
 
   // Tracks the active editor panel inside Settings Edit Mode
   BonusRowType? _activeEditorPanel;
@@ -124,14 +125,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
           (component.initialImageStats!['anonGridCount'] ?? 0);
     }
     _isLiked = component.likedImageIds.contains(component.imageId);
-
     _deferListening();
   }
 
   @override
   void didUpdateComponent(SocialToolbar oldComponent) {
     super.didUpdateComponent(oldComponent);
-
     // Sync image specific metrics and liked state
     if (oldComponent.imageId != component.imageId) {
       if (component.initialImageStats != null) {
@@ -156,10 +155,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
         _likeCount += _isLiked ? 1 : -1;
       }
     }
-
     // Clean up local editor panel state if settings panel is closed
     if (component.activeBonusRow != BonusRowType.settings) {
       _activeEditorPanel = null;
+      _showTemplatesRow = false;
     }
   }
 
@@ -184,7 +183,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
           final prefs = data['preferences'] as Map<String, dynamic>? ?? {};
           final buttons = prefs['socialButtons'] as Map<String, dynamic>? ?? {};
           setState(() {
-            _userRole = data['role'] ?? 'user';
             _socialButtonVisibility = Map<String, bool>.from(buttons);
           });
         }
@@ -238,13 +236,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
       GlobalModalBus.show();
       return;
     }
-
     final newStatus = !_isLiked;
     setState(() {
       _isLiked = newStatus;
       _likeCount += newStatus ? 1 : -1;
     });
-
     if (newStatus) {
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({'likeCount': WebFieldValue.increment(1)}));
       await fsSetDoc('Users/$uid/activity/likes/images/${component.imageId}', jsonEncode({
@@ -254,62 +250,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     } else {
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({'likeCount': WebFieldValue.increment(-1)}));
       await fsDeleteDoc('Users/$uid/activity/likes/images/${component.imageId}');
-    }
-  }
-
-  /// Master transaction handling for new publisher page generation (Legacy Fallback).
-  Future<void> _handleNewPageInsertion() async {
-    if (component.fanzineId == null) return;
-
-    setState(() {
-      _isSettingsEditMode = true; // Stay in edit mode
-    });
-
-    try {
-      final IFanzineRepository repo = createFanzineRepository();
-
-      // Resolve current fanzine layout pages to determine the precise "N" after-number insertion point
-      final List<FanzinePage> pages = [];
-      final pagesStr = await fsQuery('fanzines/${component.fanzineId}/pages', '', '', '', 'pageNumber');
-      final List decoded = jsonDecode(pagesStr) as List;
-      for (var d in decoded) {
-        pages.add(FanzinePage.fromMap(d['id'] as String, d['data'] as Map<String, dynamic>));
-      }
-
-      // Locate current image's pageNumber in the list
-      int currentNum = 1;
-      for (var p in pages) {
-        if (p.imageId == component.imageId) {
-          currentNum = p.pageNumber;
-          break;
-        }
-      }
-
-      final initialTemplateText = """
-# THE PUBLISHER
-## New Custom Page Created
-
-Start typing directly inside the text editor panel below to generate columns of printable markdown text.
-
-{{IMAGE}}
-
-* Enter bullet lists with an asterisk
-* Customize headers with # or ##
-""";
-
-      await repo.insertPublisherPage(
-        component.fanzineId!,
-        currentNum,
-        initialTemplateText,
-        pages,
-      );
-
-      setState(() {
-        _activeEditorPanel = BonusRowType.newPage;
-      });
-
-    } catch (e) {
-      print("[PUBLISHER CREATION FAILURE] $e");
     }
   }
 
@@ -330,7 +270,6 @@ Start typing directly inside the text editor panel below to generate columns of 
       if (_hasTerminalContent) 'Terminal',
       'Settings',
     ];
-
     final List<ReaderTool> visibleMainTools = [];
     for (final id in mainToolIds) {
       try {
@@ -339,7 +278,6 @@ Start typing directly inside the text editor panel below to generate columns of 
         if (id == 'Grid') {
           isContextuallyVisible = component.onOpenGrid != null;
         }
-
         // Consult customisation visibility map for customizable toolbar buttons
         if (isContextuallyVisible && id != 'Grid' && id != 'Like' && id != 'Settings') {
           final bool isUserVisible = _socialButtonVisibility[tool.id] ?? true;
@@ -347,7 +285,6 @@ Start typing directly inside the text editor panel below to generate columns of 
             isContextuallyVisible = false;
           }
         }
-
         if (isContextuallyVisible) {
           visibleMainTools.add(tool);
         }
@@ -360,11 +297,13 @@ Start typing directly inside the text editor panel below to generate columns of 
         for (var tool in visibleMainTools)
           _buildToolbarButton(tool)
       ]),
-
       // 2. Settings/Button toggle list (Optionally renders either customizable toggles or advanced editor tools)
       if (component.activeBonusRow == BonusRowType.settings)
         _buildSettingsToggleRow(),
-
+      // 3. Templates Row: 3rd row of buttons activated from the templates social button
+      if (component.activeBonusRow == BonusRowType.settings && _isSettingsEditMode && _showTemplatesRow)
+        _buildTemplatesRow(),
+      // 4. Editor panel content
       if (component.activeBonusRow == BonusRowType.settings && _isSettingsEditMode && _activeEditorPanel != null)
         _buildEditorPanelContent(component.imageId)
     ]);
@@ -374,7 +313,6 @@ Start typing directly inside the text editor panel below to generate columns of 
     bool isActive = false;
     int? count;
     VoidCallback action = () {};
-
     if (tool.id == 'Like') {
       isActive = _isLiked;
       count = _likeCount;
@@ -392,10 +330,19 @@ Start typing directly inside the text editor panel below to generate columns of 
       isActive = component.activeBonusRow == BonusRowType.analyticsDashboard;
       count = _viewCount;
       action = () => component.onToggleBonusRow(BonusRowType.analyticsDashboard);
+    } else if (tool.id == 'Settings') {
+      isActive = component.activeBonusRow == BonusRowType.settings;
+      action = () {
+        if (getCurrentUserId() == null) {
+          GlobalModalBus.show();
+        } else {
+          component.onToggleBonusRow(BonusRowType.settings);
+        }
+      };
     } else if (tool.bonusRow != null) {
       isActive = component.activeBonusRow == tool.bonusRow;
       action = () {
-        if (tool.id == 'Settings' && getCurrentUserId() == null) {
+        if (getCurrentUserId() == null) {
           GlobalModalBus.show();
         } else {
           component.onToggleBonusRow(tool.bonusRow!);
@@ -406,7 +353,6 @@ Start typing directly inside the text editor panel below to generate columns of 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
     final resolvedIcon = cleanIconName(iconName);
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
-
     return button(
         classes: btnClasses,
         events: {'click': (e) => action()},
@@ -417,19 +363,18 @@ Start typing directly inside the text editor panel below to generate columns of 
                 attributes: {
                   'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                 },
-                [text(resolvedIcon)]
+                [Component.text(resolvedIcon)]
             ),
             if (count != null && count > 0)
-              span(classes: 'badge', [text('$count')])
+              span(classes: 'badge', [Component.text('$count')])
           ]),
-          span(classes: 'toolbar-label', [text(tool.label)])
+          span(classes: 'toolbar-label', [Component.text(tool.label)])
         ]
     );
   }
 
   Component _buildSettingsToggleRow() {
     final bool isNewTextPage = _imageData['templateId'] == 'basic_text';
-
     if (!_isSettingsEditMode) {
       // STANDARD CUSTOMIZATION MODE: Turn standard main social toolbar buttons on and off
       final togglableToolIds = [
@@ -443,7 +388,6 @@ Start typing directly inside the text editor panel below to generate columns of 
         if (_hasYoutubeContent) 'YouTube',
         if (_hasTerminalContent) 'Terminal',
       ];
-
       final List<ReaderTool> togglableTools = [];
       for (final id in togglableToolIds) {
         try {
@@ -451,7 +395,6 @@ Start typing directly inside the text editor panel below to generate columns of 
           togglableTools.add(tool);
         } catch (_) {}
       }
-
       return div(
           classes: 'toolbar-container panel-container-animate mt-2',
           attributes: const {
@@ -476,7 +419,6 @@ Start typing directly inside the text editor panel below to generate columns of 
         'YouTube',
         'Terminal'
       ];
-
       final List<ReaderTool> visibleEditorTools = [];
       for (final id in editorToolIds) {
         try {
@@ -484,7 +426,6 @@ Start typing directly inside the text editor panel below to generate columns of 
           visibleEditorTools.add(tool);
         } catch (_) {}
       }
-
       return div(
           classes: 'toolbar-container panel-container-animate mt-2',
           attributes: const {
@@ -493,6 +434,7 @@ Start typing directly inside the text editor panel below to generate columns of 
           [
             for (var tool in visibleEditorTools)
               _buildSettingsEditModeActionButton(tool),
+            _buildTemplatesToggleButton(), // The new templates social button
             if (isNewTextPage)
               _buildSettingsEditModeNewPageButton(), // Toggle editor panel for newly inserted text page
             _buildEditorToggleButton() // Displays 'edit' button as the last button on the right (marked as active)
@@ -514,12 +456,9 @@ Start typing directly inside the text editor panel below to generate columns of 
     } else if (tool.id == 'Terminal') {
       hasContent = _hasTerminalContent;
     }
-
     final bool isVisible = hasContent ? (_socialButtonVisibility[tool.id] ?? true) : false;
-
     bool isToolActive = false;
     int? toolCount;
-
     if (tool.id == 'Like') {
       isToolActive = _isLiked;
       toolCount = _likeCount;
@@ -534,7 +473,6 @@ Start typing directly inside the text editor panel below to generate columns of 
 
     final iconName = (isToolActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
     final resolvedIcon = cleanIconName(iconName);
-
     final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
 
     // Style logic: if empty, display as unclickable and greyed out
@@ -566,14 +504,14 @@ Start typing directly inside the text editor panel below to generate columns of 
                       ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                       : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                 },
-                [text(resolvedIcon)]
+                [Component.text(resolvedIcon)]
             ),
             if (toolCount != null && toolCount > 0)
-              span(classes: 'badge', [text('$toolCount')])
+              span(classes: 'badge', [Component.text('$toolCount')])
           ]),
           span(classes: 'toolbar-label', [
-            text(tool.label),
-            if (!hasContent) span([text(' (empty)')], attributes: const {'style': 'font-size: 8px; display: block;'})
+            Component.text(tool.label),
+            if (!hasContent) span([Component.text(' (empty)')], attributes: const {'style': 'font-size: 8px; display: block;'})
           ])
         ]
     );
@@ -586,7 +524,6 @@ Start typing directly inside the text editor panel below to generate columns of 
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
     final resolvedIcon = cleanIconName(iconName);
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
-
     return button(
         classes: btnClasses,
         attributes: const {
@@ -597,6 +534,8 @@ Start typing directly inside the text editor panel below to generate columns of 
             if (tool.bonusRow != null) {
               setState(() {
                 _activeEditorPanel = (_activeEditorPanel == tool.bonusRow) ? null : tool.bonusRow;
+                // Close templates row when other panels are opened
+                _showTemplatesRow = false;
               });
             }
           }
@@ -608,20 +547,19 @@ Start typing directly inside the text editor panel below to generate columns of 
                 attributes: {
                   'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                 },
-                [text(resolvedIcon)]
+                [Component.text(resolvedIcon)]
             )
           ]),
-          span(classes: 'toolbar-label', [text(tool.label)])
+          span(classes: 'toolbar-label', [Component.text(tool.label)])
         ]
     );
   }
 
-  /// Unique settings panel button trigger specifically targeting newly inserted 'new page' text editing.
-  Component _buildSettingsEditModeNewPageButton() {
-    final bool isActive = _activeEditorPanel == BonusRowType.newPage;
-    final resolvedIcon = cleanIconName('note_add');
+  /// Interactive triggers for the newly introduced 'templates' action inside Advanced Edit Mode.
+  Component _buildTemplatesToggleButton() {
+    final bool isActive = _showTemplatesRow;
+    final resolvedIcon = cleanIconName('auto_awesome_motion');
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
-
     return button(
         classes: btnClasses,
         attributes: const {
@@ -630,7 +568,9 @@ Start typing directly inside the text editor panel below to generate columns of 
         events: {
           'click': (e) {
             setState(() {
-              _activeEditorPanel = (_activeEditorPanel == BonusRowType.newPage) ? null : BonusRowType.newPage;
+              _showTemplatesRow = !_showTemplatesRow;
+              // Close other editor panels when looking at templates
+              _activeEditorPanel = null;
             });
           }
         },
@@ -641,10 +581,83 @@ Start typing directly inside the text editor panel below to generate columns of 
                 attributes: {
                   'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                 },
-                [text(resolvedIcon)]
+                [Component.text(resolvedIcon)]
             )
           ]),
-          span(classes: 'toolbar-label', [text('new page')])
+          span(classes: 'toolbar-label', [Component.text('templates')])
+        ]
+    );
+  }
+
+  /// Renders a third ribbon/sliver containing the template buttons.
+  Component _buildTemplatesRow() {
+    return div(
+        classes: 'toolbar-container panel-container-animate mt-1',
+        attributes: const {
+          'style': 'background-color: #f1f1f1; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; width: 100%; box-sizing: border-box;'
+        },
+        [
+          _buildTemplatesRowActionButton('text page'),
+        ]
+    );
+  }
+
+  Component _buildTemplatesRowActionButton(String label) {
+    final resolvedIcon = cleanIconName('note_add');
+    return button(
+        classes: 'toolbar-btn',
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
+        },
+        events: {
+          'click': (e) {
+            // Placeholder: currently does nothing as requested.
+          }
+        },
+        [
+          div(classes: 'toolbar-icon-wrapper', [
+            span(
+                classes: 'material-symbols-outlined',
+                attributes: const {
+                  'style': "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
+                },
+                [Component.text(resolvedIcon)]
+            )
+          ]),
+          span(classes: 'toolbar-label', [Component.text(label)])
+        ]
+    );
+  }
+
+  /// Unique settings panel button trigger specifically targeting newly inserted 'new page' text editing.
+  Component _buildSettingsEditModeNewPageButton() {
+    final bool isActive = _activeEditorPanel == BonusRowType.newPage;
+    final resolvedIcon = cleanIconName('note_add');
+    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
+    return button(
+        classes: btnClasses,
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
+        },
+        events: {
+          'click': (e) {
+            setState(() {
+              _activeEditorPanel = (_activeEditorPanel == BonusRowType.newPage) ? null : BonusRowType.newPage;
+              _showTemplatesRow = false;
+            });
+          }
+        },
+        [
+          div(classes: 'toolbar-icon-wrapper', [
+            span(
+                classes: 'material-symbols-outlined',
+                attributes: {
+                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
+                },
+                [Component.text(resolvedIcon)]
+            )
+          ]),
+          span(classes: 'toolbar-label', [Component.text('new page')])
         ]
     );
   }
@@ -655,7 +668,6 @@ Start typing directly inside the text editor panel below to generate columns of 
     final bool isToolActive = _isSettingsEditMode;
     final resolvedIcon = cleanIconName('construction');
     final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
-
     return button(
         classes: btnClasses,
         attributes: const {
@@ -667,6 +679,7 @@ Start typing directly inside the text editor panel below to generate columns of 
               _isSettingsEditMode = !_isSettingsEditMode;
               if (!_isSettingsEditMode) {
                 _activeEditorPanel = null;
+                _showTemplatesRow = false;
               }
             });
           }
@@ -680,10 +693,10 @@ Start typing directly inside the text editor panel below to generate columns of 
                       ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                       : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                 },
-                [text(resolvedIcon)]
+                [Component.text(resolvedIcon)]
             )
           ]),
-          span(classes: 'toolbar-label', [text('edit')])
+          span(classes: 'toolbar-label', [Component.text('edit')])
         ]
     );
   }
@@ -692,7 +705,6 @@ Start typing directly inside the text editor panel below to generate columns of 
   Component _buildEditorPanelContent(String imageId) {
     Component inner;
     String title = "";
-
     switch (_activeEditorPanel!) {
       case BonusRowType.rawText:
         title = "Raw OCR Text";
@@ -735,14 +747,13 @@ Start typing directly inside the text editor panel below to generate columns of 
         title = "Terminal Game";
         inner = div([
           p(classes: 'text-center text-sm text-gray p-6 italic', [
-            text('CA Combat Terminal is optimized only for mobile application contexts.')
+            Component.text('CA Combat Terminal is optimized only for mobile application contexts.')
           ])
         ]);
         break;
       default:
         return div([]);
     }
-
     return PanelContainer(
       title: title,
       type: _activeEditorPanel!,
@@ -756,14 +767,11 @@ Start typing directly inside the text editor panel below to generate columns of 
       GlobalModalBus.show();
       return;
     }
-
     final current = _socialButtonVisibility[toolId] ?? true;
     final next = !current;
-
     setState(() {
       _socialButtonVisibility[toolId] = next;
     });
-
     await fsUpdateDoc('Users/$uid', jsonEncode({
       'preferences.socialButtons.$toolId': next
     }));
