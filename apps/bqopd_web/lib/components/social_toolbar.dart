@@ -374,7 +374,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   Component _buildSettingsToggleRow() {
-    final bool isNewTextPage = _imageData['templateId'] == 'basic_text';
     if (!_isSettingsEditMode) {
       // STANDARD CUSTOMIZATION MODE: Turn standard main social toolbar buttons on and off
       final togglableToolIds = [
@@ -434,9 +433,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
           [
             for (var tool in visibleEditorTools)
               _buildSettingsEditModeActionButton(tool),
-            _buildTemplatesToggleButton(), // The new templates social button
-            if (isNewTextPage)
-              _buildSettingsEditModeNewPageButton(), // Toggle editor panel for newly inserted text page
+            _buildTemplatesToggleButton(), // The templates social button
             _buildEditorToggleButton() // Displays 'edit' button as the last button on the right (marked as active)
           ]
       );
@@ -591,6 +588,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   /// Renders a third ribbon/sliver containing the template buttons.
   Component _buildTemplatesRow() {
+    final bool isNewTextPage = _imageData['templateId'] == 'basic_text';
     return div(
         classes: 'toolbar-container panel-container-animate mt-1',
         attributes: const {
@@ -598,6 +596,8 @@ class _SocialToolbarState extends State<SocialToolbar> {
         },
         [
           _buildTemplatesRowActionButton('text page'),
+          if (isNewTextPage)
+            _buildSettingsEditModeNewPageButton(), // Toggle inside templates row
         ]
     );
   }
@@ -643,7 +643,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
           'click': (e) {
             setState(() {
               _activeEditorPanel = (_activeEditorPanel == BonusRowType.newPage) ? null : BonusRowType.newPage;
-              _showTemplatesRow = false;
+              // Keep the template ribbon open when toggling this option!
             });
           }
         },
