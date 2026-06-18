@@ -25,11 +25,11 @@ class FanzinePageLayout extends StatelessComponent {
   });
 
   @override
-  Iterable<Component> build(BuildContext context) sync* {
+  Component build(BuildContext context) {
     // Parse the linear text stream into up to 3 structured physical columns
     final List<ColumnData> parsedColumns = _parseColumns(rawText);
 
-    yield div(
+    return div(
       classes: 'fanzine-page-grid grid grid-cols-3 gap-6 h-full w-full min-h-[600px] bg-white p-6 border border-gray-300 rounded-lg shadow-sm overflow-hidden box-border',
       [
         for (int i = 0; i < 3; i++)
