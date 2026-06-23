@@ -204,9 +204,37 @@ window.renderPublisherPage = async (text) => {
         if (!pText) return;
 
         const imageRegex = /^\{\{IMAGE(?::\s*(.*?))?\}\}$/i;
+        const templateRegex = /^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$/i;
+        const colBreakRegex = /^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$/i;
+
         const match = imageRegex.exec(pText);
+        const tMatch = templateRegex.exec(pText);
+        const cbMatch = colBreakRegex.exec(pText);
+
         if (match) {
             blocks.push({ type: 'image', url: match[1] ? match[1].trim() : '' });
+        } else if (tMatch) {
+            // Decouple contents to check if a row specifies a specific start index line
+            let targetRow = null;
+            let captionText = tMatch[3].trim();
+            const rowMatch = /^row=(\d+)\s*\|\s*(.*)$/i.exec(captionText);
+            if (rowMatch) {
+                targetRow = parseInt(rowMatch[1]);
+                captionText = rowMatch[2].trim();
+            }
+
+            // Always enforce a column break before and after the template block
+            blocks.push({ type: 'column_break' });
+            blocks.push({
+                type: 'template_block',
+                templateNum: parseInt(tMatch[1]),
+                url: tMatch[2].trim(),
+                content: captionText,
+                targetRow: targetRow
+            });
+            blocks.push({ type: 'column_break' });
+        } else if (cbMatch || pText.toLowerCase() === 'column-break' || pText.toLowerCase() === 'column_break') {
+            blocks.push({ type: 'column_break' });
         } else if (pText.startsWith('###')) {
             blocks.push({ type: 'h3', content: pText.substring(3).trim() });
         } else if (pText.startsWith('##')) {
@@ -225,7 +253,7 @@ window.renderPublisherPage = async (text) => {
         const cleanLine = line.trim();
         if (cleanLine === "") {
             commitParagraph();
-        } else if (cleanLine.startsWith('#') || cleanLine.startsWith('*') || cleanLine.startsWith('-') || cleanLine.startsWith('{{')) {
+        } else if (cleanLine.startsWith('#') || cleanLine.startsWith('*') || cleanLine.startsWith('-') || cleanLine.startsWith('{{') || cleanLine.startsWith('[[')) {
             commitParagraph();
             currentParagraph = cleanLine;
             commitParagraph();
@@ -238,6 +266,15 @@ window.renderPublisherPage = async (text) => {
     // Render blocks onto canvas
     for (let block of blocks) {
         if (colIndex >= 3) break;
+
+        if (block.type === 'column_break') {
+            // Advance to the top of the next column if we've written anything in this one
+            if (currentY > 33) {
+                colIndex++;
+                currentY = 33;
+            }
+            continue;
+        }
 
         if (block.type === 'image') {
             const targetUrl = block.url;
@@ -259,7 +296,7 @@ window.renderPublisherPage = async (text) => {
                     ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawRatioHeight);
                     currentY += drawRatioHeight + 20;
                 } else {
-                    // FIXED: Draw a beautiful local vector wireframe placeholder to prevent CORS canvas tainting entirely!
+                    // Draw a beautiful local vector wireframe placeholder to prevent CORS canvas tainting entirely!
                     ctx.fillStyle = '#f3f4f6';
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, drawHeight);
 
@@ -286,6 +323,86 @@ window.renderPublisherPage = async (text) => {
                     ctx.textAlign = 'left';
 
                     currentY += drawHeight + 20;
+                }
+            }
+        } else if (block.type === 'template_block' && block.templateNum === 1) {
+            const targetUrl = block.url;
+            let img = null;
+            if (targetUrl && targetUrl.trim().length > 0) {
+                img = await loadImage(targetUrl);
+            }
+
+            // Estimate metrics dynamically to handle column split bounds safely
+            let imgHeight = 400; // Standard fallback height
+            if (img) {
+                imgHeight = colWidth * (img.height / img.width);
+            }
+
+            const fontSize = 24; // Subtle elegant paragraph font sizing
+            const fontName = 'Arial';
+            const linesToDraw = wrapText(block.content, fontSize, fontName, false);
+            const textLeadingStep = fontSize * 1.4;
+            const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
+
+            if (block.targetRow !== null && block.targetRow !== undefined) {
+                // Bottom of the image sits at targetRow * 42 pixels down from top
+                let targetYBottom = 33 + block.targetRow * 42;
+                let targetYTop = targetYBottom - imgHeight;
+
+                // Check for column overflow or overlapping existing content
+                if (currentY > targetYTop || targetYBottom + totalTextHeight > maxY) {
+                    colIndex++;
+                    currentY = 33;
+                    // Recalculate based on next column's top
+                    targetYBottom = 33 + block.targetRow * 42;
+                    targetYTop = targetYBottom - imgHeight;
+                }
+
+                if (colIndex < 3) {
+                    // Draw image at targetYTop (sitting on targetYBottom)
+                    if (img) {
+                        ctx.drawImage(img, columnsX[colIndex], targetYTop, colWidth, imgHeight);
+                    } else {
+                        ctx.fillStyle = '#f3f4f6';
+                        ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
+                    }
+                    currentY = targetYTop + imgHeight + 16; // Update currentY to point to the bottom of the image + spacing!
+
+                    // Print text payload sequences neatly underneath
+                    ctx.font = `${fontSize}px ${fontName}`;
+                    ctx.fillStyle = '#1a1a1a';
+                    for (let line of linesToDraw) {
+                        ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
+                        currentY += textLeadingStep;
+                    }
+                    currentY += 24; // Extra paragraph padding block spacing
+                }
+            } else {
+                // Handle multi-column overflow protection (standard layout fallback)
+                const compositeBlockHeight = imgHeight + totalTextHeight + 20;
+                if (currentY + compositeBlockHeight > maxY) {
+                    colIndex++;
+                    currentY = 33;
+                }
+
+                if (colIndex < 3) {
+                    // Draw the image container box edge-to-edge
+                    if (img) {
+                        ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, imgHeight);
+                    } else {
+                        ctx.fillStyle = '#f3f4f6';
+                        ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
+                    }
+                    currentY += imgHeight + 16; // Spacing block directly under image bounds
+
+                    // Print text payload sequences neatly underneath
+                    ctx.font = `${fontSize}px ${fontName}`;
+                    ctx.fillStyle = '#1a1a1a';
+                    for (let line of linesToDraw) {
+                        ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
+                        currentY += textLeadingStep;
+                    }
+                    currentY += 24; // Extra paragraph padding block spacing
                 }
             }
         } else {

@@ -217,6 +217,10 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     // Core layout processing match regular expressions
     final imageRegex = RegExp(r'^\{\{IMAGE(?::\s*(.*?))?\}\}$', caseSensitive: false);
     final headerRegex = RegExp(r'^(#{1,6})\s+(.*)$');
+    final templateRegex = RegExp(r'^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$', caseSensitive: false);
+    final colBreakRegex = RegExp(r'^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$', caseSensitive: false);
+
+    int currentRow = 0;
 
     for (var line in lines) {
       final cleanLine = line.trim();
@@ -226,8 +230,84 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       }
       final imageMatch = imageRegex.firstMatch(cleanLine);
       final headerMatch = headerRegex.firstMatch(cleanLine);
+      final templateMatch = templateRegex.firstMatch(cleanLine);
+      final colBreakMatch = colBreakRegex.firstMatch(cleanLine);
 
-      if (imageMatch != null) {
+      if (colBreakMatch != null || cleanLine == 'column-break' || cleanLine == 'column_break') {
+        // Render a soft, modern horizontal divider to indicate a column break on the single scrolling reader column
+        lineComponents.add(
+            div(
+              attributes: const {
+                'style': 'height: 1px; background: linear-gradient(to right, transparent, #cbd5e1, transparent); margin: 32px 0;'
+              },
+              [],
+            )
+        );
+        currentRow = 0;
+      } else if (templateMatch != null) {
+        final templateNum = templateMatch.group(1) ?? '1';
+        final url = templateMatch.group(2)?.trim() ?? '';
+        final restContent = templateMatch.group(3)?.trim() ?? '';
+
+        String caption = restContent;
+        int? targetRow;
+        final rowMatch = RegExp(r'^row=(\d+)\s*\|\s*(.*)$', caseSensitive: false).firstMatch(restContent);
+        if (rowMatch != null) {
+          targetRow = int.tryParse(rowMatch.group(1) ?? '');
+          caption = rowMatch.group(2)!.trim();
+        }
+
+        if (templateNum == '1') {
+          final int imgRows = 8;
+          final int captionRows = (caption.length / 60).ceil();
+
+          if (targetRow != null) {
+            final int targetTopRow = targetRow - imgRows;
+            if (currentRow < targetTopRow) {
+              final int blankRows = targetTopRow - currentRow;
+              lineComponents.add(
+                  div(
+                    attributes: {
+                      'style': 'height: ${blankRows * 24}px; width: 100%;'
+                    },
+                    [],
+                  )
+              );
+            }
+            currentRow = targetRow + captionRows;
+          } else {
+            currentRow += imgRows + captionRows;
+          }
+
+          lineComponents.add(
+              div(
+                  classes: 'my-6 flex flex-col items-stretch border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-200',
+                  attributes: const {'style': 'margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background-color: white; display: flex; flex-direction: column; align-items: stretch;'},
+                  [
+                    if (url.isNotEmpty)
+                      img(
+                          src: url,
+                          attributes: const {'style': 'width: 100%; height: auto; object-fit: contain; max-height: 450px;'}
+                      ),
+                    if (caption.isNotEmpty)
+                      div(
+                          classes: 'p-4 bg-gray-50 border-t border-gray-150 text-center',
+                          attributes: const {'style': 'padding: 16px; background-color: #f9fafb; border-top: 1px solid #f1f5f9; text-align: center;'},
+                          [
+                            p(
+                                classes: 'text-sm text-gray-600 italic font-medium leading-relaxed m-0',
+                                attributes: const {'style': 'font-size: 14px; color: #4b5563; font-style: italic; font-weight: 500; line-height: 1.625; margin: 0;'},
+                                [Component.text(caption)]
+                            )
+                          ]
+                      )
+                  ]
+              )
+          );
+        } else {
+          lineComponents.add(p([Component.text('Unknown Template $templateNum: $caption')]));
+        }
+      } else if (imageMatch != null) {
         final url = imageMatch.group(1)?.trim();
         final finalUrl = (url != null && url.isNotEmpty) ? url : 'https://placehold.co/600x400/png?text=Image+Asset';
         lineComponents.add(div([
@@ -240,6 +320,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
               }
           )
         ], attributes: const {'style': 'width: 100%; text-align: center; display: block;'} ));
+        currentRow += 8;
       } else if (headerMatch != null) {
         // --- MATCHED MARKDOWN HEADER BLOCK -> USE IMPACT ---
         final level = headerMatch.group(1)!.length;
@@ -279,10 +360,11 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
             lineComponents.add(h6(headingChildren, attributes: headingAttributes));
             break;
         }
+        currentRow += 2;
       } else {
         // --- STANDARD PARAGRAPH BLOCK -> USE ARIAL ---
         lineComponents.add(p(
-            _parseAndRenderContent(line),
+            _parseAndRenderContent(cleanLine),
             attributes: {
               'style': 'font-size: ${_fontSize}px; '
                   'font-family: Arial, Helvetica, sans-serif; '
@@ -292,6 +374,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
                   'margin: 0 0 14px 0;'
             }
         ));
+        currentRow += (cleanLine.length / 60).ceil();
       }
     }
     return lineComponents;

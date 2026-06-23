@@ -18,13 +18,89 @@ class PublisherCompiler {
     final uid = getCurrentUserId() ?? 'system_web';
     final updates = <String, dynamic>{};
 
-    // 1. Resolve and replace image shortcodes with their absolute Firebase URLs
+    // 1. Fetch user images first to map template shortcodes to absolute URLs
+    List<Map<String, dynamic>> userImages = [];
+    try {
+      final imagesRes = await fsQuery('images', 'uploaderId', '==', jsonEncode(uid), '');
+      final List decodedImages = jsonDecode(imagesRes) as List;
+      userImages = decodedImages.map((d) {
+        final data = d['data'] as Map<String, dynamic>;
+        data['id'] = d['id'];
+        return data;
+      }).toList();
+    } catch (_) {}
+
+    // 2. Filter images belonging to this fanzine or folio context
+    final folioImages = userImages.where((img) {
+      final List usedIn = img['usedInFanzines'] ?? [];
+      final String? contextId = img['folioContext'];
+      return contextId == fanzineId || usedIn.contains(fanzineId);
+    }).toList();
+
+    // Sort by timestamp sequentially to align with reader indexes
+    folioImages.sort((a, b) {
+      final aT = a['timestamp'] ?? a['createdAt'] ?? '';
+      final bT = b['timestamp'] ?? b['createdAt'] ?? '';
+      return aT.toString().compareTo(bT.toString());
+    });
+
+    // 3. Create a map of shortcodes (img01, img02, etc.) to absolute URLs
+    final Map<String, String> shortNameMap = {};
+    for (int i = 0; i < folioImages.length; i++) {
+      final img = folioImages[i];
+      final String fileUrl = img['fileUrl'] ?? img['gridUrl'] ?? '';
+      if (fileUrl.isNotEmpty) {
+        final String shortName = "img${(i + 1).toString().padLeft(2, '0')}";
+        shortNameMap[shortName] = fileUrl;
+      }
+    }
+
+    // 4. Intercept and replace template shortcodes: {{1|img01|rowOffset|caption text}}
+    // Supports both double brackets [[ ]] and double curly braces {{ }}
+    String processedText = text;
+    final templateRegex = RegExp(r'(?:\{\{|\[\[)(\d+)\|([^|]+)\|(.*?)(?:\}\}|\]\])');
+    processedText = processedText.replaceAllMapped(templateRegex, (match) {
+      final templateNum = match.group(1);
+      final imgShortCode = match.group(2)?.trim() ?? '';
+      final rest = match.group(3)?.trim() ?? '';
+
+      var captionText = rest;
+      String? rowOffset;
+
+      // Check if the parameter starts with a row specifier, e.g. "20|text"
+      final rowRegex = RegExp(r'^(\d+)\|(.*)$');
+      final rowMatch = rowRegex.firstMatch(rest);
+      if (rowMatch != null) {
+        rowOffset = rowMatch.group(1);
+        captionText = rowMatch.group(2)!.trim();
+      }
+
+      // Strip potential wrapping single or double quotes entered by user
+      if ((captionText.startsWith("'") && captionText.endsWith("'")) ||
+          (captionText.startsWith('"') && captionText.endsWith('"'))) {
+        if (captionText.length >= 2) {
+          captionText = captionText.substring(1, captionText.length - 1).trim();
+        }
+      }
+
+      if (shortNameMap.containsKey(imgShortCode)) {
+        final absoluteUrl = shortNameMap[imgShortCode];
+        if (rowOffset != null) {
+          return '{{TEMPLATE_$templateNum: $absoluteUrl | row=$rowOffset | $captionText}}';
+        } else {
+          return '{{TEMPLATE_$templateNum: $absoluteUrl | $captionText}}';
+        }
+      }
+      return match.group(0)!; // Fallback to original text if missing
+    });
+
+    // 5. Resolve and replace any remaining standard image shortcodes (e.g. {{img01}})
     final String compiledText = await resolveAndReplaceShortcodes(
       fanzineId,
-      text,
+      processedText,
     );
 
-    // 2. Run the Web-based Canvas compiler for absolute layout accuracy
+    // 6. Run the Web-based Canvas compiler for absolute layout accuracy
     final resultJson = await renderPublisherPage(compiledText);
     final decoded = jsonDecode(resultJson);
 
@@ -38,7 +114,7 @@ class PublisherCompiler {
 
     final String baseDir = 'uploads/$uid/folio_assets/$fanzineId/$imageId';
 
-    // 3. Upload three standard WebP sizes concurrently to Google Cloud Storage
+    // 7. Upload three standard WebP sizes concurrently to Google Cloud Storage
     final urls = await Future.wait([
       stUpload('$baseDir/original.webp', origBytes, 'image/webp'),
       stUpload('$baseDir/list.webp', listBytes, 'image/webp'),
@@ -55,7 +131,7 @@ class PublisherCompiler {
     updates['listUrl'] = listUrl;
     updates['gridUrl'] = gridUrl;
 
-    // 4. Synchronize parent fanzine page document models reactively
+    // 8. Synchronize parent fanzine page document models reactively
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
       final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
       final idx = pages.indexWhere((p) => p.imageId == imageId);

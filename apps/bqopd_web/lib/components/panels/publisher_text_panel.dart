@@ -169,11 +169,58 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
     });
   }
 
-  void _insertImageAsset(String url) {
-    final String imageTag = "\n{{IMAGE: $url}}\n";
+  void _insertImageAsset(String shortName) {
+    final String imageTag = "\n{{$shortName}}\n";
     setState(() {
       _textValue += imageTag;
     });
+  }
+
+  void _insertTemplateAsset(String shortName, int templateNum) {
+    final String templateTag = "\n{{$templateNum|$shortName|This is the text that will display under the image.}}\n";
+    setState(() {
+      _textValue += templateTag;
+    });
+  }
+
+  Component _buildImageThumbnail(Map<String, dynamic> img, Map<String, String> imageShortNames) {
+    final String id = img['id'] ?? '';
+    final String shortName = imageShortNames[id] ?? 'img';
+
+    return div(
+      [
+        // Image Thumbnail container
+        div(
+            attributes: {
+              'style': 'width: 100%; aspect-ratio: 5/8; background-color: #f1f1f1; background-image: url("${img['gridUrl'] ?? img['fileUrl'] ?? ''}"); background-size: cover; background-position: center; border-radius: 4px; border: 1px solid #ddd; cursor: pointer;'
+            },
+            events: {
+              'click': (e) => _insertImageAsset(shortName)
+            },
+            []
+        ),
+        // Copyable shortname tag container
+        span(
+            [text('{{$shortName}}')],
+            attributes: const {
+              'style': 'font-size: 10px; font-weight: bold; font-family: monospace; color: #6750A4; user-select: all; -webkit-user-select: all; cursor: text; padding: 2px 4px; background: #f5f5f5; border-radius: 4px; border: 1px solid #e2e8f0; display: inline-block; max-width: 100%; text-align: center; word-break: break-all;'
+            }
+        ),
+        // Helper action button to insert formatted Template 1 with a placeholder caption
+        button(
+            [text('+ Template 1')],
+            attributes: const {
+              'style': 'font-size: 9px; font-weight: bold; color: #6750A4; background-color: #f3f0ff; border: 1px solid #d8b4fe; border-radius: 4px; padding: 2px 4px; cursor: pointer; width: 100%; text-align: center; margin-top: 2px;'
+            },
+            events: {
+              'click': (e) => _insertTemplateAsset(shortName, 1)
+            }
+        )
+      ],
+      attributes: const {
+        'style': 'display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden;'
+      },
+    );
   }
 
   @override
@@ -226,7 +273,7 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
             textarea(
                 classes: 'border border-gray-300 rounded-md',
                 attributes: {
-                  'placeholder': 'Type markdown text here. Write headings with # or ## and tap images in your gallery below to instantly insert {{IMAGE}} placeholders.',
+                  'placeholder': 'Type markdown text here. Write headings with # or ##. Tap gallery images to insert local shortcodes (e.g. {{img01}}), or click "+ Template 1" to insert full-width layout panels with caption support.',
                   'oninput': 'this.parentNode.dataset.replicatedValue = this.value',
                 },
                 events: {
@@ -281,30 +328,7 @@ class _PublisherTextPanelState extends State<PublisherTextPanel> {
               div(
                 [
                   for (var img in folioImages)
-                    div(
-                      [
-                        // Image Thumbnail container
-                        div(
-                            attributes: {
-                              'style': 'width: 100%; aspect-ratio: 5/8; background-color: #f1f1f1; background-image: url("${img['gridUrl'] ?? img['fileUrl'] ?? ''}"); background-size: cover; background-position: center; border-radius: 4px; border: 1px solid #ddd; cursor: pointer;'
-                            },
-                            events: {
-                              'click': (e) => _insertImageAsset(img['fileUrl'] ?? img['gridUrl'] ?? '')
-                            },
-                            []
-                        ),
-                        // Copyable shortname tag container
-                        span(
-                            [text('{{${imageShortNames[img['id']] ?? 'img'}}}')],
-                            attributes: const {
-                              'style': 'font-size: 10px; font-weight: bold; font-family: monospace; color: #6750A4; user-select: all; -webkit-user-select: all; cursor: text; padding: 2px 4px; background: #f5f5f5; border-radius: 4px; border: 1px solid #e2e8f0; display: inline-block; max-width: 100%; text-align: center; word-break: break-all;'
-                            }
-                        )
-                      ],
-                      attributes: const {
-                        'style': 'display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden;'
-                      },
-                    )
+                    _buildImageThumbnail(img, imageShortNames)
                 ],
                 attributes: const {
                   'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 12px; width: 100%; box-sizing: border-box;'
