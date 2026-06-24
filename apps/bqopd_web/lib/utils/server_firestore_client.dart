@@ -325,8 +325,8 @@ class ServerFirestoreClient {
         fsGetDoc('usernames/$codeLower')
       ]);
 
-      final Map<String, dynamic> scDoc = jsonDecode(lookupResults[0]) as Map<String, dynamic>;
-      final Map<String, dynamic> unDoc = jsonDecode(lookupResults[1]) as Map<String, dynamic>;
+      final Map<String, dynamic> scDoc = jsonDecode(lookupResults[0]);
+      final Map<String, dynamic> unDoc = jsonDecode(lookupResults[1]);
 
       if (scDoc['exists'] == true) {
         final data = scDoc['data'] as Map<String, dynamic>? ?? {};
@@ -347,9 +347,9 @@ class ServerFirestoreClient {
 
       if (payload.isEmpty) {
         final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(code), '');
-        final fzDocs = jsonDecode(fzRes) as List;
+        final List fzDocs = jsonDecode(fzRes);
         if (fzDocs.isNotEmpty) {
-          final firstDoc = fzDocs.first as Map<String, dynamic>;
+          final firstDoc = fzDocs.first;
           payload['targetFanzineId'] = firstDoc['id'];
           payload['status'] = 'fanzine';
         }
@@ -357,32 +357,32 @@ class ServerFirestoreClient {
 
       if (payload.isEmpty) {
         final prRes = await fsQuery('profiles', 'username', '==', jsonEncode(codeLower), '');
-        final prDocs = jsonDecode(prRes) as List;
+        final List prDocs = jsonDecode(prRes);
         if (prDocs.isNotEmpty) {
-          final firstDoc = prDocs.first as Map<String, dynamic>;
+          final firstDoc = prDocs.first;
           payload['targetUserId'] = firstDoc['id'];
           payload['status'] = 'user';
         }
       }
 
       if (payload['targetFanzineId'] != null) {
-        final String fanzineId = payload['targetFanzineId'] as String;
+        final String fanzineId = payload['targetFanzineId'];
 
         final fzResults = await Future.wait([
           fsGetDoc('fanzines/$fanzineId'),
           fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber')
         ]);
 
-        final Map<String, dynamic> fzDoc = jsonDecode(fzResults[0]) as Map<String, dynamic>;
-        final List pagesListRaw = jsonDecode(fzResults[1]) as List;
+        final Map<String, dynamic> fzDoc = jsonDecode(fzResults[0]);
+        final List pagesListRaw = jsonDecode(fzResults[1]);
 
         if (fzDoc['exists'] == true) {
-          final Map<String, dynamic> fzData = fzDoc['data'] as Map<String, dynamic>? ?? {};
+          final Map<String, dynamic> fzData = fzDoc['data'] ?? {};
           payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(restoreTimestamps(fzData));
 
           final pagesList = pagesListRaw.map((p) {
-            final mapItem = p as Map<String, dynamic>;
-            final d = restoreTimestamps(mapItem['data'] as Map<String, dynamic>);
+            final Map<String, dynamic> mapItem = p;
+            final d = restoreTimestamps(mapItem['data']);
             d['id'] = mapItem['id'];
             return d;
           }).toList();
@@ -390,9 +390,13 @@ class ServerFirestoreClient {
           payload['pages'] = pagesList;
 
           final creators = fzData['masterCreators'] as List? ?? [];
-          final uidsToFetch = creators.map((c) => c is Map ? (c as Map)['uid'] as String? : null)
-              .where((uid) => uid != null && uid!.isNotEmpty)
-              .cast<String>().toSet().toList();
+          final uidsToFetch = creators
+              .whereType<Map>()
+              .map((c) => c['uid'] as String?)
+              .whereType<String>()
+              .where((uid) => uid.isNotEmpty)
+              .toSet()
+              .toList();
 
           final Map<String, dynamic> creatorProfiles = {};
           final Map<String, dynamic> imageStats = {};
@@ -402,22 +406,22 @@ class ServerFirestoreClient {
           for (final uid in uidsToFetch) {
             parallelFetches.add(
               fsGetDoc('profiles/$uid').then((pRes) {
-                final pDoc = jsonDecode(pRes) as Map<String, dynamic>;
+                final Map<String, dynamic> pDoc = jsonDecode(pRes);
                 if (pDoc['exists'] == true) {
-                  creatorProfiles[uid] = restoreTimestamps(pDoc['data'] as Map<String, dynamic>);
+                  creatorProfiles[uid] = restoreTimestamps(pDoc['data']);
                 }
               }),
             );
           }
 
           for (final page in pagesList) {
-            final imageId = page['imageId'] as String?;
+            final imageId = page['imageId'];
             if (imageId != null && imageId.isNotEmpty) {
               parallelFetches.add(
                 fsGetDoc('images/$imageId').then((imgRes) {
-                  final imgDoc = jsonDecode(imgRes) as Map<String, dynamic>;
+                  final Map<String, dynamic> imgDoc = jsonDecode(imgRes);
                   if (imgDoc['exists'] == true) {
-                    final imgData = imgDoc['data'] as Map<String, dynamic>;
+                    final Map<String, dynamic> imgData = imgDoc['data'] ?? {};
                     imageStats[imageId] = {
                       'likeCount': imgData['likeCount'] ?? 0,
                       'commentCount': imgData['commentCount'] ?? 0,
@@ -463,8 +467,8 @@ class ServerFirestoreClient {
         getDocument('usernames/$codeLower'),
       ]);
 
-      final scDoc = initialChecks[0] as Map<String, dynamic>?;
-      final usernameDoc = initialChecks[1] as Map<String, dynamic>?;
+      final scDoc = initialChecks[0];
+      final usernameDoc = initialChecks[1];
 
       if (scDoc != null) {
         final type = scDoc['type'] ?? 'fanzine';
@@ -492,8 +496,8 @@ class ServerFirestoreClient {
           runQuery(collectionId: 'profiles', fieldPath: 'username', value: codeLower),
         ]);
 
-        final fzDocs = queryChecks[0] as List<Map<String, dynamic>>;
-        final profileDocs = queryChecks[1] as List<Map<String, dynamic>>;
+        final fzDocs = queryChecks[0];
+        final profileDocs = queryChecks[1];
 
         if (fzDocs.isNotEmpty) {
           payload['targetFanzineId'] = fzDocs.first['id'];
@@ -508,7 +512,7 @@ class ServerFirestoreClient {
 
       // 5. If we resolved a fanzine target, pre-fetch pages
       if (payload['targetFanzineId'] != null) {
-        final String fanzineId = payload['targetFanzineId'] as String;
+        final String fanzineId = payload['targetFanzineId'];
         print('[RESOLVE REST] Gathering fanzine data and page matrices for ID: "$fanzineId"');
 
         final fzDataResults = await Future.wait([
@@ -516,8 +520,8 @@ class ServerFirestoreClient {
           getCollection('fanzines/$fanzineId/pages'),
         ]);
 
-        final fanzineData = fzDataResults[0] as Map<String, dynamic>?;
-        final pagesList = fzDataResults[1] as List<Map<String, dynamic>>;
+        final Map<String, dynamic>? fanzineData = fzDataResults[0] as Map<String, dynamic>?;
+        final List<Map<String, dynamic>> pagesList = (fzDataResults[1] as List).cast<Map<String, dynamic>>();
 
         if (fanzineData != null) {
           payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(fanzineData);
@@ -531,9 +535,9 @@ class ServerFirestoreClient {
 
           final creators = fanzineData['masterCreators'] as List? ?? [];
           final Set<String> uidsToFetch = creators
-              .map((c) => c is Map ? (c as Map)['uid'] as String? : null)
-              .where((uid) => uid != null && uid!.isNotEmpty)
-              .cast<String>()
+              .whereType<Map>()
+              .map((c) => c['uid'] as String?)
+              .whereType<String>()
               .toSet();
 
           final Map<String, dynamic> creatorProfiles = {};
@@ -553,7 +557,7 @@ class ServerFirestoreClient {
 
           // Preload Individual Image Stats
           for (final page in pagesList) {
-            final imageId = page['imageId'] as String?;
+            final imageId = page['imageId'];
             if (imageId != null && imageId.isNotEmpty) {
               parallelFetches.add(
                 getDocument('images/$imageId').then((imgDoc) {
