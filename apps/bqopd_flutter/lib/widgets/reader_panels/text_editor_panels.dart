@@ -21,7 +21,7 @@ class RawTextPanel extends StatelessWidget {
   }
 }
 
-// --- MASTER TEXT PANEL ---
+// --- MASTER TEXT PANEL (COMBINED EDIT TEXT) ---
 class MasterTextPanel extends StatelessWidget {
   final String imageId;
   final String initialText;
@@ -53,12 +53,12 @@ class MasterTextPanel extends StatelessWidget {
   }
 }
 
-// --- LINKED TEXT PANEL ---
+// --- LINKED TEXT PANEL (COMPATIBILITY WRAPPER REDIRECTS TO UNIFIED WORKSPACE) ---
 class LinkedTextPanel extends StatelessWidget {
   final String imageId;
   final String initialText;
   final String aiBaselineText;
-  final String fanzineId; // Added to enable bubbling up of manual entities
+  final String fanzineId;
 
   const LinkedTextPanel({
     super.key,
@@ -74,7 +74,7 @@ class LinkedTextPanel extends StatelessWidget {
       imageId: imageId,
       initialText: initialText,
       aiBaselineText: aiBaselineText,
-      mode: 'linked',
+      mode: 'master', // Redirect linked panel targets to combined edit text
       fanzineId: fanzineId,
     );
   }
@@ -85,8 +85,8 @@ class _InlineTextEditor extends StatefulWidget {
   final String imageId;
   final String initialText;
   final String aiBaselineText;
-  final String mode; // 'master' or 'linked'
-  final String fanzineId; // Passed down to update Fanzine metadata
+  final String mode;
+  final String fanzineId;
 
   const _InlineTextEditor({
     required this.imageId,
@@ -127,7 +127,6 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
     super.dispose();
   }
 
-  /// Calculates the "Mutation Weight" between the AI's guess and the human's fix.
   int _calculateEditDistance(String s1, String s2) {
     if (s1 == s2) return 0;
     if (s1.isEmpty) return s2.length;
@@ -152,40 +151,36 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
     setState(() => _s = true);
     try {
       final Map<String, dynamic> updates = {};
-      // Calculate how much work the human had to do
       int score = _calculateEditDistance(widget.aiBaselineText, _c.text);
-      if (widget.mode == 'master') {
-        updates['text_corrected'] = _c.text;
-        updates['needs_linking'] = true;
-        if (widget.aiBaselineText.isNotEmpty) {
-          updates['human_correction_score'] = score;
-          if (score > 0) updates['isTrainingData'] = true;
-        }
-      } else {
-        updates['text_linked'] = _c.text;
-        if (widget.aiBaselineText.isNotEmpty) {
-          updates['human_linking_score'] = score;
-          if (score > 0) updates['isTrainingData'] = true;
-        }
 
-        // Parse manual [[Entity]] brackets and instantly bubble them up to the Fanzine!
-        final regex = RegExp(r'\[\[(.*?)\]\]');
-        final matches = regex.allMatches(_c.text);
-        final List<String> manualEntities = [];
-        for (final m in matches) {
-          final content = m.group(1) ?? '';
-          final parts = content.split('|');
-          if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
-            manualEntities.add(parts[0].trim());
-          }
-        }
-        updates['detected_entities'] = manualEntities;
-        if (widget.fanzineId.isNotEmpty && manualEntities.isNotEmpty) {
-          FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).update({
-            'draftEntities': FieldValue.arrayUnion(manualEntities)
-          });
+      updates['text_corrected'] = _c.text;
+      updates['text_linked'] = _c.text; // Keeps fields aligned programmatically
+      updates['needs_linking'] = false; // Bypasses the backend AI linking queue completely!
+
+      // Parse manual [[Entity]] bracket annotations programmatically
+      final regex = RegExp(r'\[\[(.*?)\]\]');
+      final matches = regex.allMatches(_c.text);
+      final List<String> manualEntities = [];
+      for (final m in matches) {
+        final content = m.group(1) ?? '';
+        final parts = content.split('|');
+        if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+          manualEntities.add(parts[0].trim());
         }
       }
+      updates['detected_entities'] = manualEntities;
+
+      if (widget.fanzineId.isNotEmpty && manualEntities.isNotEmpty) {
+        FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).update({
+          'draftEntities': FieldValue.arrayUnion(manualEntities)
+        });
+      }
+
+      if (widget.aiBaselineText.isNotEmpty) {
+        updates['human_correction_score'] = score;
+        if (score > 0) updates['isTrainingData'] = true;
+      }
+
       await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update(updates);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved! (Score: $score)')));
@@ -205,25 +200,23 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
         ),
       );
     }
-    final bool isMaster = widget.mode == 'master';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              isMaster ? "CORRECTED TEXT EDITOR" : "WIKI-LINK EDITOR",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            const Text(
+              "EDIT TEXT & WIKILINKS",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
             ),
             Row(
               children: [
-                if (isMaster)
-                  IconButton(
-                    icon: Icon(_p ? Icons.visibility_off : Icons.visibility),
-                    tooltip: "Toggle Preview",
-                    onPressed: () => setState(() => _p = !_p),
-                  ),
+                IconButton(
+                  icon: Icon(_p ? Icons.visibility_off : Icons.visibility),
+                  tooltip: "Toggle Preview",
+                  onPressed: () => setState(() => _p = !_p),
+                ),
                 IconButton(
                   icon: const Icon(Icons.save),
                   tooltip: "Save",
@@ -233,11 +226,10 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
             )
           ],
         ),
-        if (!isMaster)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8.0),
-            child: Text("Use [[Exact Name]] to manually create entity links.", style: TextStyle(fontSize: 10, color: Colors.grey)),
-          ),
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8.0),
+          child: Text("Edit typos and adjust [[Exact Name]] or [[Exact Name|user:uid]] wiki-links directly.", style: TextStyle(fontSize: 10, color: Colors.grey)),
+        ),
         TextField(
           controller: _c,
           maxLines: null,
@@ -249,7 +241,7 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
           ),
           style: const TextStyle(fontFamily: 'Courier', fontSize: 14),
         ),
-        if (_p && isMaster) ...[
+        if (_p) ...[
           const SizedBox(height: 16),
           const Text(
             "LIVE PREVIEW (2000x3200 SCALE)",

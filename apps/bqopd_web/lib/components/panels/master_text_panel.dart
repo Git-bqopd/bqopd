@@ -8,7 +8,7 @@ import '../../utils/web_firebase_interop.dart';
 import '../../utils/publisher_compiler.dart';
 import '../../utils/web_utils.dart';
 
-/// Corrected text editor panel for Fanzine Folio pages.
+/// Unified Combined Edit Text & Wikilink social panel for Fanzine Folio pages.
 /// Aligns with Clean Architecture by delegating GCS asset compiler steps to the centralized service.
 class MasterTextPanel extends StatefulComponent {
   final String imageId;
@@ -32,7 +32,6 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
   String _statusMessage = '';
   bool _isError = false;
   Timer? _statusTimer;
-
   bool _isTemplate = false;
 
   @override
@@ -65,16 +64,15 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
       });
       return;
     }
-
     if (!mounted) return;
     setState(() => _loading = true);
-
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
       if (doc['exists'] && mounted) {
         final data = doc['data'] as Map<String, dynamic>;
         setState(() {
+          // Unified combined editor: Prioritize whatever spelling/link edits exist, falling back to raw OCR
           _textValue = data['text_corrected'] ?? data['text_raw'] ?? data['text'] ?? '';
           _aiBaselineText = data['text_corrected_ai'] ?? '';
           _isTemplate = data['type'] == 'template' || data['templateId'] == 'basic_text';
@@ -99,10 +97,8 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
     if (s1 == s2) return 0;
     if (s1.isEmpty) return s2.length;
     if (s2.isEmpty) return s1.length;
-
     List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
     List<int> v1 = List<int>.filled(s2.length + 1, 0);
-
     for (int i = 0; i < s1.length; i++) {
       v1[0] = i + 1;
       for (int j = 0; j < s2.length; j++) {
@@ -118,17 +114,29 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
 
   Future<void> _saveText() async {
     if (component.imageId.isEmpty || _isSaving) return;
-
     setState(() {
       _isSaving = true;
-      _statusMessage = 'Saving page text...';
+      _statusMessage = 'Saving page text and links...';
       _isError = false;
     });
-
     try {
+      // Parse manual bracket annotations [[Label|ref]] out of content programmatically
+      final regex = RegExp(r'\[\[(.*?)\]\]');
+      final matches = regex.allMatches(_textValue);
+      final List<String> manualEntities = [];
+      for (final m in matches) {
+        final content = m.group(1) ?? '';
+        final parts = content.split('|');
+        if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+          manualEntities.add(parts[0].trim());
+        }
+      }
+
       final updates = <String, dynamic>{
         'text_corrected': _textValue,
-        'needs_linking': true,
+        'text_linked': _textValue, // Maintain aligned fields in combined workflow
+        'detected_entities': manualEntities,
+        'needs_linking': false,    // Set to false to bypass background AI wikilinking on save
       };
 
       if (_aiBaselineText.isNotEmpty) {
@@ -139,28 +147,31 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
         }
       }
 
-      // REDIRECT IF TEMPLATE PAGE: Re-compile WebPs immediately on save via our centralized service
       if (_isTemplate) {
         setState(() {
           _statusMessage = 'Re-compiling WebP page layouts...';
         });
-
         final fanzineId = component.fanzineId ?? 'unknown_fanzine';
         final compiledUrls = await PublisherCompiler.compileAndPublish(
           fanzineId: fanzineId,
           imageId: component.imageId,
           text: _textValue,
         );
-
         updates.addAll(compiledUrls);
       }
 
       await fsUpdateDoc('images/${component.imageId}', jsonEncode(updates));
 
+      if (component.fanzineId != null && manualEntities.isNotEmpty) {
+        await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode({
+          'draftEntities': WebFieldValue.arrayUnion(manualEntities)
+        }));
+      }
+
       if (mounted) {
         setState(() {
           _isSaving = false;
-          _statusMessage = 'Saved page text successfully!';
+          _statusMessage = 'Page text and links saved successfully!';
           _isError = false;
         });
         _resetStatusTimer();
@@ -202,16 +213,14 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
       );
     }
-
     return div(
       [
-        // Implement the .grow-wrap element mirroring architecture
         div(
           [
             textarea(
                 classes: 'border border-gray-300 rounded-md',
                 attributes: {
-                  'placeholder': 'Start typing directly in the editor to create or correct page text...',
+                  'placeholder': 'Type page text here. Use markdown [[Wiki-Links]] to tag profiles directly.',
                   'oninput': 'this.parentNode.dataset.replicatedValue = this.value',
                 },
                 events: {

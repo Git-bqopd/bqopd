@@ -6,14 +6,11 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/icon_utils.dart';
 import '../repositories/repositories.dart';
-
-// Panel imports for local settings edit mode rendering
 import 'panels/panel_container.dart';
 import 'panels/text_reader_panel.dart';
 import 'panels/comments_panel.dart';
 import 'panels/hashtag_panel.dart';
 import 'panels/master_text_panel.dart';
-import 'panels/linked_text_panel.dart';
 import 'panels/entities_panel.dart';
 import 'panels/raw_text_panel.dart';
 import 'panels/indicia_panel.dart';
@@ -22,9 +19,6 @@ import 'panels/youtube_panel.dart';
 import 'panels/analytics_panel.dart';
 import 'panels/publisher_text_panel.dart';
 
-/// Highly-optimized and fully structured Social Toolbar for fanzine issues and pages.
-/// Implements a multi-row modular system where Row 1 reflects the standard public reader view
-/// and the Settings panel toggles into "edit mode" to reveal all curator-only editor tools.
 class SocialToolbar extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
@@ -36,7 +30,7 @@ class SocialToolbar extends StatefulComponent {
   final VoidCallback? onOpenGrid;
   final BonusRowType? activeBonusRow;
   final ValueChanged<BonusRowType> onToggleBonusRow;
-  final Set<String> likedImageIds; // Dynamic Set from parent layout
+  final Set<String> likedImageIds;
   final Map<String, dynamic>? initialImageStats;
   final AuthState? authState;
   final AuthBloc? authBloc;
@@ -69,29 +63,21 @@ class _SocialToolbarState extends State<SocialToolbar> {
   int _viewCount = 0;
   bool _isLiked = false;
   Map<String, bool> _socialButtonVisibility = {};
-  Map<String, dynamic> _imageData = {}; // Dynamic image doc metadata
-
-  // Controls the customisation panel mode (toggled via the 'edit' button)
+  Map<String, dynamic> _imageData = {};
   bool _isSettingsEditMode = false;
-  // Controls the new templates social panel row (opened via the 'templates' button)
   bool _showTemplatesRow = false;
-
-  // Tracks the active editor panel inside Settings Edit Mode
   BonusRowType? _activeEditorPanel;
-
-  // Broad listeners
   dynamic _userUnsub;
   dynamic _imageStatsUnsub;
 
-  // Real-time Content Check Getters
   bool get _hasTextContent {
-    final t = _imageData['text_corrected'] ?? _imageData['text_linked'] ?? _imageData['text_raw'] ?? _imageData['text'] ?? '';
+    final t = _imageData['text_corrected'] ?? _imageData['text'] ?? '';
     return t.toString().trim().isNotEmpty;
   }
 
   bool get _hasEntitiesContent {
     final de = _imageData['detected_entities'];
-    final tl = _imageData['text_linked'] ?? '';
+    final tl = _imageData['text_corrected'] ?? '';
     final hasList = de is List && de.isNotEmpty;
     final hasBrackets = tl.toString().contains('[[') && tl.toString().contains(']]');
     return hasList || hasBrackets;
@@ -131,7 +117,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
   @override
   void didUpdateComponent(SocialToolbar oldComponent) {
     super.didUpdateComponent(oldComponent);
-    // Sync image specific metrics and liked state
     if (oldComponent.imageId != component.imageId) {
       if (component.initialImageStats != null) {
         _likeCount = component.initialImageStats!['likeCount'] ?? 0;
@@ -155,7 +140,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
         _likeCount += _isLiked ? 1 : -1;
       }
     }
-    // Clean up local editor panel state if settings panel is closed
     if (component.activeBonusRow != BonusRowType.settings) {
       _activeEditorPanel = null;
       _showTemplatesRow = false;
@@ -255,7 +239,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   @override
   Component build(BuildContext context) {
-    // Row 1 (Main Row tool configurations) - Holds the static standard reader-facing social toolbar
     final mainToolIds = [
       'Grid',
       'Like',
@@ -278,7 +261,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
         if (id == 'Grid') {
           isContextuallyVisible = component.onOpenGrid != null;
         }
-        // Consult customisation visibility map for customizable toolbar buttons
         if (isContextuallyVisible && id != 'Grid' && id != 'Like' && id != 'Settings') {
           final bool isUserVisible = _socialButtonVisibility[tool.id] ?? true;
           if (!isUserVisible) {
@@ -290,20 +272,15 @@ class _SocialToolbarState extends State<SocialToolbar> {
         }
       } catch (_) {}
     }
-
     return div(classes: 'w-full flex-col', [
-      // 1. Row 1: Main row of default reader tools
       div(classes: 'toolbar-container', [
         for (var tool in visibleMainTools)
           _buildToolbarButton(tool)
       ]),
-      // 2. Settings/Button toggle list (Optionally renders either customizable toggles or advanced editor tools)
       if (component.activeBonusRow == BonusRowType.settings)
         _buildSettingsToggleRow(),
-      // 3. Templates Row: 3rd row of buttons activated from the templates social button
       if (component.activeBonusRow == BonusRowType.settings && _isSettingsEditMode && _showTemplatesRow)
         _buildTemplatesRow(),
-      // 4. Editor panel content
       if (component.activeBonusRow == BonusRowType.settings && _isSettingsEditMode && _activeEditorPanel != null)
         _buildEditorPanelContent(component.imageId)
     ]);
@@ -349,7 +326,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
         }
       };
     }
-
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
     final resolvedIcon = cleanIconName(iconName);
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
@@ -375,7 +351,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Component _buildSettingsToggleRow() {
     if (!_isSettingsEditMode) {
-      // STANDARD CUSTOMIZATION MODE: Turn standard main social toolbar buttons on and off
       final togglableToolIds = [
         'Comment',
         'Text',
@@ -403,15 +378,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
             for (var tool in togglableTools)
               _buildSettingsToggleButton(tool),
             if (component.isEditingMode)
-              _buildEditorToggleButton() // Displays 'edit' button as the last button on the right
+              _buildEditorToggleButton()
           ]
       );
     } else {
-      // ADVANCED EDIT MODE: Instantly displays active curator action buttons
       final editorToolIds = [
         'Raw',
         'Master',
-        'Linked',
         'Entities',
         'Indicia',
         'Credits',
@@ -433,8 +406,8 @@ class _SocialToolbarState extends State<SocialToolbar> {
           [
             for (var tool in visibleEditorTools)
               _buildSettingsEditModeActionButton(tool),
-            _buildTemplatesToggleButton(), // The templates social button
-            _buildEditorToggleButton() // Displays 'edit' button as the last button on the right (marked as active)
+            _buildTemplatesToggleButton(),
+            _buildEditorToggleButton()
           ]
       );
     }
@@ -467,19 +440,15 @@ class _SocialToolbarState extends State<SocialToolbar> {
     } else if (tool.bonusRow != null) {
       isToolActive = component.activeBonusRow == tool.bonusRow;
     }
-
     final iconName = (isToolActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
     final resolvedIcon = cleanIconName(iconName);
     final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
-
-    // Style logic: if empty, display as unclickable and greyed out
     String extraStyle = '';
     if (!hasContent) {
       extraStyle = 'opacity: 0.25; filter: grayscale(100%); cursor: not-allowed;';
     } else if (!isVisible) {
       extraStyle = 'opacity: 0.35; filter: grayscale(100%);';
     }
-
     return button(
         classes: btnClasses,
         attributes: {
@@ -514,8 +483,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  /// Specialized action buttons loaded inside edit mode.
-  /// Click behavior maintains settings panel while rendering the related panel below.
   Component _buildSettingsEditModeActionButton(ReaderTool tool) {
     final bool isActive = _activeEditorPanel == tool.bonusRow;
     final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
@@ -531,7 +498,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
             if (tool.bonusRow != null) {
               setState(() {
                 _activeEditorPanel = (_activeEditorPanel == tool.bonusRow) ? null : tool.bonusRow;
-                // Close templates row when other panels are opened
                 _showTemplatesRow = false;
               });
             }
@@ -552,7 +518,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  /// Interactive triggers for the newly introduced 'templates' action inside Advanced Edit Mode.
   Component _buildTemplatesToggleButton() {
     final bool isActive = _showTemplatesRow;
     final resolvedIcon = cleanIconName('auto_awesome_motion');
@@ -566,7 +531,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
           'click': (e) {
             setState(() {
               _showTemplatesRow = !_showTemplatesRow;
-              // Close other editor panels when looking at templates
               _activeEditorPanel = null;
             });
           }
@@ -586,7 +550,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  /// Renders a third ribbon/sliver containing the template buttons.
   Component _buildTemplatesRow() {
     final bool isNewTextPage = _imageData['templateId'] == 'basic_text';
     return div(
@@ -597,7 +560,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
         [
           _buildTemplatesRowActionButton('text page'),
           if (isNewTextPage)
-            _buildSettingsEditModeNewPageButton(), // Toggle inside templates row
+            _buildSettingsEditModeNewPageButton(),
         ]
     );
   }
@@ -610,9 +573,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
           'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
         },
         events: {
-          'click': (e) {
-            // Placeholder: currently does nothing as requested.
-          }
+          'click': (e) {}
         },
         [
           div(classes: 'toolbar-icon-wrapper', [
@@ -629,7 +590,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  /// Unique settings panel button trigger specifically targeting newly inserted 'new page' text editing.
   Component _buildSettingsEditModeNewPageButton() {
     final bool isActive = _activeEditorPanel == BonusRowType.newPage;
     final resolvedIcon = cleanIconName('note_add');
@@ -643,7 +603,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
           'click': (e) {
             setState(() {
               _activeEditorPanel = (_activeEditorPanel == BonusRowType.newPage) ? null : BonusRowType.newPage;
-              // Keep the template ribbon open when toggling this option!
             });
           }
         },
@@ -662,12 +621,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  /// Specialized toggle button for the Editor Row.
-  /// Toggles the settings panel into 'edit mode' to reveal advanced options.
   Component _buildEditorToggleButton() {
-    final bool isToolActive = _isSettingsEditMode;
+    final bool isWhiteSelected = _isSettingsEditMode;
     final resolvedIcon = cleanIconName('construction');
-    final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
+    final btnClasses = 'toolbar-btn ${isWhiteSelected ? 'active' : ''}';
     return button(
         classes: btnClasses,
         attributes: const {
@@ -689,7 +646,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
             span(
                 classes: 'material-symbols-outlined',
                 attributes: {
-                  'style': isToolActive
+                  'style': isWhiteSelected
                       ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                       : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
                 },
@@ -701,7 +658,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  /// Helper to dynamically render our selected editor panels below standard toolbar elements
   Component _buildEditorPanelContent(String imageId) {
     Component inner;
     String title = "";
@@ -711,15 +667,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         inner = RawTextPanel(imageId: imageId);
         break;
       case BonusRowType.masterText:
-        title = ""; // Omit the 'CORRECTED TEXT EDITOR' title
+        title = "";
         inner = MasterTextPanel(imageId: imageId, fanzineId: component.fanzineId ?? '');
         break;
-      case BonusRowType.linkedText:
-        title = ""; // Omit the 'WIKI-LINK EDITOR' title
-        inner = LinkedTextPanel(imageId: imageId, fanzineId: component.fanzineId ?? '');
-        break;
       case BonusRowType.entities:
-        title = ""; // Omit 'PAGE ENTITIES' text
+        title = "";
         inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
         break;
       case BonusRowType.indicia:
@@ -772,7 +724,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     setState(() {
       _socialButtonVisibility[toolId] = next;
     });
-    await fsUpdateDoc('Users/$uid', jsonEncode({
+    await fsUpdateDoc('images/${component.imageId}', jsonEncode({
       'preferences.socialButtons.$toolId': next
     }));
   }

@@ -1,10 +1,8 @@
 import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
-
 import '../../services/engagement_service.dart';
 import '../../services/view_service.dart';
 import '../../game/game_lobby.dart';
-
 import 'comments_panel.dart';
 import 'credits_panel.dart';
 import 'entities_panel.dart';
@@ -15,15 +13,15 @@ import 'text_editor_panels.dart';
 import 'text_reader_panel.dart';
 import 'views_panel.dart';
 import 'youtube_panel.dart';
-import 'publisher_panel.dart'; // Added publisher_panel import
+import 'publisher_panel.dart';
 
 class PanelFactory {
   static String getTitle(BonusRowType type) {
     switch (type) {
       case BonusRowType.textReader: return "TEXT READER";
       case BonusRowType.rawText: return "RAW OCR TEXT";
-      case BonusRowType.masterText: return "CORRECTED TEXT EDITOR";
-      case BonusRowType.linkedText: return "WIKI-LINK EDITOR";
+      case BonusRowType.masterText: return "EDIT TEXT";
+      case BonusRowType.linkedText: return "EDIT TEXT"; // Backwards compatibility fallback mapping
       case BonusRowType.tags: return "HASHTAGS & VOTING";
       case BonusRowType.entities: return "PAGE ENTITIES";
       case BonusRowType.comments: return "COMMENTS";
@@ -36,7 +34,7 @@ class PanelFactory {
       case BonusRowType.settings: return "SETTINGS";
       case BonusRowType.editDetails: return "EDIT DETAILS";
       case BonusRowType.terminal: return "COMBAT TERMINAL";
-      case BonusRowType.newPage: return "PUBLISHER EDITOR"; // Matched newPage case
+      case BonusRowType.newPage: return "PUBLISHER EDITOR";
     }
   }
 
@@ -48,13 +46,12 @@ class PanelFactory {
       case BonusRowType.youtube: return Colors.black;
       case BonusRowType.shareOptions: return Colors.indigo.withValues(alpha: 0.05);
       case BonusRowType.terminal: return const Color(0xFF0D0D0D);
-      case BonusRowType.newPage: return Colors.white; // Added
+      case BonusRowType.newPage: return Colors.white;
       default: return Colors.white;
     }
   }
 
   static Widget buildPanelContent(PanelContext context) {
-    // Safely parse the value notifier out from dynamic wrapper
     final ValueNotifier<double> resolvedSizeNotifier =
     (context.fontSizeNotifier is ValueNotifier<double>)
         ? context.fontSizeNotifier as ValueNotifier<double>
@@ -69,19 +66,13 @@ class PanelFactory {
       case BonusRowType.rawText:
         return RawTextPanel(text: context.textRaw);
       case BonusRowType.masterText:
+      case BonusRowType.linkedText: // Route link panels straight to the unified master editor!
         return MasterTextPanel(
           imageId: context.imageId,
           initialText: context.textCorrected,
           fanzineId: context.fanzineId ?? '',
           templateId: context.templateId,
           aiBaselineText: context.textCorrectedAi,
-        );
-      case BonusRowType.linkedText:
-        return LinkedTextPanel(
-          imageId: context.imageId,
-          initialText: context.textLinked,
-          fanzineId: context.fanzineId ?? '',
-          aiBaselineText: context.textLinkedAi,
         );
       case BonusRowType.tags:
         return HashtagPanel(imageId: context.imageId);
@@ -108,7 +99,7 @@ class PanelFactory {
                 const Text("Select how you'd like to share this page.", style: TextStyle(fontSize: 12, color: Colors.grey)),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
-                  onPressed: () { /* Sharing logic */ },
+                  onPressed: () {},
                   icon: const Icon(Icons.link, size: 16),
                   label: const Text("Copy Direct Link"),
                 )
@@ -131,7 +122,7 @@ class PanelFactory {
         return const Center(child: Text("Edit Details not implemented yet"));
       case BonusRowType.terminal:
         return const GameLobby();
-      case BonusRowType.newPage: // Matched newPage case
+      case BonusRowType.newPage:
         return PublisherPanel(
           imageId: context.imageId,
           initialText: context.actualText,

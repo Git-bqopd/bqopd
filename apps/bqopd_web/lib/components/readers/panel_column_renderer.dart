@@ -5,7 +5,6 @@ import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
 import '../panels/master_text_panel.dart';
-import '../panels/linked_text_panel.dart';
 import '../panels/entities_panel.dart';
 import '../panels/raw_text_panel.dart';
 import '../panels/indicia_panel.dart';
@@ -34,69 +33,66 @@ class PanelColumnRenderer extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     String title = activePanel.name.toUpperCase();
-    if (activePanel == BonusRowType.textReader) title = ""; // Omit 'Reader' text on desktop column headers too
+    if (activePanel == BonusRowType.textReader) title = ""; // Omit 'Reader' text
     if (activePanel == BonusRowType.comments) title = "Comments";
-    if (activePanel == BonusRowType.masterText) title = ""; // Omit 'Corrected Text Editor' on desktop column headers too
-    if (activePanel == BonusRowType.linkedText) title = ""; // Omit 'Wiki-Link Editor' title on desktop column headers too
-    if (activePanel == BonusRowType.entities) title = ""; // Omit 'Page Entities' text on desktop column headers too
+    if (activePanel == BonusRowType.masterText) title = ""; // Omit 'Edit Text' title
+    if (activePanel == BonusRowType.entities) title = ""; // Omit 'Page Entities' text
     if (activePanel == BonusRowType.newPage) title = "New Page Layout Editor";
 
-    return div(classes: 'reader-split-layout', [
-      div(
-          attributes: const {'style': 'width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden;'},
-          [
-            // Header
-            div(classes: 'p-4 bg-gray-100 flex-row justify-between items-center', attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;'}, [
-              span(classes: 'font-bold text-sm', [text(title)]),
-              button(
-                  classes: 'cursor-pointer border-none bg-transparent',
-                  events: {'click': (e) => onClose()},
-                  [span(classes: 'material-symbols-outlined', [text('close')])]
-              )
-            ]),
+    final bool isSingleton = activePanel == BonusRowType.settings || activePanel == BonusRowType.youtube;
 
-            // Scrollable List of Panels (one per page)
-            div(classes: 'flex-1 overflow-y-auto p-4', attributes: const {'style': 'overflow-y: auto; flex: 1; padding: 16px;'}, [
+    return div(
+        [
+          // Header
+          div(classes: 'p-4 bg-gray-100 flex-row justify-between items-center', attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;'}, [
+            span([text(title)], attributes: const {'style': 'font-weight: bold; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase;'}),
+            button(
+                classes: 'cursor-pointer border-none bg-transparent',
+                events: {'click': (e) => onClose()},
+                [span(classes: 'material-symbols-outlined', [text('close')])]
+            )
+          ]),
+          // Scrollable List of Panels
+          div(classes: 'flex-1 overflow-y-auto p-4', attributes: const {'style': 'overflow-y: auto; flex: 1; padding: 16px;'}, [
+            if (isSingleton)
+              _buildPagePanel(pages.isNotEmpty ? pages.first : {})
+            else
               for (var page in pages)
                 _buildPagePanel(page)
-            ])
-          ]
-      )
-    ]);
+          ])
+        ],
+        attributes: const {'style': 'width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden;'}
+    );
   }
 
   Component _buildPagePanel(Map<String, dynamic> pageData) {
     final imageId = pageData['imageId'] ?? '';
     if (imageId.isEmpty) return div([]);
-
     final pageNum = pageData['pageNumber'] ?? '?';
-
     return div(classes: 'mb-8', [
       p(classes: 'text-xs font-bold text-gray mb-2', [text('PAGE $pageNum')]),
       if (activePanel == BonusRowType.textReader)
         TextReaderPanel(imageId: imageId, fanzineId: fanzineId)
       else if (activePanel == BonusRowType.comments)
         CommentsPanel(imageId: imageId)
-      else if (activePanel == BonusRowType.masterText)
+      else if (activePanel == BonusRowType.masterText || activePanel == BonusRowType.linkedText)
           MasterTextPanel(imageId: imageId, fanzineId: fanzineId)
-        else if (activePanel == BonusRowType.linkedText)
-            LinkedTextPanel(imageId: imageId, fanzineId: fanzineId)
-          else if (activePanel == BonusRowType.entities)
-              EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: isEditingMode)
-            else if (activePanel == BonusRowType.rawText)
-                RawTextPanel(imageId: imageId)
-              else if (activePanel == BonusRowType.indicia)
-                  IndiciaPanel(fanzineId: fanzineId, isEditingMode: isEditingMode)
-                else if (activePanel == BonusRowType.credits)
-                    CreditsPanel(imageId: imageId)
-                  else if (activePanel == BonusRowType.youtube)
-                      YoutubePanel(imageId: imageId)
-                    else if (activePanel == BonusRowType.analyticsDashboard)
-                        AnalyticsPanel(imageId: imageId)
-                      else if (activePanel == BonusRowType.newPage)
-                          PublisherTextPanel(imageId: imageId, fanzineId: fanzineId)
-                        else
-                          div([text('Panel type not yet implemented in web column.')])
+        else if (activePanel == BonusRowType.entities)
+            EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: isEditingMode)
+          else if (activePanel == BonusRowType.rawText)
+              RawTextPanel(imageId: imageId)
+            else if (activePanel == BonusRowType.indicia)
+                IndiciaPanel(fanzineId: fanzineId, isEditingMode: isEditingMode)
+              else if (activePanel == BonusRowType.credits)
+                  CreditsPanel(imageId: imageId)
+                else if (activePanel == BonusRowType.youtube)
+                    YoutubePanel(imageId: imageId)
+                  else if (activePanel == BonusRowType.analyticsDashboard)
+                      AnalyticsPanel(imageId: imageId)
+                    else if (activePanel == BonusRowType.newPage)
+                        PublisherTextPanel(imageId: imageId, fanzineId: fanzineId)
+                      else
+                        div([text('Panel type not yet implemented in web column.')])
     ]);
   }
 }

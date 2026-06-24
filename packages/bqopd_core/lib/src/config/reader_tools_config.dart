@@ -14,7 +14,6 @@ class ReaderToolsConfig {
     final bool isElevated = userRole == 'admin' || userRole == 'moderator' || userRole == 'curator';
     if (tool.role == ToolRole.editor && !isElevated) return false;
     if (tool.role == ToolRole.editor && !isEditingMode) return false;
-
     switch (tool.condition) {
       case ToolCondition.requiresYouTube:
         if (!hasYoutube) return false;
@@ -85,25 +84,16 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.rawText,
     ),
-    // 6. Master (corrected) - [Editor Only]
+    // 6. Master (edit text) - [Editor Only Combined Panel]
     ReaderTool(
       id: 'Master',
-      label: 'corrected',
-      description: 'Edit the corrected master text.',
+      label: 'edit text',
+      description: 'Edit page text and adjust wiki-links in a unified editor.',
       defaultIcon: 'edit_document',
       role: ToolRole.editor,
       bonusRow: BonusRowType.masterText,
     ),
-    // 7. Linked (linked) - [Editor Only]
-    ReaderTool(
-      id: 'Linked',
-      label: 'linked',
-      description: 'Manually adjust wiki-links.',
-      defaultIcon: 'add_link',
-      role: ToolRole.editor,
-      bonusRow: BonusRowType.linkedText,
-    ),
-    // 8. Entities (entities) - [Editor Only]
+    // 7. Entities (entities) - [Editor Only]
     ReaderTool(
       id: 'Entities',
       label: 'entities',
@@ -114,7 +104,7 @@ class ReaderToolsConfig {
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
     ),
-    // 9. Tags (tags)
+    // 8. Tags (tags)
     ReaderTool(
       id: 'Tags',
       label: 'tags',
@@ -122,7 +112,7 @@ class ReaderToolsConfig {
       defaultIcon: 'tag',
       bonusRow: BonusRowType.tags,
     ),
-    // 10. Indicia (indicia)
+    // 9. Indicia (indicia)
     ReaderTool(
       id: 'Indicia',
       label: 'indicia',
@@ -132,7 +122,7 @@ class ReaderToolsConfig {
       condition: ToolCondition.requiresIndicia,
       bonusRow: BonusRowType.indicia,
     ),
-    // 11. Credits (credits) - [Editor Only]
+    // 10. Credits (credits) - [Editor Only]
     ReaderTool(
       id: 'Credits',
       label: 'credits',
@@ -142,7 +132,7 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.credits,
     ),
-    // 12. Views (views) - [Editor Only]
+    // 11. Views (views) - [Editor Only]
     ReaderTool(
       id: 'Views',
       label: 'views',
@@ -152,7 +142,7 @@ class ReaderToolsConfig {
       role: ToolRole.editor,
       bonusRow: BonusRowType.analyticsDashboard,
     ),
-    // 13. YouTube (YouTube)
+    // 12. YouTube (YouTube)
     ReaderTool(
       id: 'YouTube',
       label: 'YouTube',
@@ -162,7 +152,7 @@ class ReaderToolsConfig {
       condition: ToolCondition.requiresYouTube,
       bonusRow: BonusRowType.youtube,
     ),
-    // 14. Terminal (Terminal)
+    // 13. Terminal (Terminal)
     ReaderTool(
       id: 'Terminal',
       label: 'Terminal',
@@ -172,7 +162,7 @@ class ReaderToolsConfig {
       condition: ToolCondition.requiresGame,
       bonusRow: BonusRowType.terminal,
     ),
-    // 15. Share (share)
+    // 14. Share (share)
     ReaderTool(
       id: 'Share',
       label: 'share',
@@ -181,7 +171,7 @@ class ReaderToolsConfig {
       action: ToolAction.openBonusRow,
       bonusRow: BonusRowType.shareOptions,
     ),
-    // 16. Settings (buttons)
+    // 15. Settings (buttons)
     ReaderTool(
       id: 'Settings',
       label: 'buttons',
@@ -190,7 +180,7 @@ class ReaderToolsConfig {
       activeIcon: 'settings',
       bonusRow: BonusRowType.settings,
     ),
-    // 17. New Page (new page) - [Editor Only Settings subrow]
+    // 16. New Page (new page) - [Editor Only Settings subrow]
     ReaderTool(
       id: 'NewPage',
       label: 'new page',

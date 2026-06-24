@@ -9,7 +9,6 @@ import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
 import '../panels/hashtag_panel.dart';
 import '../panels/master_text_panel.dart';
-import '../panels/linked_text_panel.dart';
 import '../panels/entities_panel.dart';
 import '../panels/raw_text_panel.dart';
 import '../panels/indicia_panel.dart';
@@ -24,7 +23,7 @@ class ReaderPageItem extends StatefulComponent {
   final int pageIndex;
   final VoidCallback? onOpenGrid;
   final Map<String, dynamic>? initialImageStats;
-  final Set<String> likedImageIds; // Pass downs down
+  final Set<String> likedImageIds;
   final AuthState? authState;
   final AuthBloc? authBloc;
   final bool isEditingMode;
@@ -48,8 +47,6 @@ class ReaderPageItem extends StatefulComponent {
 
 class _ReaderPageItemState extends State<ReaderPageItem> {
   BonusRowType? _activePanel;
-
-  // Real-time tracking of inlined template text contents
   String _templateTextValue = '';
   dynamic _imgDataUnsub;
 
@@ -76,12 +73,9 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   void _listenToTemplateImageContents() {
     _imgDataUnsub?.cancel();
     _imgDataUnsub = null;
-
     final imageId = component.pageData['imageId'];
     final templateId = component.pageData['templateId'];
-
     if (imageId == null || imageId.isEmpty || templateId != 'basic_text') return;
-
     _imgDataUnsub = fsListenDoc('images/$imageId', (String jsonStr) {
       try {
         final doc = jsonDecode(jsonStr);
@@ -104,10 +98,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   Component build(BuildContext context) {
     final String imageId = component.pageData['imageId'] ?? '';
     final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
-
     return div(classes: 'reader-list-item flex-col w-full', [
       div(classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center', [
-        // STRIP INLINE HTML RENDERERS COMPLETELY: Renders only the WebP image with strict selection block properties
         if (url != null && url.isNotEmpty)
           img(
               src: url,
@@ -126,7 +118,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
             div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'width: 50%; height: 16px; margin-bottom: 12px;'}),
           ])
       ]),
-
       div(classes: 'bg-white', [
         SocialToolbar(
           imageId: imageId,
@@ -134,14 +125,12 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
           onOpenGrid: component.onOpenGrid,
           activeBonusRow: _activePanel,
           onToggleBonusRow: _handleTogglePanel,
-          likedImageIds: component.likedImageIds, // Pass downs down
+          likedImageIds: component.likedImageIds,
           initialImageStats: component.initialImageStats,
           authState: component.authState,
           authBloc: component.authBloc,
           isEditingMode: component.isEditingMode,
         ),
-
-        // AVOID rendering the redundant vertical SettingsPanel container when the settings tab is active
         if (_activePanel != null && _activePanel != BonusRowType.settings)
           _buildPanelContent(imageId),
       ])
@@ -151,10 +140,9 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   Component _buildPanelContent(String imageId) {
     Component inner;
     String title = "";
-
     switch (_activePanel!) {
       case BonusRowType.textReader:
-        title = ""; // Omit the 'READER' text
+        title = "";
         inner = TextReaderPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.comments:
@@ -170,15 +158,12 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         inner = RawTextPanel(imageId: imageId);
         break;
       case BonusRowType.masterText:
-        title = ""; // Omit the 'CORRECTED TEXT EDITOR' title
+      case BonusRowType.linkedText:
+        title = "";
         inner = MasterTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
-      case BonusRowType.linkedText:
-        title = ""; // Omit the 'WIKI-LINK EDITOR' title
-        inner = LinkedTextPanel(imageId: imageId, fanzineId: component.fanzineId);
-        break;
       case BonusRowType.entities:
-        title = ""; // Omit the 'PAGE ENTITIES' text
+        title = "";
         inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
         break;
       case BonusRowType.indicia:
@@ -212,7 +197,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       default:
         return div([]);
     }
-
     return PanelContainer(
       title: title,
       type: _activePanel!,
