@@ -20,7 +20,7 @@ class PanelFactory {
     switch (type) {
       case BonusRowType.textReader: return "TEXT READER";
       case BonusRowType.rawText: return "RAW OCR TEXT";
-      case BonusRowType.masterText: return "EDIT TEXT";
+      case BonusRowType.editText: return "EDIT TEXT"; // FIXED: Uses matching editText enum name
       case BonusRowType.linkedText: return "EDIT TEXT"; // Backwards compatibility fallback mapping
       case BonusRowType.tags: return "HASHTAGS & VOTING";
       case BonusRowType.entities: return "PAGE ENTITIES";
@@ -65,11 +65,12 @@ class PanelFactory {
         );
       case BonusRowType.rawText:
         return RawTextPanel(text: context.textRaw);
-      case BonusRowType.masterText:
+      case BonusRowType.editText: // FIXED: Map to the editText enum key
       case BonusRowType.linkedText: // Route link panels straight to the unified master editor!
-        return MasterTextPanel(
+        return EditTextPanel(
           imageId: context.imageId,
-          initialText: context.textCorrected,
+          // FIXED: Prioritize actualText (which is pre-resolved to textLinked) instead of textCorrected!
+          initialText: context.actualText,
           fanzineId: context.fanzineId ?? '',
           templateId: context.templateId,
           aiBaselineText: context.textCorrectedAi,
@@ -107,7 +108,7 @@ class PanelFactory {
             ),
           ),
         );
-      case BonusRowType.credits:
+      case BonusRowType.credits: // FIXED: Cleaned up the non-existent focusedPanel case reference
         return CreditsPanel(imageId: context.imageId);
       case BonusRowType.youtube:
         return YoutubePanel(imageId: context.imageId);

@@ -91,7 +91,7 @@ class ReaderToolsConfig {
       description: 'Edit page text and adjust wiki-links in a unified editor.',
       defaultIcon: 'edit_document',
       role: ToolRole.editor,
-      bonusRow: BonusRowType.masterText,
+      bonusRow: BonusRowType.editText, // FIXED: Renamed masterText reference to editText
     ),
     // 7. Entities (entities) - [Editor Only]
     ReaderTool(

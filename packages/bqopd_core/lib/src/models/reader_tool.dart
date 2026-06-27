@@ -23,7 +23,7 @@ enum ToolCondition {
 enum BonusRowType {
   textReader,
   rawText,
-  masterText,
+  editText, // FIXED: Renamed from masterText to editText for perfect uniform naming conventions
   linkedText,
   comments,
   editDetails,

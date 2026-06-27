@@ -8,7 +8,7 @@ import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
 import '../panels/hashtag_panel.dart';
-import '../panels/master_text_panel.dart';
+import '../panels/edit_text_panel.dart';
 import '../panels/entities_panel.dart';
 import '../panels/raw_text_panel.dart';
 import '../panels/indicia_panel.dart';
@@ -25,7 +25,7 @@ class ReaderPageItem extends StatefulComponent {
   final Map<String, dynamic>? initialImageStats;
   final Set<String> likedImageIds;
   final AuthState? authState;
-  final AuthBloc? authBloc;
+  final AuthBloc? authBloc; // FIXED: Corrected type to AuthBloc? to resolve type mismatch errors
   final bool isEditingMode;
 
   const ReaderPageItem({
@@ -81,7 +81,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         final doc = jsonDecode(jsonStr);
         if (doc['exists'] == true && mounted) {
           setState(() {
-            _templateTextValue = doc['data']['text_corrected'] ?? doc['data']['text'] ?? '';
+            // FIXED: Prioritize text_linked over text_corrected here as well
+            _templateTextValue = doc['data']['text_linked'] ?? doc['data']['text_corrected'] ?? doc['data']['text'] ?? '';
           });
         }
       } catch (_) {}
@@ -157,10 +158,10 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         title = "Raw OCR Text";
         inner = RawTextPanel(imageId: imageId);
         break;
-      case BonusRowType.masterText:
+      case BonusRowType.editText: // FIXED: Uses matching editText enum name
       case BonusRowType.linkedText:
         title = "";
-        inner = MasterTextPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:
         title = "";

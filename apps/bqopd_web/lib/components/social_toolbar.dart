@@ -10,7 +10,7 @@ import 'panels/panel_container.dart';
 import 'panels/text_reader_panel.dart';
 import 'panels/comments_panel.dart';
 import 'panels/hashtag_panel.dart';
-import 'panels/master_text_panel.dart';
+import 'panels/edit_text_panel.dart';
 import 'panels/entities_panel.dart';
 import 'panels/raw_text_panel.dart';
 import 'panels/indicia_panel.dart';
@@ -165,9 +165,9 @@ class _SocialToolbarState extends State<SocialToolbar> {
         if (doc['exists'] && mounted) {
           final data = doc['data'] as Map<String, dynamic>? ?? {};
           final prefs = data['preferences'] as Map<String, dynamic>? ?? {};
-          final buttons = prefs['socialButtons'] as Map<String, dynamic>? ?? {};
+          final text_editor_panels = prefs['socialButtons'] as Map<String, dynamic>? ?? {};
           setState(() {
-            _socialButtonVisibility = Map<String, bool>.from(buttons);
+            _socialButtonVisibility = Map<String, bool>.from(text_editor_panels);
           });
         }
       });
@@ -341,7 +341,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
                 },
                 [Component.text(resolvedIcon)]
             ),
-            if (count != null && count > 0)
+            if (count != null && count! > 0)
               span(classes: 'badge', [Component.text('$count')])
           ]),
           span(classes: 'toolbar-label', [Component.text(tool.label)])
@@ -592,10 +592,22 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Component _buildSettingsEditModeNewPageButton() {
     final bool isActive = _activeEditorPanel == BonusRowType.newPage;
-    final resolvedIcon = cleanIconName('note_add');
-    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
+    final iconId = 'note_add';
+    final resolvedIcon = cleanIconName(iconId);
+
     return button(
-        classes: btnClasses,
+        [
+          div(
+              [
+                span([text(resolvedIcon)], classes: 'material-symbols-outlined', attributes: const {
+                  'style': "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
+                })
+              ],
+              classes: 'toolbar-icon-wrapper'
+          ),
+          span(classes: 'toolbar-label', [Component.text('new page')])
+        ],
+        classes: 'toolbar-btn ${isActive ? 'active' : ''}',
         attributes: const {
           'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
         },
@@ -605,19 +617,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
               _activeEditorPanel = (_activeEditorPanel == BonusRowType.newPage) ? null : BonusRowType.newPage;
             });
           }
-        },
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [Component.text(resolvedIcon)]
-            )
-          ]),
-          span(classes: 'toolbar-label', [Component.text('new page')])
-        ]
+        }
     );
   }
 
@@ -666,9 +666,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
         title = "Raw OCR Text";
         inner = RawTextPanel(imageId: imageId);
         break;
-      case BonusRowType.masterText:
+      case BonusRowType.editText: // FIXED: Map to matching editText enum key
+      case BonusRowType.linkedText:
         title = "";
-        inner = MasterTextPanel(imageId: imageId, fanzineId: component.fanzineId ?? '');
+        inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId ?? '');
         break;
       case BonusRowType.entities:
         title = "";

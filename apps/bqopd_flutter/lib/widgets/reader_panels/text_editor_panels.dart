@@ -21,15 +21,15 @@ class RawTextPanel extends StatelessWidget {
   }
 }
 
-// --- MASTER TEXT PANEL (COMBINED EDIT TEXT) ---
-class MasterTextPanel extends StatelessWidget {
+// --- EDIT TEXT PANEL (COMBINED EDIT TEXT) ---
+class EditTextPanel extends StatelessWidget {
   final String imageId;
   final String initialText;
   final String aiBaselineText;
   final String fanzineId;
   final String? templateId;
 
-  const MasterTextPanel({
+  const EditTextPanel({
     super.key,
     required this.imageId,
     required this.initialText,
@@ -47,7 +47,7 @@ class MasterTextPanel extends StatelessWidget {
       imageId: imageId,
       initialText: initialText,
       aiBaselineText: aiBaselineText,
-      mode: 'master',
+      mode: 'edit', // FIXED: Changed from 'master' to 'edit' to enforce uniform naming conventions
       fanzineId: fanzineId,
     );
   }
@@ -74,7 +74,7 @@ class LinkedTextPanel extends StatelessWidget {
       imageId: imageId,
       initialText: initialText,
       aiBaselineText: aiBaselineText,
-      mode: 'master', // Redirect linked panel targets to combined edit text
+      mode: 'edit', // FIXED: Changed from 'master' to 'edit' to enforce uniform naming conventions
       fanzineId: fanzineId,
     );
   }

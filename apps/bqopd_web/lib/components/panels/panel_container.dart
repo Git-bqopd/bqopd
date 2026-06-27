@@ -23,8 +23,9 @@ class PanelContainer extends StatelessComponent {
 
     // Text editors and readers should grow dynamically to arbitrary lengths without any transition-induced clipping.
     // For these panels, we omit 'panel-container-animate' to bypass CSS max-height caps completely.
+    // FIXED: Changed reference from masterText to editText
     final bool isUnlimitedHeight = type == BonusRowType.textReader ||
-        type == BonusRowType.masterText ||
+        type == BonusRowType.editText ||
         type == BonusRowType.linkedText;
 
     final String classesStr = isUnlimitedHeight

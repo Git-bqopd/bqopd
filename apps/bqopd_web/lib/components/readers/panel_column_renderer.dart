@@ -4,7 +4,7 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../panels/panel_container.dart';
 import '../panels/text_reader_panel.dart';
 import '../panels/comments_panel.dart';
-import '../panels/master_text_panel.dart';
+import '../panels/edit_text_panel.dart';
 import '../panels/entities_panel.dart';
 import '../panels/raw_text_panel.dart';
 import '../panels/indicia_panel.dart';
@@ -35,7 +35,7 @@ class PanelColumnRenderer extends StatelessComponent {
     String title = activePanel.name.toUpperCase();
     if (activePanel == BonusRowType.textReader) title = ""; // Omit 'Reader' text
     if (activePanel == BonusRowType.comments) title = "Comments";
-    if (activePanel == BonusRowType.masterText) title = ""; // Omit 'Edit Text' title
+    if (activePanel == BonusRowType.editText) title = ""; // FIXED: Omit 'Edit Text' title using the updated enum name
     if (activePanel == BonusRowType.entities) title = ""; // Omit 'Page Entities' text
     if (activePanel == BonusRowType.newPage) title = "New Page Layout Editor";
 
@@ -75,8 +75,8 @@ class PanelColumnRenderer extends StatelessComponent {
         TextReaderPanel(imageId: imageId, fanzineId: fanzineId)
       else if (activePanel == BonusRowType.comments)
         CommentsPanel(imageId: imageId)
-      else if (activePanel == BonusRowType.masterText || activePanel == BonusRowType.linkedText)
-          MasterTextPanel(imageId: imageId, fanzineId: fanzineId)
+      else if (activePanel == BonusRowType.editText || activePanel == BonusRowType.linkedText) // FIXED: Uses matching editText enum name
+          EditTextPanel(imageId: imageId, fanzineId: fanzineId)
         else if (activePanel == BonusRowType.entities)
             EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: isEditingMode)
           else if (activePanel == BonusRowType.rawText)
