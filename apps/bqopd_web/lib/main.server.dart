@@ -19,6 +19,9 @@ void main() {
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js'),
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js'),
 
+      // Load Google Places SDK on server pre-renders as well
+      script(src: 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g&libraries=places&loading=async'),
+
       // Pull in your newly created JS interop file
       script(src: 'firebase_init.js'),
 

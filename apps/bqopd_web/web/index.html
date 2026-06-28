@@ -10,12 +10,26 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <link rel="stylesheet" href="styles.css">
 
+    <!-- Force Google Autocomplete dropdown layer on top of premium manila modals -->
+    <style>
+        .pac-container {
+            z-index: 20000 !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+            border: 1px solid #eee !important;
+            font-family: inherit !important;
+        }
+    </style>
+
     <!-- Firebase SDK Compat libraries (Web) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+
+    <!-- Google Maps Places SDK -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g&libraries=places&loading=async"></script>
 
     <!-- Initialize Firebase -->
     <script>
@@ -138,7 +152,7 @@
                 input = document.createElement('input');
                 input.id = inputElementId;
                 input.type = 'file';
-                input.accept = 'image/*';
+                input.accept = 'image/*'
                 input.style.display = 'none';
                 document.body.appendChild(input);
             }
@@ -171,6 +185,48 @@
                 callback(base64, file.name, objectUrl);
             };
             reader.readAsDataURL(file);
+        };
+
+        // --- Google Places Autocomplete Interop Promise ---
+        window.getPlacePredictions = (input) => {
+            return new Promise((resolve) => {
+                if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+                    resolve(JSON.stringify([]));
+                    return;
+                }
+                const service = new google.maps.places.AutocompleteService();
+                service.getPlacePredictions({ input: input }, (predictions, status) => {
+                    if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
+                        resolve(JSON.stringify([]));
+                        return;
+                    }
+                    const results = predictions.map(p => ({
+                        description: p.description,
+                        placeId: p.place_id
+                    }));
+                    resolve(JSON.stringify(results));
+                });
+            });
+        };
+
+        // --- Google Places Autocomplete Native Element Binder ---
+        window.initAddressAutocomplete = (inputId, callback) => {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+                // Retry in 150ms if Places API has not loaded or initialized yet
+                setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
+                return;
+            }
+            const autocomplete = new google.maps.places.Autocomplete(input, {
+                fields: ['formatted_address']
+            });
+            autocomplete.addListener('place_changed', () => {
+                const place = autocomplete.getPlace();
+                if (place && place.formatted_address) {
+                    callback(place.formatted_address);
+                }
+            });
         };
     </script>
 

@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import '../utils/web_firebase_interop.dart';
+import 'web_firebase_interop.dart';
 
 /// Server VM stub implementation of the static unsubscription handler.
 class StubSubscription implements FirebaseSubscription {
@@ -56,6 +56,12 @@ void readInputFile(String inputId, void Function(String base64, String fileName,
 
 /// Server VM stub for high-performance canvas page rendering
 Future<String> renderPublisherPage(String text) async => '{}';
+
+/// Server VM stub for Google Places API autocomplete predictions
+Future<String> getPlacePredictions(String input) async => '[]';
+
+/// Server VM stub for initializing Google Address Autocomplete on an element
+void initAddressAutocomplete(String inputId, void Function(String) callback) {}
 
 /// Mock representation of WebFieldValue for the server environment.
 class WebFieldValue {

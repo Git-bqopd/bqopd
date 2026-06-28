@@ -480,3 +480,45 @@ window.renderPublisherPage = async (text) => {
         grid: gridBase64
     });
 };
+
+// --- Google Places Autocomplete Interop Promise ---
+window.getPlacePredictions = (input) => {
+    return new Promise((resolve) => {
+        if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+            resolve(JSON.stringify([]));
+            return;
+        }
+        const service = new google.maps.places.AutocompleteService();
+        service.getPlacePredictions({ input: input }, (predictions, status) => {
+            if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
+                resolve(JSON.stringify([]));
+                return;
+            }
+            const results = predictions.map(p => ({
+                description: p.description,
+                placeId: p.place_id
+            }));
+            resolve(JSON.stringify(results));
+        });
+    });
+};
+
+// --- Google Places Autocomplete Native Element Binder ---
+window.initAddressAutocomplete = (inputId, callback) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+        // Retry in 150ms if Places API has not loaded or initialized yet
+        setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
+        return;
+    }
+    const autocomplete = new google.maps.places.Autocomplete(input, {
+        fields: ['formatted_address']
+    });
+    autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place && place.formatted_address) {
+            callback(place.formatted_address);
+        }
+    });
+};

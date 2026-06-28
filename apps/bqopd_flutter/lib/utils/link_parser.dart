@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class LinkParser {
   static final RegExp _wikiLinkRegex = RegExp(r'\[\[(.*?)\]\]');
@@ -100,6 +101,13 @@ class LinkParser {
         context.pushNamed('editInfo', queryParameters: {'userId': id});
       } else if (parts[0] == 'fanzine') {
         context.push('/reader/$id');
+      } else if (parts[0] == 'address') {
+        // Safe link launcher on mobile devices for addresses
+        final encoded = Uri.encodeComponent(id);
+        final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encoded');
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
       }
     } else {
       context.push('/${ref.toLowerCase().replaceAll(' ', '-')}');

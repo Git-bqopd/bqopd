@@ -165,27 +165,52 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         ref = parts[2].trim();
       }
 
-      if (ref != null && ref.startsWith('user:')) {
-        final uid = ref.substring(5);
-        final profile = _loadedProfiles[uid];
-        final String? username = profile?['username'];
-        if (profile != null && username != null && username.isNotEmpty) {
-          // Rule 1: Connected to an @username handle -> Regular (non-bold) weight, Underlined, Clickable, and BLACK in Impact
+      if (ref != null) {
+        if (ref.startsWith('user:')) {
+          final uid = ref.substring(5);
+          final profile = _loadedProfiles[uid];
+          final String? username = profile?['username'];
+          if (profile != null && username != null && username.isNotEmpty) {
+            // Rule 1: Connected to an @username handle -> Clickable link and BLACK in Impact
+            children.add(a(
+                href: '/$username',
+                attributes: {
+                  'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
+                },
+                events: {
+                  'click': (e) {
+                    e.preventDefault();
+                    Router.of(context).push('/$username');
+                  }
+                },
+                [Component.text(display)]
+            ));
+          } else {
+            // Rule 2: Connected to a profile ID but NO handle -> Regular weight, NOT underlined in Impact (black)
+            children.add(span(
+                attributes: const {
+                  'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+                },
+                [Component.text(display)]
+            ));
+          }
+        } else if (ref.startsWith('address:')) {
+          // Places / Normalized addresses linking -> Style in green with Map launcher link
+          final addressVal = ref.substring(8);
+          final encodedAddr = Uri.encodeComponent(addressVal);
           children.add(a(
-              href: '/$username',
+              href: 'https://www.google.com/maps/search/?api=1&query=$encodedAddr',
               attributes: {
-                'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
+                'target': '_blank',
+                'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
               },
-              events: {
-                'click': (e) {
-                  e.preventDefault();
-                  Router.of(context).push('/$username');
-                }
-              },
-              [Component.text(display)]
+              [
+                span([text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 2px; vertical-align: middle; display: inline-block;'}),
+                Component.text(display)
+              ]
           ));
         } else {
-          // Rule 2: Connected to a profile ID but NO handle -> Regular weight, NOT underlined, NOT a link in Impact (black)
+          // General unlinked target formatting in Impact (black)
           children.add(span(
               attributes: const {
                 'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
@@ -234,7 +259,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       final colBreakMatch = colBreakRegex.firstMatch(cleanLine);
 
       if (colBreakMatch != null || cleanLine == 'column-break' || cleanLine == 'column_break') {
-        // Render a soft, modern horizontal divider to indicate a column break on the single scrolling reader column
+        // Render a soft divider on column breaks
         lineComponents.add(
             div(
               attributes: const {
@@ -325,7 +350,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         // --- MATCHED MARKDOWN HEADER BLOCK -> USE IMPACT ---
         final level = headerMatch.group(1)!.length;
         final content = headerMatch.group(2)!.trim();
-        // Calculate dynamic sizing adjustments relative to your current scale factor button state
         final double headerSize = _fontSize + (4.0 * (7 - level));
         final headingChildren = _parseAndRenderContent(content);
         final headingAttributes = {
@@ -338,7 +362,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
               'letter-spacing: 0.5px;'
         };
 
-        // Leverage native Jaspr tag builders to bypass raw DomComponent constructors
         switch (level) {
           case 1:
             lineComponents.add(h1(headingChildren, attributes: headingAttributes));
@@ -387,7 +410,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           'style': 'position: relative; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;'
         },
         [
-          // Move A- and A+ buttons to the top right corner
+          // Zoom scale triggers
           div(
               classes: 'flex-row gap-2',
               attributes: const {

@@ -4,12 +4,12 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../../utils/web_firebase_interop.dart';
+import '../../utils/web_firebase_interop.dart' hide initAddressAutocomplete;
 import '../../utils/web_utils.dart';
 import '../../repositories/repositories.dart';
 
 /// The 'entities' social panel displaying Cards for any [[wiki-linked]] text.
-/// Aligns with Clean Architecture by utilizing abstract Repository interfaces.
+/// Supports both Person (user:uid) and Place (address:normalized_address) types.
 class EntitiesPanel extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
@@ -27,8 +27,8 @@ class EntitiesPanel extends StatefulComponent {
 }
 
 class EntityLink {
-  final String label; // The Canonical Name
-  final String? ref; // user:uid
+  final String label; // The Canonical Name/Display Address
+  final String? ref; // user:uid or address:normalized_address
   final String rawMatch;
 
   EntityLink({required this.label, this.ref, required this.rawMatch});
@@ -42,10 +42,12 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
 
   // Modal Editing State
   EntityLink? _editingEntity;
-  String _handleInput = '';
+  String _entityType = 'person'; // 'person' or 'place'
+  String _handleInput = '';      // For Person type
+  String _addressInput = '';     // For Place type
   bool _modalSaving = false;
   String? _modalError;
-  String? _suggestedHandle; // Holds the automatically detected suggestion if previously linked
+  String? _suggestedHandle;
 
   final IUserRepository _userRepo = createUserRepository();
   final IUploadRepository _uploadRepo = createUploadRepository();
@@ -90,11 +92,11 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         final textRaw = data['text_raw'] ?? '';
         _rawFullText = textLinked.isNotEmpty ? textLinked : (textCorrected.isNotEmpty ? textCorrected : textRaw);
 
-        // Parse wiki links [[Label]] with support for programmatically split parts (up to 3-part layout structures)
+        // Parse wiki links [[Label]] with support for multi-part layout structures
         final regex = RegExp(r'\[\[(.*?)\]\]');
         final matches = regex.allMatches(_rawFullText);
-        // Use a map to filter out duplicate keys, keeping linked occurrences as higher priority
         final Map<String, EntityLink> uniqueEntities = {};
+
         for (final m in matches) {
           final content = m.group(1) ?? '';
           final parts = content.split('|');
@@ -108,7 +110,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
               ref = parts[2].trim();
             }
             final key = canonical.toLowerCase();
-            // If the entity doesn't exist yet OR if this match has a target ref while the previous one didn't, insert/upgrade it
+            // If the entity doesn't exist yet OR has a more complete reference, insert/upgrade it
             if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
               uniqueEntities[key] = EntityLink(label: canonical, ref: ref, rawMatch: raw);
             }
@@ -119,7 +121,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           _loading = false;
         });
 
-        // Load profiles for linked entities in parallel
+        // Load profiles for linked user entities in parallel
         _loadEntityProfiles(_entities);
       } else {
         setState(() {
@@ -173,7 +175,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
     final String label = entity.label;
     final String handle = _normalize(label);
 
-    // 1. Check if usernames/$handle exists
     try {
       final String userRes = await fsGetDoc('usernames/$handle');
       final Map<String, dynamic> doc = jsonDecode(userRes);
@@ -194,7 +195,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       print('[EntitiesPanel _findSuggestedHandle] Error checking usernames: $e');
     }
 
-    // 2. Scan other images/pages in the same fanzine for linked occurrences of this exact label
     if (component.fanzineId != null && component.fanzineId!.isNotEmpty) {
       try {
         final imagesRes = await fsQuery('images', 'usedInFanzines', 'array-contains', jsonEncode(component.fanzineId), '');
@@ -233,66 +233,131 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   void _onEntityTap(EntityLink entity) {
     if (component.isEditingMode) {
       String initialHandle = '';
-      if (entity.ref != null && entity.ref!.startsWith('user:')) {
-        final uid = entity.ref!.substring(5);
-        initialHandle = _loadedProfiles[uid]?['username'] ?? '';
+      String initialAddress = '';
+      String resolvedType = 'person';
+
+      if (entity.ref != null) {
+        if (entity.ref!.startsWith('user:')) {
+          final uid = entity.ref!.substring(5);
+          initialHandle = _loadedProfiles[uid]?['username'] ?? '';
+          resolvedType = 'person';
+        } else if (entity.ref!.startsWith('address:')) {
+          initialAddress = entity.ref!.substring(8);
+          resolvedType = 'place';
+        }
       }
+
       setState(() {
         _editingEntity = entity;
+        _entityType = resolvedType;
         _handleInput = initialHandle;
+        _addressInput = initialAddress;
         _modalError = null;
         _modalSaving = false;
         _suggestedHandle = null;
       });
-      _findSuggestedHandle(entity);
+
+      if (resolvedType == 'person') {
+        _findSuggestedHandle(entity);
+      } else {
+        // Auto-initialize Google places on modal element display
+        Timer(const Duration(milliseconds: 120), () {
+          initAddressAutocomplete('modal-address-input', (String address) {
+            setState(() {
+              _addressInput = address;
+            });
+          });
+        });
+      }
     } else {
-      if (entity.ref != null && entity.ref!.startsWith('user:')) {
-        final uid = entity.ref!.substring(5);
-        final String? username = _loadedProfiles[uid]?['username'];
-        if (username != null && username.isNotEmpty) {
-          Router.of(context).push('/$username');
+      if (entity.ref != null) {
+        if (entity.ref!.startsWith('user:')) {
+          final uid = entity.ref!.substring(5);
+          final String? username = _loadedProfiles[uid]?['username'];
+          if (username != null && username.isNotEmpty) {
+            Router.of(context).push('/$username');
+          }
+        } else if (entity.ref!.startsWith('address:')) {
+          final addressVal = entity.ref!.substring(8);
+          final encoded = Uri.encodeComponent(addressVal);
+          openMapLauncher(encoded);
         }
       }
     }
   }
 
+  void openMapLauncher(String encodedAddress) {
+    openWindow('https://www.google.com/maps/search/?api=1&query=$encodedAddress', '_blank');
+  }
+
   Future<void> _saveEntityLink() async {
     final entity = _editingEntity;
     if (entity == null || _modalSaving) return;
-    final cleanHandle = _handleInput.trim().toLowerCase().replaceAll('@', '');
-    if (cleanHandle.isEmpty) {
-      setState(() => _modalError = 'Please enter a valid username.');
-      return;
-    }
+
     setState(() {
       _modalSaving = true;
       _modalError = null;
     });
-    try {
-      // Find matching profile username cleanly via abstract repository
-      final result = await _uploadRepo.lookupUserByHandle(cleanHandle);
-      if (result == null) {
-        setState(() {
-          _modalError = 'Profile @$cleanHandle not found in database.';
-          _modalSaving = false;
-        });
-        return;
-      }
-      final targetUid = result['uid'];
 
-      // Reconstruct replacement based on original match structure
-      final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
-      final parts = content.split('|');
-      String replacement;
-      if (parts.length == 3) {
-        // Joe Smith|Joe|user:old_uid -> Joe Smith|Joe|user:targetUid
-        replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
-      } else if (parts.length == 2 && !parts[1].contains(':')) {
-        // Joe Smith|Joe -> Joe Smith|Joe|user:targetUid
-        replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
+    try {
+      String replacement = '';
+
+      if (_entityType == 'place') {
+        final cleanAddress = _addressInput.trim();
+        if (cleanAddress.isEmpty) {
+          setState(() {
+            _modalError = 'Please enter or select a valid address.';
+            _modalSaving = false;
+          });
+          return;
+        }
+
+        final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
+        final parts = content.split('|');
+
+        if (parts.length >= 2 && !parts[1].startsWith('address:') && !parts[1].startsWith('user:')) {
+          replacement = "[[${parts[0].trim()}|${parts[1].trim()}|address:$cleanAddress]]";
+        } else {
+          replacement = "[[${entity.label}|address:$cleanAddress]]";
+        }
       } else {
-        // Joe Smith or Joe Smith|user:old_uid -> Joe Smith|user:targetUid
-        replacement = "[[${entity.label}|user:$targetUid]]";
+        // Person linking flow
+        final cleanHandle = _handleInput.trim().toLowerCase().replaceAll('@', '');
+        if (cleanHandle.isEmpty) {
+          setState(() {
+            _modalError = 'Please enter a valid username.';
+            _modalSaving = false;
+          });
+          return;
+        }
+
+        final result = await _uploadRepo.lookupUserByHandle(cleanHandle);
+        if (result == null) {
+          setState(() {
+            _modalError = 'Profile @$cleanHandle not found in database.';
+            _modalSaving = false;
+          });
+          return;
+        }
+        final targetUid = result['uid'];
+
+        final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
+        final parts = content.split('|');
+
+        if (parts.length == 3) {
+          replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
+        } else if (parts.length == 2 && !parts[1].contains(':')) {
+          replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
+        } else {
+          replacement = "[[${entity.label}|user:$targetUid]]";
+        }
+
+        // Register uppercase shortcode mappings to guarantee routing path matches
+        if (component.fanzineId != null) {
+          await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode({
+            'draftEntities': WebFieldValue.arrayUnion([entity.label])
+          }));
+        }
       }
 
       final String updatedText = _rawFullText.replaceAll(entity.rawMatch, replacement);
@@ -301,16 +366,10 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         'needs_linking': false,
       }));
 
-      // Bubble up manual entities to the parent fanzine
-      if (component.fanzineId != null) {
-        await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode({
-          'draftEntities': WebFieldValue.arrayUnion([entity.label])
-        }));
-      }
-
       setState(() {
         _editingEntity = null;
         _handleInput = '';
+        _addressInput = '';
         _modalSaving = false;
         _modalError = null;
       });
@@ -334,11 +393,10 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
       final parts = content.split('|');
       String replacement;
-      if (parts.length == 3) {
-        // Joe Smith|Joe|user:uid -> Joe Smith|Joe
+
+      if (parts.length >= 2 && !parts[1].contains(':')) {
         replacement = "[[${parts[0].trim()}|${parts[1].trim()}]]";
       } else {
-        // Joe Smith|user:uid -> Joe Smith
         replacement = "[[${entity.label}]]";
       }
 
@@ -350,6 +408,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       setState(() {
         _editingEntity = null;
         _handleInput = '';
+        _addressInput = '';
         _modalSaving = false;
         _modalError = null;
       });
@@ -370,7 +429,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}),
           div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 85%;'}),
           div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}),
-          div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 60%;'}),
         ],
         classes: 'flex-col gap-2 py-4',
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
@@ -395,12 +453,15 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   }
 
   Component _buildEntityCard(EntityLink entity) {
+    final bool isAddress = entity.ref != null && entity.ref!.startsWith('address:');
+    final String? normalizedAddress = isAddress ? entity.ref!.substring(8) : null;
+
     final String? uid = entity.ref != null && entity.ref!.startsWith('user:') ? entity.ref!.substring(5) : null;
     final Map<String, dynamic>? profile = uid != null ? _loadedProfiles[uid] : null;
-    final bool isLinked = profile != null;
-    final String labelText = isLinked ? (profile['displayName'] ?? entity.label) : entity.label;
-    final String? username = isLinked ? profile['username'] : null;
-    final String? photoUrl = isLinked ? profile['photoUrl'] : null;
+    final bool isLinked = profile != null || isAddress;
+    final String labelText = profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
+    final String? subtitleText = isAddress ? normalizedAddress : (profile != null ? '@${profile['username']}' : null);
+    final String? photoUrl = profile != null ? profile['photoUrl'] : null;
 
     return div(
       [
@@ -408,26 +469,23 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           [
             div(
               [
-                if (photoUrl != null && photoUrl.isNotEmpty)
-                  img(
-                      src: photoUrl,
-                      attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover; display: block;'}
-                  )
+                if (isAddress)
+                  span([text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
+                else if (photoUrl != null && photoUrl.isNotEmpty)
+                  img(classes: 'user-avatar', src: photoUrl)
                 else
-                  div(
-                    [text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')],
-                    classes: 'user-avatar-placeholder',
-                    attributes: const {'style': 'font-size: 14px; font-weight: bold; color: #9ca3af;'},
-                  )
+                  div(classes: 'user-avatar-placeholder', [text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
               ],
               classes: 'user-avatar-container',
-              attributes: const {'style': 'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'},
+              attributes: const {
+                'style': 'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'
+              },
             ),
             div(
               [
-                div([text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2;'}),
-                if (username != null)
-                  div([text('@$username')], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px;'})
+                div([text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
+                if (subtitleText != null)
+                  div([text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
               ],
               classes: 'user-info',
               attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center;'},
@@ -442,7 +500,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           ])
         else if (isLinked)
           span(classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px; color: #6750A4;'}, [
-            text('arrow_forward_ios')
+            text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
           ])
       ],
       classes: 'hover:shadow-md transition-all',
@@ -469,57 +527,135 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                         h2([text('Link Entity')], attributes: const {'style': 'font-size: 16px; font-weight: bold; margin-bottom: 4px; margin-top: 0;'}),
                         p(
                             [
-                              text('Set the target profile username to link with "'),
+                              text('Link "'),
                               span([text(_editingEntity!.label)], attributes: const {'style': 'font-weight: bold; color: #6750A4;'}),
-                              text('".')
+                              text('" to a database profile or places location.')
                             ],
                             attributes: const {'style': 'font-size: 12px; color: #555; line-height: 1.4; margin: 0;'}
                         ),
+
+                        // Toggle Segmented Button for Person vs Place
                         div(
+                          attributes: const {
+                            'style': 'display: flex; border: 1px solid #ccc; border-radius: 100px; overflow: hidden; margin-top: 14px; background: white;'
+                          },
                           [
-                            input(
+                            button(
+                                [
+                                  span([text('person')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
+                                  text('Person')
+                                ],
                                 attributes: {
-                                  'type': 'text',
-                                  'placeholder': '@username / handle',
-                                  'value': _handleInput,
-                                  'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; outline: none; background: white;'
+                                  'type': 'button',
+                                  'style': 'flex: 1; border: none; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer; '
+                                      'background-color: ${_entityType == 'person' ? '#E8DEF8' : 'transparent'}; '
+                                      'color: ${_entityType == 'person' ? '#1D192B' : '#49454F'};'
                                 },
                                 events: {
-                                  'input': (e) => _handleInput = getInputValue(e)
+                                  'click': (e) => setState(() { _entityType = 'person'; _modalError = null; })
                                 }
                             ),
-                            if (_suggestedHandle != null)
-                              div(
+                            div(attributes: const {'style': 'width: 1px; background: #ccc;'}, []),
+                            button(
                                 [
-                                  span([text('Suggested Link:')], attributes: const {'style': 'font-size: 10px; color: #666; margin-bottom: 4px;'}),
-                                  button(
-                                      [text('@$_suggestedHandle')],
-                                      classes: 'profile-btn',
-                                      attributes: const {
-                                        'type': 'button',
-                                        'style': 'padding: 8px 12px; font-size: 12px; border: 1px dashed #6750A4; color: #6750A4; border-radius: 6px; background: rgba(103, 80, 164, 0.05); cursor: pointer; font-weight: bold; width: 100%; text-align: left; display: flex; align-items: center; justify-content: flex-start;'
-                                      },
-                                      events: {
-                                        'click': (e) {
-                                          setState(() {
-                                            _handleInput = '@$_suggestedHandle';
-                                          });
-                                        }
-                                      }
-                                  )
+                                  span([text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
+                                  text('Place')
                                 ],
-                                classes: 'flex-col mt-2',
-                                attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; align-items: flex-start; margin-top: 8px;'},
-                              ),
-                            if (_modalError != null)
-                              p([text(_modalError!)], classes: 'error-msg mt-2', attributes: const {'style': 'font-size: 11px; margin-top: 4px; color: #ef4444;'})
+                                attributes: {
+                                  'type': 'button',
+                                  'style': 'flex: 1; border: none; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer; '
+                                      'background-color: ${_entityType == 'place' ? '#E8DEF8' : 'transparent'}; '
+                                      'color: ${_entityType == 'place' ? '#1D192B' : '#49454F'};'
+                                },
+                                events: {
+                                  'click': (e) {
+                                    setState(() {
+                                      _entityType = 'place';
+                                      _modalError = null;
+                                    });
+                                    // Auto-initialize Google places on toggle switch click
+                                    Timer(const Duration(milliseconds: 120), () {
+                                      initAddressAutocomplete('modal-address-input', (String address) {
+                                        setState(() {
+                                          _addressInput = address;
+                                        });
+                                      });
+                                    });
+                                  }
+                                }
+                            ),
                           ],
-                          classes: 'flex-col w-full mt-4',
-                          attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; margin-top: 16px;'},
-                        )
+                        ),
+
+                        // Dynamic inputs depending on entityType selected
+                        if (_entityType == 'person')
+                          div(
+                            [
+                              input(
+                                  attributes: {
+                                    'type': 'text',
+                                    'placeholder': '@username / handle',
+                                    'value': _handleInput,
+                                    'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; outline: none; background: white;'
+                                  },
+                                  events: {
+                                    'input': (e) => _handleInput = getInputValue(e)
+                                  }
+                              ),
+                              if (_suggestedHandle != null)
+                                div(
+                                  [
+                                    span([text('Suggested Link:')], attributes: const {'style': 'font-size: 10px; color: #666; margin-bottom: 4px;'}),
+                                    button(
+                                        [text('@$_suggestedHandle')],
+                                        classes: 'profile-btn',
+                                        attributes: const {
+                                          'type': 'button',
+                                          'style': 'padding: 8px 12px; font-size: 12px; border: 1px dashed #6750A4; color: #6750A4; border-radius: 6px; background: rgba(103, 80, 164, 0.05); cursor: pointer; font-weight: bold; width: 100%; text-align: left; display: flex; align-items: center; justify-content: flex-start;'
+                                        },
+                                        events: {
+                                          'click': (e) {
+                                            setState(() {
+                                              _handleInput = '@$_suggestedHandle';
+                                            });
+                                          }
+                                        }
+                                    )
+                                  ],
+                                  classes: 'flex-col mt-2',
+                                  attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; align-items: flex-start; margin-top: 8px;'},
+                                ),
+                            ],
+                            classes: 'flex-col w-full mt-4',
+                            attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'},
+                          )
+                        else
+                          div(
+                            [
+                              input(
+                                  attributes: {
+                                    'type': 'text',
+                                    'id': 'modal-address-input',
+                                    'placeholder': 'Start typing normalized address...',
+                                    'value': _addressInput,
+                                    'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; outline: none; background: white;'
+                                  },
+                                  events: {
+                                    'change': (e) {
+                                      _addressInput = getInputValue(e);
+                                    }
+                                  }
+                              ),
+                            ],
+                            classes: 'flex-col w-full mt-4',
+                            attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'},
+                          ),
+
+                        if (_modalError != null)
+                          p([text(_modalError!)], classes: 'error-msg mt-2', attributes: const {'style': 'font-size: 11px; margin-top: 4px; color: #ef4444;'})
                       ],
                       classes: 'flex-col w-full text-left',
-                      attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; text-align: left;'},
+                      attributes: const {'style': 'display: flex; flex-direction: column; text-align: left;'},
                     ),
                     div(
                       [
@@ -542,6 +678,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                                 _editingEntity = null;
                                 _modalError = null;
                                 _handleInput = '';
+                                _addressInput = '';
                               });
                             }
                           },
@@ -568,7 +705,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
               ],
               classes: 'manila-envelope',
               attributes: const {
-                'style': 'max-width: 400px; max-height: 480px; border-radius: 12px; overflow: hidden; position: relative; width: 100%;'
+                'style': 'max-width: 400px; max-height: 520px; border-radius: 12px; overflow: hidden; position: relative; width: 100%;'
               },
             )
           ],

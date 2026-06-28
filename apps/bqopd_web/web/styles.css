@@ -19,6 +19,15 @@ body {
     min-height: 100vh;
 }
 
+/* Force Google Autocomplete dropdown layer on top of premium manila modals */
+.pac-container {
+    z-index: 20000 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    border: 1px solid #eee !important;
+    font-family: inherit !important;
+}
+
 /* Material Icons Setup */
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined' !important;
@@ -969,5 +978,4 @@ a:hover {
     outline: none;
     padding: 12px;
     margin: 0;
-}
 }

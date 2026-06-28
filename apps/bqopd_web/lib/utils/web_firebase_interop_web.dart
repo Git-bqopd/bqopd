@@ -4,7 +4,7 @@ library web_firebase_interop_web;
 import 'dart:js_interop';
 import 'dart:typed_data';
 import 'dart:js_util' as js_util;
-import '../utils/web_firebase_interop.dart';
+import 'web_firebase_interop.dart';
 
 /// Web implementation of the subscription wrapper to bridge the JS unsubscription callback.
 class WebSubscription implements FirebaseSubscription {
@@ -145,6 +145,18 @@ Future<String> renderPublisherPage(String text) async {
   } catch (e) {
     print('[renderPublisherPage js_util Error] $e');
     rethrow;
+  }
+}
+
+// Google Places Autocomplete predictions Promise Interop
+Future<String> getPlacePredictions(String input) async {
+  try {
+    final promise = js_util.callMethod(js_util.globalThis, 'getPlacePredictions', [input]);
+    final jsRes = await js_util.promiseToFuture(promise);
+    return jsRes.toString();
+  } catch (e) {
+    print('[getPlacePredictions js_util Error] $e');
+    return '[]';
   }
 }
 
