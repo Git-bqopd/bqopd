@@ -165,11 +165,11 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         break;
       case BonusRowType.entities:
         title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
+        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false); // ALWAYS reader mode from main toolbar
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
+        inner = IndiciaPanel(fanzineId: component.fanzineId, isEditingMode: false); // ALWAYS reader mode from main toolbar
         break;
       case BonusRowType.credits:
         title = "Creators";

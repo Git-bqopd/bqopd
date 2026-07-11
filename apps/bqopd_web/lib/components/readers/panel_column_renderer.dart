@@ -78,11 +78,11 @@ class PanelColumnRenderer extends StatelessComponent {
       else if (activePanel == BonusRowType.editText || activePanel == BonusRowType.linkedText) // FIXED: Uses matching editText enum name
           EditTextPanel(imageId: imageId, fanzineId: fanzineId)
         else if (activePanel == BonusRowType.entities)
-            EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: isEditingMode)
+            EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: false) // ALWAYS reader mode from main toolbar column
           else if (activePanel == BonusRowType.rawText)
               RawTextPanel(imageId: imageId)
             else if (activePanel == BonusRowType.indicia)
-                IndiciaPanel(fanzineId: fanzineId, isEditingMode: isEditingMode)
+                IndiciaPanel(fanzineId: fanzineId, isEditingMode: false) // ALWAYS reader mode from main toolbar column
               else if (activePanel == BonusRowType.credits)
                   CreditsPanel(imageId: imageId)
                 else if (activePanel == BonusRowType.youtube)

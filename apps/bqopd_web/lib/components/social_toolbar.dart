@@ -27,9 +27,9 @@ class SocialToolbar extends StatefulComponent {
   final String? youtubeId;
   final bool isEditingMode;
   final bool isIndiciaPage;
-  final VoidCallback? onOpenGrid;
+  final void Function()? onOpenGrid;
   final BonusRowType? activeBonusRow;
-  final ValueChanged<BonusRowType> onToggleBonusRow;
+  final void Function(BonusRowType) onToggleBonusRow;
   final Set<String> likedImageIds;
   final Map<String, dynamic>? initialImageStats;
   final AuthState? authState;
@@ -289,7 +289,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
   Component _buildToolbarButton(ReaderTool tool) {
     bool isActive = false;
     int? count;
-    VoidCallback action = () {};
+    void Function() action = () {};
     if (tool.id == 'Like') {
       isActive = _isLiked;
       count = _likeCount;
@@ -658,9 +658,78 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
+  Component _buildPanelContent(String imageId) {
+    Component inner;
+    String title = "";
+    if (component.activeBonusRow == null) return div([]);
+    switch (component.activeBonusRow!) {
+      case BonusRowType.textReader:
+        title = "";
+        inner = TextReaderPanel(imageId: imageId, fanzineId: component.fanzineId);
+        break;
+      case BonusRowType.comments:
+        title = "Comments";
+        inner = CommentsPanel(imageId: imageId);
+        break;
+      case BonusRowType.tags:
+        title = "Hashtags & Voting";
+        inner = HashtagPanel(imageId: imageId);
+        break;
+      case BonusRowType.rawText:
+        title = "Raw OCR Text";
+        inner = RawTextPanel(imageId: imageId);
+        break;
+      case BonusRowType.editText: // FIXED: Uses matching editText enum name
+      case BonusRowType.linkedText:
+        title = "";
+        inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId);
+        break;
+      case BonusRowType.entities:
+        title = "";
+        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false); // ALWAYS reader mode from main toolbar
+        break;
+      case BonusRowType.indicia:
+        title = "Issue Indicia";
+        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: false); // ALWAYS reader mode from main toolbar
+        break;
+      case BonusRowType.credits:
+        title = "Creators";
+        inner = CreditsPanel(imageId: imageId);
+        break;
+      case BonusRowType.youtube:
+        title = "Video Resource";
+        inner = YoutubePanel(imageId: imageId);
+        break;
+      case BonusRowType.analyticsDashboard:
+        title = "Analytics Dashboard";
+        inner = AnalyticsPanel(imageId: imageId);
+        break;
+      case BonusRowType.newPage:
+        title = "New Page Text Editor";
+        inner = PublisherTextPanel(imageId: imageId, fanzineId: component.fanzineId);
+        break;
+      case BonusRowType.terminal:
+        title = "Terminal Game";
+        inner = div([
+          p(classes: 'text-center text-sm text-gray p-6 italic', [
+            text('CA Combat Terminal is optimized only for mobile application contexts.')
+          ])
+        ]);
+        break;
+      default:
+        return div([]);
+    }
+    return PanelContainer(
+      title: title,
+      type: component.activeBonusRow!,
+      child: inner,
+    );
+  }
+
   Component _buildEditorPanelContent(String imageId) {
     Component inner;
     String title = "";
+    if (_activeEditorPanel == null) return div([]);
     switch (_activeEditorPanel!) {
       case BonusRowType.rawText:
         title = "Raw OCR Text";
@@ -673,11 +742,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         break;
       case BonusRowType.entities:
         title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: component.isEditingMode);
+        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: true); // ALWAYS edit mode from settings sub-toolbar
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: component.isEditingMode);
+        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: true); // ALWAYS edit mode from settings sub-toolbar
         break;
       case BonusRowType.credits:
         title = "Creators";
@@ -700,7 +769,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
         title = "Terminal Game";
         inner = div([
           p(classes: 'text-center text-sm text-gray p-6 italic', [
-            Component.text('CA Combat Terminal is optimized only for mobile application contexts.')
+            text('CA Combat Terminal is optimized only for mobile application contexts.')
           ])
         ]);
         break;
