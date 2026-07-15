@@ -147,9 +147,9 @@ class ReaderToolsConfig {
     ),
     // 13. Terminal (Terminal)
     ReaderTool(
-      id: 'Terminal',
-      label: 'Terminal',
-      description: 'Enter the CA Combat Terminal game experience.',
+      id: 'terminal',
+      label: 'terminal',
+      description: 'Enter the terminal.',
       defaultIcon: 'assets/social_toolbar/terminal.svg',
       condition: ToolCondition.requiresGame,
       bonusRow: BonusRowType.terminal,
