@@ -253,6 +253,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
       if (_hasTerminalContent) 'Terminal',
       'Settings',
     ];
+
     final List<ReaderTool> visibleMainTools = [];
     for (final id in mainToolIds) {
       try {
@@ -272,6 +273,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
         }
       } catch (_) {}
     }
+
     return div(classes: 'w-full flex-col', [
       div(classes: 'toolbar-container', [
         for (var tool in visibleMainTools)
@@ -290,6 +292,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     bool isActive = false;
     int? count;
     void Function() action = () {};
+
     if (tool.id == 'Like') {
       isActive = _isLiked;
       count = _likeCount;
@@ -326,20 +329,20 @@ class _SocialToolbarState extends State<SocialToolbar> {
         }
       };
     }
-    final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-    final resolvedIcon = cleanIconName(iconName);
+
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
+    final iconPath = isActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
+
     return button(
         classes: btnClasses,
         events: {'click': (e) => action()},
         [
           div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [Component.text(resolvedIcon)]
+            img(
+                src: iconPath,
+                attributes: const {
+                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+                }
             ),
             if (count != null && count! > 0)
               span(classes: 'badge', [Component.text('$count')])
@@ -426,6 +429,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     } else if (tool.id == 'Terminal') {
       hasContent = _hasTerminalContent;
     }
+
     final bool isVisible = hasContent ? (_socialButtonVisibility[tool.id] ?? true) : false;
     bool isToolActive = false;
     int? toolCount;
@@ -440,15 +444,17 @@ class _SocialToolbarState extends State<SocialToolbar> {
     } else if (tool.bonusRow != null) {
       isToolActive = component.activeBonusRow == tool.bonusRow;
     }
-    final iconName = (isToolActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-    final resolvedIcon = cleanIconName(iconName);
+
     final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
+    final iconPath = isToolActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
+
     String extraStyle = '';
     if (!hasContent) {
       extraStyle = 'opacity: 0.25; filter: grayscale(100%); cursor: not-allowed;';
     } else if (!isVisible) {
       extraStyle = 'opacity: 0.35; filter: grayscale(100%);';
     }
+
     return button(
         classes: btnClasses,
         attributes: {
@@ -463,14 +469,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         },
         [
           div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isToolActive
-                      ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                      : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [Component.text(resolvedIcon)]
+            img(
+                src: iconPath,
+                attributes: const {
+                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+                }
             ),
             if (toolCount != null && toolCount > 0)
               span(classes: 'badge', [Component.text('$toolCount')])
@@ -485,9 +488,9 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Component _buildSettingsEditModeActionButton(ReaderTool tool) {
     final bool isActive = _activeEditorPanel == tool.bonusRow;
-    final iconName = (isActive && tool.activeIcon != null) ? tool.activeIcon! : tool.defaultIcon;
-    final resolvedIcon = cleanIconName(iconName);
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
+    final iconPath = isActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
+
     return button(
         classes: btnClasses,
         attributes: const {
@@ -505,12 +508,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         },
         [
           div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [Component.text(resolvedIcon)]
+            img(
+                src: iconPath,
+                attributes: const {
+                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+                }
             )
           ]),
           span(classes: 'toolbar-label', [Component.text(tool.label)])
@@ -520,8 +522,8 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Component _buildTemplatesToggleButton() {
     final bool isActive = _showTemplatesRow;
-    final resolvedIcon = cleanIconName('auto_awesome_motion');
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
+
     return button(
         classes: btnClasses,
         attributes: const {
@@ -537,12 +539,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         },
         [
           div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isActive ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;" : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [Component.text(resolvedIcon)]
+            img(
+                src: 'assets/social_toolbar/templates.svg',
+                attributes: const {
+                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+                }
             )
           ]),
           span(classes: 'toolbar-label', [Component.text('templates')])
@@ -566,7 +567,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   Component _buildTemplatesRowActionButton(String label) {
-    final resolvedIcon = cleanIconName('note_add');
     return button(
         classes: 'toolbar-btn',
         attributes: const {
@@ -577,12 +577,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         },
         [
           div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
+            img(
+                src: 'assets/social_toolbar/new_page.svg',
                 attributes: const {
-                  'style': "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [Component.text(resolvedIcon)]
+                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+                }
             )
           ]),
           span(classes: 'toolbar-label', [Component.text(label)])
@@ -592,16 +591,16 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Component _buildSettingsEditModeNewPageButton() {
     final bool isActive = _activeEditorPanel == BonusRowType.newPage;
-    final iconId = 'note_add';
-    final resolvedIcon = cleanIconName(iconId);
-
     return button(
         [
           div(
               [
-                span([text(resolvedIcon)], classes: 'material-symbols-outlined', attributes: const {
-                  'style': "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                })
+                img(
+                    src: 'assets/social_toolbar/new_page.svg',
+                    attributes: const {
+                      'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+                    }
+                )
               ],
               classes: 'toolbar-icon-wrapper'
           ),
@@ -623,7 +622,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   Component _buildEditorToggleButton() {
     final bool isWhiteSelected = _isSettingsEditMode;
-    final resolvedIcon = cleanIconName('construction');
     final btnClasses = 'toolbar-btn ${isWhiteSelected ? 'active' : ''}';
     return button(
         classes: btnClasses,
@@ -643,14 +641,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         },
         [
           div(classes: 'toolbar-icon-wrapper', [
-            span(
-                classes: 'material-symbols-outlined',
-                attributes: {
-                  'style': isWhiteSelected
-                      ? "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                      : "font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
-                },
-                [Component.text(resolvedIcon)]
+            img(
+                src: 'assets/social_toolbar/edit.svg',
+                attributes: const {
+                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+                }
             )
           ]),
           span(classes: 'toolbar-label', [Component.text('edit')])
@@ -679,18 +674,18 @@ class _SocialToolbarState extends State<SocialToolbar> {
         title = "Raw OCR Text";
         inner = RawTextPanel(imageId: imageId);
         break;
-      case BonusRowType.editText: // FIXED: Uses matching editText enum name
+      case BonusRowType.editText:
       case BonusRowType.linkedText:
         title = "";
         inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:
         title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false); // ALWAYS reader mode from main toolbar
+        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false);
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: false); // ALWAYS reader mode from main toolbar
+        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: false);
         break;
       case BonusRowType.credits:
         title = "Creators";
@@ -735,18 +730,18 @@ class _SocialToolbarState extends State<SocialToolbar> {
         title = "Raw OCR Text";
         inner = RawTextPanel(imageId: imageId);
         break;
-      case BonusRowType.editText: // FIXED: Map to matching editText enum key
+      case BonusRowType.editText:
       case BonusRowType.linkedText:
         title = "";
         inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId ?? '');
         break;
       case BonusRowType.entities:
         title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: true); // ALWAYS edit mode from settings sub-toolbar
+        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: true);
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: true); // ALWAYS edit mode from settings sub-toolbar
+        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: true);
         break;
       case BonusRowType.credits:
         title = "Creators";
