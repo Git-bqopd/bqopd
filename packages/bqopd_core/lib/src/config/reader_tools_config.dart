@@ -147,7 +147,7 @@ class ReaderToolsConfig {
     ),
     // 13. Terminal (Terminal)
     ReaderTool(
-      id: 'terminal',
+      id: 'Terminal',
       label: 'terminal',
       description: 'Enter the terminal.',
       defaultIcon: 'assets/social_toolbar/terminal.svg',
