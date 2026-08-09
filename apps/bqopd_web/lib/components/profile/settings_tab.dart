@@ -6,6 +6,7 @@ import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 import '../../utils/icon_utils.dart';
 import '../editor/modals/confirm_modal.dart';
+import '../social_toolbar.dart'; // Import SocialToolbar component
 
 /// Unified utility to normalize handles consistently across settings, curator, and entities directory.
 String normalizeHandle(String input) {
@@ -42,6 +43,11 @@ class ProfileSettingsTab extends StatefulComponent {
 class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   int _activeSubTab = 0; // 0: shortcodes, 1: managed profiles, 2: permissions, 3: social buttons
   Map<String, bool> _socialButtonVisibility = {};
+
+  // Active bonus row states for the top live preview toolbars
+  BonusRowType? _previewReaderBonusRow;
+  BonusRowType? _previewCuratorBonusRow;
+  BonusRowType? _previewEditorBonusRow;
 
   // Active matrix feature/question column filters
   final Set<String> _activeMatrixColumns = {'position', 'reader', 'maker'};
@@ -401,6 +407,114 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   Component _buildSocialButtonsSettingsView() {
     return div(
         [
+          // TOP SECTION: Live Toolbar Previews for FanzineReaderPage, FanzineCurator, and FanzineEditor
+          div(
+              classes: 'flex-col gap-4 w-full mb-6 pb-6 border-b border-gray-200',
+              attributes: const {
+                'style': 'display: flex; flex-direction: column; gap: 16px; width: 100%; border-bottom: 2px solid #e5e7eb; padding-bottom: 24px;'
+              },
+              [
+                // 1. FanzineReaderPage Preview
+                div(
+                    classes: 'flex-col gap-2 w-full',
+                    attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
+                    [
+                      span(
+                          [text("FanzineReaderPage")],
+                          attributes: const {
+                            'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
+                          }
+                      ),
+                      div(
+                          classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
+                          attributes: const {'style': 'background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box;'},
+                          [
+                            SocialToolbar(
+                              imageId: 'preview_reader',
+                              fanzineType: 'ingested',
+                              isEditingMode: false,
+                              onOpenGrid: () {},
+                              activeBonusRow: _previewReaderBonusRow,
+                              onToggleBonusRow: (row) {
+                                setState(() {
+                                  _previewReaderBonusRow = (_previewReaderBonusRow == row) ? null : row;
+                                });
+                              },
+                              likedImageIds: const {},
+                            )
+                          ]
+                      )
+                    ]
+                ),
+
+                // 2. FanzineCurator Preview
+                div(
+                    classes: 'flex-col gap-2 w-full',
+                    attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
+                    [
+                      span(
+                          [text("FanzineCurator")],
+                          attributes: const {
+                            'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
+                          }
+                      ),
+                      div(
+                          classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
+                          attributes: const {'style': 'background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box;'},
+                          [
+                            SocialToolbar(
+                              imageId: 'preview_curator',
+                              fanzineType: 'ingested',
+                              isEditingMode: true,
+                              onOpenGrid: () {},
+                              activeBonusRow: _previewCuratorBonusRow,
+                              onToggleBonusRow: (row) {
+                                setState(() {
+                                  _previewCuratorBonusRow = (_previewCuratorBonusRow == row) ? null : row;
+                                });
+                              },
+                              likedImageIds: const {},
+                            )
+                          ]
+                      )
+                    ]
+                ),
+
+                // 3. FanzineEditor Preview
+                div(
+                    classes: 'flex-col gap-2 w-full',
+                    attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
+                    [
+                      span(
+                          [text("FanzineEditor")],
+                          attributes: const {
+                            'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
+                          }
+                      ),
+                      div(
+                          classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
+                          attributes: const {'style': 'background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box;'},
+                          [
+                            SocialToolbar(
+                              imageId: 'preview_editor',
+                              fanzineType: 'folio',
+                              isEditingMode: true,
+                              onOpenGrid: () {},
+                              activeBonusRow: _previewEditorBonusRow,
+                              onToggleBonusRow: (row) {
+                                setState(() {
+                                  _previewEditorBonusRow = (_previewEditorBonusRow == row) ? null : row;
+                                });
+                              },
+                              likedImageIds: const {},
+                            )
+                          ]
+                      )
+                    ]
+                ),
+              ]
+          ),
+
           // 1. Selectable Chips Row (Feature / Option Column Toggles)
           div(
             classes: 'flex-col gap-2 w-full mb-4',
