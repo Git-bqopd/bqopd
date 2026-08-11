@@ -59,7 +59,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
   void didUpdateComponent(FanzineHeader oldComponent) {
     super.didUpdateComponent(oldComponent);
     // Reactively re-resolve the display url if authentication state settles
-    if (oldComponent.authState != component.authState) {       _resolveDisplayUrl();     }
+    if (oldComponent.authState != component.authState) {
+      _resolveDisplayUrl();
+    }
   }
 
   Future<void> _resolveDisplayUrl() async {
@@ -81,7 +83,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
         final data = jsonDecode(res);
         if (data['exists']) {
           final String handle = data['data']['username'] ?? 'archival';
-          final resolvedUrl = 'bqopd.com/$handle';
+          final resolvedUrl = 'bqopd.com/@$handle';
           if (mounted) {
             setState(() {
               _displayUrl = resolvedUrl;
@@ -118,10 +120,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               _error = null;
             });
           } else {
-            // Navigate directly to the resolved handle/shortlink (e.g. '/kevin')
-            // instead of using the generic '/profile' path.
+            // Navigate directly to the resolved @handle (e.g. '/@kevin')
             if (_username != null && _username!.isNotEmpty) {
-              Router.of(context).push('/$_username');
+              Router.of(context).push('/@$_username');
             } else {
               Router.of(context).push('/profile');
             }
@@ -155,7 +156,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
       ]);
     }
 
-    final indiciaText = component.fanzineData?['masterIndicia'] ?? "  2026 BQOPD Collective.";
+    final indiciaText = component.fanzineData?['masterIndicia'] ?? "© 2026 BQOPD Collective.";
     final creators = component.fanzineData?['masterCreators'] as List? ?? [];
 
     final stickerView = div(
@@ -237,13 +238,13 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     return div(
         key: ValueKey(key),
         classes: 'white-sticker',
-        attributes: {
+        attributes: const {
           'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
         },
         [
           button(
               classes: 'close-btn',
-              attributes: {
+              attributes: const {
                 'style': 'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 24px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none;'
               },
               events: {
@@ -257,19 +258,19 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           ),
           img(
               src: 'assets/logo200.gif',
-              attributes: {
+              attributes: const {
                 'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
               }
           ),
           div(
-              attributes: {
+              attributes: const {
                 'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
               },
               [text('bqopd')]
           ),
           div(
               classes: 'flex-col w-full',
-              attributes: {
+              attributes: const {
                 'style': 'display: flex; flex-direction: column; width: 100%; gap: 10px;'
               },
               [
@@ -293,7 +294,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 ),
                 button(
                     classes: 'btn-primary',
-                    attributes: {
+                    attributes: const {
                       'style': 'width: 100%; padding: 12px; background-color: #8e8e8e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; margin-top: 4px;'
                     },
                     events: {
@@ -319,19 +320,19 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           if (_error != null)
             p(
                 classes: 'error-msg',
-                attributes: {
+                attributes: const {
                   'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
                 },
                 [text(_error!)]
             ),
           div(
-              attributes: {
+              attributes: const {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
               },
               [
                 text('not cool yet? '),
                 span(
-                    attributes: {
+                    attributes: const {
                       'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
                     },
                     events: {
@@ -353,13 +354,13 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     return div(
         key: ValueKey(key),
         classes: 'white-sticker',
-        attributes: {
+        attributes: const {
           'style': 'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
         },
         [
           button(
               classes: 'close-btn',
-              attributes: {
+              attributes: const {
                 'style': 'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 24px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none;'
               },
               events: {
@@ -373,19 +374,19 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           ),
           img(
               src: 'assets/logo200.gif',
-              attributes: {
+              attributes: const {
                 'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
               }
           ),
           div(
-              attributes: {
+              attributes: const {
                 'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
               },
               [text('bqopd')]
           ),
           div(
               classes: 'flex-col w-full',
-              attributes: {
+              attributes: const {
                 'style': 'display: flex; flex-direction: column; width: 100%; gap: 10px;'
               },
               [
@@ -418,7 +419,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 ),
                 button(
                     classes: 'btn-primary',
-                    attributes: {
+                    attributes: const {
                       'style': 'width: 100%; padding: 12px; background-color: #8e8e8e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; margin-top: 4px;'
                     },
                     events: {
@@ -444,19 +445,19 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           if (_error != null)
             p(
                 classes: 'error-msg',
-                attributes: {
+                attributes: const {
                   'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
                 },
                 [text(_error!)]
             ),
           div(
-              attributes: {
+              attributes: const {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
               },
               [
                 text('already cool? '),
                 span(
-                    attributes: {
+                    attributes: const {
                       'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
                     },
                     events: {
@@ -486,11 +487,11 @@ class _FanzineHeaderState extends State<FanzineHeader> {
   Component _buildCreatorsTab(List creators) {
     if (creators.isEmpty) return p(classes: 'text-xs text-center text-gray', [text('No creators listed.')]);
     return div(classes: 'creator-list', [
-      div(attributes: {'style': 'display: inline-flex; flex-direction: column; align-items: flex-start;'}, [
+      div(attributes: const {'style': 'display: inline-flex; flex-direction: column; align-items: flex-start;'}, [
         for (var c in creators)
           div(
             classes: 'creator-row',
-            attributes: {'style': 'width: auto;'},
+            attributes: const {'style': 'width: auto;'},
             [
               span(classes: 'creator-role', [text('${c['role']}')]),
               span(classes: 'creator-divider', [text('|')]),

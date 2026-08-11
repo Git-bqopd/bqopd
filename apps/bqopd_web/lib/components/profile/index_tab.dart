@@ -11,11 +11,15 @@ class ProfileIndexTab extends StatefulComponent {
   final String targetUserId;
   final String profileName;
   final IUserRepository userRepository;
+  final String? initialSubTab;
+  final ValueChanged<String>? onSubTabChanged;
 
   const ProfileIndexTab({
     required this.targetUserId,
     required this.profileName,
     required this.userRepository,
+    this.initialSubTab,
+    this.onSubTabChanged,
     super.key,
   });
 
@@ -37,6 +41,7 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   @override
   void initState() {
     super.initState();
+    _resolveActiveSubTab();
 
     // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
     if (kIsWeb) {
@@ -49,9 +54,33 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
     }
   }
 
+  void _resolveActiveSubTab() {
+    if (component.initialSubTab != null) {
+      if (component.initialSubTab == 'comments') {
+        _activeSubTab = 1;
+      } else if (component.initialSubTab == 'mentions') {
+        _activeSubTab = 0;
+      }
+    }
+  }
+
+  String _getSubTabName(int index) {
+    return index == 1 ? 'comments' : 'mentions';
+  }
+
+  void _selectSubTab(int index) {
+    setState(() => _activeSubTab = index);
+    if (component.onSubTabChanged != null) {
+      component.onSubTabChanged!(_getSubTabName(index));
+    }
+  }
+
   @override
   void didUpdateComponent(ProfileIndexTab oldComponent) {
     super.didUpdateComponent(oldComponent);
+    if (oldComponent.initialSubTab != component.initialSubTab) {
+      _resolveActiveSubTab();
+    }
     if ((oldComponent.targetUserId != component.targetUserId || oldComponent.profileName != component.profileName) && kIsWeb) {
       _listenToMentions();
       _listenToComments();
@@ -68,7 +97,6 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   void _listenToMentions() {
     _mentionsSub?.cancel();
     setState(() => _loadingMentions = true);
-
     _mentionsSub = component.userRepository.watchUserMentions(component.targetUserId).listen((mentions) {
       if (mounted) {
         setState(() {
@@ -82,6 +110,7 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   void _listenToComments() {
     _commentsSub?.callAsFunction();
     _commentsSub = null;
+
     setState(() => _loadingComments = true);
 
     _commentsSub = fsListenQuery('artifacts/bqopd/public/data/comments', 'userId', '==', jsonEncode(component.targetUserId), '', false, (String jsonStr) {
@@ -131,6 +160,7 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         [
           for (var w in _mentions)
@@ -159,6 +189,7 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         [
           h2([text("COMMENTS POSTED")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 16px;'}),
@@ -202,7 +233,6 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
       return div([]);
     }
 
-    // Safely auto-route if one of the sub-tabs is hidden
     int activeSubTab = _activeSubTab;
     if (!showMentions) {
       activeSubTab = 1;
@@ -211,27 +241,30 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
     }
 
     final List<Component> subTabSpans = [];
+
     if (showMentions) {
       subTabSpans.add(
           span(
               [text("mentions (${_mentions.length})")],
               classes: activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
               events: {
-                'click': (e) => setState(() => _activeSubTab = 0)
+                'click': (e) => _selectSubTab(0)
               }
           )
       );
     }
+
     if (showMentions && showComments) {
       subTabSpans.add(span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}));
     }
+
     if (showComments) {
       subTabSpans.add(
           span(
               [text("comments (${_comments.length})")],
               classes: activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
               events: {
-                'click': (e) => setState(() => _activeSubTab = 1)
+                'click': (e) => _selectSubTab(1)
               }
           )
       );
@@ -239,14 +272,12 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
 
     return div(
       [
-        // Subtab row selector (always visible if at least one sub-tab is qualified)
         if (subTabSpans.isNotEmpty)
           div(
               subTabSpans,
               classes: 'bg-white rounded-md p-4 shadow-sm',
               attributes: const {'style': 'display: flex; justify-content: center; align-items: center; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
           ),
-
         if (activeSubTab == 0 && showMentions)
           _buildWorksGridSchema()
         else if (activeSubTab == 1 && showComments)
@@ -259,10 +290,8 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
 }
 
 /// Dynamic, self-resolving grid tile for showing mentioned fanzines.
-/// Seamlessly loads the cover image (Page 1) dynamically from pages or images if not cached in gridCoverImage.
 class MentionsWorkGridTile extends StatefulComponent {
   final Map<String, dynamic> fanzineData;
-
   const MentionsWorkGridTile({
     required this.fanzineData,
     super.key,
@@ -316,7 +345,6 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
     }
 
     try {
-      // 1. Query pages subcollection for page number 1 and calculate page total length
       final pagesRes = await fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber');
       final List decodedPages = jsonDecode(pagesRes);
       if (mounted) {
@@ -324,6 +352,7 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
           _pagesCount = decodedPages.length;
         });
       }
+
       if (decodedPages.isNotEmpty) {
         final firstPage = decodedPages.firstWhere((p) => p['data']['pageNumber'] == 1, orElse: () => decodedPages.first);
         final rawData = firstPage['data'];
@@ -338,14 +367,14 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
           return;
         }
       }
-      // 2. Fallback: Query associated master images under this folioContext
+
       final imagesRes = await fsQuery('images', 'folioContext', '==', jsonEncode(fanzineId), '');
       final List decodedImages = jsonDecode(imagesRes);
       if (decodedImages.isNotEmpty) {
         decodedImages.sort((a, b) {
           final aT = a['data']?['timestamp'] ?? 0;
           final bT = b['data']?['timestamp'] ?? 0;
-          return bT.toString().compareTo(bT.toString());
+          return bT.toString().compareTo(aT.toString());
         });
         final firstImgRaw = decodedImages.first['data'];
         final Map<String, dynamic> firstImg = firstImgRaw is Map ? Map<String, dynamic>.from(firstImgRaw) : {};
@@ -362,6 +391,7 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
     } catch (e) {
       print("[MentionsWorkGridTile] Error resolving cover thumbnail: $e");
     }
+
     if (mounted && _resolvedCoverUrl == null) {
       setState(() {
         _resolvedCoverUrl = fallbackUrl;
@@ -388,7 +418,7 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
     return a(
         [
           div(
-              [], // Removed status/type badge to keep the cover preview completely clean as requested!
+              [],
               attributes: {
                 'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
               }

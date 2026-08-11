@@ -64,7 +64,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
             ? textVal
             : "Transcription pending for this page.";
 
-        // Pre-process any image shortcodes into their absolute URLs before parsing!
+        // Pre-process any image shortcodes into their absolute URLs before parsing
         final String fullyResolvedText = await resolveAndReplaceShortcodes(
           component.fanzineId ?? '',
           resolvedText,
@@ -95,15 +95,18 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(textContent);
     final Set<String> uidsToFetch = {};
+
     for (final m in matches) {
       final content = m.group(1) ?? '';
       final parts = content.split('|');
       String? ref;
+
       if (parts.length == 2 && parts[1].contains(':')) {
         ref = parts[1].trim();
       } else if (parts.length >= 3) {
         ref = parts[2].trim();
       }
+
       if (ref != null && ref.startsWith('user:')) {
         final uid = ref.substring(5);
         if (!_loadedProfiles.containsKey(uid)) {
@@ -111,9 +114,12 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         }
       }
     }
+
     if (uidsToFetch.isEmpty) return;
+
     final List<Future<void>> fetches = [];
     final Map<String, Map<String, dynamic>> fetchedProfiles = {};
+
     for (var uid in uidsToFetch) {
       fetches.add(
           fsGetDoc('profiles/$uid').then((res) {
@@ -126,6 +132,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           })
       );
     }
+
     if (fetches.isNotEmpty) {
       await Future.wait(fetches);
       if (mounted) {
@@ -141,11 +148,13 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     final regex = RegExp(r'\[\[(.*?)\]\]');
     int currentIndex = 0;
     final matches = regex.allMatches(textContent);
+
     for (final match in matches) {
       // Add standard text leading up to the entity match
       if (match.start > currentIndex) {
         children.add(Component.text(textContent.substring(currentIndex, match.start)));
       }
+
       final content = match.group(1) ?? '';
       final parts = content.split('|');
       String display = '';
@@ -171,16 +180,16 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           final profile = _loadedProfiles[uid];
           final String? username = profile?['username'];
           if (profile != null && username != null && username.isNotEmpty) {
-            // Rule 1: Connected to an @username handle -> Clickable link and BLACK in Impact
+            // Rule 1: Connected to an @username handle -> Clickable link and BLACK in Impact using /@username
             children.add(a(
-                href: '/$username',
-                attributes: {
+                href: '/@$username',
+                attributes: const {
                   'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
                 },
                 events: {
                   'click': (e) {
                     e.preventDefault();
-                    Router.of(context).push('/$username');
+                    Router.of(context).push('/@$username');
                   }
                 },
                 [Component.text(display)]
@@ -200,7 +209,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
           final encodedAddr = Uri.encodeComponent(addressVal);
           children.add(a(
               href: 'https://www.google.com/maps/search/?api=1&query=$encodedAddr',
-              attributes: {
+              attributes: const {
                 'target': '_blank',
                 'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
               },
@@ -227,18 +236,22 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
             [Component.text(display)]
         ));
       }
+
       currentIndex = match.end;
     }
+
     // Add remaining plain text trailing after final entity
     if (currentIndex < textContent.length) {
       children.add(Component.text(textContent.substring(currentIndex)));
     }
+
     return children;
   }
 
   List<Component> _renderLines(String textContent) {
     final lines = textContent.split('\n');
     final List<Component> lineComponents = [];
+
     // Core layout processing match regular expressions
     final imageRegex = RegExp(r'^\{\{IMAGE(?::\s*(.*?))?\}\}$', caseSensitive: false);
     final headerRegex = RegExp(r'^(#{1,6})\s+(.*)$');
@@ -253,6 +266,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         lineComponents.add(div([], attributes: const {'style': 'height: 16px;'}));
         continue;
       }
+
       final imageMatch = imageRegex.firstMatch(cleanLine);
       final headerMatch = headerRegex.firstMatch(cleanLine);
       final templateMatch = templateRegex.firstMatch(cleanLine);
@@ -276,6 +290,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
 
         String caption = restContent;
         int? targetRow;
+
         final rowMatch = RegExp(r'^row=(\d+)\s*\|\s*(.*)$', caseSensitive: false).firstMatch(restContent);
         if (rowMatch != null) {
           targetRow = int.tryParse(rowMatch.group(1) ?? '');
@@ -335,6 +350,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       } else if (imageMatch != null) {
         final url = imageMatch.group(1)?.trim();
         final finalUrl = (url != null && url.isNotEmpty) ? url : 'https://placehold.co/600x400/png?text=Image+Asset';
+
         lineComponents.add(div([
           img(
               src: finalUrl,
@@ -347,11 +363,12 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         ], attributes: const {'style': 'width: 100%; text-align: center; display: block;'} ));
         currentRow += 8;
       } else if (headerMatch != null) {
-        // --- MATCHED MARKDOWN HEADER BLOCK -> USE IMPACT ---
+        // MATCHED MARKDOWN HEADER BLOCK -> USE IMPACT
         final level = headerMatch.group(1)!.length;
         final content = headerMatch.group(2)!.trim();
         final double headerSize = _fontSize + (4.0 * (7 - level));
         final headingChildren = _parseAndRenderContent(content);
+
         final headingAttributes = {
           'style': 'font-size: ${headerSize}px; '
               'font-family: Impact, Charcoal, "Arial Black", sans-serif; '
@@ -385,7 +402,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         }
         currentRow += 2;
       } else {
-        // --- STANDARD PARAGRAPH BLOCK -> USE ARIAL ---
+        // STANDARD PARAGRAPH BLOCK -> USE ARIAL
         lineComponents.add(p(
             _parseAndRenderContent(cleanLine),
             attributes: {

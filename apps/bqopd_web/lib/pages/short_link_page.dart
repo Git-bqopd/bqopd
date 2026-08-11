@@ -13,7 +13,8 @@ import 'profile_page.dart';
 /// Resolved and pre-rendered matching view utilizing server pre-fetched payloads.
 class ShortLinkPage extends StatefulComponent {
   final String code;
-  final String? pageNumber;
+  final String? param1; // Fanzine pageNumber OR Profile mainTab
+  final String? param2; // Profile subtab
   final AuthState? authState;
   final AuthBloc? authBloc;
   final IUserRepository userRepository;
@@ -21,7 +22,8 @@ class ShortLinkPage extends StatefulComponent {
 
   const ShortLinkPage({
     required this.code,
-    this.pageNumber,
+    this.param1,
+    this.param2,
     required this.authState,
     required this.authBloc,
     required this.userRepository,
@@ -64,7 +66,6 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     try {
       final payload = await ServerFirestoreClient.resolveFullPayload(component.code);
       _preloadedJson = jsonEncode(payload);
-
       if (!kIsWeb) {
         print('[SHORTLINK STATE] Preloading active on server. Injecting raw HTML state immediately.');
         _applyPayload(payload);
@@ -100,8 +101,11 @@ class _ShortLinkPageState extends State<ShortLinkPage>
   @override
   void didUpdateComponent(ShortLinkPage oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.code != component.code && kIsWeb) {
-      print('[SHORTLINK STATE] Code changed to "${component.code}". Re-triggering resolution.');
+    if ((oldComponent.code != component.code ||
+        oldComponent.param1 != component.param1 ||
+        oldComponent.param2 != component.param2) &&
+        kIsWeb) {
+      print('[SHORTLINK STATE] Route params changed for "${component.code}". Re-triggering resolution.');
       _resolveOnClient();
     }
     if (oldComponent.authState?.user?.uid != component.authState?.user?.uid && kIsWeb) {
@@ -165,7 +169,6 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       _status = "Resolving link...";
       _isResolved = false;
     });
-
     try {
       final payload = await ServerFirestoreClient.resolveFullPayload(component.code);
       if (mounted) {
@@ -194,16 +197,12 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     }
 
     if (_targetFanzineId != null) {
-      final initialPage = component.pageNumber != null ? int.tryParse(component.pageNumber!) : null;
-
-      // Auto-detect if this is a temporary, unsaved fanzine from our memory layer
+      final initialPage = component.param1 != null ? int.tryParse(component.param1!) : null;
       final bool isUnsavedTemp = UnsavedFanzineRegistry.fanzines.containsKey(_targetFanzineId);
 
-      // Determine editing permissions
       final currentUid = component.authState?.user?.uid ?? getCurrentUserId();
       final ownerId = _fanzineData?['ownerId'] ?? _fanzineData?['editorId'] ?? '';
       final editors = (_fanzineData?['editors'] as List?)?.map((e) => e.toString()).toList() ?? [];
-
       final bool isOwnerOrEditor = currentUid != null && (currentUid == ownerId || editors.contains(currentUid));
       final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
       final bool isViewerModerator = _viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false);
@@ -212,8 +211,6 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       final bool canEdit = isOwnerOrEditor || isViewerAdmin || isViewerModerator || isViewerCurator;
       final bool isDraft = _fanzineData?['isLive'] != true;
 
-      // Visibility Gate: If the fanzine is set to hidden (isDraft / isLive != true)
-      // and the current visitor does NOT have editor or administrator privileges, block access.
       if (isDraft && !canEdit && !isUnsavedTemp) {
         return div(
             classes: 'flex flex-col items-center justify-center w-full px-4 text-center bg-gray-50',
@@ -238,7 +235,6 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         );
       }
 
-      // Automatically launch directly into edit mode if they are authorized and the fanzine is currently a draft/folio
       final bool shouldEdit = isUnsavedTemp || (canEdit && isDraft);
 
       return FanzineReaderPage(
@@ -250,7 +246,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         preloadedImageStats: _imageStats,
         authState: component.authState,
         authBloc: component.authBloc,
-        isEditingMode: shouldEdit, // Auto-launch directly into the Editor for temporary creations or owner draft works!
+        isEditingMode: shouldEdit,
       );
     }
 
@@ -261,6 +257,8 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         userRepository: component.userRepository,
         engagementRepository: component.engagementRepository,
         userId: _targetUserId,
+        initialTab: component.param1,
+        initialSubTab: component.param2,
       );
     }
 

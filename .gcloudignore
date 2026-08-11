@@ -2,25 +2,19 @@
 .git/
 .gitignore
 
-# Ignore Dart & Flutter build caches and compilation outputs
-.dart_tool/
-build/
-.pub-cache/
-.pub/
+# Ignore Dart & Flutter build caches and compilation outputs recursively
+**/.dart_tool/
+**/build/
+**/.pub-cache/
+**/.pub/
 
 # Ignore platform-specific build folders not needed for compiling the web app
-apps/bqopd_flutter/build/
-apps/bqopd_flutter/android/
-apps/bqopd_flutter/ios/
-apps/bqopd_flutter/windows/
-apps/bqopd_flutter/macos/
-apps/bqopd_flutter/linux/
-apps/bqopd_web/build/
+apps/bqopd_flutter/
 
 # Ignore Python environment and cache folders
 venv/
 .venv/
-/__pycache__/
+**/__pycache__/
 /*.pyc
 
 # Ignore IDE settings

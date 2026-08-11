@@ -5,6 +5,7 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
 
+/// FanzineSticker displays the sticker header with user login/register links and forms.
 class FanzineSticker extends StatefulComponent {
   final AuthState? authState;
 
@@ -27,7 +28,7 @@ class _FanzineStickerState extends State<FanzineSticker> {
   Component build(BuildContext context) {
     final isLoggedIn = component.authState?.status == AuthStatus.authenticated;
     final username = component.authState?.user?.email?.split('@').first ?? 'guest';
-    final linkText = isLoggedIn ? 'bqopd.com/$username' : 'Login / Register';
+    final linkText = isLoggedIn ? 'bqopd.com/@$username' : 'Login / Register';
 
     if (isLoggedIn) {
       _showLogin = false;

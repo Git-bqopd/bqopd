@@ -16,6 +16,8 @@ class ProfileMakerTab extends StatefulComponent {
   final bool canSeeDrafts;
   final IUserRepository userRepository;
   final AuthState? authState;
+  final String? initialSubTab;
+  final ValueChanged<String>? onSubTabChanged;
 
   const ProfileMakerTab({
     required this.targetUserId,
@@ -23,6 +25,8 @@ class ProfileMakerTab extends StatefulComponent {
     required this.canSeeDrafts,
     required this.userRepository,
     this.authState,
+    this.initialSubTab,
+    this.onSubTabChanged,
     super.key,
   });
 
@@ -46,6 +50,12 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   @override
   void initState() {
     super.initState();
+    if (component.initialSubTab == 'drafts') {
+      _showDrafts = true;
+    } else if (component.initialSubTab == 'published') {
+      _showDrafts = false;
+    }
+
     // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
     if (kIsWeb) {
       Future.microtask(() {
@@ -59,6 +69,13 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   @override
   void didUpdateComponent(ProfileMakerTab oldComponent) {
     super.didUpdateComponent(oldComponent);
+    if (oldComponent.initialSubTab != component.initialSubTab) {
+      if (component.initialSubTab == 'drafts') {
+        _showDrafts = true;
+      } else if (component.initialSubTab == 'published') {
+        _showDrafts = false;
+      }
+    }
     if (oldComponent.targetUserId != component.targetUserId && kIsWeb) {
       _listenToWorks();
     }
@@ -68,6 +85,13 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   void dispose() {
     _worksSub?.cancel();
     super.dispose();
+  }
+
+  void _selectDraftMode(bool showDrafts) {
+    setState(() => _showDrafts = showDrafts);
+    if (component.onSubTabChanged != null) {
+      component.onSubTabChanged!(showDrafts ? 'drafts' : 'published');
+    }
   }
 
   void _listenToWorks() {
@@ -128,23 +152,28 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   Future<String> _generateUniqueTempShortcode() async {
     final String? email = component.authState?.user?.email;
     final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
     bool isUnique = false;
     String code = "";
     int retries = 0;
+
     while (!isUnique && retries < 15) {
       final String candidate = useVanity
           ? ShortcodeGenerator.generateVanityCode()
           : ShortcodeGenerator.generateStandardCode();
+
       final String codeUpper = candidate.toUpperCase();
       final docRes = await fsGetDoc('shortcodes/$codeUpper');
       final Map<String, dynamic> doc = jsonDecode(docRes);
       final isLocalCollision = UnsavedFanzineRegistry.hasCode(candidate);
+
       if (doc['exists'] != true && !isLocalCollision) {
         isUnique = true;
         code = candidate;
       }
       retries++;
     }
+
     if (code.isEmpty) {
       code = 'TEMP_${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
     }
@@ -155,6 +184,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     try {
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = await _generateUniqueTempShortcode();
+
       final newFanzine = Fanzine(
         id: fanzineId,
         title: 'new folio name',
@@ -166,6 +196,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         twoPage: true,
         hasCover: true,
       );
+
       UnsavedFanzineRegistry.add(newFanzine, []);
       setState(() => _showMakerModal = false);
       Router.of(context).replace('/$shortCode');
@@ -178,6 +209,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     try {
       final fanzineId = 'calendar_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = await _generateUniqueTempShortcode();
+
       final newFanzine = Fanzine(
         id: fanzineId,
         title: 'Convention Calendar 2026',
@@ -189,12 +221,15 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         twoPage: true,
         hasCover: true,
       );
+
       final page1Id = 'page1_${DateTime.now().millisecondsSinceEpoch}';
       final page2Id = 'page2_${DateTime.now().millisecondsSinceEpoch}';
+
       final List<FanzinePage> pages = [
         FanzinePage(id: page1Id, pageNumber: 1, templateId: 'calendar_left', status: 'ready'),
         FanzinePage(id: page2Id, pageNumber: 2, templateId: 'calendar_right', status: 'ready'),
       ];
+
       UnsavedFanzineRegistry.add(newFanzine, pages);
       setState(() => _showMakerModal = false);
       Router.of(context).replace('/$shortCode');
@@ -245,7 +280,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             div(
                 [
                   button(
-                      [text('X')],
+                      [text('×')],
                       classes: 'modal-close-btn',
                       attributes: const {'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'},
                       events: {'click': (e) => setState(() => _showMakerModal = false)}
@@ -259,7 +294,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             div(
                 [
                   button(
-                      [text('X')],
+                      [text('×')],
                       classes: 'modal-close-btn',
                       attributes: const {'style': 'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'},
                       events: {'click': (e) => setState(() => _showMakerModal = false)}
@@ -284,7 +319,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   }
 
   /// Renders a design-consistent modal overlay to confirm destructive folio deletions
-  /// without using browser native alert or confirm popup systems.
   Component _buildDeleteConfirmModal() {
     return div(
         classes: 'global-modal-overlay',
@@ -319,6 +353,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
                               _pendingDeleteId = null;
                               _pendingDeleteShortcode = null;
                             });
+
                             if (fid != null) {
                               await fsDeleteDoc('fanzines/$fid');
                               if (sc != null && sc.isNotEmpty) {
@@ -342,6 +377,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (works.isEmpty) {
       return div(
         [
@@ -351,6 +387,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         [
           for (var w in works)
@@ -369,14 +406,18 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     final String issue = w['issue'] ?? '';
     final String wholeNumber = w['wholeNumber'] ?? '';
     final String shortCode = w['shortCode'] ?? '';
+
     String displaySuffix = '';
     if (volume.isNotEmpty) displaySuffix += " Vol. $volume";
     if (issue.isNotEmpty) displaySuffix += " No. $issue";
     if (wholeNumber.isNotEmpty) displaySuffix += " ($wholeNumber)";
+
     final String coverUrl = w['gridCoverImage'] ?? (w['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio');
+
     final String codeKey = w['shortCode'] ?? fanzineId;
+
     return a(
         [
           div(
@@ -433,6 +474,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     return div(
       [
         // Toolbar switch published / drafts
@@ -456,7 +498,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
                         [text("published")],
                         classes: !_showDrafts ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
                         events: {
-                          'click': (e) => setState(() => _showDrafts = false)
+                          'click': (e) => _selectDraftMode(false)
                         }
                     ),
                     if (component.canSeeDrafts) ...[
@@ -465,7 +507,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
                           [text("drafts")],
                           classes: _showDrafts ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
                           events: {
-                            'click': (e) => setState(() => _showDrafts = true)
+                            'click': (e) => _selectDraftMode(true)
                           }
                       ),
                     ]
@@ -476,9 +518,12 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             classes: 'bg-white rounded-md p-4 shadow-sm flex-row items-center justify-center',
             attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 12px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
         ),
+
         _buildWorksGridSchema(_showDrafts ? _draftWorks : _publishedWorks),
+
         if (_showMakerModal)
           _buildMakerModalOverlay(),
+
         if (_pendingDeleteId != null)
           _buildDeleteConfirmModal()
       ],

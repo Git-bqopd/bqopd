@@ -1,0 +1,11 @@
+/.git/
+/.dart_tool/
+/build/
+/.pub-cache/
+/.pub/
+apps/bqopd_flutter/
+.idea/
+.vscode/
+*.iml
+**/.dart_tool/
+**/build/

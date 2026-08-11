@@ -261,16 +261,19 @@ class ServerFirestoreClient {
   }
 
   /// CLIENT-SIDE OPTIMIZATION:
-  /// Uses the Firebase JS SDK via interop to fire parallel Websocket queries.
+  /// Uses the Firebase JS SDK via interop to fire targeted, fast-path queries.
   static Future<Map<String, dynamic>> _resolveViaJsSdk(String code) async {
     final payload = <String, dynamic>{};
     try {
-      final String codeUpper = code.toUpperCase();
-      final String codeLower = code.toLowerCase();
+      final String cleanCode = Uri.decodeComponent(code).trim();
+      final bool isUserRoute = cleanCode.startsWith('@');
+      final String handle = isUserRoute ? cleanCode.substring(1) : cleanCode;
+      final String codeUpper = handle.toUpperCase();
+      final String codeLower = handle.toLowerCase();
 
       // INTERCEPT FIRST: Check local temporary unsaved fanzines in client memory!
-      if (UnsavedFanzineRegistry.hasCode(code)) {
-        final fz = UnsavedFanzineRegistry.getByCode(code)!;
+      if (!isUserRoute && UnsavedFanzineRegistry.hasCode(cleanCode)) {
+        final fz = UnsavedFanzineRegistry.getByCode(cleanCode)!;
         payload['targetFanzineId'] = fz.id;
         payload['status'] = 'fanzine';
         payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData({
@@ -320,48 +323,58 @@ class ServerFirestoreClient {
         return payload;
       }
 
-      final lookupResults = await Future.wait([
-        fsGetDoc('shortcodes/$codeUpper'),
-        fsGetDoc('usernames/$codeLower')
-      ]);
-
-      final Map<String, dynamic> scDoc = jsonDecode(lookupResults[0]);
-      final Map<String, dynamic> unDoc = jsonDecode(lookupResults[1]);
-
-      if (scDoc['exists'] == true) {
-        final data = scDoc['data'] as Map<String, dynamic>? ?? {};
-        if (data['type'] == 'fanzine') {
-          payload['targetFanzineId'] = data['contentId'];
-          payload['status'] = 'fanzine';
-        } else if (data['type'] == 'user') {
-          payload['targetUserId'] = data['contentId'];
+      if (isUserRoute) {
+        // FAST-PATH USER LOOKUP: Direct lookup on usernames doc
+        final unRes = await fsGetDoc('usernames/$codeLower');
+        final Map<String, dynamic> unDoc = jsonDecode(unRes);
+        if (unDoc['exists'] == true) {
+          final data = unDoc['data'] as Map<String, dynamic>? ?? {};
+          payload['targetUserId'] = data['uid'];
           payload['status'] = 'user';
+        } else {
+          // Fallback query for profiles collection
+          final prRes = await fsQuery('profiles', 'username', '==', jsonEncode(codeLower), '');
+          final List prDocs = jsonDecode(prRes);
+          if (prDocs.isNotEmpty) {
+            final firstDoc = prDocs.first;
+            payload['targetUserId'] = firstDoc['id'];
+            payload['status'] = 'user';
+          } else {
+            // Check shortcodes for legacy user shortcodes
+            final scRes = await fsGetDoc('shortcodes/$codeUpper');
+            final Map<String, dynamic> scDoc = jsonDecode(scRes);
+            if (scDoc['exists'] == true) {
+              final data = scDoc['data'] as Map<String, dynamic>? ?? {};
+              if (data['type'] == 'user') {
+                payload['targetUserId'] = data['contentId'];
+                payload['status'] = 'user';
+              }
+            }
+          }
         }
-      }
-
-      if (payload.isEmpty && unDoc['exists'] == true) {
-        final data = unDoc['data'] as Map<String, dynamic>? ?? {};
-        payload['targetUserId'] = data['uid'];
-        payload['status'] = 'user';
-      }
-
-      if (payload.isEmpty) {
-        final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(code), '');
-        final List fzDocs = jsonDecode(fzRes);
-        if (fzDocs.isNotEmpty) {
-          final firstDoc = fzDocs.first;
-          payload['targetFanzineId'] = firstDoc['id'];
-          payload['status'] = 'fanzine';
+      } else {
+        // FAST-PATH FANZINE LOOKUP: Direct lookup on shortcodes doc
+        final scRes = await fsGetDoc('shortcodes/$codeUpper');
+        final Map<String, dynamic> scDoc = jsonDecode(scRes);
+        if (scDoc['exists'] == true) {
+          final data = scDoc['data'] as Map<String, dynamic>? ?? {};
+          if (data['type'] == 'fanzine') {
+            payload['targetFanzineId'] = data['contentId'];
+            payload['status'] = 'fanzine';
+          } else if (data['type'] == 'user') {
+            payload['targetUserId'] = data['contentId'];
+            payload['status'] = 'user';
+          }
         }
-      }
 
-      if (payload.isEmpty) {
-        final prRes = await fsQuery('profiles', 'username', '==', jsonEncode(codeLower), '');
-        final List prDocs = jsonDecode(prRes);
-        if (prDocs.isNotEmpty) {
-          final firstDoc = prDocs.first;
-          payload['targetUserId'] = firstDoc['id'];
-          payload['status'] = 'user';
+        if (payload.isEmpty) {
+          final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(cleanCode), '');
+          final List fzDocs = jsonDecode(fzRes);
+          if (fzDocs.isNotEmpty) {
+            final firstDoc = fzDocs.first;
+            payload['targetFanzineId'] = firstDoc['id'];
+            payload['status'] = 'fanzine';
+          }
         }
       }
 
@@ -454,63 +467,61 @@ class ServerFirestoreClient {
   }
 
   /// SERVER-SIDE STATIC PRE-RENDERING:
-  /// Uses highly concurrent Future.wait requests to prevent the HTTP waterfall effect.
+  /// Uses targeted REST calls based on `@` route detection.
   static Future<Map<String, dynamic>> _resolveViaRest(String code) async {
     final payload = <String, dynamic>{};
     try {
-      final String codeUpper = code.toUpperCase();
-      final String codeLower = code.toLowerCase();
+      final String cleanCode = Uri.decodeComponent(code).trim();
+      final bool isUserRoute = cleanCode.startsWith('@');
+      final String handle = isUserRoute ? cleanCode.substring(1) : cleanCode;
+      final String codeUpper = handle.toUpperCase();
+      final String codeLower = handle.toLowerCase();
 
-      // 1 & 2. Check shortcodes and usernames in parallel on the server
-      final initialChecks = await Future.wait([
-        getDocument('shortcodes/$codeUpper'),
-        getDocument('usernames/$codeLower'),
-      ]);
-
-      final scDoc = initialChecks[0];
-      final usernameDoc = initialChecks[1];
-
-      if (scDoc != null) {
-        final type = scDoc['type'] ?? 'fanzine';
-        if (type == 'user') {
-          payload['targetUserId'] = scDoc['contentId'];
+      if (isUserRoute) {
+        // FAST-PATH USER LOOKUP (REST)
+        final usernameDoc = await getDocument('usernames/$codeLower');
+        if (usernameDoc != null) {
+          payload['targetUserId'] = usernameDoc['uid'];
           payload['status'] = 'user';
+          print('[RESOLVE REST] Successfully mapped "@$handle" to target User ID: "${usernameDoc['uid']}"');
         } else {
-          payload['targetFanzineId'] = scDoc['contentId'];
-          payload['status'] = 'fanzine';
+          final profileDocs = await runQuery(collectionId: 'profiles', fieldPath: 'username', value: codeLower);
+          if (profileDocs.isNotEmpty) {
+            payload['targetUserId'] = profileDocs.first['id'];
+            payload['status'] = 'user';
+            print('[RESOLVE REST] Query matched "@$handle". Target ID: "${profileDocs.first['id']}"');
+          } else {
+            final scDoc = await getDocument('shortcodes/$codeUpper');
+            if (scDoc != null && scDoc['type'] == 'user') {
+              payload['targetUserId'] = scDoc['contentId'];
+              payload['status'] = 'user';
+            }
+          }
         }
-        print('[RESOLVE REST] Successfully mapped code "$code" (type: $type) to contentId: "${scDoc['contentId']}"');
-      }
-
-      if (payload.isEmpty && usernameDoc != null) {
-        payload['targetUserId'] = usernameDoc['uid'];
-        payload['status'] = 'user';
-        print('[RESOLVE REST] Successfully mapped code "$code" to target User ID: "${usernameDoc['uid']}"');
-      }
-
-      // 3 & 4. If direct lookups failed, query fanzines and profiles concurrently
-      if (payload.isEmpty) {
-        print('[RESOLVE REST] Direct document lookup failed. Running structured fallback query matching...');
-        final queryChecks = await Future.wait([
-          runQuery(collectionId: 'fanzines', fieldPath: 'shortCode', value: code),
-          runQuery(collectionId: 'profiles', fieldPath: 'username', value: codeLower),
-        ]);
-
-        final fzDocs = queryChecks[0];
-        final profileDocs = queryChecks[1];
-
-        if (fzDocs.isNotEmpty) {
-          payload['targetFanzineId'] = fzDocs.first['id'];
-          payload['status'] = 'fanzine';
-          print('[RESOLVE REST] Structured query successfully matched fanzine shortcode. Target ID: "${fzDocs.first['id']}"');
-        } else if (profileDocs.isNotEmpty) {
-          payload['targetUserId'] = profileDocs.first['id'];
-          payload['status'] = 'user';
-          print('[RESOLVE REST] Structured query successfully matched profile username. Target ID: "${profileDocs.first['id']}"');
+      } else {
+        // FAST-PATH FANZINE LOOKUP (REST)
+        final scDoc = await getDocument('shortcodes/$codeUpper');
+        if (scDoc != null) {
+          final type = scDoc['type'] ?? 'fanzine';
+          if (type == 'user') {
+            payload['targetUserId'] = scDoc['contentId'];
+            payload['status'] = 'user';
+          } else {
+            payload['targetFanzineId'] = scDoc['contentId'];
+            payload['status'] = 'fanzine';
+          }
+          print('[RESOLVE REST] Successfully mapped code "$cleanCode" (type: $type) to contentId: "${scDoc['contentId']}"');
+        } else {
+          final fzDocs = await runQuery(collectionId: 'fanzines', fieldPath: 'shortCode', value: cleanCode);
+          if (fzDocs.isNotEmpty) {
+            payload['targetFanzineId'] = fzDocs.first['id'];
+            payload['status'] = 'fanzine';
+            print('[RESOLVE REST] Query matched fanzine shortcode. Target ID: "${fzDocs.first['id']}"');
+          }
         }
       }
 
-      // 5. If we resolved a fanzine target, pre-fetch pages
+      // Pre-fetch fanzine pages if target was resolved
       if (payload['targetFanzineId'] != null) {
         final String fanzineId = payload['targetFanzineId'];
         print('[RESOLVE REST] Gathering fanzine data and page matrices for ID: "$fanzineId"');

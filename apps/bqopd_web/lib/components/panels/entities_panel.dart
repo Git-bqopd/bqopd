@@ -104,11 +104,13 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
             final canonical = parts[0].trim();
             String? ref;
+
             if (parts.length == 2 && parts[1].contains(':')) {
               ref = parts[1].trim();
             } else if (parts.length >= 3) {
               ref = parts[2].trim();
             }
+
             final key = canonical.toLowerCase();
             // If the entity doesn't exist yet OR has a more complete reference, insert/upgrade it
             if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
@@ -116,6 +118,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
             }
           }
         }
+
         setState(() {
           _entities = uniqueEntities.values.toList();
           _loading = false;
@@ -141,6 +144,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   Future<void> _loadEntityProfiles(List<EntityLink> links) async {
     final Map<String, Map<String, dynamic>> tempProfiles = {};
     final List<Future<void>> fetches = [];
+
     for (var link in links) {
       if (link.ref != null && link.ref!.startsWith('user:')) {
         final uid = link.ref!.substring(5);
@@ -157,6 +161,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         }
       }
     }
+
     if (fetches.isNotEmpty) {
       await Future.wait(fetches);
       if (mounted) {
@@ -172,6 +177,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
     setState(() {
       _suggestedHandle = null;
     });
+
     final String label = entity.label;
     final String handle = _normalize(label);
 
@@ -199,6 +205,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       try {
         final imagesRes = await fsQuery('images', 'usedInFanzines', 'array-contains', jsonEncode(component.fanzineId), '');
         final List decodedImages = jsonDecode(imagesRes);
+
         for (var imgDoc in decodedImages) {
           final Map<String, dynamic> imgData = imgDoc['data'] as Map<String, dynamic>? ?? {};
           final String textLinked = imgData['text_linked'] ?? '';
@@ -275,7 +282,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           final uid = entity.ref!.substring(5);
           final String? username = _loadedProfiles[uid]?['username'];
           if (username != null && username.isNotEmpty) {
-            Router.of(context).push('/$username');
+            Router.of(context).push('/@$username');
           }
         } else if (entity.ref!.startsWith('address:')) {
           final addressVal = entity.ref!.substring(8);
@@ -301,7 +308,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
 
     try {
       String replacement = '';
-
       if (_entityType == 'place') {
         final cleanAddress = _addressInput.trim();
         if (cleanAddress.isEmpty) {
@@ -311,7 +317,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           });
           return;
         }
-
         final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
         final parts = content.split('|');
 
@@ -339,8 +344,8 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           });
           return;
         }
-        final targetUid = result['uid'];
 
+        final targetUid = result['uid'];
         final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
         final parts = content.split('|');
 
@@ -352,7 +357,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           replacement = "[[${entity.label}|user:$targetUid]]";
         }
 
-        // Register uppercase shortcode mappings to guarantee routing path matches
         if (component.fanzineId != null) {
           await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode({
             'draftEntities': WebFieldValue.arrayUnion([entity.label])
@@ -373,6 +377,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         _modalSaving = false;
         _modalError = null;
       });
+
       _loadTextData();
     } catch (e) {
       setState(() {
@@ -385,10 +390,12 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   Future<void> _unlinkEntity() async {
     final entity = _editingEntity;
     if (entity == null || _modalSaving) return;
+
     setState(() {
       _modalSaving = true;
       _modalError = null;
     });
+
     try {
       final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
       final parts = content.split('|');
@@ -412,6 +419,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         _modalSaving = false;
         _modalError = null;
       });
+
       _loadTextData();
     } catch (e) {
       setState(() {
@@ -434,12 +442,14 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
       );
     }
+
     if (_entities.isEmpty) {
       return div(
         [text('No entity links found in page text.')],
         classes: 'p-6 text-center text-gray italic text-xs',
       );
     }
+
     return div(
       [
         for (var entity in _entities)
@@ -455,9 +465,9 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   Component _buildEntityCard(EntityLink entity) {
     final bool isAddress = entity.ref != null && entity.ref!.startsWith('address:');
     final String? normalizedAddress = isAddress ? entity.ref!.substring(8) : null;
-
     final String? uid = entity.ref != null && entity.ref!.startsWith('user:') ? entity.ref!.substring(5) : null;
     final Map<String, dynamic>? profile = uid != null ? _loadedProfiles[uid] : null;
+
     final bool isLinked = profile != null || isAddress;
     final String labelText = profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
     final String? subtitleText = isAddress ? normalizedAddress : (profile != null ? '@${profile['username']}' : null);
@@ -533,7 +543,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                             ],
                             attributes: const {'style': 'font-size: 12px; color: #555; line-height: 1.4; margin: 0;'}
                         ),
-
                         // Toggle Segmented Button for Person vs Place
                         div(
                           attributes: const {
@@ -586,7 +595,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                             ),
                           ],
                         ),
-
                         // Dynamic inputs depending on entityType selected
                         if (_entityType == 'person')
                           div(
@@ -650,7 +658,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                             classes: 'flex-col w-full mt-4',
                             attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'},
                           ),
-
                         if (_modalError != null)
                           p([text(_modalError!)], classes: 'error-msg mt-2', attributes: const {'style': 'font-size: 11px; margin-top: 4px; color: #ef4444;'})
                       ],

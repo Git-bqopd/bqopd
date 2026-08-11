@@ -6,7 +6,7 @@ import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 import '../../utils/icon_utils.dart';
 import '../editor/modals/confirm_modal.dart';
-import '../social_toolbar.dart'; // Import SocialToolbar component
+import '../social_toolbar.dart';
 
 /// Unified utility to normalize handles consistently across settings, curator, and entities directory.
 String normalizeHandle(String input) {
@@ -24,15 +24,19 @@ class ProfileSettingsTab extends StatefulComponent {
   final bool isMe;
   final IUserRepository userRepository;
   final int initialSubTab;
-  final ValueChanged<int> onSubTabChanged;
+  final String? initialSubTabName;
+  final ValueChanged<int>? onSubTabChanged;
+  final ValueChanged<String>? onSubTabChangedName;
 
   const ProfileSettingsTab({
     required this.viewerAccount,
     required this.targetUserId,
     required this.isMe,
     required this.userRepository,
-    required this.initialSubTab,
-    required this.onSubTabChanged,
+    this.initialSubTab = 0,
+    this.initialSubTabName,
+    this.onSubTabChanged,
+    this.onSubTabChangedName,
     super.key,
   });
 
@@ -51,7 +55,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
   // Active matrix feature/question column filters
   final Set<String> _activeMatrixColumns = {'position', 'reader', 'maker'};
-
   static const Map<String, String> _matrixColumnLabels = {
     'position': 'position',
     'reader': 'fanzine reader',
@@ -101,9 +104,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   @override
   void initState() {
     super.initState();
-    _activeSubTab = component.initialSubTab;
+    _resolveActiveSubTab();
     _initOrderedTools();
-
     if (component.viewerAccount != null && component.viewerAccount!.preferences.containsKey('socialButtons')) {
       _socialButtonVisibility = Map<String, bool>.from(component.viewerAccount!.preferences['socialButtons']);
     }
@@ -115,6 +117,57 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           _listenToSystemUsers();
         }
       });
+    }
+  }
+
+  void _resolveActiveSubTab() {
+    if (component.initialSubTabName != null) {
+      switch (component.initialSubTabName) {
+        case 'shortcodes':
+          _activeSubTab = 0;
+          break;
+        case 'managed_profiles':
+        case 'managed-profiles':
+        case 'managed':
+          _activeSubTab = 1;
+          break;
+        case 'permissions':
+          _activeSubTab = 2;
+          break;
+        case 'social_buttons':
+        case 'social-buttons':
+        case 'socials':
+          _activeSubTab = 3;
+          break;
+        default:
+          _activeSubTab = component.initialSubTab;
+      }
+    } else {
+      _activeSubTab = component.initialSubTab;
+    }
+  }
+
+  String _getSubTabName(int index) {
+    switch (index) {
+      case 0:
+        return 'shortcodes';
+      case 1:
+        return 'managed_profiles';
+      case 2:
+        return 'permissions';
+      case 3:
+      default:
+        return 'social_buttons';
+    }
+  }
+
+  void _selectSubTab(int index) {
+    setState(() => _activeSubTab = index);
+    if (component.onSubTabChanged != null) {
+      component.onSubTabChanged!(index);
+    }
+    if (component.onSubTabChangedName != null) {
+      component.onSubTabChangedName!(_getSubTabName(index));
     }
   }
 
@@ -148,8 +201,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   @override
   void didUpdateComponent(ProfileSettingsTab oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.initialSubTab != component.initialSubTab) {
-      _activeSubTab = component.initialSubTab;
+    if (oldComponent.initialSubTab != component.initialSubTab || oldComponent.initialSubTabName != component.initialSubTabName) {
+      _resolveActiveSubTab();
     }
     if (oldComponent.targetUserId != component.targetUserId && kIsWeb) {
       _listenToManagedProfiles();
@@ -189,6 +242,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     _managedSub?.callAsFunction();
     _managedSub = null;
     setState(() => _loadingManaged = true);
+
     _managedSub = fsListenQuery('profiles', '', '', '', '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
@@ -198,8 +252,10 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           final String id = d['id'] as String? ?? '';
           if (id.isEmpty) continue;
           data['id'] = id;
+
           final List managers = data['managers'] ?? [];
           final String username = (data['username'] ?? '').toString().trim().toLowerCase();
+
           if (managers.contains(component.targetUserId)) {
             final String key = username.isNotEmpty ? username : id;
             if (!uniqueProfiles.containsKey(key)) {
@@ -225,6 +281,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     _usersSub?.callAsFunction();
     _usersSub = null;
     setState(() => _loadingUsers = true);
+
     _usersSub = fsListenQuery('Users', '', '', '', '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
@@ -233,6 +290,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           data['id'] = d['id'];
           return data;
         }).toList();
+
         if (mounted) {
           setState(() {
             _allSystemUsers = users;
@@ -252,11 +310,13 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _settingsFeedback = "Saving global settings...";
       _isSettingsError = false;
     });
+
     try {
       await fsSetDoc('app_settings/main_settings', jsonEncode({
         'login_zine_shortcode': _loginZineShortcode.trim(),
         'register_zine_shortcode': _registerZineShortcode.trim()
       }), true);
+
       setState(() {
         _settingsFeedback = 'Global settings updated successfully!';
         _isSettingsError = false;
@@ -279,14 +339,17 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       });
       return;
     }
+
     setState(() {
       _isCreatingManagedProfile = true;
       _managedProfileFeedback = "Generating managed profile identity...";
       _isManagedProfileError = false;
     });
+
     try {
       final String baseHandle = normalizeHandle("${_newManagedFirstName.trim()} ${_newManagedLastName.trim()}");
       final String uniqueId = 'managed_${DateTime.now().millisecondsSinceEpoch}';
+
       final publicData = {
         'uid': uniqueId,
         'username': baseHandle,
@@ -301,6 +364,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'followingCount': 0,
         'updatedAt': WebFieldValue.serverTimestamp()
       };
+
       await fsSetDoc('profiles/$uniqueId', jsonEncode(publicData), true);
       await fsSetDoc('usernames/$baseHandle', jsonEncode({
         'uid': uniqueId,
@@ -313,6 +377,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'displayCode': baseHandle,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
+
       setState(() {
         _newManagedFirstName = '';
         _newManagedLastName = '';
@@ -336,17 +401,22 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _managedProfileFeedback = "Deleting managed profile @$username...";
       _isManagedProfileError = false;
     });
+
     try {
       final cleanUsername = username.trim().toLowerCase();
       final profileDocId = id.isNotEmpty ? id : cleanUsername;
+
       final List<Future<void>> deletions = [
         fsDeleteDoc('profiles/$profileDocId'),
       ];
+
       if (cleanUsername.isNotEmpty) {
         deletions.add(fsDeleteDoc('usernames/$cleanUsername'));
         deletions.add(fsDeleteDoc('shortcodes/${cleanUsername.toUpperCase()}'));
       }
+
       await Future.wait(deletions);
+
       setState(() {
         _managedProfileFeedback = "Managed profile @$username deleted successfully.";
         _isManagedProfileError = false;
@@ -365,16 +435,19 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _permissionFeedbackUid = uid;
       _permissionFeedback = "Updating access levels...";
     });
+
     try {
       final bool isCurator = newRole == 'curator' || newRole == 'admin' || newRole == 'moderator';
       await fsUpdateDoc('Users/$uid', jsonEncode({
         'role': newRole,
         'isCurator': isCurator
       }));
+
       await fsUpdateDoc('profiles/$uid', jsonEncode({
         'isCurator': isCurator,
         'isAdmin': newRole == 'admin'
       }));
+
       setState(() {
         _permissionFeedback = "Access privileges saved!";
       });
@@ -389,6 +462,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     if (oldIndex < 0 || oldIndex >= _orderedTools.length) return;
     if (newIndex < 0 || newIndex >= _orderedTools.length) return;
     if (oldIndex == newIndex) return;
+
     setState(() {
       final tool = _orderedTools.removeAt(oldIndex);
       _orderedTools.insert(newIndex, tool);
@@ -403,7 +477,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     }));
   }
 
-  /// Renders selectable chips for feature columns and a matrix grid of cards with toggle switches.
   Component _buildSocialButtonsSettingsView() {
     return div(
         [
@@ -446,7 +519,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                       )
                     ]
                 ),
-
                 // 2. FanzineCurator Preview
                 div(
                     classes: 'flex-col gap-2 w-full',
@@ -479,7 +551,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                       )
                     ]
                 ),
-
                 // 3. FanzineEditor Preview
                 div(
                     classes: 'flex-col gap-2 w-full',
@@ -514,7 +585,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                 ),
               ]
           ),
-
           // 1. Selectable Chips Row (Feature / Option Column Toggles)
           div(
             classes: 'flex-col gap-2 w-full mb-4',
@@ -536,7 +606,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               ),
             ],
           ),
-
           // 2. Matrix Table Header (rendered when columns are selected)
           if (_activeMatrixColumns.isNotEmpty)
             div(
@@ -554,7 +623,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                     )
                 ]
             ),
-
           // 3. Card Rows List / Matrix
           div(
             classes: 'flex-col gap-2 w-full',
@@ -570,7 +638,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     );
   }
 
-  /// Renders an individual column chip toggle for selecting feature/context columns.
   Component _buildColumnChip(String colKey, String label) {
     final bool isSelected = _activeMatrixColumns.contains(colKey);
     return button(
@@ -602,7 +669,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     );
   }
 
-  /// Renders an individual social button row card with grabber or intersection cell switches.
   Component _buildSocialButtonCardRow(ReaderTool tool, int index) {
     final iconPath = tool.defaultIcon;
     final bool isSvgAsset = iconPath.endsWith('.svg') || iconPath.startsWith('assets/');
@@ -636,7 +702,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           }
         },
         [
-          // 1. Social Button Icon Preview (circular border matching reader toolbar)
+          // 1. Social Button Icon Preview
           div(
               attributes: const {
                 'style': 'display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #000; flex-shrink: 0; background-color: #ffffff;'
@@ -679,7 +745,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                 )
               ]
           ),
-          // 3. Cells for each active column (Position grabber or Yes/No switch)
+          // 3. Cells for each active column
           for (var colKey in _activeMatrixColumns)
             div(
                 attributes: const {
@@ -696,7 +762,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     );
   }
 
-  /// Renders a grabber handle cell for drag-and-drop position reordering.
   Component _buildGrabberCell(int index) {
     return div(
         attributes: const {
@@ -712,7 +777,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     );
   }
 
-  /// Renders a switch control inside an intersection matrix cell.
   Component _buildCellSwitch(String toolId, String colKey) {
     final key = '${colKey}_$toolId';
     final bool isEnabled = _socialButtonVisibility[key] ?? _getDefaultToolVisibility(toolId, colKey);
@@ -746,9 +810,11 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     final key = '${colKey}_$toolId';
     final currentVal = _socialButtonVisibility[key] ?? _getDefaultToolVisibility(toolId, colKey);
     final nextVal = !currentVal;
+
     setState(() {
       _socialButtonVisibility[key] = nextVal;
     });
+
     await fsUpdateDoc('Users/${component.targetUserId}', jsonEncode({
       'preferences.socialButtons.$key': nextVal
     }));
@@ -801,7 +867,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                                 span([text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'}),
                                 span([text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'})
                               ],
-                              href: '/${p['username']}',
+                              href: '/@${p['username']}',
                               classes: 'hover:bg-gray-100 transition-all flex-1',
                               attributes: const {
                                 'style': 'display: flex; flex-direction: column; padding: 14px 12px; text-decoration: none;'
@@ -888,12 +954,14 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (_allSystemUsers.isEmpty) {
       return div(
         [p([text('No registered Users loaded.')], classes: 'text-sm text-gray italic')],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         [
           h2([text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
@@ -914,6 +982,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     final String email = u['email'] ?? 'guest';
     final String currentRole = u['role'] ?? 'user';
     final bool isUserActiveInPerm = _permissionFeedbackUid == uid;
+
     return div(
         [
           div(
@@ -961,7 +1030,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   @override
   Component build(BuildContext context) {
     final bool isViewerAdmin = component.viewerAccount?.role == 'admin' || (component.viewerAccount?.roles.contains('admin') ?? false);
-
     final List<Component> subTabs = [];
 
     // 1. Shortcodes segment
@@ -970,10 +1038,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           [text("shortcodes")],
           classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
-            'click': (e) {
-              setState(() => _activeSubTab = 0);
-              component.onSubTabChanged(0);
-            }
+            'click': (e) => _selectSubTab(0)
           }
       ));
     }
@@ -984,10 +1049,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           [text("managed profiles")],
           classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
-            'click': (e) {
-              setState(() => _activeSubTab = 1);
-              component.onSubTabChanged(1);
-            }
+            'click': (e) => _selectSubTab(1)
           }
       ));
     }
@@ -998,10 +1060,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           [text("permissions")],
           classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
-            'click': (e) {
-              setState(() => _activeSubTab = 2);
-              component.onSubTabChanged(2);
-            }
+            'click': (e) => _selectSubTab(2)
           }
       ));
     }
@@ -1012,10 +1071,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           [text("social buttons")],
           classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
-            'click': (e) {
-              setState(() => _activeSubTab = 3);
-              component.onSubTabChanged(3);
-            }
+            'click': (e) => _selectSubTab(3)
           }
       ));
     }
@@ -1036,7 +1092,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               classes: 'bg-white rounded-md p-4 shadow-sm',
               attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
           ),
-
         if (_activeSubTab == 3)
           _buildSocialButtonsSettingsView()
         else if (_activeSubTab == 1)
@@ -1047,7 +1102,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               _buildPermissionsSettingsView()
             else
               div([]),
-
         if (_pendingDeleteProfileId != null)
           ConfirmModal(
             title: 'Delete Managed Profile?',

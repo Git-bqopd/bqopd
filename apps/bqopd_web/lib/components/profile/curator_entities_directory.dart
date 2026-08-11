@@ -54,7 +54,6 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
 
     for (var fz in component.userWorks) {
       if (fz['isLive'] == true) continue;
-
       final rawEntities = fz['draftEntities'];
       if (rawEntities is List) {
         for (var ent in rawEntities) {
@@ -68,7 +67,6 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
                 entStr.toLowerCase().contains('street') ||
                 entStr.toLowerCase().contains('ave') ||
                 entStr.toLowerCase().contains('road');
-
             entityTypeMap[entStr] = looksLikeAddress ? 'place' : 'person';
           }
         }
@@ -109,7 +107,6 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
               h2([text("CANONICAL ENTITIES DIRECTORY")], attributes: const {'style': 'margin: 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;'}),
               span([text("Manage alternative name aliases, wiki profiles, or normalized address mappings. (showing ${displayedNames.length} of ${filteredNames.length})")], attributes: const {'style': 'font-size: 11px; color: #666;'})
             ]),
-
             // Interactive Sub-filters
             div(
                 attributes: const {'style': 'display: flex; border: 1px solid #ccc; border-radius: 100px; overflow: hidden; background: white;'},
@@ -121,6 +118,7 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
             )
           ],
         ),
+
         table(
           classes: 'stats-table text-left w-full',
           [
@@ -265,6 +263,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
             final rawData = doc['data'];
             final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
             final bool isAlias = data['isAlias'] == true;
+
             setState(() {
               _exists = true;
               _isAlias = isAlias;
@@ -348,13 +347,11 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       };
 
       await fsSetDoc('profiles/$profileId', jsonEncode(profileData), true);
-
       await fsSetDoc('usernames/$handle', jsonEncode({
         'uid': profileId,
         'isManaged': true,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
-
       await fsSetDoc('shortcodes/${handle.toUpperCase()}', jsonEncode({
         'type': 'user',
         'contentId': profileId,
@@ -372,11 +369,10 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   Future<void> _submitPlaceLink() async {
     final cleanAddr = _addressInputText.trim();
     if (cleanAddr.isEmpty) return;
-
     setState(() => _loading = true);
+
     try {
       final handle = normalizeHandle(component.name);
-
       // Store the place alias in our usernames mappings referencing the direct normalized string
       await fsSetDoc('usernames/$handle', jsonEncode({
         'redirect': cleanAddr,
@@ -407,7 +403,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
 
       final checkRes = await fsGetDoc('usernames/$cleanTarget');
       final targetDoc = jsonDecode(checkRes);
-
       if (targetDoc['exists'] != true) {
         setState(() {
           _loading = false;
@@ -493,7 +488,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                   span([text('account_circle')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px;'}),
                   text('@$handle')
                 ],
-                href: '/$handle',
+                href: '/@$handle',
                 classes: 'text-green-600 hover:underline inline-flex items-center',
                 attributes: const {'style': 'font-size: 12px; font-weight: bold; color: #16a34a; text-decoration: none;'}
             )

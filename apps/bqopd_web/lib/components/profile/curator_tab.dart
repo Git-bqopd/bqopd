@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:jaspr_router/jaspr_router.dart'; // Standard Jaspr Router
+import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/firebase_mocks.dart';
@@ -12,8 +12,8 @@ import '../../utils/web_shortcode_service.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
 import '../../repositories/repositories.dart';
 import '../editor/modals/confirm_modal.dart';
-import 'curator_upload_helper.dart'; // Server-safe conditional upload utility
-import 'curator_entities_directory.dart'; // Decoupled entities component
+import 'curator_upload_helper.dart';
+import 'curator_entities_directory.dart';
 
 /// Local utility to normalize handles inside the curator scope consistently with settings and database.
 String normalizeHandle(String input) {
@@ -33,10 +33,12 @@ String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
     final year = parts[0];
     final monthInt = parts.length > 1 ? int.tryParse(parts[1]) : null;
     final dayInt = parts.length > 2 ? int.tryParse(parts[2]) : null;
+
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
+
     String result = '';
     if (mode == 'day') {
       if (monthInt != null && monthInt >= 1 && monthInt <= 12) {
@@ -56,6 +58,7 @@ String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
     } else {
       result = year;
     }
+
     if (isGuess) {
       result += '?';
     }
@@ -66,14 +69,17 @@ String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
 }
 
 /// Curator Tab containing review lists, queue allocations, and baseline parameters.
-/// Streams live curator drafts and training images using abstract repositories.
 class ProfileCuratorTab extends StatefulComponent {
   final String targetUserId;
   final IUserRepository userRepository;
+  final String? initialSubTab;
+  final ValueChanged<String>? onSubTabChanged;
 
   const ProfileCuratorTab({
     required this.targetUserId,
     required this.userRepository,
+    this.initialSubTab,
+    this.onSubTabChanged,
     super.key,
   });
 
@@ -85,6 +91,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   // 0: curator, 1: curator list, 2: entities, 3: ai training data
   int _activeSubTab = 0;
   bool _showCatalogModal = false;
+
   List<Map<String, dynamic>> _userWorks = [];
   bool _loadingWorks = true;
   StreamSubscription? _worksSub;
@@ -111,6 +118,8 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   @override
   void initState() {
     super.initState();
+    _resolveActiveSubTab();
+
     // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
     if (kIsWeb) {
       Future.microtask(() {
@@ -122,9 +131,59 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
+  void _resolveActiveSubTab() {
+    if (component.initialSubTab != null) {
+      switch (component.initialSubTab) {
+        case 'curator':
+        case 'queue':
+          _activeSubTab = 0;
+          break;
+        case 'curator_list':
+        case 'curator-list':
+        case 'list':
+          _activeSubTab = 1;
+          break;
+        case 'entities':
+          _activeSubTab = 2;
+          break;
+        case 'ai_training_data':
+        case 'ai-training-data':
+        case 'training':
+          _activeSubTab = 3;
+          break;
+        default:
+          _activeSubTab = 0;
+      }
+    }
+  }
+
+  String _getSubTabName(int index) {
+    switch (index) {
+      case 0:
+        return 'curator';
+      case 1:
+        return 'curator_list';
+      case 2:
+        return 'entities';
+      case 3:
+      default:
+        return 'ai_training_data';
+    }
+  }
+
+  void _selectSubTab(int index) {
+    setState(() => _activeSubTab = index);
+    if (component.onSubTabChanged != null) {
+      component.onSubTabChanged!(_getSubTabName(index));
+    }
+  }
+
   @override
   void didUpdateComponent(ProfileCuratorTab oldComponent) {
     super.didUpdateComponent(oldComponent);
+    if (oldComponent.initialSubTab != component.initialSubTab) {
+      _resolveActiveSubTab();
+    }
     if (oldComponent.targetUserId != component.targetUserId && kIsWeb) {
       _listenToWorks();
     }
@@ -147,11 +206,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     _worksSub?.cancel();
     _worksFirebaseSub?.callAsFunction();
     _worksFirebaseSub = null;
+
     setState(() => _loadingWorks = true);
 
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
 
-    // Query ALL fanzines without complex field orderings to prevent index exceptions
     _worksFirebaseSub = fsListenQuery('fanzines', '', '', '', '', false, (String jsonStr) {
       scheduleMicrotask(() {
         try {
@@ -163,11 +222,10 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             return data;
           }).toList();
 
-          // Sort list manually in memory to conform with Rule 2
           list.sort((a, b) {
             final aT = a['creationDate'] ?? a['createdAt'] ?? '';
             final bT = b['creationDate'] ?? b['createdAt'] ?? '';
-            return bT.toString().compareTo(bT.toString());
+            return bT.toString().compareTo(aT.toString());
           });
 
           if (!controller.isClosed) {
@@ -185,17 +243,14 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           _userWorks = works;
           _loadingWorks = false;
         });
-        // Set up error page observers for draft/ingested zines
         _syncPageErrorObservers(works);
       }
     });
   }
 
-  /// Sets up real-time observers to track how many pages are on error status for each fanzine
   void _syncPageErrorObservers(List<Map<String, dynamic>> works) {
     final activeIds = works.map((w) => w['id'] as String?).where((id) => id != null).cast<String>().toSet();
 
-    // Cancel observers for fanzines no longer present
     final keysToRemove = _fanzinePagesSubscriptions.keys.where((k) => !activeIds.contains(k)).toList();
     for (var key in keysToRemove) {
       _fanzinePagesSubscriptions[key]?.callAsFunction();
@@ -203,7 +258,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       _fanzineErrorCounts.remove(key);
     }
 
-    // Subscribe to new fanzines
     for (var fid in activeIds) {
       if (!_fanzinePagesSubscriptions.containsKey(fid)) {
         _fanzinePagesSubscriptions[fid] = fsListenQuery('fanzines/$fid/pages', '', '', '', '', false, (jsonStr) {
@@ -236,6 +290,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     _trainingSub?.cancel();
     _trainingFirebaseSub?.callAsFunction();
     _trainingFirebaseSub = null;
+
     setState(() => _loadingTraining = true);
 
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
@@ -270,7 +325,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     });
   }
 
-  /// Reads selected PDF from the device, uploads to Storage, and triggers backend ingest.
   void _triggerPdfUpload() {
     if (!kIsWeb) return;
     CuratorUploadHelper.pickAndUploadPdf(
@@ -289,16 +343,13 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           });
         }
         try {
-          // Build storage path
           final String path = 'uploads/raw_pdfs/$fileName';
-          // Execute GCS upload
           await stUpload(path, bytes, 'image/jpeg');
 
           if (mounted) {
             setState(() {
               _uploadStatusMessage = 'PDF Upload complete! Processing backend ingest pipeline...';
             });
-            // Hide progress after short delay
             Future.delayed(const Duration(seconds: 4), () {
               if (mounted) {
                 setState(() {
@@ -336,14 +387,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
-  /// Generates a placeholder Ingested fanzine metadata object directly
   Future _createArchivalFanzine(String userId) async {
     final uid = getCurrentUserId() ?? 'system';
     setState(() => _loadingWorks = true);
     try {
       final fanzineId = 'ingested_${DateTime.now().millisecondsSinceEpoch}';
-
-      // ALIGNED SHORTCODE LOGIC: Matches Maker tab shortcode selection checks & vanity triggers
       final String? email = createAuthRepository().currentUser?.email;
       final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
 
@@ -359,7 +407,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         'editorId': uid,
         'editors': [],
         'isLive': false,
-        'inCurator': true, // Defaults to true
+        'inCurator': true,
         'processingStatus': 'images_ready',
         'creationDate': WebFieldValue.serverTimestamp(),
         'type': 'ingested',
@@ -372,7 +420,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       };
 
       await fsSetDoc('fanzines/$fanzineId', jsonEncode(data), true);
-
       if (mounted) {
         setState(() => _loadingWorks = false);
         Router.of(context).push('/$shortCode');
@@ -397,19 +444,15 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     });
   }
 
-  /// Confirms and deletes a fanzine
   Future _deleteFanzine() async {
     final fid = _pendingDeleteId;
     if (fid == null) return;
-
     setState(() {
       _pendingDeleteId = null;
       _pendingDeleteTitle = null;
       _loadingWorks = true;
     });
-
     try {
-      // 1. Fetch shortcode from fanzine doc to purge
       final docRes = await fsGetDoc('fanzines/$fid');
       final doc = jsonDecode(docRes);
       if (doc['exists'] == true) {
@@ -418,7 +461,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           await fsDeleteDoc('shortcodes/${shortCode.toUpperCase()}');
         }
       }
-      // 2. Clear fanzine record
       await fsDeleteDoc('fanzines/$fid');
       _showToast("Fanzine deleted successfully.");
     } catch (e) {
@@ -428,7 +470,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
-  /// Toggles the 'inCurator' state of a fanzine in Firestore
   Future _toggleInCurator(String fanzineId, bool currentVal) async {
     if (fanzineId.isEmpty) return;
     final bool newVal = !currentVal;
@@ -439,17 +480,12 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
-  /// Helper to determine if a fanzine is curated/owned by the target user profile.
   bool _isCuratedByUser(Map<String, dynamic> w) {
     final owner = w['ownerId'] ?? w['editorId'] ?? w['uploaderId'] ?? '';
     final List editors = w['editors'] ?? [];
-
-    // If it has no owner/editor/uploader, it's a global/system fanzine curated via the Jaspr app ingest pipeline,
-    // meaning we want to show it to the active curator so they can curate it and toggle it.
     if (owner == '' && editors.isEmpty) {
       return true;
     }
-
     return owner == component.targetUserId ||
         editors.contains(component.targetUserId) ||
         w['editorId'] == component.targetUserId ||
@@ -457,49 +493,38 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         owner == 'system';
   }
 
-  /// Helper to check if a fanzine belongs exclusively to the curated / ingested queue.
   bool _isCuratedFanzine(Map<String, dynamic> w) {
     return w['sourceFile'] != null || w['type'] == 'ingested';
   }
 
-  /// Custom comparison logic to sort fanzines based on publishedDate (newest first).
-  /// Falls back smoothly to creation/upload timestamps if publishedDate is empty.
   int _comparePublishedDates(Map<String, dynamic> a, Map<String, dynamic> b) {
     final aDate = a['publishedDate']?.toString() ?? '';
     final bDate = b['publishedDate']?.toString() ?? '';
-
     if (aDate.isEmpty && bDate.isEmpty) {
       final aT = a['creationDate'] ?? a['createdAt'] ?? '';
       final bT = b['creationDate'] ?? b['createdAt'] ?? '';
       return bT.toString().compareTo(aT.toString());
     }
-
-    if (aDate.isEmpty) return 1; // Send unpopulated dates to bottom
-    if (bDate.isEmpty) return -1; // Pull populated dates to top
-
-    return bDate.compareTo(aDate); // Alphabetical comparison works for YYYY-MM-DD descending
+    if (aDate.isEmpty) return 1;
+    if (bDate.isEmpty) return -1;
+    return bDate.compareTo(aDate);
   }
 
-  /// Renders the correct workspace based on the active sub-tab.
-  /// Isolating this helper prevents Jaspr's diffing engine from mismatching stateful elements.
   Component _buildActiveSubTabContent() {
     switch (_activeSubTab) {
       case 0:
-      // curator: shows fanzines where 'inCurator' is true AND is curated by the target user profile
         final list = _userWorks.where((w) {
           return _isCuratedFanzine(w) && _isCuratedByUser(w) && (w['inCurator'] ?? true) == true;
         }).toList();
         list.sort((a, b) => _comparePublishedDates(a, b));
         return _buildWorksGridSchema(list);
       case 1:
-      // curator list: shows all curated fanzines with type == 'ingested' no matter their status
         final list = _userWorks.where((w) {
           return _isCuratedFanzine(w) && _isCuratedByUser(w);
         }).toList();
         list.sort((a, b) => _comparePublishedDates(a, b));
         return _buildCuratorListSubView(list);
       case 2:
-      // entities: shows entities from fanzines curated by this profile where 'inCurator' is true
         final filteredWorks = _userWorks.where((w) {
           return _isCuratedFanzine(w) && _isCuratedByUser(w) && (w['inCurator'] ?? true) == true;
         }).toList();
@@ -517,6 +542,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (works.isEmpty) {
       return div(
         [
@@ -526,6 +552,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center border border-gray-100 flex flex-col items-center justify-center w-full mt-4',
       );
     }
+
     return div(
       classes: 'bg-white rounded-lg p-6 shadow-sm border border-gray-200 w-full mt-4',
       [
@@ -638,6 +665,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (works.isEmpty) {
       return div(
         [
@@ -647,6 +675,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         attributes: const {
           'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;'
@@ -674,6 +703,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (_aiTrainingData.isEmpty) {
       return div(
         [
@@ -682,6 +712,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
         classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white;'},
@@ -737,7 +768,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             events: {
               'click': (e) {
                 setState(() => _showCatalogModal = false);
-                _createArchivalFanzine(component.targetUserId); // Pass component.targetUserId instead of undefined uid
+                _createArchivalFanzine(component.targetUserId);
               }
             },
             [text("upload images")]
@@ -759,7 +790,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                     classes: 'modal-close-btn',
                     attributes: const {'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'},
                     events: {'click': (e) => setState(() => _showCatalogModal = false)},
-                    [text('X')]
+                    [text('×')]
                 ),
                 _buildCatalogOptionsContent()
               ]
@@ -776,12 +807,13 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           [p([text('Loading curator queue...')])]
       );
     }
+
     return div(
       [
         // Navigation segment
         div(
           [
-            // Catalog trigger button (Now triggers a premium options modal)
+            // Catalog trigger button
             button(
               [text("catalog")],
               classes: 'transition-all cursor-pointer flex items-center',
@@ -793,6 +825,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
               },
             ),
             span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+
             // 'curator' text subtab
             span(
               [text("curator")],
@@ -800,10 +833,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
               events: {
-                'click': (e) => setState(() => _activeSubTab = 0)
+                'click': (e) => _selectSubTab(0)
               },
             ),
             span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+
             // 'curator list' text subtab
             span(
               [text("curator list")],
@@ -811,10 +845,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
               events: {
-                'click': (e) => setState(() => _activeSubTab = 1)
+                'click': (e) => _selectSubTab(1)
               },
             ),
             span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+
             // 'entities' text subtab
             span(
               [text("entities")],
@@ -822,10 +857,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
               events: {
-                'click': (e) => setState(() => _activeSubTab = 2)
+                'click': (e) => _selectSubTab(2)
               },
             ),
             span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
+
             // 'ai training data' text subtab
             span(
               [text("ai training data")],
@@ -833,13 +869,14 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
               events: {
-                'click': (e) => setState(() => _activeSubTab = 3)
+                'click': (e) => _selectSubTab(3)
               },
             ),
           ],
           classes: 'bg-white rounded-md p-4 shadow-sm',
           attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'},
         ),
+
         // Prominent live upload status bar
         if (_uploadStatusMessage.isNotEmpty)
           div(
@@ -852,11 +889,14 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 )
               ]
           ),
+
         // Sub-Tab Content Routing
         _buildActiveSubTabContent(),
+
         // Dynamic Modal Overlays
         if (_showCatalogModal)
           _buildCatalogModalOverlay(),
+
         // Delete verification dialog modal
         if (_pendingDeleteId != null)
           ConfirmModal(
@@ -875,6 +915,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   }
 }
 
+/// Dynamic, self-resolving grid tile for showing curated fanzines.
 class CuratorWorkGridTile extends StatefulComponent {
   final Map<String, dynamic> fanzineData;
   final void Function(String id, String title)? onDelete;
@@ -918,9 +959,11 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
       }
       return;
     }
+
     final fallbackUrl = component.fanzineData['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio';
+
     if (!kIsWeb || fanzineId.isEmpty) {
       if (mounted) {
         setState(() {
@@ -929,8 +972,8 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
       }
       return;
     }
+
     try {
-      // 1. Query pages subcollection for page number 1 and calculate page total length
       final pagesRes = await fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber');
       final List decodedPages = jsonDecode(pagesRes);
       if (mounted) {
@@ -938,6 +981,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
           _pagesCount = decodedPages.length;
         });
       }
+
       if (decodedPages.isNotEmpty) {
         final firstPage = decodedPages.firstWhere((p) => p['data']['pageNumber'] == 1, orElse: () => decodedPages.first);
         final rawData = firstPage['data'];
@@ -952,14 +996,14 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
           return;
         }
       }
-      // 2. Fallback: Query associated master images under this folioContext
+
       final imagesRes = await fsQuery('images', 'folioContext', '==', jsonEncode(fanzineId), '');
       final List decodedImages = jsonDecode(imagesRes);
       if (decodedImages.isNotEmpty) {
         decodedImages.sort((a, b) {
           final aT = a['data']?['timestamp'] ?? 0;
           final bT = b['data']?['timestamp'] ?? 0;
-          return bT.toString().compareTo(bT.toString());
+          return bT.toString().compareTo(aT.toString());
         });
         final firstImgRaw = decodedImages.first['data'];
         final Map<String, dynamic> firstImg = firstImgRaw is Map ? Map<String, dynamic>.from(firstImgRaw) : {};
@@ -976,6 +1020,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     } catch (e) {
       print("[CuratorWorkGridTile] Error resolving cover thumbnail: $e");
     }
+
     if (mounted && _resolvedCoverUrl == null) {
       setState(() {
         _resolvedCoverUrl = fallbackUrl;
@@ -991,13 +1036,13 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     final String fanzineType = component.fanzineData['type'] ?? 'ingested';
     final String displayYear = (component.fanzineData['startYear'] ?? '').toString();
     final int resolvedPageCount = component.fanzineData['pageCount'] ?? _pagesCount;
-    // Resolve shortcode URL binding cleanly similar to the other workspaces
     final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
-    // Format publishing date nicely using precision choices and guess configurations
+
     final String? publishedDateVal = component.fanzineData['publishedDate'];
     final String? publishedDateMode = component.fanzineData['publishedDateMode'] ?? 'year';
     final bool publishedDateGuess = component.fanzineData['publishedDateGuess'] ?? false;
     String resolvedYear = '';
+
     if (publishedDateVal != null && publishedDateVal.isNotEmpty) {
       resolvedYear = formatDisplayDate(publishedDateVal, publishedDateMode, publishedDateGuess);
     } else if (displayYear.isNotEmpty) {
@@ -1010,21 +1055,19 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
         }
       } catch (_) {}
     }
+
     return a(
       [
         div(
           [
-            // High fidelity layered metadata badge overlays (narrowed to make room for delete action)
             div(
                 [
-                  // Badge 1: Type & Page count
                   div(
                       [text("$fanzineType   $resolvedPageCount pages")],
                       attributes: const {
                         'style': 'background-color: rgba(33, 33, 33, 0.85); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center; text-transform: lowercase;'
                       }
                   ),
-                  // Badge 2: Year info
                   if (resolvedYear.isNotEmpty)
                     div(
                         [text(resolvedYear)],
@@ -1037,7 +1080,6 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
                   'style': 'position: absolute; top: 12px; left: 12px; right: 44px; display: flex; flex-direction: column; gap: 4px; pointer-events: none;'
                 }
             ),
-            // High-fidelity delete button positioned top-right of the card thumbnail
             if (component.onDelete != null)
               button(
                 [
@@ -1070,7 +1112,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
       ],
       classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
       attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'},
-      href: '/$codeKey', // Unified routing pattern matching standard vanity/shortcode pathways!
+      href: '/$codeKey',
     );
   }
 }

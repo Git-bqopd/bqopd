@@ -65,12 +65,15 @@ class _FanzineCuratorState extends State<FanzineCurator> {
       pipelineRepository: createPipelineRepository(),
       fanzineId: _frefFrefFanzineIdSafe,
     );
+
     _bloc.add(LoadFanzineRequested(_frefFrefFanzineIdSafe));
+
     _blocSubscription = _bloc.stream.listen((state) {
       if (mounted) {
         setState(() {
           _blocState = state;
         });
+
         if (state is FanzineEditorLoaded && component.onTwoPageChanged != null) {
           component.onTwoPageChanged!(state.fanzine.twoPage);
         }
@@ -99,6 +102,7 @@ class _FanzineCuratorState extends State<FanzineCurator> {
   @override
   Component build(BuildContext context) {
     final state = _blocState;
+
     if (state is FanzineEditorLoading || state is FanzineEditorInitial) {
       return div(
         [
@@ -107,6 +111,7 @@ class _FanzineCuratorState extends State<FanzineCurator> {
         classes: 'white-sticker-flexible w-full mt-2 p-8 text-center text-gray italic',
       );
     }
+
     if (state is FanzineEditorFailure) {
       return div(
         [
@@ -116,10 +121,12 @@ class _FanzineCuratorState extends State<FanzineCurator> {
         classes: 'white-sticker-flexible w-full mt-2 p-8 text-center',
       );
     }
+
     if (state is FanzineEditorLoaded) {
       final fanzine = state.fanzine;
       final pages = state.pages;
       final isProcessing = state.isProcessing;
+
       return div(
         [
           div(
@@ -151,6 +158,7 @@ class _FanzineCuratorState extends State<FanzineCurator> {
         classes: 'white-sticker-flexible w-full mt-2',
       );
     }
+
     return div([]);
   }
 }
@@ -238,7 +246,6 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
         }
 
         final sortedEntities = aggregatedEntities.toList()..sort();
-
         // Check if the freshly aggregated list differs from current fanzine draftEntities
         final List<String> fzDraftEntities = List<String>.from(component.fanzine.draftEntities);
         fzDraftEntities.sort();
@@ -296,7 +303,6 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
             _buildCounterSquare("Linked Pending", _linkedPending, '#ea580c'),
           ],
         ),
-
         div(
           classes: 'flex-row gap-3 mt-2',
           attributes: const {'style': 'display: flex; flex-direction: row; gap: 12px; justify-content: center;'},
@@ -321,9 +327,7 @@ class _EditorOcrEntitiesTabState extends State<EditorOcrEntitiesTab> {
             ),
           ],
         ),
-
         div([], attributes: const {'style': 'height: 1px; background-color: #eee; margin: 8px 0;'}),
-
         h3([text("Detected Entities Archive")], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-1'),
         if (draftEntities.isEmpty)
           p([text("No entities registered in this issue's index pipeline yet.")], classes: 'text-xs text-gray italic text-center py-4')
@@ -486,7 +490,6 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
 
       final checkRes = await fsGetDoc('usernames/$cleanTarget');
       final targetDoc = jsonDecode(checkRes);
-
       if (targetDoc['exists'] != true) {
         setState(() {
           _loading = false;
@@ -536,7 +539,6 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
               span([text("aliases to @$_redirectHandle")], attributes: const {'style': 'font-size: 10px; color: #2563eb; font-weight: bold;'})
           ],
         ),
-
         div(
           [
             if (_exists)
@@ -545,7 +547,7 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
                     span([text('account_circle')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
                     text("@$handle")
                   ],
-                  href: '/$handle',
+                  href: '/@$handle',
                   classes: 'text-green-600 hover:underline inline-flex items-center',
                   attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #16a34a; text-decoration: none; display: inline-flex; align-items: center;'}
               )

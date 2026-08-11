@@ -213,10 +213,10 @@ class _EditInfoPageState extends State<EditInfoPage> {
           _initialUsername = finalUsername;
         });
 
-        // Navigate back to profile page after confirmation
+        // Navigate back to profile page using the @username format after confirmation
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
-            final targetPath = finalUsername.isNotEmpty ? '/$finalUsername' : '/profile';
+            final targetPath = finalUsername.isNotEmpty ? '/@$finalUsername' : '/profile';
             Router.of(context).push(targetPath);
           }
         });
@@ -433,7 +433,7 @@ class _EditInfoPageState extends State<EditInfoPage> {
                           events: {
                             'click': (e) {
                               if (_username.isNotEmpty) {
-                                Router.of(context).push('/$_username');
+                                Router.of(context).push('/@$_username');
                               } else {
                                 Router.of(context).push('/profile');
                               }

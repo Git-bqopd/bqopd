@@ -319,7 +319,6 @@ class _FollowListModalState extends State<FollowListModal> {
       try {
         final List decoded = jsonDecode(jsonStr);
         final List<String> loadedUids = decoded.map((d) => d['id'].toString()).where((id) => id.isNotEmpty).toList();
-
         if (mounted) {
           setState(() {
             _uids = loadedUids;
@@ -338,7 +337,6 @@ class _FollowListModalState extends State<FollowListModal> {
       if (mounted) setState(() => _loading = false);
       return;
     }
-
     final Map<String, Map<String, dynamic>> temp = {};
     final List<Future<void>> fetches = [];
 
@@ -352,7 +350,6 @@ class _FollowListModalState extends State<FollowListModal> {
         }),
       );
     }
-
     await Future.wait(fetches);
 
     if (mounted) {
@@ -400,7 +397,7 @@ class _FollowListModalState extends State<FollowListModal> {
                           [
                             h2([text(component.title)], attributes: const {'style': 'font-size: 16px; font-weight: bold; margin: 0; color: black;'}),
                             button(
-                                [text('✕')],
+                                [text('×')],
                                 attributes: const {
                                   'style': 'border: none; background: transparent; font-size: 18px; font-weight: bold; cursor: pointer; color: #666;'
                                 },
@@ -455,7 +452,7 @@ class _FollowListModalState extends State<FollowListModal> {
     final photoUrl = profile?['photoUrl'] ?? '';
 
     return a(
-        href: '/$username',
+        href: '/@$username',
         classes: 'hover:bg-gray-50 transition-colors',
         attributes: const {
           'style': 'display: flex; align-items: center; gap: 12px; padding: 8px; border-bottom: 1px solid #f5f5f5; text-decoration: none;'

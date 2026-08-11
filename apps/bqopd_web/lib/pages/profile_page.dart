@@ -22,6 +22,8 @@ class ProfilePage extends StatefulComponent {
   final IUserRepository userRepository;
   final IEngagementRepository engagementRepository;
   final String? userId; // Optional override for specific profiles
+  final String? initialTab;
+  final String? initialSubTab;
 
   const ProfilePage({
     required this.authState,
@@ -29,6 +31,8 @@ class ProfilePage extends StatefulComponent {
     required this.userRepository,
     required this.engagementRepository,
     this.userId,
+    this.initialTab,
+    this.initialSubTab,
     super.key,
   });
 
@@ -58,7 +62,7 @@ class _ProfilePageState extends State<ProfilePage> {
   int _publicMentionsCount = 0;
   int _publicCommentsCount = 0;
 
-  int _settingsSubTabIndex = 0;
+  String? _activeSubTabName;
 
   String get _targetUid => component.userId ?? component.authState?.user?.uid ?? '';
   bool get _isMe => component.authState?.user?.uid != null && component.authState?.user?.uid == _targetUid;
@@ -66,6 +70,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
+    _activeSubTabName = component.initialSubTab;
 
     // SERVER PRE-RENDERING GUARD: Only initialize dynamic streams on the client
     if (kIsWeb) {
@@ -83,6 +88,10 @@ class _ProfilePageState extends State<ProfilePage> {
     super.didUpdateComponent(oldComponent);
     final String oldTarget = oldComponent.userId ?? oldComponent.authState?.user?.uid ?? '';
     final String currentTarget = _targetUid;
+
+    if (oldComponent.initialSubTab != component.initialSubTab) {
+      _activeSubTabName = component.initialSubTab;
+    }
 
     if (oldTarget != currentTarget || oldComponent.authState?.user?.uid != component.authState?.user?.uid) {
       _cleanupDataPipeline();
@@ -109,8 +118,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final cached = getLocalPreference('profile_sticky_prefs_$_targetUid');
       if (cached != null) {
         final decoded = jsonDecode(cached) as Map<String, dynamic>;
-        final initialTab = decoded['mainTab'] as String?;
-        _settingsSubTabIndex = decoded['settingsSubTab'] as int? ?? 0;
+        final initialTab = component.initialTab ?? decoded['mainTab'] as String?;
         if (initialTab != null) {
           setState(() {
             _blocState = _blocState.copyWith(visibleTabs: [initialTab]);
@@ -135,7 +143,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (component.userId == null && currentUid != null) {
       _viewerRedirectSub = component.userRepository.watchUser(currentUid).listen((profile) {
         if (profile != null && profile.username.isNotEmpty && mounted) {
-          Router.of(context).replace('/${profile.username}');
+          Router.of(context).replace('/@${profile.username}');
         }
       });
       return;
@@ -159,13 +167,14 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     });
 
-    String? initialTab;
+    String? initialTab = component.initialTab;
     try {
-      final cached = getLocalPreference('profile_sticky_prefs_$_targetUid');
-      if (cached != null) {
-        final decoded = jsonDecode(cached) as Map<String, dynamic>;
-        initialTab = decoded['mainTab'] as String?;
-        _settingsSubTabIndex = decoded['settingsSubTab'] as int? ?? 0;
+      if (initialTab == null) {
+        final cached = getLocalPreference('profile_sticky_prefs_$_targetUid');
+        if (cached != null) {
+          final decoded = jsonDecode(cached) as Map<String, dynamic>;
+          initialTab = decoded['mainTab'] as String?;
+        }
       }
     } catch (_) {}
 
@@ -278,6 +287,28 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  void _updateProfileUrl({String? mainTab, String? subTab}) {
+    final username = _blocState.userData?.username;
+    if (username == null || username.isEmpty) return;
+
+    final String tab = mainTab ??
+        (_blocState.visibleTabs.isNotEmpty && _blocState.currentTabIndex < _blocState.visibleTabs.length
+            ? _blocState.visibleTabs[_blocState.currentTabIndex]
+            : '');
+    if (tab.isEmpty) return;
+
+    String path = '/@$username/$tab';
+    if (subTab != null && subTab.isNotEmpty) {
+      path += '/$subTab';
+    }
+
+    if (kIsWeb) {
+      try {
+        Router.of(context).replace(path);
+      } catch (_) {}
+    }
+  }
+
   void _savePrefs() {
     if (!_isMe) return;
     final uid = component.authState?.user?.uid;
@@ -294,7 +325,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final prefsData = {
       'mainTab': mainTab,
-      'settingsSubTab': _settingsSubTabIndex,
+      'settingsSubTab': _activeSubTabName ?? '',
     };
 
     try {
@@ -319,6 +350,9 @@ class _ProfilePageState extends State<ProfilePage> {
         'click': (e) {
           _profileBloc?.add(ChangeTabRequested(index));
           if (index < _blocState.visibleTabs.length) {
+            final newTab = _blocState.visibleTabs[index];
+            _activeSubTabName = null; // Reset subtab when changing main tab
+            _updateProfileUrl(mainTab: newTab);
             _savePrefs();
           }
         }
@@ -335,12 +369,24 @@ class _ProfilePageState extends State<ProfilePage> {
           canSeeDrafts: _isMe || (_viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false)) || (_viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false)) || (_viewerAccount?.role == 'curator' || (_viewerAccount?.roles.contains('curator') ?? false) || (_viewerAccount?.isCurator ?? false)),
           userRepository: component.userRepository,
           authState: component.authState,
+          initialSubTab: _activeSubTabName,
+          onSubTabChanged: (subTabName) {
+            _activeSubTabName = subTabName;
+            _updateProfileUrl(mainTab: 'maker', subTab: subTabName);
+            _savePrefs();
+          },
         );
       case 'index':
         return ProfileIndexTab(
           targetUserId: _targetUid,
           profileName: _blocState.userData?.displayName ?? _blocState.userData?.username ?? '',
           userRepository: component.userRepository,
+          initialSubTab: _activeSubTabName,
+          onSubTabChanged: (subTabName) {
+            _activeSubTabName = subTabName;
+            _updateProfileUrl(mainTab: 'index', subTab: subTabName);
+            _savePrefs();
+          },
         );
       case 'settings':
         return ProfileSettingsTab(
@@ -348,11 +394,10 @@ class _ProfilePageState extends State<ProfilePage> {
           isMe: _isMe,
           viewerAccount: _viewerAccount,
           userRepository: component.userRepository,
-          initialSubTab: _settingsSubTabIndex,
-          onSubTabChanged: (val) {
-            setState(() {
-              _settingsSubTabIndex = val;
-            });
+          initialSubTabName: _activeSubTabName,
+          onSubTabChangedName: (subTabName) {
+            _activeSubTabName = subTabName;
+            _updateProfileUrl(mainTab: 'settings', subTab: subTabName);
             _savePrefs();
           },
         );
@@ -360,6 +405,12 @@ class _ProfilePageState extends State<ProfilePage> {
         return ProfileCuratorTab(
           targetUserId: _targetUid,
           userRepository: component.userRepository,
+          initialSubTab: _activeSubTabName,
+          onSubTabChanged: (subTabName) {
+            _activeSubTabName = subTabName;
+            _updateProfileUrl(mainTab: 'curator', subTab: subTabName);
+            _savePrefs();
+          },
         );
       case 'collection':
       default:

@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
 import 'fanzine_reader_page.dart';
 import 'profile_page.dart';
 
+/// Flutter ShortLink Resolver for resolving vanity handles and shortcodes.
 class ShortLinkPage extends StatefulWidget {
   final String code;
-  final int? initialPageNumber; // NEW: Forwarding the anchor
+  final int? initialPageNumber;
 
   const ShortLinkPage({
     super.key,
@@ -51,7 +51,6 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
             if (snap.hasError) {
               return Center(child: Text('Error: ${snap.error}'));
             }
-
             final result = snap.data;
             if (result == null) {
               return Center(
@@ -67,20 +66,17 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
                 ),
               );
             }
-
             if (result.startsWith('user:')) {
               final userId = result.substring(5);
               return ProfilePage(userId: userId);
             }
-
             if (result.startsWith('fanzine:')) {
               final fanzineCode = result.substring(8);
               return FanzineReaderPage(
                 shortCode: fanzineCode,
-                initialPageNumber: widget.initialPageNumber, // NEW: Forward anchor
+                initialPageNumber: widget.initialPageNumber,
               );
             }
-
             return const Center(child: Text('Unknown content type.'));
           },
         ),
@@ -92,37 +88,46 @@ class _ShortLinkPageState extends State<ShortLinkPage> {
     final db = FirebaseFirestore.instance;
     final String cleanCode = code.trim();
 
-    final List<String> variations = [cleanCode.toUpperCase(), cleanCode.toLowerCase(), cleanCode];
-
-    for (var v in variations) {
-      DocumentSnapshot masterDoc = await db.collection('shortcodes').doc(v).get();
-      if (masterDoc.exists) {
-        final data = masterDoc.data() as Map<String, dynamic>;
-        final type = data['type'];
-        if (type == 'fanzine') return 'fanzine:${data['displayCode'] ?? cleanCode}';
-        if (type == 'user') return 'user:${data['contentId']}';
+    // Direct User Handle Fast-Path
+    if (cleanCode.startsWith('@')) {
+      final handle = cleanCode.substring(1).toLowerCase();
+      final unameDoc = await db.collection('usernames').doc(handle).get();
+      if (unameDoc.exists) {
+        final data = unameDoc.data() as Map<String, dynamic>;
+        if (data.containsKey('redirect')) {
+          final targetHandle = data['redirect'] as String;
+          final targetDoc = await db.collection('usernames').doc(targetHandle).get();
+          if (targetDoc.exists) {
+            final targetData = targetDoc.data() as Map<String, dynamic>;
+            if (targetData['uid'] != null) return 'user:${targetData['uid']}';
+          }
+        }
+        if (data['uid'] != null) return 'user:${data['uid']}';
       }
+      final profilesByUsername = await db.collection('profiles').where('username', isEqualTo: handle).limit(1).get();
+      if (profilesByUsername.docs.isNotEmpty) return 'user:${profilesByUsername.docs.first.id}';
+      return null;
     }
+
+    // Direct Shortcode Fast-Path
+    final String codeUpper = cleanCode.toUpperCase();
+    final masterDoc = await db.collection('shortcodes').doc(codeUpper).get();
+    if (masterDoc.exists) {
+      final data = masterDoc.data() as Map<String, dynamic>;
+      final type = data['type'];
+      if (type == 'fanzine') return 'fanzine:${data['displayCode'] ?? cleanCode}';
+      if (type == 'user') return 'user:${data['contentId']}';
+    }
+
+    // Fallback Queries
+    final fz = await db.collection('fanzines').where('shortCode', isEqualTo: cleanCode).limit(1).get();
+    if (fz.docs.isNotEmpty) return 'fanzine:$cleanCode';
 
     final unameDoc = await db.collection('usernames').doc(cleanCode.toLowerCase()).get();
     if (unameDoc.exists) {
       final data = unameDoc.data() as Map<String, dynamic>;
-      if (data.containsKey('redirect')) {
-        final targetHandle = data['redirect'] as String;
-        final targetDoc = await db.collection('usernames').doc(targetHandle).get();
-        if (targetDoc.exists) {
-          final targetData = targetDoc.data() as Map<String, dynamic>;
-          if (targetData['uid'] != null) return 'user:${targetData['uid']}';
-        }
-      }
       if (data['uid'] != null) return 'user:${data['uid']}';
     }
-
-    final fz = await db.collection('fanzines').where('shortCode', isEqualTo: cleanCode).limit(1).get();
-    if (fz.docs.isNotEmpty) return 'fanzine:$cleanCode';
-
-    final profilesByUsername = await db.collection('profiles').where('username', isEqualTo: cleanCode.toLowerCase()).limit(1).get();
-    if (profilesByUsername.docs.isNotEmpty) return 'user:${profilesByUsername.docs.first.id}';
 
     return null;
   }

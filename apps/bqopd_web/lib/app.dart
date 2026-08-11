@@ -29,6 +29,7 @@ class _AppState extends State<App> {
   late final IPipelineRepository pipelineRepository;
   late final IUploadRepository uploadRepository;
   late final IUserRepository userRepository;
+
   late final AuthBloc authBloc;
   late final UploadBloc uploadBloc;
   late final InteractionBloc interactionBloc;
@@ -54,6 +55,7 @@ class _AppState extends State<App> {
       uploadBloc = UploadBloc(repository: uploadRepository);
       interactionBloc = InteractionBloc(repository: engagementRepository);
       authBloc = AuthBloc(repository: authRepository)..add(AuthSubscriptionRequested());
+
       authState = authBloc.state;
 
       if (kIsWeb) {
@@ -171,12 +173,25 @@ class _AppState extends State<App> {
               engagementRepository: engagementRepository,
             ),
           ),
-          // ULTRA-SHORT HIERARCHY PATTERN (/:code/:pageNumber)
+          // ULTRA-SHORT HIERARCHY PATTERN (/:code/:param1) -> Fanzine Page OR Profile Main Tab
           Route(
-            path: '/:code/:pageNumber',
+            path: '/:code/:param1',
             builder: (context, state) => ShortLinkPage(
               code: state.params['code']!,
-              pageNumber: state.params['pageNumber'],
+              param1: state.params['param1'],
+              authState: authState,
+              authBloc: authBloc,
+              userRepository: userRepository,
+              engagementRepository: engagementRepository,
+            ),
+          ),
+          // PROFILE SUFFIX PATTERN (/:code/:param1/:param2) -> Profile Main Tab + Subtab
+          Route(
+            path: '/:code/:param1/:param2',
+            builder: (context, state) => ShortLinkPage(
+              code: state.params['code']!,
+              param1: state.params['param1'],
+              param2: state.params['param2'],
               authState: authState,
               authBloc: authBloc,
               userRepository: userRepository,
@@ -217,7 +232,7 @@ class _AppState extends State<App> {
                         });
                       }
                     },
-                    [text('✕')]
+                    [text('×')]
                 ),
                 _GlobalModalLoginContent(
                   authState: authState,
