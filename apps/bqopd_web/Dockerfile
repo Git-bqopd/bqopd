@@ -11,13 +11,17 @@ WORKDIR /app
 # Copy the entire monorepo workspace to resolve package dependencies
 COPY . .
 
-# Clean override configurations and purge lingering host build caches
+# Clean override configurations and purge lingering build caches
 RUN rm -f pubspec_overrides.yaml
 RUN rm -rf .dart_tool apps/bqopd_web/.dart_tool packages/bqopd_core/.dart_tool apps/bqopd_web/build
+
+# Resolve dependencies for the shared core package
+WORKDIR /app/packages/bqopd_core
 RUN dart pub get
 
-# Navigate into the Web Application subfolder and compile the server & client-side assets
+# Navigate into the Web App, resolve packages, and upgrade build daemon dependencies
 WORKDIR /app/apps/bqopd_web
+RUN dart pub get && dart pub upgrade build_daemon build_runner
 RUN dart pub global run jaspr_cli:jaspr build --verbose
 
 # ==========================================

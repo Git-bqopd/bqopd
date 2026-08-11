@@ -5,20 +5,19 @@ publish_to: none
 environment:
   sdk: ^3.11.0
 
-# Set Jaspr to build dynamically (SSR) via Dart backend on Google Cloud Run
 jaspr:
   mode: server
 
 dependencies:
-  jaspr: ^0.23.1
-  jaspr_router: ^0.8.2
+  jaspr: ^0.23.3
+  jaspr_router: ^0.9.0
   bloc: ^8.1.4
   http: ^1.1.0
   bqopd_core:
     path: ../../packages/bqopd_core
 
 dev_dependencies:
-  jaspr_builder: ^0.23.1
-  build_runner: ^2.4.13
-  build_web_compilers: ^4.0.0
+  jaspr_builder: ^0.23.3
+  build_runner: ">=2.14.0 <2.15.2"
+  build_web_compilers: ^4.5.1
   lints: ^5.0.0
