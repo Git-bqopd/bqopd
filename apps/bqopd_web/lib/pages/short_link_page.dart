@@ -101,11 +101,9 @@ class _ShortLinkPageState extends State<ShortLinkPage>
   @override
   void didUpdateComponent(ShortLinkPage oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if ((oldComponent.code != component.code ||
-        oldComponent.param1 != component.param1 ||
-        oldComponent.param2 != component.param2) &&
-        kIsWeb) {
-      print('[SHORTLINK STATE] Route params changed for "${component.code}". Re-triggering resolution.');
+    // Only re-resolve payload if the target code entity changes
+    if (oldComponent.code != component.code && kIsWeb) {
+      print('[SHORTLINK STATE] Route code changed from "${oldComponent.code}" to "${component.code}". Re-triggering resolution.');
       _resolveOnClient();
     }
     if (oldComponent.authState?.user?.uid != component.authState?.user?.uid && kIsWeb) {

@@ -93,6 +93,17 @@ class _ProfilePageState extends State<ProfilePage> {
       _activeSubTabName = component.initialSubTab;
     }
 
+    // Reactively update BLoC active tab when URL route parameters change
+    if (oldComponent.initialTab != component.initialTab && component.initialTab != null) {
+      final tabs = _blocState.visibleTabs;
+      if (tabs.contains(component.initialTab)) {
+        final newIndex = tabs.indexOf(component.initialTab!);
+        if (newIndex != _blocState.currentTabIndex) {
+          _profileBloc?.add(ChangeTabRequested(newIndex));
+        }
+      }
+    }
+
     if (oldTarget != currentTarget || oldComponent.authState?.user?.uid != component.authState?.user?.uid) {
       _cleanupDataPipeline();
       if (kIsWeb) {
@@ -275,12 +286,21 @@ class _ProfilePageState extends State<ProfilePage> {
           final isViewerModerator = account.role == 'moderator' || account.roles.contains('moderator');
           final isViewerCurator = account.role == 'curator' || account.roles.contains('curator') || account.isCurator;
 
+          // Preserve active tab state during viewer account stream emissions
+          String? activeTab;
+          if (_blocState.visibleTabs.isNotEmpty && _blocState.currentTabIndex < _blocState.visibleTabs.length) {
+            activeTab = _blocState.visibleTabs[_blocState.currentTabIndex];
+          } else {
+            activeTab = component.initialTab;
+          }
+
           _profileBloc?.add(LoadProfileRequested(
             userId: _targetUid,
             currentAuthId: uid,
             isViewerAdmin: isViewerAdmin,
             isViewerModerator: isViewerModerator,
             isViewerCurator: isViewerCurator,
+            initialTab: activeTab,
           ));
         }
       });
