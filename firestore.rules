@@ -1,0 +1,160 @@
+rules_version = '2';
+service cloud.firestore {
+match /databases/{database}/documents {
+
+// --- Helper Functions ---
+function isEditor() {
+  // Safe check: Ensure doc exists before attempting to read data to avoid runtime errors
+  return request.auth != null &&
+         exists(/databases/$(database)/documents/Users/$(request.auth.uid)) &&
+         (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.get('Editor', false) == true ||
+          get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'moderator', 'curator']);
+}
+
+// --- Series (Groups of Fanzines - Legacy) ---
+match /series/{seriesId} {
+  // Series names and IDs are publicly readable for navigation and SSR pre-rendering
+  allow read: if true;
+  // Only authorized curators, moderators, and admins can create or delete series
+  allow write: if isEditor();
+}
+
+// --- Profiles (Public Identity - Unified Collection) ---
+match /profiles/{profileId} {
+  // 1. Read: Publicly readable for everyone (Critical for instant pageloads)
+  allow read: if true;
+
+  // 2. Full Write: Profile owner or designated managers
+  allow write: if request.auth != null && (
+    (request.auth.uid == profileId) ||
+    (resource != null && request.auth.uid in resource.data.get('managers', [])) ||
+    (resource == null && request.auth.uid in request.resource.data.get('managers', []))
+  );
+
+  // 3. Partial Update: Allow social engagement updates (following counts) from any authenticated user
+  allow update: if request.auth != null &&
+    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followerCount', 'followingCount', 'updatedAt']);
+
+  // 4. Subcollections (Followers/Following)
+  match /followers/{followerId} {
+    allow read: if true;
+    // Users can add/remove themselves from any follower list
+    allow write: if request.auth != null && request.auth.uid == followerId;
+  }
+  match /following/{targetId} {
+    allow read: if true;
+    // Users can only modify their own following list
+    allow write: if request.auth != null && request.auth.uid == profileId;
+  }
+}
+
+// --- Users (Private System Data - PHYSICAL ADDRESS / EMAIL) ---
+match /Users/{userDocId}/{allPaths=**} {
+  // Locked down: Only owner or admin can read sensitive data
+  allow read: if request.auth != null && (request.auth.uid == userDocId || isEditor());
+  allow write: if request.auth != null && request.auth.uid == userDocId;
+}
+
+// --- Images ---
+match /images/{id} {
+  // Required for public pre-rendered thumbnail pages
+  allow read: if true;
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && (
+    request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+      'usedInFanzines', 'likeCount', 'commentCount',
+      'regListCount', 'anonListCount', 'regGridCount', 'anonGridCount',
+      'tags', 'status', 'indicia', 'creators'
+    ]) ||
+    request.auth.uid == resource.data.uploaderId ||
+    isEditor()
+  );
+  allow delete: if request.auth != null && (
+    request.auth.uid == resource.data.uploaderId || isEditor()
+  );
+}
+
+// --- Shortcodes & Usernames ---
+match /shortcodes/{id} {
+  // Publicly readable so Cloud Run can fetch metadata mappings unauthenticated
+  allow read: if true;
+  allow write: if request.auth != null;
+}
+
+match /usernames/{handle} {
+  allow read: if true;
+  allow create: if request.auth != null
+                && !exists(/databases/$(database)/documents/usernames/$(handle))
+                // Note: rules don't support .upper(), handle must be normalized via client/functions
+                && !exists(/databases/$(database)/documents/shortcodes/$(handle));
+  allow update: if request.auth != null && (
+    resource.data.uid == request.auth.uid ||
+    (exists(/databases/$(database)/documents/profiles/$(resource.data.uid)) &&
+     request.auth.uid in get(/databases/$(database)/documents/profiles/$(resource.data.uid)).data.get('managers', [])) ||
+    isEditor()
+  );
+  allow delete: if false;
+}
+
+// --- Fanzines & Subcollections ---
+match /fanzines/{id} {
+  allow read: if true;
+  allow create: if request.auth != null;
+  allow update, delete: if request.auth != null && (
+    isEditor() ||
+    resource.data.ownerId == request.auth.uid ||
+    resource.data.get('editorId', '') == request.auth.uid ||
+    request.auth.uid in resource.data.get('editors', [])
+  );
+
+  match /pages/{pageId} {
+    allow read: if true;
+    allow write: if request.auth != null && (
+      isEditor() ||
+      get(/databases/$(database)/documents/fanzines/$(id)).data.ownerId == request.auth.uid ||
+      get(/databases/$(database)/documents/fanzines/$(id)).data.get('editorId', '') == request.auth.uid ||
+      request.auth.uid in get(/databases/$(database)/documents/fanzines/$(id)).data.get('editors', [])
+    );
+  }
+}
+
+// --- App Settings ---
+match /app_settings/main_settings {
+  allow read: if true;
+  allow write: if isEditor();
+}
+
+// --- Public Artifact Data (Rule 1 Compliant) ---
+match /artifacts/{appId}/public/data/view_logs/{viewId} {
+  allow get, create: if request.auth != null;
+  allow list: if isEditor();
+}
+
+match /artifacts/{appId}/public/data/game_characters/{charId} {
+  allow read: if true;
+  allow write: if request.auth != null;
+}
+
+match /artifacts/{appId}/public/data/game_battles/{battleId} {
+  allow read: if true;
+  allow create: if request.auth != null;
+}
+
+match /artifacts/{appId}/public/data/comments/{commentId} {
+  allow read: if true;
+  allow write: if request.auth != null;
+}
+
+// --- Series Public List Matcher ---
+match /artifacts/{appId}/public/data/series/{seriesId} {
+  allow read: if true;
+  allow write: if isEditor();
+}
+
+// --- Fallback ---
+match /{document=**} {
+  allow read, write: if false;
+}
+
+}
+}

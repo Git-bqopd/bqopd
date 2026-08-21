@@ -1,0 +1,100 @@
+[debug] [2026-08-20T03:15:04.185Z] ----------------------------------------------------------------------
+[debug] [2026-08-20T03:15:04.189Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\kevla\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2026-08-20T03:15:04.190Z] CLI Version:   15.16.0
+[debug] [2026-08-20T03:15:04.190Z] Platform:      win32
+[debug] [2026-08-20T03:15:04.190Z] Node Version:  v24.12.0
+[debug] [2026-08-20T03:15:04.190Z] Time:          Wed Aug 19 2026 22:15:04 GMT-0500 (Central Daylight Time)
+[debug] [2026-08-20T03:15:04.190Z] ----------------------------------------------------------------------
+[debug] 
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\kevla\StudioProjects\bqopd_workspace\functions
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2026-08-20T03:15:38.127Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-20T03:15:38.128Z] > authorizing via signed-in user (bqopdmail@gmail.com)
+[debug] [2026-08-20T03:15:38.131Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:38.131Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:38.133Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/bqopd-9ce06 [none]
+[debug] [2026-08-20T03:15:38.498Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/bqopd-9ce06 200
+[debug] [2026-08-20T03:15:38.498Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/bqopd-9ce06 {"projectId":"bqopd-9ce06","projectNumber":"17060476719","displayName":"bqopd","name":"projects/bqopd-9ce06","resources":{"hostingSite":"bqopd-9ce06","locationId":"us-central"},"state":"ACTIVE","labels":{"firebase":"enabled"},"etag":"1_43365e0e-f08c-4015-8c45-97342aa3ddc4"}
+[info] i  Using project bqopd-9ce06 (bqopd) . 
+[info] 
+=== Firestore Setup
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-08-20T03:15:38.529Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:38.529Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:38.529Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases [none]
+[debug] [2026-08-20T03:15:39.206Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases 200
+[debug] [2026-08-20T03:15:39.207Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases {"databases":[{"name":"projects/bqopd-9ce06/databases/(default)","uid":"6b7e42fc-ddb6-4815-a457-d8b05dad1da2","createTime":"2024-09-30T00:37:31.573336Z","updateTime":"2024-09-30T00:37:31.573336Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-08-20T02:15:39.941507Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IObx0vmerpYDMOiO3ubRgpMD"}]}
+[info] 
+[info] Firestore Security Rules allow you to define how and when to allow
+[info] requests. You can keep these rules in your project directory
+[info] and publish them with firebase deploy.
+[info] 
+[debug] [2026-08-20T03:15:42.664Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:42.664Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:42.665Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/bqopd-9ce06/releases pageSize=10&pageToken=
+[debug] [2026-08-20T03:15:42.931Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/bqopd-9ce06/releases 200
+[debug] [2026-08-20T03:15:42.931Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/bqopd-9ce06/releases {"releases":[{"name":"projects/bqopd-9ce06/releases/cloud.firestore","rulesetName":"projects/bqopd-9ce06/rulesets/a49616f7-098f-4603-95b3-444d9d4b7143","createTime":"2024-09-30T00:37:38.731790Z","updateTime":"2026-06-05T00:00:13.703641Z"},{"name":"projects/bqopd-9ce06/releases/firebase.storage/bqopd-9ce06.appspot.com","rulesetName":"projects/bqopd-9ce06/rulesets/fa721c66-0be1-4bd8-8558-982bb945c1e5","createTime":"2024-10-23T00:45:05.109404Z","updateTime":"2024-10-23T00:46:35.854081Z"}]}
+[debug] [2026-08-20T03:15:42.961Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:42.961Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:42.962Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/bqopd-9ce06/rulesets/a49616f7-098f-4603-95b3-444d9d4b7143 [none]
+[debug] [2026-08-20T03:15:43.077Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/bqopd-9ce06/rulesets/a49616f7-098f-4603-95b3-444d9d4b7143 200
+[debug] [2026-08-20T03:15:43.077Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/bqopd-9ce06/rulesets/a49616f7-098f-4603-95b3-444d9d4b7143 [omitted]
+[info] i  Downloaded the existing Firestore Security Rules from the Firebase console 
+[info] 
+[info] Firestore indexes allow you to perform complex queries while
+[info] maintaining performance that scales with the size of the result
+[info] set. You can keep index definitions in your project directory
+[info] and publish them with firebase deploy.
+[info] 
+[debug] [2026-08-20T03:15:44.592Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:44.592Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:44.593Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:44.593Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:44.593Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/collectionGroups/-/indexes [none]
+[debug] [2026-08-20T03:15:44.597Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* [none]
+[debug] [2026-08-20T03:15:44.811Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* 200
+[debug] [2026-08-20T03:15:44.811Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* {"fields":[{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/__default__/fields/*","indexConfig":{"indexes":[{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"ASCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"DESCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","arrayConfig":"CONTAINS"}],"state":"READY"}]}}]}
+[debug] [2026-08-20T03:15:44.854Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/collectionGroups/-/indexes 200
+[debug] [2026-08-20T03:15:44.854Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/bqopd-9ce06/databases/(default)/collectionGroups/-/indexes {"indexes":[{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/images/indexes/CICAgNiav4AK","queryScope":"COLLECTION","fields":[{"fieldPath":"folioContext","order":"ASCENDING"},{"fieldPath":"timestamp","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/images/indexes/CICAgJim14AK","queryScope":"COLLECTION","fields":[{"fieldPath":"shortCode","order":"ASCENDING"},{"fieldPath":"timestamp","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/fanzines/indexes/CICAgOjXh4EK","queryScope":"COLLECTION","fields":[{"fieldPath":"authorID","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/fanzines/indexes/CICAgJj7z4EK","queryScope":"COLLECTION","fields":[{"fieldPath":"mentionedUsers","arrayConfig":"CONTAINS"},{"fieldPath":"creationDate","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/fanzines/indexes/CICAgJjF9oIK","queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"creationDate","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/images/indexes/CICAgJiUpoMK","queryScope":"COLLECTION","fields":[{"fieldPath":"uploaderId","order":"ASCENDING"},{"fieldPath":"timestamp","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/conventions/indexes/CICAgNi47oMK","queryScope":"COLLECTION","fields":[{"fieldPath":"folioId","order":"ASCENDING"},{"fieldPath":"timestamp","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/images/indexes/CICAgJiUzYsK","queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"timestamp","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/images/indexes/CICAgJiH2JAK","queryScope":"COLLECTION","fields":[{"fieldPath":"uploaderId","order":"ASCENDING"},{"fieldPath":"timestamp","order":"DESCENDING"},{"fieldPath":"status","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/page_events/indexes/CICAgJjmiJEK","queryScope":"COLLECTION","fields":[{"fieldPath":"pageId","order":"ASCENDING"},{"fieldPath":"startDate","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/bqopd-9ce06/databases/(default)/collectionGroups/fanzines/indexes/CICAgJiUsZIK","queryScope":"COLLECTION","fields":[{"fieldPath":"editorId","order":"ASCENDING"},{"fieldPath":"creationDate","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"}]}
+[info] i  Downloaded the existing Firestore indexes from the Firebase console 
+[info] +  Wrote firestore.rules 
+[info] +  Wrote firestore.indexes.json 
+[info] 
+=== Functions Setup
+[debug] [2026-08-20T03:15:44.866Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-20T03:15:44.866Z] > authorizing via signed-in user (bqopdmail@gmail.com)
+[debug] [2026-08-20T03:15:44.866Z] [iam] checking project bqopd-9ce06 for permissions ["firebase.projects.get"]
+[debug] [2026-08-20T03:15:44.867Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:44.867Z] Checked if tokens are valid: true, expires at: 1787198312302
+[debug] [2026-08-20T03:15:44.867Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/bqopd-9ce06:testIamPermissions [none]
+[debug] [2026-08-20T03:15:44.867Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/bqopd-9ce06:testIamPermissions  x-goog-user-project=bqopd-9ce06
+[debug] [2026-08-20T03:15:44.867Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bqopd-9ce06:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-08-20T03:15:45.099Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/bqopd-9ce06:testIamPermissions 200
+[debug] [2026-08-20T03:15:45.099Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bqopd-9ce06:testIamPermissions {"permissions":["firebase.projects.get"]}
+[info] Let's create a new codebase for your functions.
+[info] A directory corresponding to the codebase will be created in your project
+[info] with sample code pre-configured.
+
+[info] See https://firebase.google.com/docs/functions/organize-functions for
+[info] more information on organizing your functions using codebases.
+
+[info] Functions can be deployed with firebase deploy.
+
+[info] +  Wrote functions/requirements.txt 
+[info] +  Wrote functions/.gitignore 
+[info] +  Wrote functions/main.py 
