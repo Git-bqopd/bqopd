@@ -1,297 +1,288 @@
-/* STREAMING_CHUNK:Configuring Material Design 3 tokens and root styles... /
-/ --- MATERIAL DESIGN 3 TOKENS --- /
+/* --- MATERIAL DESIGN 3 TOKENS --- */
 :root {
---m3-surface: #ffffff;
-/ M3 Outline color for unselected chips /
---m3-outline: #79747E;
---m3-primary: #6750A4;
-/ M3 Secondary Container for selected chips */
---m3-secondary-container: #E8DEF8;
---m3-on-secondary-container: #1D192B;
---m3-surface-variant: #F4F4F4;
---envelope-yellow: #F1B255;
+    --m3-surface: #ffffff;
+    /* M3 Outline color for unselected chips */
+    --m3-outline: #79747E;
+    --m3-primary: #6750A4;
+    /* M3 Secondary Container for selected chips */
+    --m3-secondary-container: #E8DEF8;
+    --m3-on-secondary-container: #1D192B;
+    --m3-surface-variant: #F4F4F4;
+    --envelope-yellow: #F1B255;
 }
 
 body {
-font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-background-color: #e5e5e5;
-margin: 0;
-padding: 0;
-min-height: 100vh;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #e5e5e5;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
 }
 
-/* STREAMING_CHUNK:Styling Google Autocomplete and Material Symbols icons... /
-/ Force Google Autocomplete dropdown layer on top of premium manila modals */
+/* Force Google Autocomplete dropdown layer on top of premium manila modals */
 .pac-container {
-z-index: 20000 !important;
-border-radius: 8px !important;
-box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-border: 1px solid #eee !important;
-font-family: inherit !important;
+    z-index: 20000 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    border: 1px solid #eee !important;
+    font-family: inherit !important;
 }
 
 /* Material Icons Setup */
 .material-symbols-outlined {
-font-family: 'Material Symbols Outlined' !important;
-font-weight: normal;
-font-style: normal;
-font-size: 24px;
-line-height: 1;
-letter-spacing: normal;
-text-transform: none;
-display: inline-block;
-white-space: nowrap;
-word-wrap: normal;
-direction: ltr;
--webkit-font-feature-settings: 'liga';
--webkit-font-smoothing: antialiased;
-font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* STREAMING_CHUNK:Styling Material 3 filter chips... /
-/ --- M3 FILTER CHIP (Identical to Flutter) --- /
+/* --- M3 FILTER CHIP (Identical to Flutter) --- */
 .m3-chip {
-display: inline-flex;
-align-items: center;
-height: 32px;
-padding-left: 12px;
-padding-right: 8px;
-border: 1px solid var(--m3-outline);
-border-radius: 100px; / Full pill shape /
-background: var(--m3-surface);
-cursor: pointer;
-font-size: 14px;
-font-weight: 500;
-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-user-select: none;
-color: #49454F;
-box-sizing: border-box;
-gap: 0; / Gaps are handled by the divider margins */
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding-left: 12px;
+    padding-right: 8px;
+    border: 1px solid var(--m3-outline);
+    border-radius: 100px; /* Full pill shape */
+    background: var(--m3-surface);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    color: #49454F;
+    box-sizing: border-box;
+    gap: 0; /* Gaps are handled by the divider margins */
 }
 
 .m3-chip:hover {
-background-color: rgba(0, 0, 0, 0.08);
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 .m3-chip.active {
-background-color: var(--m3-secondary-container);
-border-color: transparent;
-color: var(--m3-on-secondary-container);
+    background-color: var(--m3-secondary-container);
+    border-color: transparent;
+    color: var(--m3-on-secondary-container);
 }
 
-/* STREAMING_CHUNK:Styling chip dividers and split button components... /
-/ The vertical separator inside the chip /
+/* The vertical separator inside the chip */
 .m3-chip .v-divider {
-width: 1px;
-height: 32px; / Matches chip height to span top-to-bottom */
-background-color: currentColor;
-opacity: 0.12;
-margin: 0 8px;
+    width: 1px;
+    height: 32px; /* Matches chip height to span top-to-bottom */
+    background-color: currentColor;
+    opacity: 0.12;
+    margin: 0 8px;
 }
 
 .m3-chip .chip-icon {
-font-size: 18px !important;
-margin-right: 4px;
+    font-size: 18px !important;
+    margin-right: 4px;
 }
 
 /* --- M3 SPLIT BUTTON (Submission UI) --- */
 .m3-split-button {
-display: inline-flex;
-align-items: center;
-background: var(--m3-surface);
-border: 1px solid var(--m3-outline);
-border-radius: 100px;
-height: 36px;
-overflow: hidden;
-box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    display: inline-flex;
+    align-items: center;
+    background: var(--m3-surface);
+    border: 1px solid var(--m3-outline);
+    border-radius: 100px;
+    height: 36px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .m3-split-button input {
-border: none !important;
-margin-bottom: 0 !important;
-padding: 0 12px !important;
-height: 100% !important;
-font-size: 13px;
-width: 110px;
-outline: none;
-background: transparent;
+    border: none !important;
+    margin-bottom: 0 !important;
+    padding: 0 12px !important;
+    height: 100% !important;
+    font-size: 13px;
+    width: 110px;
+    outline: none;
+    background: transparent;
 }
 
-/* STREAMING_CHUNK:Styling split button hover actions and structural layout... */
 .m3-split-button .split-action {
-display: flex;
-align-items: center;
-justify-content: center;
-padding: 0 10px;
-height: 100%;
-cursor: pointer;
-transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    height: 100%;
+    cursor: pointer;
+    transition: background 0.2s;
 }
 
 .m3-split-button .split-action:hover {
-background-color: rgba(0, 0, 0, 0.08);
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 .m3-split-button .v-divider {
-width: 1px;
-height: 20px;
-background-color: var(--m3-outline);
-opacity: 0.12;
+    width: 1px;
+    height: 20px;
+    background-color: var(--m3-outline);
+    opacity: 0.12;
 }
 
-/* --- STRUCTURAL LAYOUT --- */
+/* --- STRUCTURAL LAYOUT (RE-RESTORED FULL VERSION) --- */
 
-/* Manila Envelope Aesthetic - Locked to 5x8 Ratio /
+/* Manila Envelope Aesthetic - Locked to 5x8 Ratio */
 .manila-envelope, .manila-envelope-cover {
-background-color: var(--envelope-yellow);
-padding: 20px;
-width: 100%;
-max-width: 100%; / Spans full column width */
-aspect-ratio: 5 / 8;
-display: flex;
-flex-direction: column;
-justify-content: center;
-align-items: center;
-box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
-box-sizing: border-box;
+    background-color: var(--envelope-yellow);
+    padding: 20px;
+    width: 100%;
+    max-width: 100%; /* Spans full column width */
+    aspect-ratio: 5 / 8;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
+    box-sizing: border-box;
 }
 
-/* STREAMING_CHUNK:Formatting flexible envelope and white sticker cards... /
-/ Flexible Manila Envelope - For dynamic content editors /
+/* Flexible Manila Envelope - For dynamic content editors */
 .manila-envelope-flexible {
-background-color: var(--envelope-yellow);
-padding: 20px;
-width: 100%;
-max-width: 100%; / Spans full column width */
-display: flex;
-flex-direction: column;
-justify-content: flex-start;
-align-items: center;
-box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
-box-sizing: border-box;
+    background-color: var(--envelope-yellow);
+    padding: 20px;
+    width: 100%;
+    max-width: 100%; /* Spans full column width */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
+    box-sizing: border-box;
 }
 
-/* White Sticker Aesthetic - Inset and Pinning Content to Top /
+/* White Sticker Aesthetic - Inset and Pinning Content to Top */
 .white-sticker {
-background-color: white;
-border-radius: 12px;
-border: 1px solid rgba(0,0,0,0.05);
-box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-flex: none;
-width: 85%;
-height: 80%;
-display: flex;
-flex-direction: column;
-justify-content: center; / Keeps main text centered /
-align-items: center;
-overflow: hidden;
-box-sizing: border-box;
-padding: 32px;
-position: relative; / Allow children to be pinned */
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    flex: none;
+    width: 85%;
+    height: 80%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Keeps main text centered */
+    align-items: center;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 32px;
+    position: relative; /* Allow children to be pinned */
 }
 
-/* STREAMING_CHUNK:Styling compact sticker and user tile components... /
-/ White Sticker-Compact */
+/* White Sticker-Compact */
 .white-sticker-compact {
-background-color: white;
-border-radius: 12px;
-border: 1px solid rgba(0,0,0,0.05);
-box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-flex: none;
-width: 85%;
-height: 80%;
-display: flex;
-flex-direction: column;
-overflow: hidden;
-box-sizing: border-box;
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    flex: none;
+    width: 85%;
+    height: 80%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 /* Flexible White Sticker - Adapts height to content dynamically */
 .white-sticker-flexible {
-background-color: white;
-border-radius: 12px;
-border: 1px solid rgba(0,0,0,0.05);
-box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-width: 85%;
-display: flex;
-flex-direction: column;
-overflow: hidden;
-box-sizing: border-box;
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    width: 85%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 /* User Tile & Avatar Components */
 .user-tile {
-display: flex;
-flex-direction: row;
-align-items: center;
-gap: 12px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
 }
 
-/* STREAMING_CHUNK:Styling avatar containers and user identity text... */
 .user-avatar-container {
-width: 32px;
-height: 32px;
-border-radius: 50%;
-overflow: hidden;
-background-color: #f0f0f0;
-flex-shrink: 0;
-display: flex;
-justify-content: center;
-align-items: center;
-border: 1px solid rgba(0,0,0,0.05);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: #f0f0f0;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid rgba(0,0,0,0.05);
 }
 
 .user-avatar {
-width: 100%;
-height: 100%;
-object-fit: cover;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .user-avatar-placeholder {
-font-size: 14px;
-font-weight: bold;
-color: #999;
+    font-size: 14px;
+    font-weight: bold;
+    color: #999;
 }
 
 .user-info {
-display: flex;
-flex-direction: column;
-justify-content: center;
-overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
 }
 
 .user-display-name {
-font-size: 11px;
-font-weight: 900;
-color: black;
-white-space: nowrap;
-overflow: hidden;
-text-overflow: ellipsis;
-line-height: 1.2;
+    font-size: 11px;
+    font-weight: 900;
+    color: black;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
 }
 
-/* STREAMING_CHUNK:Defining flexbox utility helper classes... /
 .user-identity {
-/ Right side of the pipe: takes the remaining space and holds the UserTile */
-flex: 1;
-display: flex;
-justify-content: flex-start;
+    /* Right side of the pipe: takes the remaining space and holds the UserTile */
+    flex: 1;
+    display: flex;
+    justify-content: flex-start;
 }
 
 /* Restored Tab Row Formatting logic */
 .bg-gray-100 {
-background-color: #f5f5f5;
-width: 100%;
-display: flex;
-flex-direction: row;
-justify-content: center;
-align-items: center;
-padding-top: 8px;
-padding-bottom: 8px;
+    background-color: #f5f5f5;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding-top: 8px;
+    padding-bottom: 8px;
 }
 
 /* Utility Classes */
-.flex { display: flex; }
+.flex { display: flex; } /* NEW: Essential fix for flex-alignment rules */
 .flex-col { display: flex; flex-direction: column; }
 .flex-row { display: flex; flex-direction: row; }
 .flex-wrap { flex-wrap: wrap; }
@@ -301,8 +292,6 @@ padding-bottom: 8px;
 .w-full { width: 100%; }
 .h-full { height: 100%; }
 .flex-1 { flex: 1; }
-
-/* STREAMING_CHUNK:Defining spacing, text, and form element styles... */
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }
 .mt-2 { margin-top: 8px; }
@@ -332,448 +321,436 @@ padding-bottom: 8px;
 .positioned-fill { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .positioned-left { position: absolute; top: 0; bottom: 0; left: 0; }
 
-/* STREAMING_CHUNK:Styling buttons and links... /
-/ Form Elements */
+/* Form Elements */
 input {
-width: 100%;
-padding: 12px;
-margin-bottom: 12px;
-border: 1px solid #ccc;
-border-radius: 12px;
-box-sizing: border-box;
-font-size: 16px;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 12px;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    box-sizing: border-box;
+    font-size: 16px;
 }
 
 button.btn-primary {
-width: 100%;
-padding: 16px;
-background-color: #808080;
-color: white;
-border: none;
-border-radius: 12px;
-font-size: 16px;
-font-weight: bold;
-cursor: pointer;
+    width: 100%;
+    padding: 16px;
+    background-color: #808080;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
 }
 
 button.btn-primary:hover {
-background-color: #666;
+    background-color: #666;
 }
 
 button.btn-logout {
-padding: 8px 16px;
-background-color: transparent;
-color: black;
-text-decoration: underline;
-border: none;
-cursor: pointer;
-font-weight: bold;
-font-size: 14px;
+    padding: 8px 16px;
+    background-color: transparent;
+    color: black;
+    text-decoration: underline;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
 }
 
 a {
-color: black;
-text-decoration: none;
-cursor: pointer;
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
 }
 
 a:hover {
-text-decoration: underline;
+    text-decoration: underline;
 }
 
 .error-msg {
-color: #d9534f;
-font-weight: bold;
-margin-top: 8px;
-text-align: center;
+    color: #d9534f;
+    font-weight: bold;
+    margin-top: 8px;
+    text-align: center;
 }
 
-/* STREAMING_CHUNK:Styling spread layout, paper, and header overlay... /
-/ Fanzine Reader & Navigation */
+/* Fanzine Reader & Navigation */
 .nav-pill {
-background: white;
-border: 1px solid rgba(0,0,0,0.05);
-border-radius: 50px;
-padding: 8px 16px;
-font-size: 11px;
-font-weight: 900;
-letter-spacing: 0.5px;
-cursor: pointer;
-box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-margin-bottom: 10px;
-color: black;
+    background: white;
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: 50px;
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    margin-bottom: 10px;
+    color: black;
 }
 .nav-pill:hover { background: #f9f9f9; }
 
 .fanzine-page-img {
-max-width: 100%;
-height: auto;
-border: 1px solid rgba(0,0,0,0.05);
-border-radius: 2px;
-display: block;
-object-fit: contain;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: 2px;
+    display: block;
+    object-fit: contain;
 }
 
 /* --- Grid View Layout --- */
 .spread-wrapper {
-position: relative;
-width: 100%;
-max-width: 1000px;
-margin: 24px auto;
-aspect-ratio: 11 / 8.5;
+    position: relative;
+    width: 100%;
+    max-width: 1000px;
+    margin: 24px auto;
+    aspect-ratio: 11 / 8.5;
 }
 
 .spread-paper {
-background-color: white;
-border-radius: 2px;
-box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-padding: 3%;
-width: 100%;
-height: 100%;
-box-sizing: border-box;
-display: flex;
-flex-direction: row;
+    background-color: white;
+    border-radius: 2px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    padding: 3%;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: row;
 }
 
-/* STREAMING_CHUNK:Styling half-spread wrappers and page borders... */
 .spread-half {
-flex: 1;
-display: flex;
-height: 100%;
+    flex: 1;
+    display: flex;
+    height: 100%;
 }
 
 .spread-half.left {
-padding-right: 1.5%;
+    padding-right: 1.5%;
 }
 
 .spread-half.right {
-padding-left: 1.5%;
+    padding-left: 1.5%;
 }
 
 .page-wrapper-border {
-border: 1px solid rgba(0,0,0,0.05);
-background-color: white;
-height: 100%;
-width: 100%;
-display: flex;
-justify-content: center;
-align-items: center;
-overflow: hidden;
-aspect-ratio: 5 / 8;
+    border: 1px solid rgba(0,0,0,0.05);
+    background-color: white;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    aspect-ratio: 5 / 8;
 }
 
 .page-wrapper-border img {
-width: 100%;
-height: 100%;
-object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 /* --- Header Overlay --- */
 .header-envelope-overlay {
-position: absolute;
-top: 0;
-bottom: 0;
-left: 0;
-width: 50%;
-display: flex;
-justify-content: center;
-align-items: center;
-z-index: 10;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
 }
 
-/* STREAMING_CHUNK:Styling social toolbar buttons and badges... /
-/ Grid & List View Classes */
+/* Grid & List View Classes */
 .reader-list-item {
-margin-bottom: 48px;
+    margin-bottom: 48px;
 }
 
 .spread-container {
-background: white;
-border-radius: 2px;
-box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-padding: 24px;
-display: flex;
-width: 100%;
-box-sizing: border-box;
+    background: white;
+    border-radius: 2px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    padding: 24px;
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-/* --- OPTIMIZED COMPACT TOOLBAR & BUTTONS --- /
+/* --- OPTIMIZED COMPACT TOOLBAR & BUTTONS --- */
 .toolbar-container {
-padding: 8px 4px;
-display: flex;
-flex-wrap: wrap;
-justify-content: center;
-gap: 4px; / Reduced from 8px to pack elements tighter */
+    padding: 8px 4px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px; /* Reduced from 8px to pack elements tighter */
 }
 
 .toolbar-btn {
-display: flex;
-flex-direction: column;
-align-items: center;
-cursor: pointer;
-margin: 0 2px; /* Reduced side margin from 6px to 2px */
-background: none;
-border: none;
-padding: 0;
-transition: transform 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    margin: 0 2px; /* Reduced side margin from 6px to 2px */
+    background: none;
+    border: none;
+    padding: 0;
+    transition: transform 0.15s ease;
 }
 
 .toolbar-btn:active {
-transform: scale(0.92);
+    transform: scale(0.92);
 }
 
-/* STREAMING_CHUNK:Styling active button icons and notification badges... /
 .toolbar-icon-wrapper {
-position: relative;
-padding: 6px; / Reduced from 10px to scale down wrapper /
-border-radius: 50%;
-border: 1.5px solid black; / Thinned border from 2px for tighter visuals /
-display: flex;
-justify-content: center;
-align-items: center;
-margin-bottom: 2px; / Reduced from 4px */
+    position: relative;
+    padding: 6px; /* Reduced from 10px to scale down wrapper */
+    border-radius: 50%;
+    border: 1.5px solid black; /* Thinned border from 2px for tighter visuals */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 2px; /* Reduced from 4px */
 }
 
 .toolbar-icon-wrapper .material-symbols-outlined {
-font-size: 18px !important; /* Scaled down glyph size from 24px */
+    font-size: 18px !important; /* Scaled down glyph size from 24px */
 }
 
 .toolbar-btn.active .toolbar-icon-wrapper {
-background-color: rgba(0, 0, 0, 0.08);
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 .toolbar-btn.active.like-btn .toolbar-icon-wrapper {
-border-color: #ff5252;
-background-color: rgba(255, 82, 82, 0.08);
+    border-color: #ff5252;
+    background-color: rgba(255, 82, 82, 0.08);
 }
 
 .toolbar-btn.active.like-btn .material-symbols-outlined,
 .toolbar-btn.active.like-btn .toolbar-label {
-color: #ff5252;
+    color: #ff5252;
 }
 
 .badge {
-position: absolute;
-top: -5px;
-right: -5px;
-background-color: #757575;
-color: white;
-font-size: 8px; /* Slightly shrunk from 9px /
-font-weight: bold;
-border-radius: 50%;
-padding: 1px 4px; / Smoother badge bounds */
-border: 1px solid white;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: #757575;
+    color: white;
+    font-size: 8px; /* Slightly shrunk from 9px */
+    font-weight: bold;
+    border-radius: 50%;
+    padding: 1px 4px; /* Smoother badge bounds */
+    border: 1px solid white;
 }
 
 .toolbar-btn.active .badge {
-background-color: black;
+    background-color: black;
 }
 
 .toolbar-btn.active.like-btn .badge {
-background-color: #ff5252;
+    background-color: #ff5252;
 }
 
 .toolbar-label {
-font-size: 9px; /* Shrunk from 10px to guarantee single row fitting */
-color: black;
+    font-size: 9px; /* Shrunk from 10px to guarantee single row fitting */
+    color: black;
 }
 
 .toolbar-btn.active .toolbar-label {
-font-weight: bold;
+    font-weight: bold;
 }
 
-/* STREAMING_CHUNK:Styling reader split layout and Column 2 list-area gutters... /
-/ Stats Table Classes */
+/* Stats Table Classes */
 .stats-table-wrapper {
-width: 100%;
-overflow-x: auto;
+    width: 100%;
+    overflow-x: auto;
 }
 
 .stats-table {
-width: 100%;
-border-collapse: collapse;
-font-size: 11px;
-margin-top: 12px;
-font-family: inherit;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-top: 12px;
+    font-family: inherit;
 }
 
 .stats-table th, .stats-table td {
-border: 1px solid #e0e0e0;
-padding: 8px;
-text-align: center;
+    border: 1px solid #e0e0e0;
+    padding: 8px;
+    text-align: center;
 }
 
 .stats-table th {
-background-color: white;
-color: #546E7A;
-font-weight: bold;
+    background-color: white;
+    color: #546E7A;
+    font-weight: bold;
 }
 
 .stats-table tr:nth-child(even) td {
-background-color: #fafafa;
+    background-color: #fafafa;
 }
 
 .stats-table td.highlight {
-font-weight: bold;
-color: #3f51b5; /* indigo */
+    font-weight: bold;
+    color: #3f51b5; /* indigo */
 }
 
-/* Layout Splitter - CENTERING UPGRADE /
+/* Layout Splitter - CENTERING UPGRADE */
 .reader-split-layout {
-display: flex;
-flex-direction: row;
-justify-content: center; / Center the columns together snugly /
-align-items: stretch;
-width: 100%;
-height: 100vh;
-overflow: hidden;
-background-color: #e5e5e5; / Clean body backdrop */
+    display: flex;
+    flex-direction: row;
+    justify-content: center; /* Center the columns together snugly */
+    align-items: stretch;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    background-color: #e5e5e5; /* Clean body backdrop */
 }
 
 .grid-area {
-background-color: transparent; /* Blends seamlessly in split configuration /
-overflow-y: auto;
-padding: 24px;
-box-sizing: border-box;
-flex: 1; / Default flex when alone /
+    background-color: transparent; /* Blends seamlessly in split configuration */
+    overflow-y: auto;
+    padding: 24px;
+    box-sizing: border-box;
+    flex: 1; /* Default flex when alone */
 }
 .reader-split-layout:has(.list-area) .grid-area {
-flex: 0 0 450px; / Fixed width when list-area is open alongside it */
+    flex: 0 0 450px; /* Fixed width when list-area is open alongside it */
 }
 
-/* STREAMING_CHUNK:Updating Column 2 list-area to grey backdrop with gutters... /
 .list-area {
-background-color: #e5e5e5; / Matching grey backdrop as Column 1 /
-overflow-y: auto;
-padding: 24px; / Gutters around the floating page cards matching Column 1 */
-box-sizing: border-box;
-position: relative;
-border-left: 1px solid #d1d5db;
-box-shadow: -4px 0 16px rgba(0, 0, 0, 0.04);
-display: flex;
-flex-direction: column;
-align-items: center;
+    background-color: white;
+    overflow-y: auto;
+    padding: 0; /* Bleed children elements edge-to-edge if needed */
+    box-sizing: border-box;
+    position: relative;
+    border-left: 1px solid #e0e0e0;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.04); /* Subtly separate list depth */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
-/* Size of List Area on Desktop depending on Editor vs Reader Mode /
+/* Size of List Area on Desktop depending on Editor vs Reader Mode */
 @media (min-width: 901px) {
-/ Reader mode list width - set dynamically by the height of the viewport /
-.list-area.reader-mode {
-flex: 0 0 calc((100vh - 120px) * 0.625 + 48px);
-min-width: calc((100vh - 120px) * 0.625 + 48px);
-max-width: calc((100vh - 120px) * 0.625 + 48px);
-}
-/ Editor mode list width - fixed width on desktop to snugly fit the 650px wide header widget */
-.list-area.editor-mode {
-flex: 0 0 650px;
-min-width: 650px;
-max-width: 650px;
-}
+    /* Reader mode list width - set dynamically by the height of the viewport */
+    .list-area.reader-mode {
+        flex: 0 0 calc((100vh - 120px) * 0.625);
+        min-width: calc((100vh - 120px) * 0.625);
+        max-width: calc((100vh - 120px) * 0.625);
+    }
+    /* Editor mode list width - fixed width on desktop to snugly fit the 650px wide header widget */
+    .list-area.editor-mode {
+        flex: 0 0 650px;
+        min-width: 650px;
+        max-width: 650px;
+    }
 }
 
-/* STREAMING_CHUNK:Configuring mobile responsive rules and table styles... /
-/ Responsive Desktop Split Layout /
+/* Responsive Desktop Split Layout */
 @media (max-width: 900px) {
-.hidden-on-mobile {
-display: none !important;
-}
-.reader-split-layout {
-flex-direction: column;
-justify-content: flex-start;
-}
-.grid-area {
-width: 100% !important;
-flex: 1 !important;
-}
-.list-area {
-width: 100% !important;
-flex: 1 !important;
-min-width: 0 !important; / No min-width on mobile! */
-max-width: none !important;
-}
+    .hidden-on-mobile {
+        display: none !important;
+    }
+    .reader-split-layout {
+        flex-direction: column;
+        justify-content: flex-start;
+    }
+    .grid-area {
+        width: 100% !important;
+        flex: 1 !important;
+    }
+    .list-area {
+        width: 100% !important;
+        flex: 1 !important;
+        min-width: 0 !important; /* No min-width on mobile! */
+        max-width: none !important;
+    }
 }
 
-/* --- BOX SPECIFIC TABLE STYLES --- /
+/* --- BOX SPECIFIC TABLE STYLES --- */
 .stats-table th {
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-color: #6b7280; / text-gray-500 */
-padding: 8px 12px;
-border-bottom: 2px solid #e5e7eb;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280; /* text-gray-500 */
+  padding: 8px 12px;
+  border-bottom: 2px solid #e5e7eb;
 }
 
 .stats-table td {
-padding: 12px;
-border-bottom: 1px solid #f3f4f6;
-vertical-align: middle;
+  padding: 12px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
 }
 
 .stats-table tbody tr:hover {
-background-color: #fafafa;
+  background-color: #fafafa;
 }
 
 .profile-btn {
-transition: all 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .profile-btn:hover {
-background-color: #f3f4f6 !important;
-border-color: #000 !important;
+  background-color: #f3f4f6 !important;
+  border-color: #000 !important;
 }
 
-/* STREAMING_CHUNK:Configuring container sizing and alignment overrides... /
-/ --- HEADER/WIDGET & PAGE WIDTH RULES --- */
+/* --- HEADER/WIDGET & PAGE WIDTH RULES --- */
 
 /* Fanzine Header (Manila Envelope) container */
 .fanzine-header-container {
-width: 100%;
-display: flex;
-justify-content: center;
-box-sizing: border-box;
-margin-bottom: 16px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    box-sizing: border-box;
+    margin-bottom: 16px;
 }
 
 /* Fanzine Page Container */
 .fanzine-page-container {
-width: 100%;
-display: flex;
-justify-content: center;
-box-sizing: border-box;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    box-sizing: border-box;
 }
 
 /* Sizing rules for wrappers */
 .fanzine-header-wrapper {
-width: 100%;
-max-width: 100%;
-box-sizing: border-box;
-}
-
-.fanzine-page-wrapper {
-width: 100%;
-max-width: 100%;
-padding-left: 16px; /* Exactly 16px padding on left/right -> 32px narrower total */
-padding-right: 16px;
-box-sizing: border-box;
-}
-
-/* STREAMING_CHUNK:Configuring desktop alignments and header view toggles... /
-/ Desktop Sizing overrides for Page and Header alignment /
-@media (min-width: 901px) {
-/ Editor mode fanzine header card - comfortable wide display */
-.editor-mode .fanzine-header-wrapper {
-width: 100%;
-max-width: 100%;
-}
-
-/* Editor mode fanzine page container - scales down dynamically from viewport height so 1 full image and toolbar fit vertically! */
-.editor-mode .fanzine-page-wrapper {
-    width: calc((100vh - 220px) * 0.625 + 32px); /* height-based width + 32px horizontal padding offset */
+    width: 100%;
     max-width: 100%;
     box-sizing: border-box;
 }
 
+.fanzine-page-wrapper {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 16px; /* Exactly 16px padding on left/right -> 32px narrower total */
+    padding-right: 16px;
+    box-sizing: border-box;
+}
 
+/* Desktop Sizing overrides for Page and Header alignment */
+@media (min-width: 901px) {
+    /* Editor mode fanzine header card - comfortable wide display */
+    .editor-mode .fanzine-header-wrapper {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    /* Editor mode fanzine page container - scales down dynamically from viewport height so 1 full image and toolbar fit vertically! */
+    .editor-mode .fanzine-page-wrapper {
+        width: calc((100vh - 220px) * 0.625 + 32px); /* height-based width + 32px horizontal padding offset */
+        max-width: 100%;
+        box-sizing: border-box;
+    }
 }
 
 /* Fanzine Header Context Switches */
@@ -784,225 +761,221 @@ max-width: 100%;
 .reader-split-layout:has(.list-area) .grid-area .fh-full-view { display: none !important; }
 .reader-split-layout:has(.list-area) .grid-area .fh-sticker-view { display: flex !important; }
 
-/* STREAMING_CHUNK:Defining animations and shimmer loader keyframes... /
-/ --- SMOOTH PANELS TRANSITIONS --- */
+/* --- SMOOTH PANELS TRANSITIONS --- */
 @keyframes slideDownFadeIn {
-from {
-max-height: 0;
-opacity: 0;
-}
-to {
-max-height: 20000px;
-opacity: 1;
-}
+    from {
+        max-height: 0;
+        opacity: 0;
+    }
+    to {
+        max-height: 20000px;
+        opacity: 1;
+    }
 }
 
 .panel-container-animate {
-animation: slideDownFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-overflow: hidden;
+    animation: slideDownFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    overflow: hidden;
 }
 
 /* --- PREMIUM SHIMMER SKELETON LOADER --- */
 .shimmer-bg {
-background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-background-size: 200% 100%;
-animation: shimmerKeyframe 1.5s infinite linear;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmerKeyframe 1.5s infinite linear;
 }
 
 @keyframes shimmerKeyframe {
-from { background-position: -200% 0; }
-to { background-position: 200% 0; }
+    from { background-position: -200% 0; }
+    to { background-position: 200% 0; }
 }
 
 .skeleton-line {
-height: 12px;
-margin-bottom: 10px;
-border-radius: 4px;
-width: 100%;
+    height: 12px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    width: 100%;
 }
 .skeleton-line.short {
-width: 60%;
+    width: 60%;
 }
 .skeleton-line.medium {
-width: 85%;
+    width: 85%;
 }
 
-/* STREAMING_CHUNK:Styling profile envelope cards and mobile layout containers... /
-/ --- COMPLIANT SQUARED 8X5 PREMIUM PROFILE CARD CSS CLASSES --- /
+/* --- COMPLIANT SQUARED 8X5 PREMIUM PROFILE CARD CSS CLASSES --- */
 .envelope-8-5-desktop {
-display: flex;
-width: 100%;
-background-color: var(--envelope-yellow, #F1B255);
-padding: 20px;
-box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
-box-sizing: border-box;
-border-radius: 0px !important; / Fully Squared /
+    display: flex;
+    width: 100%;
+    background-color: var(--envelope-yellow, #F1B255);
+    padding: 20px;
+    box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
+    box-sizing: border-box;
+    border-radius: 0px !important; /* Fully Squared */
 }
 .white-sticker-8-5 {
-background-color: white;
-border-radius: 0px !important; / Fully Squared */
-border: 1px solid rgba(0,0,0,0.05);
-box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-width: 100%;
-height: 100%;
-display: flex;
-box-sizing: border-box;
-padding: 24px;
-overflow: hidden;
+    background-color: white;
+    border-radius: 0px !important; /* Fully Squared */
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    box-sizing: border-box;
+    padding: 24px;
+    overflow: hidden;
 }
 .profile-desktop-left {
-flex: 1;
-display: flex;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-padding-right: 24px;
-box-sizing: border-box;
-text-align: center;
-overflow-y: auto;
-max-height: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-right: 24px;
+    box-sizing: border-box;
+    text-align: center;
+    overflow-y: auto;
+    max-height: 100%;
 }
 .profile-desktop-right {
-flex: 1;
-display: flex;
-flex-direction: column;
-padding-left: 24px;
-box-sizing: border-box;
-overflow-y: auto;
-max-height: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-left: 24px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    max-height: 100%;
 }
 .profile-desktop-divider {
-width: 1px;
-background-color: #eee;
-align-self: stretch;
+    width: 1px;
+    background-color: #eee;
+    align-self: stretch;
 }
 
 /* --- PERFECT ROW ELEMENT WIDTH ALIGNMENT --- */
 .unified-profile-column {
-width: 100%;
-max-width: 800px;
-display: flex;
-flex-direction: column;
-box-sizing: border-box;
+    width: 100%;
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
 }
 
 .profile-spacer {
-width: 100%;
-height: 16px;
-flex-shrink: 0;
+    width: 100%;
+    height: 16px;
+    flex-shrink: 0;
 }
 
 .envelope-8-5-mobile-container {
-display: none;
+    display: none;
 }
 @media (max-width: 768px) {
-.envelope-8-5-desktop {
-display: none !important;
-}
-.envelope-8-5-mobile-container {
-display: flex !important;
-flex-direction: column;
-gap: 16px;
-width: 100%;
-}
-.envelope-8-5-mobile-item {
-width: 100%;
-background-color: var(--envelope-yellow, #F1B255);
-padding: 16px;
-box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
-box-sizing: border-box;
-display: flex;
-flex-direction: column;
-border-radius: 0px !important; /* Fully Squared /
-}
-.white-sticker-mobile-8-5 {
-background-color: white;
-border-radius: 0px !important; / Fully Squared */
-border: 1px solid rgba(0,0,0,0.05);
-box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-width: 100%;
-display: flex;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-padding: 16px;
-box-sizing: border-box;
-}
+    .envelope-8-5-desktop {
+        display: none !important;
+    }
+    .envelope-8-5-mobile-container {
+        display: flex !important;
+        flex-direction: column;
+        gap: 16px;
+        width: 100%;
+    }
+    .envelope-8-5-mobile-item {
+        width: 100%;
+        background-color: var(--envelope-yellow, #F1B255);
+        padding: 16px;
+        box-shadow: 4px 8px 15px rgba(0,0,0,0.26);
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        border-radius: 0px !important; /* Fully Squared */
+    }
+    .white-sticker-mobile-8-5 {
+        background-color: white;
+        border-radius: 0px !important; /* Fully Squared */
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+    }
 }
 
-/* STREAMING_CHUNK:Styling profile buttons and social links... /
-/ --- PREMIUM PROFILE BUTTONS SQUARED --- /
+/* --- PREMIUM PROFILE BUTTONS SQUARED --- */
 .profile-btn {
-border-radius: 0px !important; / Fully Squared */
-background: white;
-color: black;
-border: 1px solid #ddd;
-transition: all 0.15s ease-in-out;
-box-sizing: border-box;
+    border-radius: 0px !important; /* Fully Squared */
+    background: white;
+    color: black;
+    border: 1px solid #ddd;
+    transition: all 0.15s ease-in-out;
+    box-sizing: border-box;
 }
 .profile-btn:hover {
-background-color: #fafafa;
-text-decoration: none !important;
+    background-color: #fafafa;
+    text-decoration: none !important;
 }
 
-/* --- PREMIUM SQUARED SOCIAL BUTTONS WITH CENTERED TEXT AND HOVER EXCLUSIONS --- /
+/* --- PREMIUM SQUARED SOCIAL BUTTONS WITH CENTERED TEXT AND HOVER EXCLUSIONS --- */
 .social-link-button {
-display: flex;
-align-items: center;
-justify-content: center; / Center Text Alignment /
-padding: 8px 12px;
-border: 1px solid #ddd;
-background-color: #fafafa;
-border-radius: 0px !important; / Fully Squared /
-margin-bottom: 8px;
-cursor: pointer;
-transition: background 0.15s;
-text-decoration: none !important; / Eradicate parent underline /
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center Text Alignment */
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    background-color: #fafafa;
+    border-radius: 0px !important; /* Fully Squared */
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-decoration: none !important; /* Eradicate parent underline */
 }
 .social-link-button:hover {
-background-color: #f5f5f5;
+    background-color: #f5f5f5;
 }
 .social-link-button .handle-text {
-font-size: 11px;
-color: #3f51b5;
-margin-left: 4px;
-text-decoration: none; / No default underline /
-font-weight: 500;
+    font-size: 11px;
+    color: #3f51b5;
+    margin-left: 4px;
+    text-decoration: none; /* No default underline */
+    font-weight: 500;
 }
 .social-link-button:hover .handle-text {
-text-decoration: underline !important; / Underline handle text on hover only */
+    text-decoration: underline !important; /* Underline handle text on hover only */
 }
 
-/* STREAMING_CHUNK:Styling auto-growing textarea containers... /
-/ --- PREMIUM AUTO-GROWING TEXTAREA CONTAINER SYSTEM --- /
+/* --- PREMIUM AUTO-GROWING TEXTAREA CONTAINER SYSTEM --- */
 .grow-wrap {
-display: grid;
-width: 100%;
+    display: grid;
+    width: 100%;
 }
 .grow-wrap::after {
-/ Exact layout mirrors textarea styling to calculate accurate line wrapping height */
-content: attr(data-replicated-value) " ";
-white-space: pre-wrap;
-word-break: break-word;
-visibility: hidden;
-font-family: Courier, monospace;
-font-size: 14px;
-line-height: 1.5;
-padding: 12px;
-border: 1px solid transparent;
-grid-area: 1 / 1 / 2 / 2;
-box-sizing: border-box;
+    /* Exact layout mirrors textarea styling to calculate accurate line wrapping height */
+    content: attr(data-replicated-value) " ";
+    white-space: pre-wrap;
+    word-break: break-word;
+    visibility: hidden;
+    font-family: Courier, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 12px;
+    border: 1px solid transparent;
+    grid-area: 1 / 1 / 2 / 2;
+    box-sizing: border-box;
 }
 .grow-wrap > textarea {
-grid-area: 1 / 1 / 2 / 2;
-resize: none;
-overflow: hidden;
-font-family: Courier, monospace;
-font-size: 14px;
-line-height: 1.5;
-width: 100%;
-box-sizing: border-box;
-outline: none;
-padding: 12px;
-margin: 0;
+    grid-area: 1 / 1 / 2 / 2;
+    resize: none;
+    overflow: hidden;
+    font-family: Courier, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+    padding: 12px;
+    margin: 0;
 }
