@@ -5,6 +5,7 @@ import 'web_fanzine_repository.dart';
 import 'web_pipeline_repository.dart';
 import 'web_upload_repository.dart';
 import 'web_user_repository.dart';
+import 'web_game_service.dart';
 
 IAuthRepository createAuthRepository() => WebAuthRepository();
 IFanzineRepository createFanzineRepository() => WebFanzineRepository();
@@ -12,3 +13,4 @@ IEngagementRepository createEngagementRepository() => WebEngagementRepository();
 IPipelineRepository createPipelineRepository() => WebPipelineRepository();
 IUploadRepository createUploadRepository() => WebUploadRepository();
 IUserRepository createUserRepository() => WebUserRepository();
+IGameService createGameService() => WebGameService();

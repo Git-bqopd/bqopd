@@ -18,6 +18,7 @@ import 'panels/credits_panel.dart';
 import 'panels/youtube_panel.dart';
 import 'panels/analytics_panel.dart';
 import 'panels/publisher_text_panel.dart';
+import 'panels/terminal_panel.dart';
 
 class SocialToolbar extends StatefulComponent {
   final String imageId;
@@ -344,7 +345,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
                   'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
                 }
             ),
-            if (count != null && count! > 0)
+            if (count != null && count > 0)
               span(classes: 'badge', [Component.text('$count')])
           ]),
           span(classes: 'toolbar-label', [Component.text(tool.label)])
@@ -372,6 +373,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
           togglableTools.add(tool);
         } catch (_) {}
       }
+
       return div(
           classes: 'toolbar-container panel-container-animate mt-2',
           attributes: const {
@@ -401,6 +403,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
           visibleEditorTools.add(tool);
         } catch (_) {}
       }
+
       return div(
           classes: 'toolbar-container panel-container-animate mt-2',
           attributes: const {
@@ -433,6 +436,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final bool isVisible = hasContent ? (_socialButtonVisibility[tool.id] ?? true) : false;
     bool isToolActive = false;
     int? toolCount;
+
     if (tool.id == 'Like') {
       isToolActive = _isLiked;
       toolCount = _likeCount;
@@ -523,7 +527,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
   Component _buildTemplatesToggleButton() {
     final bool isActive = _showTemplatesRow;
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
-
     return button(
         classes: btnClasses,
         attributes: const {
@@ -653,78 +656,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  Component _buildPanelContent(String imageId) {
-    Component inner;
-    String title = "";
-    if (component.activeBonusRow == null) return div([]);
-    switch (component.activeBonusRow!) {
-      case BonusRowType.textReader:
-        title = "";
-        inner = TextReaderPanel(imageId: imageId, fanzineId: component.fanzineId);
-        break;
-      case BonusRowType.comments:
-        title = "Comments";
-        inner = CommentsPanel(imageId: imageId);
-        break;
-      case BonusRowType.tags:
-        title = "Hashtags & Voting";
-        inner = HashtagPanel(imageId: imageId);
-        break;
-      case BonusRowType.rawText:
-        title = "Raw OCR Text";
-        inner = RawTextPanel(imageId: imageId);
-        break;
-      case BonusRowType.editText:
-      case BonusRowType.linkedText:
-        title = "";
-        inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId);
-        break;
-      case BonusRowType.entities:
-        title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false);
-        break;
-      case BonusRowType.indicia:
-        title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: false);
-        break;
-      case BonusRowType.credits:
-        title = "Creators";
-        inner = CreditsPanel(imageId: imageId);
-        break;
-      case BonusRowType.youtube:
-        title = "Video Resource";
-        inner = YoutubePanel(imageId: imageId);
-        break;
-      case BonusRowType.analyticsDashboard:
-        title = "Analytics Dashboard";
-        inner = AnalyticsPanel(imageId: imageId);
-        break;
-      case BonusRowType.newPage:
-        title = "New Page Text Editor";
-        inner = PublisherTextPanel(imageId: imageId, fanzineId: component.fanzineId);
-        break;
-      case BonusRowType.terminal:
-        title = "Terminal Game";
-        inner = div([
-          p(classes: 'text-center text-sm text-gray p-6 italic', [
-            text('CA Combat Terminal is optimized only for mobile application contexts.')
-          ])
-        ]);
-        break;
-      default:
-        return div([]);
-    }
-    return PanelContainer(
-      title: title,
-      type: component.activeBonusRow!,
-      child: inner,
-    );
-  }
-
   Component _buildEditorPanelContent(String imageId) {
     Component inner;
     String title = "";
     if (_activeEditorPanel == null) return div([]);
+
     switch (_activeEditorPanel!) {
       case BonusRowType.rawText:
         title = "Raw OCR Text";
@@ -761,16 +697,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
         inner = PublisherTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.terminal:
-        title = "Terminal Game";
-        inner = div([
-          p(classes: 'text-center text-sm text-gray p-6 italic', [
-            text('CA Combat Terminal is optimized only for mobile application contexts.')
-          ])
-        ]);
+        title = "Combat Terminal";
+        inner = TerminalPanel(imageId: imageId);
         break;
       default:
         return div([]);
     }
+
     return PanelContainer(
       title: title,
       type: _activeEditorPanel!,
@@ -789,7 +722,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     setState(() {
       _socialButtonVisibility[toolId] = next;
     });
-    await fsUpdateDoc('images/${component.imageId}', jsonEncode({
+    await fsUpdateDoc('Users/$uid', jsonEncode({
       'preferences.socialButtons.$toolId': next
     }));
   }

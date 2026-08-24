@@ -98,9 +98,23 @@ class StubUserRepository implements IUserRepository {
   Future<String?> claimHandleForUser(String handle) async => null;
 }
 
+class StubGameService implements IGameService {
+  @override
+  Stream<List<GameCharacter>> getMyCharacters(String userId) => Stream.value([]);
+  @override
+  Stream<List<GameCharacter>> getPublicCharacters(String currentUserId) => Stream.value([]);
+  @override
+  Future<void> createCharacter(String userId, String name) async {}
+  @override
+  Future<void> updateCharacter(GameCharacter char) async {}
+  @override
+  Future<void> saveBattleLog(BattleLog log) async {}
+}
+
 IAuthRepository createAuthRepository() => StubAuthRepository();
 IFanzineRepository createFanzineRepository() => StubFanzineRepository();
 IEngagementRepository createEngagementRepository() => StubEngagementRepository();
 IPipelineRepository createPipelineRepository() => StubPipelineRepository();
 IUploadRepository createUploadRepository() => StubUploadRepository();
 IUserRepository createUserRepository() => StubUserRepository();
+IGameService createGameService() => StubGameService();

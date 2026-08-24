@@ -68,10 +68,10 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   @override
   Component build(BuildContext context) {
     return div(classes: 'flex-col items-center w-full', [
-      // Manila Envelope / Workspace Editor Widget: Styled responsively to fill parent layouts cleanly
+      // Manila Envelope / Workspace Editor Widget
       div(
           id: 'fanzine-header',
-          classes: 'fanzine-header-container mb-4 flex-row justify-center w-full',
+          classes: 'fanzine-header-container mb-6 flex-row justify-center w-full',
           [
             div(
                 classes: '${component.isEditingMode ? 'manila-envelope-flexible' : 'manila-envelope'} fanzine-header-wrapper',
@@ -80,29 +80,30 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
           ]
       ),
 
-      // Page Images Loop: Centered inner column aligned perfectly with the header limits
       for (int i = 0; i < component.pages.length; i++)
         div(
             id: 'reader-page-$i',
-            classes: 'fanzine-page-container w-full flex-row justify-center', // Centers the inner column using flex-row
+            classes: 'fanzine-page-container w-full flex-row justify-center mb-6',
             attributes: i == component.pages.length - 1
                 ? const {
-              'style': 'padding-bottom: 48px; box-sizing: border-box;'
+              'style': 'padding-bottom: 24px; box-sizing: border-box; width: 100%;'
             }
                 : const {
-              'style': 'box-sizing: border-box;'
+              'style': 'box-sizing: border-box; width: 100%;'
             },
             [
-              // Inside column: Sized dynamically via CSS class and padded to stand exactly 32px narrower than the header
               div(
-                  classes: 'fanzine-page-wrapper',
+                  classes: 'fanzine-page-wrapper w-full',
+                  attributes: const {'style': 'width: 100%; box-sizing: border-box;'},
                   [
                     ReaderPageItem(
-                      fanzineId: component.fanzineId, // Correctly resolved field getter
+                      fanzineId: component.fanzineId,
                       pageData: component.pages[i],
                       pageIndex: i,
                       onOpenGrid: component.onOpenGrid,
-                      likedImageIds: component.likedImageIds, // Pass downs down
+                      activeGlobalPanel: component.activeGlobalPanel,
+                      onTogglePanel: component.onTogglePanel,
+                      likedImageIds: component.likedImageIds,
                       initialImageStats: component.preloadedImageStats[component.pages[i]['imageId']],
                       authState: component.authState,
                       authBloc: component.authBloc,

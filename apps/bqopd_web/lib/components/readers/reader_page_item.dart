@@ -16,6 +16,7 @@ import '../panels/credits_panel.dart';
 import '../panels/youtube_panel.dart';
 import '../panels/analytics_panel.dart';
 import '../panels/publisher_text_panel.dart';
+import '../panels/terminal_panel.dart';
 
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
@@ -25,8 +26,10 @@ class ReaderPageItem extends StatefulComponent {
   final Map<String, dynamic>? initialImageStats;
   final Set<String> likedImageIds;
   final AuthState? authState;
-  final AuthBloc? authBloc; // FIXED: Corrected type to AuthBloc? to resolve type mismatch errors
+  final AuthBloc? authBloc;
   final bool isEditingMode;
+  final BonusRowType? activeGlobalPanel;
+  final ValueChanged<BonusRowType>? onTogglePanel;
 
   const ReaderPageItem({
     required this.fanzineId,
@@ -38,6 +41,8 @@ class ReaderPageItem extends StatefulComponent {
     this.authState,
     this.authBloc,
     this.isEditingMode = false,
+    this.activeGlobalPanel,
+    this.onTogglePanel,
     super.key,
   });
 
@@ -46,7 +51,6 @@ class ReaderPageItem extends StatefulComponent {
 }
 
 class _ReaderPageItemState extends State<ReaderPageItem> {
-  BonusRowType? _activePanel;
   String _templateTextValue = '';
   dynamic _imgDataUnsub;
 
@@ -76,12 +80,12 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     final imageId = component.pageData['imageId'];
     final templateId = component.pageData['templateId'];
     if (imageId == null || imageId.isEmpty || templateId != 'basic_text') return;
+
     _imgDataUnsub = fsListenDoc('images/$imageId', (String jsonStr) {
       try {
         final doc = jsonDecode(jsonStr);
         if (doc['exists'] == true && mounted) {
           setState(() {
-            // FIXED: Prioritize text_linked over text_corrected here as well
             _templateTextValue = doc['data']['text_linked'] ?? doc['data']['text_corrected'] ?? doc['data']['text'] ?? '';
           });
         }
@@ -90,58 +94,79 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   }
 
   void _handleTogglePanel(BonusRowType type) {
-    setState(() {
-      _activePanel = (_activePanel == type) ? null : type;
-    });
+    if (component.onTogglePanel != null) {
+      component.onTogglePanel!(type);
+    }
   }
 
   @override
   Component build(BuildContext context) {
     final String imageId = component.pageData['imageId'] ?? '';
     final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
-    return div(classes: 'reader-list-item flex-col w-full', [
-      div(classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center', [
-        if (url != null && url.isNotEmpty)
-          img(
-              src: url,
-              classes: 'w-full h-full',
-              attributes: {
-                'style': 'object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
-                'draggable': 'false',
-                'loading': 'lazy',
-              }
+
+    return div(
+        classes: 'reader-list-item-card bg-white rounded-lg border border-gray-300 shadow-md mb-6 w-full flex-col overflow-hidden',
+        attributes: const {
+          'style': 'background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); overflow: hidden; margin-bottom: 24px; width: 100%; box-sizing: border-box;'
+        },
+        [
+          // Top Card Section: Page Image Container
+          div(
+              classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center border-b border-gray-200 w-full',
+              attributes: const {
+                'style': 'aspect-ratio: 5 / 8; background-color: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #e2e8f0; width: 100%;'
+              },
+              [
+                if (url != null && url.isNotEmpty)
+                  img(
+                      src: url,
+                      classes: 'w-full h-full',
+                      attributes: const {
+                        'style': 'width: 100%; height: 100%; object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
+                        'draggable': 'false',
+                        'loading': 'lazy',
+                      }
+                  )
+                else
+                  div(classes: 'flex-col gap-2 py-4 w-full h-full justify-center items-center p-8', [
+                    div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 80%; height: 16px; margin-bottom: 12px;'}),
+                    div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'width: 90%; height: 16px; margin-bottom: 12px;'}),
+                    div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 70%; height: 16px; margin-bottom: 12px;'}),
+                    div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'width: 50%; height: 16px; margin-bottom: 12px;'}),
+                  ])
+              ]
+          ),
+          // Bottom Card Section: Social Toolbar + Social Panel (Stretches Card vertically when opened)
+          div(
+              classes: 'bg-white p-3 flex-col w-full',
+              attributes: const {
+                'style': 'background-color: #ffffff; padding: 12px; display: flex; flex-direction: column; width: 100%; box-sizing: border-box;'
+              },
+              [
+                SocialToolbar(
+                  imageId: imageId,
+                  fanzineId: component.fanzineId,
+                  onOpenGrid: component.onOpenGrid,
+                  activeBonusRow: component.activeGlobalPanel,
+                  onToggleBonusRow: _handleTogglePanel,
+                  likedImageIds: component.likedImageIds,
+                  initialImageStats: component.initialImageStats,
+                  authState: component.authState,
+                  authBloc: component.authBloc,
+                  isEditingMode: component.isEditingMode,
+                ),
+                if (component.activeGlobalPanel != null && component.activeGlobalPanel != BonusRowType.settings)
+                  _buildPanelContent(imageId, component.activeGlobalPanel!),
+              ]
           )
-        else
-          div(classes: 'flex-col gap-2 py-4 w-full h-full justify-center items-center p-8', [
-            div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 80%; height: 16px; margin-bottom: 12px;'}),
-            div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'width: 90%; height: 16px; margin-bottom: 12px;'}),
-            div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 70%; height: 16px; margin-bottom: 12px;'}),
-            div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'width: 50%; height: 16px; margin-bottom: 12px;'}),
-          ])
-      ]),
-      div(classes: 'bg-white', [
-        SocialToolbar(
-          imageId: imageId,
-          fanzineId: component.fanzineId,
-          onOpenGrid: component.onOpenGrid,
-          activeBonusRow: _activePanel,
-          onToggleBonusRow: _handleTogglePanel,
-          likedImageIds: component.likedImageIds,
-          initialImageStats: component.initialImageStats,
-          authState: component.authState,
-          authBloc: component.authBloc,
-          isEditingMode: component.isEditingMode,
-        ),
-        if (_activePanel != null && _activePanel != BonusRowType.settings)
-          _buildPanelContent(imageId),
-      ])
-    ]);
+        ]
+    );
   }
 
-  Component _buildPanelContent(String imageId) {
+  Component _buildPanelContent(String imageId, BonusRowType activePanel) {
     Component inner;
     String title = "";
-    switch (_activePanel!) {
+    switch (activePanel) {
       case BonusRowType.textReader:
         title = "";
         inner = TextReaderPanel(imageId: imageId, fanzineId: component.fanzineId);
@@ -158,18 +183,18 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         title = "Raw OCR Text";
         inner = RawTextPanel(imageId: imageId);
         break;
-      case BonusRowType.editText: // FIXED: Uses matching editText enum name
+      case BonusRowType.editText:
       case BonusRowType.linkedText:
         title = "";
         inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:
         title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false); // ALWAYS reader mode from main toolbar
+        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false);
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId, isEditingMode: false); // ALWAYS reader mode from main toolbar
+        inner = IndiciaPanel(fanzineId: component.fanzineId, isEditingMode: false);
         break;
       case BonusRowType.credits:
         title = "Creators";
@@ -188,19 +213,16 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         inner = PublisherTextPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.terminal:
-        title = "Terminal Game";
-        inner = div([
-          p(classes: 'text-center text-sm text-gray p-6 italic', [
-            text('CA Combat Terminal is optimized only for mobile application contexts.')
-          ])
-        ]);
+        title = "Combat Terminal";
+        inner = TerminalPanel(imageId: imageId);
         break;
       default:
         return div([]);
     }
+
     return PanelContainer(
       title: title,
-      type: _activePanel!,
+      type: activePanel,
       child: inner,
     );
   }
