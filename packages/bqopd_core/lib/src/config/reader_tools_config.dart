@@ -3,17 +3,15 @@ import '../models/reader_tool.dart';
 class ReaderToolsConfig {
   static bool isToolVisibleInContext({
     required ReaderTool tool,
-    required String userRole,
-    required bool isEditingMode,
+    required ToolScope activeScope,
     String? fanzineType,
     bool hasYoutube = false,
     bool isGame = false,
     bool isIndiciaPage = false,
     bool canOpenGrid = false,
   }) {
-    final bool isElevated = userRole == 'admin' || userRole == 'moderator' || userRole == 'curator';
-    if (tool.role == ToolRole.editor && !isElevated) return false;
-    if (tool.role == ToolRole.editor && !isEditingMode) return false;
+    if (!tool.scopes.contains(activeScope)) return false;
+
     switch (tool.condition) {
       case ToolCondition.requiresYouTube:
         if (!hasYoutube) return false;
@@ -73,31 +71,31 @@ class ReaderToolsConfig {
       defaultIcon: 'assets/social_toolbar/text.svg',
       bonusRow: BonusRowType.textReader,
     ),
-    // 5. Raw (raw) - [Editor Only]
+    // 5. Raw (raw)
     ReaderTool(
       id: 'Raw',
       label: 'raw',
       description: 'View the raw OCR output.',
       defaultIcon: 'assets/social_toolbar/raw.svg',
-      role: ToolRole.editor,
+      scopes: const {ToolScope.editor, ToolScope.curator},
       bonusRow: BonusRowType.rawText,
     ),
-    // 6. Master (edit text) - [Editor Only Combined Panel]
+    // 6. Master (edit text)
     ReaderTool(
       id: 'Master',
       label: 'edit text',
       description: 'Edit page text and adjust wiki-links in a unified editor.',
       defaultIcon: 'assets/social_toolbar/edit.svg',
-      role: ToolRole.editor,
-      bonusRow: BonusRowType.editText, // FIXED: Renamed masterText reference to editText
+      scopes: const {ToolScope.editor, ToolScope.curator},
+      bonusRow: BonusRowType.editText,
     ),
-    // 7. Entities (entities) - [Editor Only]
+    // 7. Entities (entities)
     ReaderTool(
       id: 'Entities',
       label: 'entities',
       description: 'Link detected names to internal profiles.',
       defaultIcon: 'assets/social_toolbar/entities.svg',
-      role: ToolRole.editor,
+      scopes: const {ToolScope.curator},
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
     ),
@@ -118,22 +116,22 @@ class ReaderToolsConfig {
       condition: ToolCondition.requiresIndicia,
       bonusRow: BonusRowType.indicia,
     ),
-    // 10. Credits (credits) - [Editor Only]
+    // 10. Credits (credits)
     ReaderTool(
       id: 'Credits',
       label: 'credits',
       description: 'Manage archival metadata and contributor lists.',
       defaultIcon: 'assets/social_toolbar/credits.svg',
-      role: ToolRole.editor,
+      scopes: const {ToolScope.editor, ToolScope.curator},
       bonusRow: BonusRowType.credits,
     ),
-    // 11. Views (views) - [Editor Only]
+    // 11. Views (views)
     ReaderTool(
       id: 'Views',
       label: 'views',
       description: 'View detailed reader analytics for this content.',
       defaultIcon: 'assets/social_toolbar/views.svg',
-      role: ToolRole.editor,
+      scopes: const {ToolScope.editor, ToolScope.curator},
       bonusRow: BonusRowType.analyticsDashboard,
     ),
     // 12. YouTube (YouTube)
@@ -171,13 +169,13 @@ class ReaderToolsConfig {
       defaultIcon: 'assets/social_toolbar/buttons.svg',
       bonusRow: BonusRowType.settings,
     ),
-    // 16. New Page (new page) - [Editor Only Settings subrow]
+    // 16. New Page (new page)
     ReaderTool(
       id: 'NewPage',
       label: 'new page',
       description: 'Insert a blank 2000x3200 publisher text page.',
       defaultIcon: 'assets/social_toolbar/new_page.svg',
-      role: ToolRole.editor,
+      scopes: const {ToolScope.editor},
       bonusRow: BonusRowType.newPage,
     ),
   ];

@@ -47,7 +47,7 @@ class SettingsPanel extends StatelessWidget {
     final userProvider = Provider.of<UserProvider>(context);
 
     final togglableTools = ReaderToolsConfig.tools
-        .where((t) => t.id != 'Settings' && t.role == ToolRole.public)
+        .where((t) => t.id != 'Settings' && t.scopes.contains(ToolScope.reader))
         .toList();
 
     return Column(

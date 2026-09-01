@@ -1,6 +1,7 @@
-enum ToolRole {
-  public, // Visible to everyone
-  editor, // Visible only to curators/editors
+enum ToolScope {
+  reader,  // FanzineReaderPage SocialToolbar
+  editor,  // FanzineEditor SocialToolbar (Maker)
+  curator, // FanzineCurator SocialToolbar
 }
 
 enum ToolAction {
@@ -23,7 +24,7 @@ enum ToolCondition {
 enum BonusRowType {
   textReader,
   rawText,
-  editText, // FIXED: Renamed from masterText to editText for perfect uniform naming conventions
+  editText,
   linkedText,
   comments,
   editDetails,
@@ -37,7 +38,7 @@ enum BonusRowType {
   analyticsDashboard,
   shareOptions,
   terminal,
-  newPage, // Added for high-fidelity Publisher template editing on web
+  newPage,
 }
 
 /// Pure Dart data model for a dynamic toolbar button.
@@ -50,7 +51,7 @@ class ReaderTool {
   final String? activeIcon;
   final String? darkIcon;
 
-  final ToolRole role;
+  final Set<ToolScope> scopes;
   final ToolAction action;
   final ToolCondition condition;
   final BonusRowType? bonusRow;
@@ -62,7 +63,7 @@ class ReaderTool {
     required this.defaultIcon,
     this.activeIcon,
     this.darkIcon,
-    this.role = ToolRole.public,
+    this.scopes = const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
     this.action = ToolAction.openBonusRow,
     this.condition = ToolCondition.always,
     this.bonusRow,

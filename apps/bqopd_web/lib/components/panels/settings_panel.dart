@@ -82,7 +82,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
     }
 
     final togglableTools = ReaderToolsConfig.tools
-        .where((t) => t.id != 'Settings' && t.role == ToolRole.public)
+        .where((t) => t.id != 'Settings' && t.scopes.contains(ToolScope.reader))
         .toList();
 
     return div(classes: 'flex-col gap-2 py-4', [

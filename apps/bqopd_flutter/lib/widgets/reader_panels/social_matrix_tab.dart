@@ -103,12 +103,12 @@ class _SocialMatrixTabState extends State<SocialMatrixTab> {
                       width: 250,
                       child: Text(tool.description, style: const TextStyle(fontSize: 12, height: 1.4, color: Colors.black54)),
                     )),
-                    DataCell(Center(child: _buildPreview(tool, false, 'ingested'))),
-                    DataCell(Center(child: _buildPreview(tool, true, 'folio'))),
+                    DataCell(Center(child: _buildPreview(tool, ToolScope.reader, 'ingested'))),
+                    DataCell(Center(child: _buildPreview(tool, ToolScope.editor, 'folio'))),
                     // Mode 3: Curator (Column shuts off if role not selected)
                     DataCell(Center(
                         child: isCuratorActive
-                            ? _buildPreview(tool, true, 'ingested')
+                            ? _buildPreview(tool, ToolScope.curator, 'ingested')
                             : const Icon(Icons.lock_outline, color: Colors.black12, size: 16)
                     )),
                   ]);
@@ -122,11 +122,10 @@ class _SocialMatrixTabState extends State<SocialMatrixTab> {
     );
   }
 
-  Widget _buildPreview(ReaderTool tool, bool isEditing, String type) {
+  Widget _buildPreview(ReaderTool tool, ToolScope scope, String type) {
     bool isVisible = ReaderToolsConfig.isToolVisibleInContext(
       tool: tool,
-      userRole: _selectedRole,
-      isEditingMode: isEditing,
+      activeScope: scope,
       fanzineType: type,
       hasYoutube: true,
       isGame: true,

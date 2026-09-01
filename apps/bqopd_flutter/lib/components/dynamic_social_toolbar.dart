@@ -19,6 +19,7 @@ class DynamicSocialToolbar extends StatefulWidget {
   final bool isGame;
   final String? youtubeId;
   final bool isEditingMode;
+  final ToolScope? activeScope;
   final bool isIndiciaPage;
   final VoidCallback? onOpenGrid;
   final Function(BonusRowType) onToggleBonusRow;
@@ -33,7 +34,8 @@ class DynamicSocialToolbar extends StatefulWidget {
     this.pageNumber,
     this.isGame = false,
     this.youtubeId,
-    required this.isEditingMode,
+    this.isEditingMode = false,
+    this.activeScope,
     this.isIndiciaPage = false,
     this.onOpenGrid,
     required this.onToggleBonusRow,
@@ -135,11 +137,13 @@ class _DynamicSocialToolbarState extends State<DynamicSocialToolbar> {
     final userProvider = Provider.of<UserProvider>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
+    final effectiveScope = widget.activeScope ??
+        (widget.isEditingMode ? ToolScope.editor : ToolScope.reader);
+
     final visibleTools = ReaderToolsConfig.tools.where((tool) {
       bool isContextuallyVisible = ReaderToolsConfig.isToolVisibleInContext(
         tool: tool,
-        userRole: userProvider.userAccount?.role ?? 'user',
-        isEditingMode: widget.isEditingMode,
+        activeScope: effectiveScope,
         fanzineType: widget.fanzineType,
         hasYoutube: widget.youtubeId != null && widget.youtubeId!.isNotEmpty,
         isGame: widget.isGame,
