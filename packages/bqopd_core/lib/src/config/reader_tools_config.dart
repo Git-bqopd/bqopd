@@ -95,7 +95,7 @@ class ReaderToolsConfig {
       label: 'entities',
       description: 'Link detected names to internal profiles.',
       defaultIcon: 'assets/social_toolbar/entities.svg',
-      scopes: const {ToolScope.curator},
+      scopes: const {ToolScope.curator, ToolScope.reader},
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
     ),

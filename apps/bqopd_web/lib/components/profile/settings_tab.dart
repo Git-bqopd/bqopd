@@ -4,9 +4,8 @@ import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
-import '../../utils/icon_utils.dart';
 import '../editor/modals/confirm_modal.dart';
-import '../social_toolbar.dart';
+import './settings_social_buttons_page.dart';
 
 /// Unified utility to normalize handles consistently across settings, curator, and entities directory.
 String normalizeHandle(String input) {
@@ -46,26 +45,6 @@ class ProfileSettingsTab extends StatefulComponent {
 
 class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   int _activeSubTab = 0; // 0: shortcodes, 1: managed profiles, 2: permissions, 3: social buttons
-  Map<String, bool> _socialButtonVisibility = {};
-
-  // Active bonus row states for the top live preview toolbars
-  BonusRowType? _previewReaderBonusRow;
-  BonusRowType? _previewCuratorBonusRow;
-  BonusRowType? _previewEditorBonusRow;
-
-  // Active matrix feature/question column filters
-  final Set<String> _activeMatrixColumns = {'position', 'reader', 'maker'};
-  static const Map<String, String> _matrixColumnLabels = {
-    'position': 'position',
-    'reader': 'fanzine reader',
-    'maker': 'maker / editor',
-    'curator': 'curator pipeline',
-    'guests': 'public guests',
-  };
-
-  // Simplified Drag and Drop State
-  List<ReaderTool> _orderedTools = [];
-  int? _draggedIndex;
 
   // Create Managed Profile Inputs
   String _newManagedFirstName = '';
@@ -105,10 +84,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   void initState() {
     super.initState();
     _resolveActiveSubTab();
-    _initOrderedTools();
-    if (component.viewerAccount != null && component.viewerAccount!.preferences.containsKey('socialButtons')) {
-      _socialButtonVisibility = Map<String, bool>.from(component.viewerAccount!.preferences['socialButtons']);
-    }
     _loadGlobalSettings();
     if (kIsWeb) {
       Future.microtask(() {
@@ -171,33 +146,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     }
   }
 
-  void _initOrderedTools() {
-    final defaultTools = List<ReaderTool>.from(ReaderToolsConfig.tools);
-    // Guarantee 'buttons' (Settings) is placed at the very end as the furthest right toolbar button
-    final settingsIdx = defaultTools.indexWhere((t) => t.id == 'Settings');
-    if (settingsIdx != -1 && settingsIdx != defaultTools.length - 1) {
-      final settingsTool = defaultTools.removeAt(settingsIdx);
-      defaultTools.add(settingsTool);
-    }
-
-    if (component.viewerAccount != null && component.viewerAccount!.preferences.containsKey('socialButtonsOrder')) {
-      final List savedOrder = component.viewerAccount!.preferences['socialButtonsOrder'] as List? ?? [];
-      if (savedOrder.isNotEmpty) {
-        final Map<String, ReaderTool> toolMap = {for (var t in defaultTools) t.id: t};
-        final List<ReaderTool> sorted = [];
-        for (var id in savedOrder) {
-          if (toolMap.containsKey(id.toString())) {
-            sorted.add(toolMap.remove(id.toString())!);
-          }
-        }
-        sorted.addAll(toolMap.values);
-        _orderedTools = sorted;
-        return;
-      }
-    }
-    _orderedTools = defaultTools;
-  }
-
   @override
   void didUpdateComponent(ProfileSettingsTab oldComponent) {
     super.didUpdateComponent(oldComponent);
@@ -207,12 +155,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     if (oldComponent.targetUserId != component.targetUserId && kIsWeb) {
       _listenToManagedProfiles();
       _listenToSystemUsers();
-    }
-    if (component.viewerAccount != null && oldComponent.viewerAccount == null) {
-      if (component.viewerAccount!.preferences.containsKey('socialButtons')) {
-        _socialButtonVisibility = Map<String, bool>.from(component.viewerAccount!.preferences['socialButtons']);
-      }
-      _initOrderedTools();
     }
   }
 
@@ -456,368 +398,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         _permissionFeedback = "Update failed: ${e.toString()}";
       });
     }
-  }
-
-  void _reorderTool(int oldIndex, int newIndex) {
-    if (oldIndex < 0 || oldIndex >= _orderedTools.length) return;
-    if (newIndex < 0 || newIndex >= _orderedTools.length) return;
-    if (oldIndex == newIndex) return;
-
-    setState(() {
-      final tool = _orderedTools.removeAt(oldIndex);
-      _orderedTools.insert(newIndex, tool);
-    });
-    _saveToolOrder();
-  }
-
-  Future<void> _saveToolOrder() async {
-    final orderIds = _orderedTools.map((t) => t.id).toList();
-    await fsUpdateDoc('Users/${component.targetUserId}', jsonEncode({
-      'preferences.socialButtonsOrder': orderIds
-    }));
-  }
-
-  Component _buildSocialButtonsSettingsView() {
-    return div(
-        [
-          // TOP SECTION: Live Toolbar Previews for FanzineReaderPage, FanzineCurator, and FanzineEditor
-          div(
-              classes: 'flex-col gap-4 w-full mb-6 pb-6 border-b border-gray-200',
-              attributes: const {
-                'style': 'display: flex; flex-direction: column; gap: 16px; width: 100%; border-bottom: 2px solid #e5e7eb; padding-bottom: 24px;'
-              },
-              [
-                // 1. FanzineReaderPage Preview
-                div(
-                    classes: 'flex-col gap-2 w-full',
-                    attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
-                    [
-                      span(
-                          [text("FanzineReaderPage")],
-                          attributes: const {
-                            'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
-                          }
-                      ),
-                      div(
-                          classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
-                          attributes: const {'style': 'background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box;'},
-                          [
-                            SocialToolbar(
-                              imageId: 'preview_reader',
-                              fanzineType: 'ingested',
-                              isEditingMode: false,
-                              onOpenGrid: () {},
-                              activeBonusRow: _previewReaderBonusRow,
-                              onToggleBonusRow: (row) {
-                                setState(() {
-                                  _previewReaderBonusRow = (_previewReaderBonusRow == row) ? null : row;
-                                });
-                              },
-                              likedImageIds: const {},
-                            )
-                          ]
-                      )
-                    ]
-                ),
-                // 2. FanzineCurator Preview
-                div(
-                    classes: 'flex-col gap-2 w-full',
-                    attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
-                    [
-                      span(
-                          [text("FanzineCurator")],
-                          attributes: const {
-                            'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
-                          }
-                      ),
-                      div(
-                          classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
-                          attributes: const {'style': 'background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box;'},
-                          [
-                            SocialToolbar(
-                              imageId: 'preview_curator',
-                              fanzineType: 'ingested',
-                              isEditingMode: true,
-                              onOpenGrid: () {},
-                              activeBonusRow: _previewCuratorBonusRow,
-                              onToggleBonusRow: (row) {
-                                setState(() {
-                                  _previewCuratorBonusRow = (_previewCuratorBonusRow == row) ? null : row;
-                                });
-                              },
-                              likedImageIds: const {},
-                            )
-                          ]
-                      )
-                    ]
-                ),
-                // 3. FanzineEditor Preview
-                div(
-                    classes: 'flex-col gap-2 w-full',
-                    attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
-                    [
-                      span(
-                          [text("FanzineEditor")],
-                          attributes: const {
-                            'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
-                          }
-                      ),
-                      div(
-                          classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
-                          attributes: const {'style': 'background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box;'},
-                          [
-                            SocialToolbar(
-                              imageId: 'preview_editor',
-                              fanzineType: 'folio',
-                              isEditingMode: true,
-                              onOpenGrid: () {},
-                              activeBonusRow: _previewEditorBonusRow,
-                              onToggleBonusRow: (row) {
-                                setState(() {
-                                  _previewEditorBonusRow = (_previewEditorBonusRow == row) ? null : row;
-                                });
-                              },
-                              likedImageIds: const {},
-                            )
-                          ]
-                      )
-                    ]
-                ),
-              ]
-          ),
-          // 1. Selectable Chips Row (Feature / Option Column Toggles)
-          div(
-            classes: 'flex-col gap-2 w-full mb-4',
-            attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%; margin-bottom: 16px;'},
-            [
-              span(
-                  [text("FEATURE / CONTEXT COLUMNS")],
-                  attributes: const {
-                    'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
-                  }
-              ),
-              div(
-                classes: 'flex-row flex-wrap gap-2 items-center',
-                attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 8px; align-items: center;'},
-                [
-                  for (var colKey in _matrixColumnLabels.keys)
-                    _buildColumnChip(colKey, _matrixColumnLabels[colKey]!)
-                ],
-              ),
-            ],
-          ),
-          // 2. Matrix Table Header (rendered when columns are selected)
-          if (_activeMatrixColumns.isNotEmpty)
-            div(
-                attributes: const {
-                  'style': 'display: flex; flex-direction: row; align-items: center; padding: 0 12px 8px 12px; border-bottom: 2px solid #e5e7eb; width: 100%; box-sizing: border-box;'
-                },
-                [
-                  div([text("BUTTON / PANEL")], attributes: const {'style': 'flex: 1; font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase;'}),
-                  for (var colKey in _activeMatrixColumns)
-                    div(
-                        [text(_matrixColumnLabels[colKey] ?? colKey)],
-                        attributes: const {
-                          'style': 'width: 110px; text-align: center; font-size: 10px; font-weight: bold; color: #6b7280; text-transform: uppercase; flex-shrink: 0; padding: 0 4px;'
-                        }
-                    )
-                ]
-            ),
-          // 3. Card Rows List / Matrix
-          div(
-            classes: 'flex-col gap-2 w-full',
-            attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
-            [
-              for (int i = 0; i < _orderedTools.length; i++)
-                _buildSocialButtonCardRow(_orderedTools[i], i),
-            ],
-          )
-        ],
-        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
-        attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'}
-    );
-  }
-
-  Component _buildColumnChip(String colKey, String label) {
-    final bool isSelected = _activeMatrixColumns.contains(colKey);
-    return button(
-      classes: isSelected ? 'm3-chip active' : 'm3-chip',
-      attributes: {
-        'type': 'button',
-        'style': 'height: 28px; padding: 0 12px; font-size: 11px; font-weight: bold; border-radius: 100px; cursor: pointer; text-transform: lowercase; border: ${isSelected ? "none" : "1px solid #79747E"}; background-color: ${isSelected ? "#E8DEF8" : "#ffffff"}; color: ${isSelected ? "#1D192B" : "#49454F"}; display: inline-flex; align-items: center; gap: 4px;',
-      },
-      events: {
-        'click': (e) {
-          setState(() {
-            if (isSelected) {
-              _activeMatrixColumns.remove(colKey);
-            } else {
-              _activeMatrixColumns.add(colKey);
-            }
-          });
-        }
-      },
-      [
-        if (isSelected)
-          span(
-              classes: 'material-symbols-outlined',
-              attributes: const {'style': 'font-size: 14px; color: #1D192B;'},
-              [text('check')]
-          ),
-        text(label),
-      ],
-    );
-  }
-
-  Component _buildSocialButtonCardRow(ReaderTool tool, int index) {
-    final iconPath = tool.defaultIcon;
-    final bool isSvgAsset = iconPath.endsWith('.svg') || iconPath.startsWith('assets/');
-    final bool isDragging = _draggedIndex == index;
-
-    return div(
-        classes: 'social-button-card-row',
-        attributes: {
-          'draggable': 'true',
-          'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; background-color: #ffffff; border: ${isDragging ? "2px solid #6750A4" : "1px solid #e5e7eb"}; border-radius: 8px; min-height: 48px; box-sizing: border-box; width: 100%; transition: transform 0.15s ease, border-color 0.15s; cursor: grab; opacity: 1.0;',
-        },
-        events: {
-          'dragstart': (dynamic e) {
-            _draggedIndex = index;
-          },
-          'dragover': (dynamic e) {
-            try { e.preventDefault(); } catch (_) {}
-          },
-          'drop': (dynamic e) {
-            try { e.preventDefault(); } catch (_) {}
-            if (_draggedIndex != null && _draggedIndex != index) {
-              final targetIdx = _draggedIndex!;
-              _draggedIndex = null;
-              _reorderTool(targetIdx, index);
-            } else {
-              _draggedIndex = null;
-            }
-          },
-          'dragend': (dynamic e) {
-            _draggedIndex = null;
-          }
-        },
-        [
-          // 1. Social Button Icon Preview
-          div(
-              attributes: const {
-                'style': 'display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #000; flex-shrink: 0; background-color: #ffffff;'
-              },
-              [
-                if (isSvgAsset)
-                  img(
-                      src: iconPath,
-                      attributes: const {
-                        'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                      }
-                  )
-                else
-                  span(
-                      classes: 'material-symbols-outlined',
-                      attributes: const {
-                        'style': 'font-size: 18px; color: #000; line-height: 1;'
-                      },
-                      [text(cleanIconName(iconPath))]
-                  )
-              ]
-          ),
-          // 2. Name & Description Text Container
-          div(
-              attributes: const {
-                'style': 'display: flex; flex-direction: column; justify-content: center; flex: 1; overflow: hidden;'
-              },
-              [
-                div(
-                    [text(tool.label.toLowerCase())],
-                    attributes: const {
-                      'style': 'font-size: 13px; font-weight: bold; color: #000; line-height: 1.2; text-transform: lowercase;'
-                    }
-                ),
-                div(
-                    [text(tool.description)],
-                    attributes: const {
-                      'style': 'font-size: 11px; color: #6b7280; line-height: 1.3; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
-                    }
-                )
-              ]
-          ),
-          // 3. Cells for each active column
-          for (var colKey in _activeMatrixColumns)
-            div(
-                attributes: const {
-                  'style': 'width: 110px; display: flex; justify-content: center; align-items: center; flex-shrink: 0;'
-                },
-                [
-                  if (colKey == 'position')
-                    _buildGrabberCell(index)
-                  else
-                    _buildCellSwitch(tool.id, colKey)
-                ]
-            )
-        ]
-    );
-  }
-
-  Component _buildGrabberCell(int index) {
-    return div(
-        attributes: const {
-          'style': 'display: flex; align-items: center; justify-content: center; cursor: grab; user-select: none;'
-        },
-        [
-          span(
-              classes: 'material-symbols-outlined text-gray-400',
-              attributes: const {'style': 'font-size: 20px; color: #9ca3af;'},
-              [text('drag_indicator')]
-          ),
-        ]
-    );
-  }
-
-  Component _buildCellSwitch(String toolId, String colKey) {
-    final key = '${colKey}_$toolId';
-    final bool isEnabled = _socialButtonVisibility[key] ?? _getDefaultToolVisibility(toolId, colKey);
-
-    return div(
-        [
-          div(
-              [],
-              attributes: {
-                'style': 'width: 18px; height: 18px; border-radius: 50%; background-color: white; transition: left 0.2s; position: absolute; left: ${isEnabled ? '21px' : '3px'}; top: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.2);'
-              }
-          )
-        ],
-        attributes: {
-          'style': 'width: 42px; height: 22px; border-radius: 100px; padding: 2px; position: relative; transition: background 0.2s; cursor: pointer; box-sizing: border-box; flex-shrink: 0; background-color: ${isEnabled ? '#6750A4' : '#ccc'};'
-        },
-        events: {
-          'click': (e) => _toggleMatrixSwitch(toolId, colKey)
-        }
-    );
-  }
-
-  bool _getDefaultToolVisibility(String toolId, String colKey) {
-    if (colKey == 'guests') {
-      return toolId == 'Like' || toolId == 'Comment' || toolId == 'Text' || toolId == 'Grid';
-    }
-    return true;
-  }
-
-  Future<void> _toggleMatrixSwitch(String toolId, String colKey) async {
-    final key = '${colKey}_$toolId';
-    final currentVal = _socialButtonVisibility[key] ?? _getDefaultToolVisibility(toolId, colKey);
-    final nextVal = !currentVal;
-
-    setState(() {
-      _socialButtonVisibility[key] = nextVal;
-    });
-
-    await fsUpdateDoc('Users/${component.targetUserId}', jsonEncode({
-      'preferences.socialButtons.$key': nextVal
-    }));
   }
 
   Component _buildManagedProfilesSettingsView() {
@@ -1093,7 +673,10 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
           ),
         if (_activeSubTab == 3)
-          _buildSocialButtonsSettingsView()
+          SettingsSocialButtonsPage(
+            targetUserId: component.targetUserId,
+            viewerAccount: component.viewerAccount,
+          )
         else if (_activeSubTab == 1)
           _buildManagedProfilesSettingsView()
         else if (_activeSubTab == 0 && isViewerAdmin)
