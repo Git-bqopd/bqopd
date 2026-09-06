@@ -4,8 +4,9 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/icon_utils.dart';
 import '../social_toolbar.dart';
 
-/// Read-only visual inspection and configuration matrix for social buttons.
-/// Reflects the code configuration defined in `reader_tool.dart` and `reader_tools_config.dart`.
+/// Interactive visual inspection and configuration matrix for social buttons.
+/// Accurately renders each tool scope (FanzineReaderPage, FanzineCurator, FanzineEditor)
+/// matching the exact live app toolbar visibility rules.
 class SettingsSocialButtonsPage extends StatefulComponent {
   final String targetUserId;
   final UserAccount? viewerAccount;
@@ -21,13 +22,19 @@ class SettingsSocialButtonsPage extends StatefulComponent {
 }
 
 class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
-  // Active bonus row states for the top live preview toolbars
   BonusRowType? _previewReaderBonusRow;
   BonusRowType? _previewCuratorBonusRow;
   BonusRowType? _previewEditorBonusRow;
 
+  // Context simulation toggles for preview inspection
+  bool _previewHasYoutube = false;
+  bool _previewIsGame = false;
+  bool _previewIsIndicia = false;
+  bool _previewCanOpenGrid = true;
+
   // Active matrix feature/context column filters
   final Set<String> _activeMatrixColumns = {'position', 'reader', 'maker', 'curator', 'guests'};
+
   static const Map<String, String> _matrixColumnLabels = {
     'position': 'position',
     'reader': 'fanzine reader',
@@ -36,7 +43,6 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
     'guests': 'public guests',
   };
 
-  // Canonical toolbar list directly mirroring codebase configuration
   List<ReaderTool> _tools = [];
 
   @override
@@ -91,6 +97,26 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
     );
   }
 
+  Component _buildContextToggleChip(String label, bool isSelected, VoidCallback onToggle) {
+    return button(
+      classes: isSelected ? 'm3-chip active' : 'm3-chip',
+      attributes: {
+        'type': 'button',
+        'style': 'height: 24px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 100px; cursor: pointer; text-transform: lowercase; border: ${isSelected ? "none" : "1px solid #ccc"}; background-color: ${isSelected ? "#E8DEF8" : "#ffffff"}; color: ${isSelected ? "#1D192B" : "#666"}; display: inline-flex; align-items: center; gap: 4px;',
+      },
+      events: {'click': (e) => onToggle()},
+      [
+        if (isSelected)
+          span(
+            classes: 'material-symbols-outlined',
+            attributes: const {'style': 'font-size: 12px; color: #1D192B;'},
+            [text('check')],
+          ),
+        text(label),
+      ],
+    );
+  }
+
   Component _buildSocialButtonCardRow(ReaderTool tool, int index) {
     final iconPath = tool.defaultIcon;
     final bool isSvgAsset = iconPath.endsWith('.svg') || iconPath.startsWith('assets/');
@@ -101,7 +127,6 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
         'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; min-height: 48px; box-sizing: border-box; width: 100%; transition: background-color 0.15s ease;',
       },
       [
-        // 1. Social Button Icon Preview
         div(
           attributes: const {
             'style': 'display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #000; flex-shrink: 0; background-color: #ffffff;'
@@ -124,7 +149,6 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
               )
           ],
         ),
-        // 2. Name & Description Text Container
         div(
           attributes: const {
             'style': 'display: flex; flex-direction: column; justify-content: center; flex: 1; overflow: hidden;'
@@ -144,7 +168,6 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
             )
           ],
         ),
-        // 3. Cells for each active column
         for (var colKey in _activeMatrixColumns)
           div(
             attributes: const {
@@ -172,7 +195,6 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
 
   Component _buildCheckIndicatorCell(ReaderTool tool, String colKey) {
     final bool hasFeature = _hasFeature(tool, colKey);
-
     if (hasFeature) {
       return img(
         src: 'assets/social_toolbar/check.svg',
@@ -182,7 +204,6 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
         },
       );
     }
-    // Blank when feature is not present
     return span([], attributes: const {'style': 'display: inline-block; width: 18px; height: 18px;'});
   }
 
@@ -197,16 +218,59 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
             'style': 'display: flex; flex-direction: column; gap: 16px; width: 100%; border-bottom: 2px solid #e5e7eb; padding-bottom: 24px;'
           },
           [
-            // 1. FanzineReaderPage Preview
+            // Context simulation toolbar row
+            div(
+              classes: 'flex-row flex-wrap justify-between items-center',
+              attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; width: 100%;'},
+              [
+                span(
+                  [text("LIVE APP TOOLBAR SIMULATION")],
+                  attributes: const {
+                    'style': 'font-size: 11px; font-weight: bold; color: #374151; letter-spacing: 0.5px;'
+                  },
+                ),
+                div(
+                  attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 6px; align-items: center;'},
+                  [
+                    span([text("simulate:")], attributes: const {'style': 'font-size: 10px; color: #888; font-weight: bold; margin-right: 2px;'}),
+                    _buildContextToggleChip("grid open", _previewCanOpenGrid, () {
+                      setState(() => _previewCanOpenGrid = !_previewCanOpenGrid);
+                    }),
+                    _buildContextToggleChip("youtube", _previewHasYoutube, () {
+                      setState(() => _previewHasYoutube = !_previewHasYoutube);
+                    }),
+                    _buildContextToggleChip("terminal", _previewIsGame, () {
+                      setState(() => _previewIsGame = !_previewIsGame);
+                    }),
+                    _buildContextToggleChip("indicia", _previewIsIndicia, () {
+                      setState(() => _previewIsIndicia = !_previewIsIndicia);
+                    }),
+                  ],
+                ),
+              ],
+            ),
+
+            // 1. FanzineReaderPage Preview (ToolScope.reader)
             div(
               classes: 'flex-col gap-2 w-full',
               attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
               [
-                span(
-                  [text("FanzineReaderPage")],
-                  attributes: const {
-                    'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
-                  },
+                div(
+                  attributes: const {'style': 'display: flex; justify-content: space-between; align-items: center;'},
+                  [
+                    span(
+                      [text("FanzineReaderPage (Public Reader)")],
+                      attributes: const {
+                        'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
+                      },
+                    ),
+                    span(
+                      [text("ToolScope.reader | ingested")],
+                      attributes: const {
+                        'style': 'font-size: 10px; color: #9ca3af; font-family: monospace;'
+                      },
+                    ),
+                  ],
                 ),
                 div(
                   classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
@@ -214,9 +278,13 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
                   [
                     SocialToolbar(
                       imageId: 'preview_reader',
+                      activeScope: ToolScope.reader,
                       fanzineType: 'ingested',
                       isEditingMode: false,
-                      onOpenGrid: () {},
+                      onOpenGrid: _previewCanOpenGrid ? () {} : null,
+                      youtubeId: _previewHasYoutube ? 'demo' : null,
+                      isGame: _previewIsGame,
+                      isIndiciaPage: _previewIsIndicia,
                       activeBonusRow: _previewReaderBonusRow,
                       onToggleBonusRow: (row) {
                         setState(() {
@@ -229,16 +297,28 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
                 )
               ],
             ),
-            // 2. FanzineCurator Preview
+
+            // 2. FanzineCurator Preview (ToolScope.curator)
             div(
               classes: 'flex-col gap-2 w-full',
               attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
               [
-                span(
-                  [text("FanzineCurator")],
-                  attributes: const {
-                    'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
-                  },
+                div(
+                  attributes: const {'style': 'display: flex; justify-content: space-between; align-items: center;'},
+                  [
+                    span(
+                      [text("FanzineCurator (Curator Workspace)")],
+                      attributes: const {
+                        'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
+                      },
+                    ),
+                    span(
+                      [text("ToolScope.curator | ingested")],
+                      attributes: const {
+                        'style': 'font-size: 10px; color: #9ca3af; font-family: monospace;'
+                      },
+                    ),
+                  ],
                 ),
                 div(
                   classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
@@ -246,9 +326,13 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
                   [
                     SocialToolbar(
                       imageId: 'preview_curator',
+                      activeScope: ToolScope.curator,
                       fanzineType: 'ingested',
                       isEditingMode: true,
-                      onOpenGrid: () {},
+                      onOpenGrid: _previewCanOpenGrid ? () {} : null,
+                      youtubeId: _previewHasYoutube ? 'demo' : null,
+                      isGame: _previewIsGame,
+                      isIndiciaPage: _previewIsIndicia,
                       activeBonusRow: _previewCuratorBonusRow,
                       onToggleBonusRow: (row) {
                         setState(() {
@@ -261,16 +345,28 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
                 )
               ],
             ),
-            // 3. FanzineEditor Preview
+
+            // 3. FanzineEditor Preview (ToolScope.editor)
             div(
               classes: 'flex-col gap-2 w-full',
               attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
               [
-                span(
-                  [text("FanzineEditor")],
-                  attributes: const {
-                    'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
-                  },
+                div(
+                  attributes: const {'style': 'display: flex; justify-content: space-between; align-items: center;'},
+                  [
+                    span(
+                      [text("FanzineEditor (Maker / Folio Workspace)")],
+                      attributes: const {
+                        'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;'
+                      },
+                    ),
+                    span(
+                      [text("ToolScope.editor | folio")],
+                      attributes: const {
+                        'style': 'font-size: 10px; color: #9ca3af; font-family: monospace;'
+                      },
+                    ),
+                  ],
                 ),
                 div(
                   classes: 'bg-gray-50 border border-gray-200 rounded-lg p-2',
@@ -278,9 +374,13 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
                   [
                     SocialToolbar(
                       imageId: 'preview_editor',
+                      activeScope: ToolScope.editor,
                       fanzineType: 'folio',
                       isEditingMode: true,
-                      onOpenGrid: () {},
+                      onOpenGrid: _previewCanOpenGrid ? () {} : null,
+                      youtubeId: _previewHasYoutube ? 'demo' : null,
+                      isGame: _previewIsGame,
+                      isIndiciaPage: _previewIsIndicia,
                       activeBonusRow: _previewEditorBonusRow,
                       onToggleBonusRow: (row) {
                         setState(() {
@@ -295,7 +395,8 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
             ),
           ],
         ),
-        // 1. Selectable Chips Row (Feature / Option Column Toggles)
+
+        // MATRIX TOGGLES
         div(
           classes: 'flex-col gap-2 w-full mb-4',
           attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%; margin-bottom: 16px;'},
@@ -316,7 +417,8 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
             ),
           ],
         ),
-        // 2. Matrix Table Header (rendered when columns are selected)
+
+        // MATRIX HEADER
         if (_activeMatrixColumns.isNotEmpty)
           div(
             attributes: const {
@@ -333,7 +435,8 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
                 )
             ],
           ),
-        // 3. Card Rows List / Matrix (Direct order from ReaderToolsConfig)
+
+        // MATRIX ROWS
         div(
           classes: 'flex-col gap-2 w-full',
           attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},

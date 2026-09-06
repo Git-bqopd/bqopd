@@ -19,6 +19,15 @@ void scrollToElement(String id) {
   }
 }
 
+/// Copies text to the system clipboard in web environments.
+void copyToClipboard(String text) {
+  try {
+    web.window.navigator.clipboard.writeText(text);
+  } catch (e) {
+    print('[copyToClipboard Error] $e');
+  }
+}
+
 /// Reads the selected file from the DOM element directly using pure Dart and package:web.
 void readSelectedFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
   final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
@@ -118,6 +127,7 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue js_util Error] $e');
   }
+
   // 2. Fallback to dynamic property invocation (handles legacy dart:html or wrapped event variants)
   try {
     final target = (event as dynamic).target;
@@ -130,6 +140,7 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue dynamic Fallback Error] $e');
   }
+
   // 3. Fallback to package:web extension type matching
   try {
     if (event is web.Event) {
@@ -140,6 +151,7 @@ String getInputValue(dynamic event) {
       }
     }
   } catch (_) {}
+
   return '';
 }
 
@@ -175,12 +187,10 @@ void openWindow(String url, String target) {
 /// Self-injects the JS helper globally on-the-fly to bypass browser caching of firebase_init.js.
 void initAddressAutocomplete(String inputId, void Function(String) callback) {
   final windowObj = js_util.globalThis;
-
   if (!js_util.hasProperty(windowObj, 'initAddressAutocomplete')) {
     js_util.setProperty(windowObj, 'initAddressAutocomplete', (JSString id, JSFunction cb) {
       final input = web.document.getElementById(id.toDart) as web.HTMLInputElement?;
       if (input == null) return;
-
       final googleExists = js_util.hasProperty(windowObj, 'google');
       if (!googleExists) {
         web.window.setTimeout((() {
@@ -188,7 +198,6 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
         }).toJS, 150.toJS);
         return;
       }
-
       final google = js_util.getProperty(windowObj, 'google');
       final maps = js_util.getProperty(google, 'maps');
       if (maps == null || !js_util.hasProperty(maps, 'places')) {
@@ -197,15 +206,11 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
         }).toJS, 150.toJS);
         return;
       }
-
       final places = js_util.getProperty(maps, 'places');
       final autocompleteClass = js_util.getProperty(places, 'Autocomplete');
-
       final options = js_util.newObject();
       js_util.setProperty(options, 'fields', js_util.jsify(['formatted_address']));
-
       final autocompleteInstance = js_util.callConstructor(autocompleteClass, [input, options]);
-
       js_util.callMethod(autocompleteInstance, 'addListener', [
         'place_changed'.toJS,
         (() {

@@ -199,7 +199,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
 
       UnsavedFanzineRegistry.add(newFanzine, []);
       setState(() => _showMakerModal = false);
-      Router.of(context).replace('/$shortCode');
+      Router.of(context).replace('/$shortCode/maker');
     } catch (e) {
       print("Error creating folio: $e");
     }
@@ -232,7 +232,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
 
       UnsavedFanzineRegistry.add(newFanzine, pages);
       setState(() => _showMakerModal = false);
-      Router.of(context).replace('/$shortCode');
+      Router.of(context).replace('/$shortCode/maker');
     } catch (e) {
       print("Error creating calendar: $e");
     }
@@ -418,6 +418,11 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
 
     final String codeKey = w['shortCode'] ?? fanzineId;
 
+    // Published works open as unmodified vanity URL (Reader view).
+    // Draft works open in the editing workspace (maker by default, or curator if ingested).
+    final String draftWorkspace = (w['type'] == 'ingested') ? 'curator' : 'maker';
+    final String targetHref = _showDrafts ? '/$codeKey/$draftWorkspace' : '/$codeKey';
+
     return a(
         [
           div(
@@ -460,9 +465,9 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
               attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'}
           )
         ],
-        href: '/$codeKey',
+        href: targetHref,
         classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
-        attributes: const {'style': 'display: flex; flex-decoration: none; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none; position: relative;'}
+        attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none; position: relative;'}
     );
   }
 

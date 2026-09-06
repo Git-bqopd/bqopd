@@ -11,10 +11,12 @@ import 'fanzine_reader_page.dart';
 import 'profile_page.dart';
 
 /// Resolved and pre-rendered matching view utilizing server pre-fetched payloads.
+/// Supports clean vanity routing, explicit workspace suffixes (/reader, /curator, /maker),
+/// and deep-link page anchors in both /:code/:page/:mode and /:code/:mode/:page hierarchies.
 class ShortLinkPage extends StatefulComponent {
   final String code;
-  final String? param1; // Fanzine pageNumber OR Profile mainTab
-  final String? param2; // Profile subtab
+  final String? param1; // Fanzine pageNumber, workspace mode, OR Profile mainTab
+  final String? param2; // Fanzine pageNumber (if param1 is workspace) OR Profile subtab
   final AuthState? authState;
   final AuthBloc? authBloc;
   final IUserRepository userRepository;
@@ -28,6 +30,7 @@ class ShortLinkPage extends StatefulComponent {
     required this.authBloc,
     required this.userRepository,
     required this.engagementRepository,
+    super.key,
   });
 
   @override
@@ -184,6 +187,12 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     }
   }
 
+  bool _isWorkspaceSlug(String? val) {
+    if (val == null) return false;
+    final s = val.trim().toLowerCase();
+    return s == 'reader' || s == 'curator' || s == 'maker' || s == 'editor';
+  }
+
   @override
   Component build(BuildContext context) {
     print('[SHORTLINK RENDER] Render loop called. Mapped Fanzine: "$_targetFanzineId" | Status: "$_status"');
@@ -195,9 +204,32 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     }
 
     if (_targetFanzineId != null) {
-      final initialPage = component.param1 != null ? int.tryParse(component.param1!) : null;
-      final bool isUnsavedTemp = UnsavedFanzineRegistry.fanzines.containsKey(_targetFanzineId);
+      // Bi-directional parameter disambiguation:
+      // Pattern 1 (Recommended): /:code/:page/:mode (e.g. /QrNsbYA/8/curator)
+      // Pattern 2 (Legacy):      /:code/:mode/:page (e.g. /QrNsbYA/curator/8)
+      // Pattern 3:               /:code/:page       (e.g. /QrNsbYA/8)
+      // Pattern 4:               /:code/:mode       (e.g. /QrNsbYA/curator)
+      final int? param1AsNumber = int.tryParse(component.param1?.trim() ?? '');
+      final bool param1IsMode = _isWorkspaceSlug(component.param1);
 
+      int? initialPage;
+      String? requestedWorkspace;
+
+      if (param1AsNumber != null) {
+        initialPage = param1AsNumber;
+        if (_isWorkspaceSlug(component.param2)) {
+          requestedWorkspace = component.param2?.trim().toLowerCase();
+        }
+      } else if (param1IsMode) {
+        requestedWorkspace = component.param1?.trim().toLowerCase();
+        initialPage = int.tryParse(component.param2?.trim() ?? '');
+      }
+
+      if (requestedWorkspace == 'editor') {
+        requestedWorkspace = 'maker';
+      }
+
+      final bool isUnsavedTemp = UnsavedFanzineRegistry.fanzines.containsKey(_targetFanzineId);
       final currentUid = component.authState?.user?.uid ?? getCurrentUserId();
       final ownerId = _fanzineData?['ownerId'] ?? _fanzineData?['editorId'] ?? '';
       final editors = (_fanzineData?['editors'] as List?)?.map((e) => e.toString()).toList() ?? [];
@@ -233,7 +265,29 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         );
       }
 
-      final bool shouldEdit = isUnsavedTemp || (canEdit && isDraft);
+      String effectiveMode = 'reader';
+      if (requestedWorkspace != null) {
+        if (requestedWorkspace == 'reader') {
+          effectiveMode = 'reader';
+        } else if (canEdit || isUnsavedTemp) {
+          effectiveMode = requestedWorkspace;
+        } else {
+          // Public guests requesting curator/maker fall back to reader view
+          effectiveMode = 'reader';
+        }
+      } else {
+        // Option A: clean vanity without suffix defaults to reader
+        // If an editor/curator views an unpublished draft without a suffix, open their editing workspace
+        if (isDraft && (canEdit || isUnsavedTemp)) {
+          final String type = _fanzineData?['type'] ?? 'ingested';
+          effectiveMode = (type == 'folio' || type == 'calendar') ? 'maker' : 'curator';
+        } else {
+          effectiveMode = 'reader';
+        }
+      }
+
+      final ToolScope effectiveScope = ToolScopeRouting.fromRouteSlug(effectiveMode);
+      final bool shouldEdit = effectiveScope != ToolScope.reader;
 
       return FanzineReaderPage(
         fanzineId: _targetFanzineId!,
@@ -245,6 +299,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         authState: component.authState,
         authBloc: component.authBloc,
         isEditingMode: shouldEdit,
+        activeScope: effectiveScope,
       );
     }
 

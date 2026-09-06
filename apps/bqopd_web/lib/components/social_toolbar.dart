@@ -4,8 +4,8 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
+import '../utils/web_utils.dart';
 import '../utils/icon_utils.dart';
-import '../repositories/repositories.dart';
 import 'panels/panel_container.dart';
 import 'panels/text_reader_panel.dart';
 import 'panels/comments_panel.dart';
@@ -20,13 +20,19 @@ import 'panels/analytics_panel.dart';
 import 'panels/publisher_text_panel.dart';
 import 'panels/terminal_panel.dart';
 
+/// SocialToolbar manages the interactive social action buttons for each page item.
+/// It dynamically evaluates button visibility via [ReaderToolsConfig.isToolVisibleInContext],
+/// supporting public readers, makers (editors), and curator workspaces.
 class SocialToolbar extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
+  final String? shortCode;
   final String? fanzineType;
+  final int? pageNumber;
   final bool isGame;
   final String? youtubeId;
   final bool isEditingMode;
+  final ToolScope? activeScope;
   final bool isIndiciaPage;
   final void Function()? onOpenGrid;
   final BonusRowType? activeBonusRow;
@@ -39,10 +45,13 @@ class SocialToolbar extends StatefulComponent {
   const SocialToolbar({
     required this.imageId,
     this.fanzineId,
+    this.shortCode,
     this.fanzineType,
+    this.pageNumber,
     this.isGame = false,
     this.youtubeId,
     required this.isEditingMode,
+    this.activeScope,
     this.isIndiciaPage = false,
     this.onOpenGrid,
     required this.activeBonusRow,
@@ -63,20 +72,33 @@ class _SocialToolbarState extends State<SocialToolbar> {
   int _commentCount = 0;
   int _viewCount = 0;
   bool _isLiked = false;
+  bool _justCopiedShare = false;
+  Timer? _copyToastTimer;
   Map<String, bool> _socialButtonVisibility = {};
   Map<String, dynamic> _imageData = {};
-  bool _isSettingsEditMode = false;
-  bool _showTemplatesRow = false;
-  BonusRowType? _activeEditorPanel;
   dynamic _userUnsub;
   dynamic _imageStatsUnsub;
 
+  bool get _isPreview => component.imageId.startsWith('preview_');
+
+  /// Resolves the effective tool scope based on explicit override or reader context.
+  ToolScope get effectiveScope {
+    if (component.activeScope != null) return component.activeScope!;
+    if (!component.isEditingMode) return ToolScope.reader;
+    if (component.fanzineType == 'folio' || component.fanzineType == 'calendar') {
+      return ToolScope.editor;
+    }
+    return ToolScope.curator;
+  }
+
   bool get _hasTextContent {
+    if (_isPreview) return true;
     final t = _imageData['text_corrected'] ?? _imageData['text'] ?? '';
     return t.toString().trim().isNotEmpty;
   }
 
   bool get _hasEntitiesContent {
+    if (_isPreview) return true;
     final de = _imageData['detected_entities'];
     final tl = _imageData['text_corrected'] ?? '';
     final hasList = de is List && de.isNotEmpty;
@@ -85,6 +107,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   bool get _hasCreditsContent {
+    if (_isPreview) return true;
     final cr = _imageData['creators'];
     final ind = _imageData['indicia'] ?? '';
     final hasCreators = cr is List && cr.isNotEmpty;
@@ -141,14 +164,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
         _likeCount += _isLiked ? 1 : -1;
       }
     }
-    if (component.activeBonusRow != BonusRowType.settings) {
-      _activeEditorPanel = null;
-      _showTemplatesRow = false;
-    }
   }
 
   void _deferListening() {
-    if (kIsWeb) {
+    if (kIsWeb && !_isPreview) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
           _startListening();
@@ -166,9 +185,9 @@ class _SocialToolbarState extends State<SocialToolbar> {
         if (doc['exists'] && mounted) {
           final data = doc['data'] as Map<String, dynamic>? ?? {};
           final prefs = data['preferences'] as Map<String, dynamic>? ?? {};
-          final text_editor_panels = prefs['socialButtons'] as Map<String, dynamic>? ?? {};
+          final buttons = prefs['socialButtons'] as Map<String, dynamic>? ?? {};
           setState(() {
-            _socialButtonVisibility = Map<String, bool>.from(text_editor_panels);
+            _socialButtonVisibility = Map<String, bool>.from(buttons);
           });
         }
       });
@@ -176,7 +195,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   void _startImageStatsListener() {
-    if (component.imageId.isEmpty) return;
+    if (component.imageId.isEmpty || _isPreview) return;
     _imageStatsUnsub = fsListenDoc('images/${component.imageId}', (jsonStr) {
       final doc = jsonDecode(jsonStr);
       if (doc['exists'] && mounted) {
@@ -211,11 +230,19 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
   @override
   void dispose() {
+    _copyToastTimer?.cancel();
     _closeListeners();
     super.dispose();
   }
 
   Future<void> _handleLike() async {
+    if (_isPreview) {
+      setState(() {
+        _isLiked = !_isLiked;
+        _likeCount += _isLiked ? 1 : -1;
+      });
+      return;
+    }
     final uid = getCurrentUserId();
     if (uid == null) {
       GlobalModalBus.show();
@@ -238,41 +265,74 @@ class _SocialToolbarState extends State<SocialToolbar> {
     }
   }
 
+  /// Copies the clean, canonical public reader link to clipboard (stripping internal editing suffixes)
+  void _handleCopyShareLink() {
+    final String sc = component.shortCode ?? component.fanzineId ?? '';
+    final int pNum = component.pageNumber ?? 1;
+
+    // Canonical link assembly:
+    // If on specific page (page > 1): https://bqopd.com/$shortCode/$page
+    // If on cover/top (page <= 1):    https://bqopd.com/$shortCode
+    String canonicalPath;
+    if (pNum > 1 && sc.isNotEmpty) {
+      canonicalPath = '/$sc/$pNum';
+    } else if (sc.isNotEmpty) {
+      canonicalPath = '/$sc';
+    } else {
+      canonicalPath = '';
+    }
+
+    final String origin = 'https://bqopd.com';
+    final String fullUrl = '$origin$canonicalPath';
+
+    copyToClipboard(fullUrl);
+
+    setState(() {
+      _justCopiedShare = true;
+    });
+    _copyToastTimer?.cancel();
+    _copyToastTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _justCopiedShare = false;
+        });
+      }
+    });
+  }
+
   @override
   Component build(BuildContext context) {
-    final mainToolIds = [
-      'Grid',
-      'Like',
-      'Comment',
-      if (_hasTextContent) 'Text',
-      'Tags',
-      'Views',
-      'Share',
-      if (_hasEntitiesContent) 'Entities',
-      if (_hasCreditsContent) 'Credits',
-      if (_hasYoutubeContent) 'YouTube',
-      if (_hasTerminalContent) 'Terminal',
-      'Settings',
-    ];
+    final bool hasYoutube = _hasYoutubeContent;
+    final bool isGame = _hasTerminalContent;
+    final bool isIndiciaPage = component.isIndiciaPage;
+    final bool canOpenGrid = component.onOpenGrid != null;
 
     final List<ReaderTool> visibleMainTools = [];
-    for (final id in mainToolIds) {
-      try {
-        final tool = ReaderToolsConfig.tools.firstWhere((t) => t.id == id);
-        bool isContextuallyVisible = true;
-        if (id == 'Grid') {
-          isContextuallyVisible = component.onOpenGrid != null;
-        }
-        if (isContextuallyVisible && id != 'Grid' && id != 'Like' && id != 'Settings') {
-          final bool isUserVisible = _socialButtonVisibility[tool.id] ?? true;
-          if (!isUserVisible) {
-            isContextuallyVisible = false;
-          }
-        }
-        if (isContextuallyVisible) {
-          visibleMainTools.add(tool);
-        }
-      } catch (_) {}
+    for (final tool in ReaderToolsConfig.tools) {
+      final bool isContextuallyVisible = ReaderToolsConfig.isToolVisibleInContext(
+        tool: tool,
+        activeScope: effectiveScope,
+        fanzineType: component.fanzineType,
+        hasYoutube: hasYoutube,
+        isGame: isGame,
+        isIndiciaPage: isIndiciaPage,
+        canOpenGrid: canOpenGrid,
+      );
+      if (!isContextuallyVisible) continue;
+
+      // Section 2.C Rule: Only hide empty content tools in public reader mode!
+      // In curator/maker scopes, editors must be able to add content to blank pages.
+      if (!_isPreview && effectiveScope == ToolScope.reader) {
+        if (tool.id == 'Text' && !_hasTextContent) continue;
+        if (tool.id == 'Entities' && !_hasEntitiesContent) continue;
+      }
+
+      if (tool.id != 'Grid' && tool.id != 'Like' && tool.id != 'Settings') {
+        final bool isUserVisible = _socialButtonVisibility[tool.id] ?? true;
+        if (!isUserVisible) continue;
+      }
+
+      visibleMainTools.add(tool);
     }
 
     return div(classes: 'w-full flex-col', [
@@ -281,11 +341,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
           _buildToolbarButton(tool)
       ]),
       if (component.activeBonusRow == BonusRowType.settings)
-        _buildSettingsToggleRow(),
-      if (component.activeBonusRow == BonusRowType.settings && _isSettingsEditMode && _showTemplatesRow)
-        _buildTemplatesRow(),
-      if (component.activeBonusRow == BonusRowType.settings && _isSettingsEditMode && _activeEditorPanel != null)
-        _buildEditorPanelContent(component.imageId)
+        _buildSettingsToggleRow(
+          hasYoutube: hasYoutube,
+          isGame: isGame,
+          isIndiciaPage: isIndiciaPage,
+          canOpenGrid: canOpenGrid,
+        ),
     ]);
   }
 
@@ -311,10 +372,13 @@ class _SocialToolbarState extends State<SocialToolbar> {
       isActive = component.activeBonusRow == BonusRowType.analyticsDashboard;
       count = _viewCount;
       action = () => component.onToggleBonusRow(BonusRowType.analyticsDashboard);
+    } else if (tool.id == 'Share' || tool.action == ToolAction.copyShareLink) {
+      isActive = _justCopiedShare;
+      action = _handleCopyShareLink;
     } else if (tool.id == 'Settings') {
       isActive = component.activeBonusRow == BonusRowType.settings;
       action = () {
-        if (getCurrentUserId() == null) {
+        if (getCurrentUserId() == null && !_isPreview) {
           GlobalModalBus.show();
         } else {
           component.onToggleBonusRow(BonusRowType.settings);
@@ -323,7 +387,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
     } else if (tool.bonusRow != null) {
       isActive = component.activeBonusRow == tool.bonusRow;
       action = () {
-        if (getCurrentUserId() == null) {
+        if (getCurrentUserId() == null && !_isPreview) {
           GlobalModalBus.show();
         } else {
           component.onToggleBonusRow(tool.bonusRow!);
@@ -334,121 +398,76 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
     final iconPath = isActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
 
+    final String displayLabel = (tool.id == 'Share' && _justCopiedShare) ? 'copied!' : tool.label;
+
     return button(
-        classes: btnClasses,
-        events: {'click': (e) => action()},
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            img(
-                src: iconPath,
-                attributes: const {
-                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                }
-            ),
-            if (count != null && count > 0)
-              span(classes: 'badge', [Component.text('$count')])
-          ]),
-          span(classes: 'toolbar-label', [Component.text(tool.label)])
-        ]
+      classes: btnClasses,
+      events: {'click': (e) => action()},
+      [
+        div(classes: 'toolbar-icon-wrapper', [
+          img(
+            src: iconPath,
+            attributes: const {
+              'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+            },
+          ),
+          if (count != null && count > 0)
+            span(classes: 'badge', [Component.text('$count')])
+        ]),
+        span(classes: 'toolbar-label', [Component.text(displayLabel)])
+      ],
     );
   }
 
-  Component _buildSettingsToggleRow() {
-    if (!_isSettingsEditMode) {
-      final togglableToolIds = [
-        'Comment',
-        'Text',
-        'Tags',
-        'Views',
-        'Share',
-        if (_hasEntitiesContent) 'Entities',
-        if (_hasCreditsContent) 'Credits',
-        if (_hasYoutubeContent) 'YouTube',
-        if (_hasTerminalContent) 'Terminal',
-      ];
-      final List<ReaderTool> togglableTools = [];
-      for (final id in togglableToolIds) {
-        try {
-          final tool = ReaderToolsConfig.tools.firstWhere((t) => t.id == id);
-          togglableTools.add(tool);
-        } catch (_) {}
-      }
-
-      return div(
-          classes: 'toolbar-container panel-container-animate mt-2',
-          attributes: const {
-            'style': 'background-color: #f9f9f9; border-top: 1px solid #eee; border-bottom: 1px solid #eee; width: 100%; box-sizing: border-box;'
-          },
-          [
-            for (var tool in togglableTools)
-              _buildSettingsToggleButton(tool),
-            if (component.isEditingMode)
-              _buildEditorToggleButton()
-          ]
+  Component _buildSettingsToggleRow({
+    required bool hasYoutube,
+    required bool isGame,
+    required bool isIndiciaPage,
+    required bool canOpenGrid,
+  }) {
+    final togglableTools = ReaderToolsConfig.tools.where((tool) {
+      if (tool.id == 'Grid' || tool.id == 'Like' || tool.id == 'Settings') return false;
+      return ReaderToolsConfig.isToolVisibleInContext(
+        tool: tool,
+        activeScope: effectiveScope,
+        fanzineType: component.fanzineType,
+        hasYoutube: hasYoutube,
+        isGame: isGame,
+        isIndiciaPage: isIndiciaPage,
+        canOpenGrid: canOpenGrid,
       );
-    } else {
-      final editorToolIds = [
-        'Raw',
-        'Master',
-        'Entities',
-        'Indicia',
-        'Credits',
-        'YouTube',
-        'Terminal'
-      ];
-      final List<ReaderTool> visibleEditorTools = [];
-      for (final id in editorToolIds) {
-        try {
-          final tool = ReaderToolsConfig.tools.firstWhere((t) => t.id == id);
-          visibleEditorTools.add(tool);
-        } catch (_) {}
-      }
+    }).toList();
 
-      return div(
-          classes: 'toolbar-container panel-container-animate mt-2',
-          attributes: const {
-            'style': 'background-color: #f9f9f9; border-top: 1px solid #eee; border-bottom: 1px solid #eee; width: 100%; box-sizing: border-box;'
-          },
-          [
-            for (var tool in visibleEditorTools)
-              _buildSettingsEditModeActionButton(tool),
-            _buildTemplatesToggleButton(),
-            _buildEditorToggleButton()
-          ]
-      );
-    }
+    return div(
+      classes: 'toolbar-container panel-container-animate mt-2',
+      attributes: const {
+        'style': 'background-color: #f9f9f9; border-top: 1px solid #eee; border-bottom: 1px solid #eee; width: 100%; box-sizing: border-box;'
+      },
+      [
+        for (var tool in togglableTools)
+          _buildSettingsToggleButton(tool)
+      ],
+    );
   }
 
   Component _buildSettingsToggleButton(ReaderTool tool) {
     bool hasContent = true;
-    if (tool.id == 'Text') {
-      hasContent = _hasTextContent;
-    } else if (tool.id == 'Entities') {
-      hasContent = _hasEntitiesContent;
-    } else if (tool.id == 'Credits') {
-      hasContent = _hasCreditsContent;
-    } else if (tool.id == 'YouTube') {
-      hasContent = _hasYoutubeContent;
-    } else if (tool.id == 'Terminal') {
-      hasContent = _hasTerminalContent;
+    if (!_isPreview) {
+      if (tool.id == 'Text') {
+        hasContent = _hasTextContent;
+      } else if (tool.id == 'Entities') {
+        hasContent = _hasEntitiesContent;
+      } else if (tool.id == 'Credits') {
+        hasContent = _hasCreditsContent;
+      } else if (tool.id == 'YouTube') {
+        hasContent = _hasYoutubeContent;
+      } else if (tool.id == 'Terminal') {
+        hasContent = _hasTerminalContent;
+      }
     }
 
     final bool isVisible = hasContent ? (_socialButtonVisibility[tool.id] ?? true) : false;
-    bool isToolActive = false;
-    int? toolCount;
-
-    if (tool.id == 'Like') {
-      isToolActive = _isLiked;
-      toolCount = _likeCount;
-    } else if (tool.id == 'Comment') {
-      isToolActive = component.activeBonusRow == BonusRowType.comments;
-      toolCount = _commentCount;
-    } else if (tool.id == 'Text') {
-      isToolActive = component.activeBonusRow == BonusRowType.textReader;
-    } else if (tool.bonusRow != null) {
-      isToolActive = component.activeBonusRow == tool.bonusRow;
-    }
-
+    final bool isToolActive = tool.bonusRow != null && component.activeBonusRow == tool.bonusRow;
     final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
     final iconPath = isToolActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
 
@@ -460,268 +479,42 @@ class _SocialToolbarState extends State<SocialToolbar> {
     }
 
     return button(
-        classes: btnClasses,
-        attributes: {
-          'style': 'display: flex; flex-direction: column; align-items: center; transition: all 0.2s; $extraStyle'
-        },
-        events: {
-          'click': (e) {
-            if (hasContent) {
-              _toggleButtonVisibility(tool.id);
-            }
-          }
-        },
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            img(
-                src: iconPath,
-                attributes: const {
-                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                }
-            ),
-            if (toolCount != null && toolCount > 0)
-              span(classes: 'badge', [Component.text('$toolCount')])
-          ]),
-          span(classes: 'toolbar-label', [
-            Component.text(tool.label),
-            if (!hasContent) span([Component.text(' (empty)')], attributes: const {'style': 'font-size: 8px; display: block;'})
-          ])
-        ]
-    );
-  }
-
-  Component _buildSettingsEditModeActionButton(ReaderTool tool) {
-    final bool isActive = _activeEditorPanel == tool.bonusRow;
-    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
-    final iconPath = isActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
-
-    return button(
-        classes: btnClasses,
-        attributes: const {
-          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
-        },
-        events: {
-          'click': (e) {
-            if (tool.bonusRow != null) {
-              setState(() {
-                _activeEditorPanel = (_activeEditorPanel == tool.bonusRow) ? null : tool.bonusRow;
-                _showTemplatesRow = false;
-              });
-            }
-          }
-        },
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            img(
-                src: iconPath,
-                attributes: const {
-                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                }
-            )
-          ]),
-          span(classes: 'toolbar-label', [Component.text(tool.label)])
-        ]
-    );
-  }
-
-  Component _buildTemplatesToggleButton() {
-    final bool isActive = _showTemplatesRow;
-    final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''}';
-    return button(
-        classes: btnClasses,
-        attributes: const {
-          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
-        },
-        events: {
-          'click': (e) {
-            setState(() {
-              _showTemplatesRow = !_showTemplatesRow;
-              _activeEditorPanel = null;
-            });
-          }
-        },
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            img(
-                src: 'assets/social_toolbar/templates.svg',
-                attributes: const {
-                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                }
-            )
-          ]),
-          span(classes: 'toolbar-label', [Component.text('templates')])
-        ]
-    );
-  }
-
-  Component _buildTemplatesRow() {
-    final bool isNewTextPage = _imageData['templateId'] == 'basic_text';
-    return div(
-        classes: 'toolbar-container panel-container-animate mt-1',
-        attributes: const {
-          'style': 'background-color: #f1f1f1; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; width: 100%; box-sizing: border-box;'
-        },
-        [
-          _buildTemplatesRowActionButton('text page'),
-          if (isNewTextPage)
-            _buildSettingsEditModeNewPageButton(),
-        ]
-    );
-  }
-
-  Component _buildTemplatesRowActionButton(String label) {
-    return button(
-        classes: 'toolbar-btn',
-        attributes: const {
-          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
-        },
-        events: {
-          'click': (e) {}
-        },
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            img(
-                src: 'assets/social_toolbar/new_page.svg',
-                attributes: const {
-                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                }
-            )
-          ]),
-          span(classes: 'toolbar-label', [Component.text(label)])
-        ]
-    );
-  }
-
-  Component _buildSettingsEditModeNewPageButton() {
-    final bool isActive = _activeEditorPanel == BonusRowType.newPage;
-    return button(
-        [
-          div(
-              [
-                img(
-                    src: 'assets/social_toolbar/new_page.svg',
-                    attributes: const {
-                      'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                    }
-                )
-              ],
-              classes: 'toolbar-icon-wrapper'
-          ),
-          span(classes: 'toolbar-label', [Component.text('new page')])
-        ],
-        classes: 'toolbar-btn ${isActive ? 'active' : ''}',
-        attributes: const {
-          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
-        },
-        events: {
-          'click': (e) {
-            setState(() {
-              _activeEditorPanel = (_activeEditorPanel == BonusRowType.newPage) ? null : BonusRowType.newPage;
-            });
+      classes: btnClasses,
+      attributes: {
+        'style': 'display: flex; flex-direction: column; align-items: center; transition: all 0.2s; $extraStyle'
+      },
+      events: {
+        'click': (e) {
+          if (hasContent) {
+            _toggleButtonVisibility(tool.id);
           }
         }
-    );
-  }
-
-  Component _buildEditorToggleButton() {
-    final bool isWhiteSelected = _isSettingsEditMode;
-    final btnClasses = 'toolbar-btn ${isWhiteSelected ? 'active' : ''}';
-    return button(
-        classes: btnClasses,
-        attributes: const {
-          'style': 'display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s;'
-        },
-        events: {
-          'click': (e) {
-            setState(() {
-              _isSettingsEditMode = !_isSettingsEditMode;
-              if (!_isSettingsEditMode) {
-                _activeEditorPanel = null;
-                _showTemplatesRow = false;
-              }
-            });
-          }
-        },
-        [
-          div(classes: 'toolbar-icon-wrapper', [
-            img(
-                src: 'assets/social_toolbar/edit.svg',
-                attributes: const {
-                  'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
-                }
-            )
-          ]),
-          span(classes: 'toolbar-label', [Component.text('edit')])
-        ]
-    );
-  }
-
-  Component _buildEditorPanelContent(String imageId) {
-    Component inner;
-    String title = "";
-    if (_activeEditorPanel == null) return div([]);
-
-    switch (_activeEditorPanel!) {
-      case BonusRowType.rawText:
-        title = "Raw OCR Text";
-        inner = RawTextPanel(imageId: imageId);
-        break;
-      case BonusRowType.editText:
-      case BonusRowType.linkedText:
-        title = "";
-        inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId ?? '');
-        break;
-      case BonusRowType.entities:
-        title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: true);
-        break;
-      case BonusRowType.indicia:
-        title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId ?? '', isEditingMode: true);
-        break;
-      case BonusRowType.credits:
-        title = "Creators";
-        inner = CreditsPanel(imageId: imageId);
-        break;
-      case BonusRowType.youtube:
-        title = "Video Resource";
-        inner = YoutubePanel(imageId: imageId);
-        break;
-      case BonusRowType.views:
-      case BonusRowType.analyticsDashboard:
-        title = "Analytics Dashboard";
-        inner = AnalyticsPanel(imageId: imageId);
-        break;
-      case BonusRowType.newPage:
-        title = "New Page Text Editor";
-        inner = PublisherTextPanel(imageId: imageId, fanzineId: component.fanzineId);
-        break;
-      case BonusRowType.terminal:
-        title = "Combat Terminal";
-        inner = TerminalPanel(imageId: imageId);
-        break;
-      default:
-        return div([]);
-    }
-
-    return PanelContainer(
-      title: title,
-      type: _activeEditorPanel!,
-      child: inner,
+      },
+      [
+        div(classes: 'toolbar-icon-wrapper', [
+          img(
+            src: iconPath,
+            attributes: const {
+              'style': 'width: 18px; height: 18px; object-fit: contain; display: block;'
+            },
+          ),
+        ]),
+        span(classes: 'toolbar-label', [
+          Component.text(tool.label),
+          if (!hasContent) span([Component.text(' (empty)')], attributes: const {'style': 'font-size: 8px; display: block;'})
+        ])
+      ],
     );
   }
 
   Future<void> _toggleButtonVisibility(String toolId) async {
     final uid = getCurrentUserId();
-    if (uid == null) {
-      GlobalModalBus.show();
-      return;
-    }
     final current = _socialButtonVisibility[toolId] ?? true;
     final next = !current;
     setState(() {
       _socialButtonVisibility[toolId] = next;
     });
+    if (_isPreview || uid == null) return;
     await fsUpdateDoc('Users/$uid', jsonEncode({
       'preferences.socialButtons.$toolId': next
     }));

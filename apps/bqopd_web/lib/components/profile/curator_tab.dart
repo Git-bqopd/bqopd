@@ -24,7 +24,7 @@ String normalizeHandle(String input) {
       .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
 }
 
-/// Helper to formatted date dynamically based on precision mode and estimated guess toggle.
+/// Helper to format dates dynamically based on precision mode and estimated guess toggle.
 String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
   if (dateStr == null || dateStr.trim().isEmpty) return '';
   try {
@@ -422,7 +422,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       await fsSetDoc('fanzines/$fanzineId', jsonEncode(data), true);
       if (mounted) {
         setState(() => _loadingWorks = false);
-        Router.of(context).push('/$shortCode');
+        Router.of(context).push('/$shortCode/curator');
       }
     } catch (e) {
       print("Error creating archival zine: $e");
@@ -592,16 +592,23 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     final String processingStatus = w['processingStatus'] ?? 'idle';
     final String fanzineId = w['id'] ?? '';
     final bool inCurator = w['inCurator'] ?? true;
+    final String codeKey = w['shortCode'] ?? fanzineId;
 
     return tr([
       td([
-        div(
-            attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px;'},
-            [
-              span([text(title)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; color: black;'}),
-              if (fanzineId.isNotEmpty)
-                span([text('ID: $fanzineId')], attributes: const {'style': 'font-size: 9px; color: #888; font-family: monospace;'})
-            ]
+        a(
+          [
+            div(
+                attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px;'},
+                [
+                  span([text(title)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; color: black;'}),
+                  if (fanzineId.isNotEmpty)
+                    span([text('ID: $fanzineId')], attributes: const {'style': 'font-size: 9px; color: #888; font-family: monospace;'})
+                ]
+            )
+          ],
+          href: '/$codeKey/curator',
+          attributes: const {'style': 'text-decoration: none; color: inherit; cursor: pointer;'},
         )
       ]),
       td([
@@ -1063,7 +1070,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
             div(
                 [
                   div(
-                      [text("$fanzineType   $resolvedPageCount pages")],
+                      [text("$fanzineType • $resolvedPageCount pages")],
                       attributes: const {
                         'style': 'background-color: rgba(33, 33, 33, 0.85); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center; text-transform: lowercase;'
                       }
@@ -1112,7 +1119,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
       ],
       classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
       attributes: const {'style': 'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none;'},
-      href: '/$codeKey',
+      href: '/$codeKey/curator',
     );
   }
 }

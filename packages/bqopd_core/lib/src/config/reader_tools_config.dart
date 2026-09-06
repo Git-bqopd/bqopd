@@ -42,6 +42,7 @@ class ReaderToolsConfig {
       label: 'open',
       description: 'Return to the grid navigation view.',
       defaultIcon: 'assets/social_toolbar/open.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       action: ToolAction.switchToGridView,
       condition: ToolCondition.hideOnDesktopSplit,
     ),
@@ -52,6 +53,7 @@ class ReaderToolsConfig {
       description: 'Show appreciation for the work.',
       defaultIcon: 'assets/social_toolbar/like.svg',
       activeIcon: 'assets/social_toolbar/like_FILL.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       action: ToolAction.toggleLike,
     ),
     // 3. Comment (comments)
@@ -61,6 +63,7 @@ class ReaderToolsConfig {
       description: 'Join the discussion on this specific page.',
       defaultIcon: 'assets/social_toolbar/comments.svg',
       activeIcon: 'assets/social_toolbar/comments_FILL.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       bonusRow: BonusRowType.comments,
     ),
     // 4. Text (text)
@@ -69,6 +72,7 @@ class ReaderToolsConfig {
       label: 'text',
       description: 'Read the finalized text.',
       defaultIcon: 'assets/social_toolbar/text.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       bonusRow: BonusRowType.textReader,
     ),
     // 5. Raw (raw)
@@ -95,7 +99,7 @@ class ReaderToolsConfig {
       label: 'entities',
       description: 'Link detected names to internal profiles.',
       defaultIcon: 'assets/social_toolbar/entities.svg',
-      scopes: const {ToolScope.curator, ToolScope.reader},
+      scopes: const {ToolScope.reader, ToolScope.curator},
       condition: ToolCondition.requiresOcrPipeline,
       bonusRow: BonusRowType.entities,
     ),
@@ -105,6 +109,7 @@ class ReaderToolsConfig {
       label: 'tags',
       description: 'Vote on hashtags and metadata.',
       defaultIcon: 'assets/social_toolbar/tag.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       bonusRow: BonusRowType.tags,
     ),
     // 9. Indicia (indicia)
@@ -113,6 +118,7 @@ class ReaderToolsConfig {
       label: 'indicia',
       description: 'View publication information and copyright details.',
       defaultIcon: 'assets/social_toolbar/indicia.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       condition: ToolCondition.requiresIndicia,
       bonusRow: BonusRowType.indicia,
     ),
@@ -140,6 +146,7 @@ class ReaderToolsConfig {
       label: 'YouTube',
       description: 'Watch the video associated with this page.',
       defaultIcon: 'assets/social_toolbar/YouTube.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       condition: ToolCondition.requiresYouTube,
       bonusRow: BonusRowType.youtube,
     ),
@@ -149,6 +156,7 @@ class ReaderToolsConfig {
       label: 'terminal',
       description: 'Enter the terminal.',
       defaultIcon: 'assets/social_toolbar/terminal.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       condition: ToolCondition.requiresGame,
       bonusRow: BonusRowType.terminal,
     ),
@@ -158,8 +166,8 @@ class ReaderToolsConfig {
       label: 'share',
       description: 'Copy a deep-link to this specific page.',
       defaultIcon: 'assets/social_toolbar/share.svg',
-      action: ToolAction.openBonusRow,
-      bonusRow: BonusRowType.shareOptions,
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
+      action: ToolAction.copyShareLink,
     ),
     // 15. Settings (buttons)
     ReaderTool(
@@ -167,6 +175,7 @@ class ReaderToolsConfig {
       label: 'buttons',
       description: 'Customize which buttons appear on your toolbar.',
       defaultIcon: 'assets/social_toolbar/buttons.svg',
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       bonusRow: BonusRowType.settings,
     ),
     // 16. New Page (new page)

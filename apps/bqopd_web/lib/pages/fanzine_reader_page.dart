@@ -7,12 +7,13 @@ import '../utils/web_firebase_interop.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
 import '../components/fanzine_editor.dart';
-import '../components/fanzine_curator.dart'; // Import newly created FanzineCurator
+import '../components/fanzine_curator.dart';
 import '../components/fanzine_layout.dart';
 import '../utils/firebase_mocks.dart';
 import '../utils/web_utils.dart';
 
-/// Jaspr Web Reader Page utilizing Set-based likedImageIds to optimize performance.
+/// Top-level coordinator page for public readers, editors, and curators.
+/// Manages real-time data streaming, likes pipeline, and responsive layout delegation.
 class FanzineReaderPage extends StatefulComponent {
   final String fanzineId;
   final int? initialPageNumber;
@@ -23,6 +24,7 @@ class FanzineReaderPage extends StatefulComponent {
   final AuthState? authState;
   final AuthBloc? authBloc;
   final bool isEditingMode;
+  final ToolScope? activeScope;
 
   const FanzineReaderPage({
     required this.fanzineId,
@@ -34,6 +36,7 @@ class FanzineReaderPage extends StatefulComponent {
     this.authState,
     this.authBloc,
     this.isEditingMode = false,
+    this.activeScope,
     super.key,
   });
 
@@ -357,62 +360,72 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         attributes: const {'style': 'min-height: 100vh;'},
       );
     }
-    final String fanzineType = _fanzine!['type'] ?? 'ingested';
-    final bool isCuratorZine = fanzineType == 'ingested';
 
-    final Component listHeader = component.isEditingMode
-        ? (isCuratorZine
-        ? FanzineCurator(
-      frefFanzineId: component.fanzineId,
-      shortCode: _fanzine!['shortCode'],
-      fanzineData: _fanzine,
-      creatorProfiles: _creatorProfiles,
-      imageStats: _imageStats,
-      pageStructure: _pages,
-      authState: component.authState,
-      authBloc: component.authBloc,
-      twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
-      onTwoPageChanged: (val) {
-        setState(() {
-          _overriddenTwoPage = val;
-        });
-      },
-    )
-        : FanzineEditor(
-      frefFanzineId: component.fanzineId,
-      shortCode: _fanzine!['shortCode'],
-      fanzineData: _fanzine,
-      creatorProfiles: _creatorProfiles,
-      imageStats: _imageStats,
-      pageStructure: _pages,
-      authState: component.authState,
-      authBloc: component.authBloc,
-      twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
-      onTwoPageChanged: (val) {
-        setState(() {
-          _overriddenTwoPage = val;
-        });
-      },
-    ))
-        : FanzineHeader(
-      fanzineId: component.fanzineId,
-      shortCode: _fanzine!['shortCode'],
-      fanzineData: _fanzine,
-      creatorProfiles: _creatorProfiles,
-      imageStats: _imageStats,
-      pageStructure: _pages,
-      authState: component.authState,
-      authBloc: component.authBloc,
-    );
+    final String fanzineType = _fanzine!['type'] ?? 'ingested';
+    final String? shortCode = _fanzine!['shortCode'];
+    final ToolScope effectiveScope = component.activeScope ??
+        (component.isEditingMode
+            ? (fanzineType == 'folio' || fanzineType == 'calendar'
+            ? ToolScope.editor
+            : ToolScope.curator)
+            : ToolScope.reader);
+
+    final Component listHeader;
+    if (effectiveScope == ToolScope.curator) {
+      listHeader = FanzineCurator(
+        frefFanzineId: component.fanzineId,
+        shortCode: shortCode,
+        fanzineData: _fanzine,
+        creatorProfiles: _creatorProfiles,
+        imageStats: _imageStats,
+        pageStructure: _pages,
+        authState: component.authState,
+        authBloc: component.authBloc,
+        twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
+        onTwoPageChanged: (val) {
+          setState(() {
+            _overriddenTwoPage = val;
+          });
+        },
+      );
+    } else if (effectiveScope == ToolScope.editor) {
+      listHeader = FanzineEditor(
+        frefFanzineId: component.fanzineId,
+        shortCode: shortCode,
+        fanzineData: _fanzine,
+        creatorProfiles: _creatorProfiles,
+        imageStats: _imageStats,
+        pageStructure: _pages,
+        authState: component.authState,
+        authBloc: component.authBloc,
+        twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
+        onTwoPageChanged: (val) {
+          setState(() {
+            _overriddenTwoPage = val;
+          });
+        },
+      );
+    } else {
+      listHeader = FanzineHeader(
+        fanzineId: component.fanzineId,
+        shortCode: shortCode,
+        fanzineData: _fanzine,
+        creatorProfiles: _creatorProfiles,
+        imageStats: _imageStats,
+        pageStructure: _pages,
+        authState: component.authState,
+        authBloc: component.authBloc,
+      );
+    }
 
     final Component gridHeader = FanzineHeader(
       fanzineId: component.fanzineId,
-      shortCode: _fanzine!['shortCode'],
+      shortCode: shortCode,
       fanzineData: _fanzine,
       creatorProfiles: _creatorProfiles,
       imageStats: _imageStats,
       pageStructure: _pages,
-      isStickerOnly: component.isEditingMode,
+      isStickerOnly: effectiveScope != ToolScope.reader,
       authState: component.authState,
       authBloc: component.authBloc,
     );
@@ -421,6 +434,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       [
         FanzineLayout(
           fanzineId: component.fanzineId,
+          shortCode: shortCode,
+          fanzineType: fanzineType,
           pages: _pages,
           hasCover: _fanzine!['hasCover'] ?? true,
           twoPage: _overriddenTwoPage ?? _fanzine!['twoPage'] ?? true,
@@ -429,7 +444,8 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           likedImageIds: _likedImageIds,
           authState: component.authState,
           authBloc: component.authBloc,
-          isEditingMode: component.isEditingMode,
+          isEditingMode: effectiveScope != ToolScope.reader,
+          activeScope: effectiveScope,
           gridHeader: gridHeader,
           listHeader: listHeader,
         )

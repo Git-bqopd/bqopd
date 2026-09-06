@@ -18,8 +18,12 @@ import '../panels/analytics_panel.dart';
 import '../panels/publisher_text_panel.dart';
 import '../panels/terminal_panel.dart';
 
+/// Renders an individual fanzine page container inside the list reading view,
+/// hosting the high-resolution image, social toolbar, and expandable detail panels.
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
+  final String? shortCode;
+  final String? fanzineType;
   final Map<String, dynamic> pageData;
   final int pageIndex;
   final VoidCallback? onOpenGrid;
@@ -28,11 +32,14 @@ class ReaderPageItem extends StatefulComponent {
   final AuthState? authState;
   final AuthBloc? authBloc;
   final bool isEditingMode;
+  final ToolScope? activeScope;
   final BonusRowType? activeGlobalPanel;
   final ValueChanged<BonusRowType>? onTogglePanel;
 
   const ReaderPageItem({
     required this.fanzineId,
+    this.shortCode,
+    this.fanzineType,
     required this.pageData,
     required this.pageIndex,
     this.onOpenGrid,
@@ -41,6 +48,7 @@ class ReaderPageItem extends StatefulComponent {
     this.authState,
     this.authBloc,
     this.isEditingMode = false,
+    this.activeScope,
     this.activeGlobalPanel,
     this.onTogglePanel,
     super.key,
@@ -80,7 +88,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     final imageId = component.pageData['imageId'];
     final templateId = component.pageData['templateId'];
     if (imageId == null || imageId.isEmpty || templateId != 'basic_text') return;
-
     _imgDataUnsub = fsListenDoc('images/$imageId', (String jsonStr) {
       try {
         final doc = jsonDecode(jsonStr);
@@ -103,63 +110,66 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   Component build(BuildContext context) {
     final String imageId = component.pageData['imageId'] ?? '';
     final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
+    final int resolvedPageNumber = component.pageData['pageNumber'] ?? (component.pageIndex + 1);
 
     return div(
-        classes: 'reader-list-item-card bg-white rounded-lg border border-gray-300 shadow-md mb-6 w-full flex-col overflow-hidden',
-        attributes: const {
-          'style': 'background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); overflow: hidden; margin-bottom: 24px; width: 100%; box-sizing: border-box;'
-        },
-        [
-          // Top Card Section: Page Image Container
-          div(
-              classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center border-b border-gray-200 w-full',
-              attributes: const {
-                'style': 'aspect-ratio: 5 / 8; background-color: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #e2e8f0; width: 100%;'
-              },
-              [
-                if (url != null && url.isNotEmpty)
-                  img(
-                      src: url,
-                      classes: 'w-full h-full',
-                      attributes: const {
-                        'style': 'width: 100%; height: 100%; object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
-                        'draggable': 'false',
-                        'loading': 'lazy',
-                      }
-                  )
-                else
-                  div(classes: 'flex-col gap-2 py-4 w-full h-full justify-center items-center p-8', [
-                    div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 80%; height: 16px; margin-bottom: 12px;'}),
-                    div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'width: 90%; height: 16px; margin-bottom: 12px;'}),
-                    div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 70%; height: 16px; margin-bottom: 12px;'}),
-                    div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'width: 50%; height: 16px; margin-bottom: 12px;'}),
-                  ])
-              ]
-          ),
-          // Bottom Card Section: Social Toolbar + Social Panel (Stretches Card vertically when opened)
-          div(
-              classes: 'bg-white p-3 flex-col w-full',
-              attributes: const {
-                'style': 'background-color: #ffffff; padding: 12px; display: flex; flex-direction: column; width: 100%; box-sizing: border-box;'
-              },
-              [
-                SocialToolbar(
-                  imageId: imageId,
-                  fanzineId: component.fanzineId,
-                  onOpenGrid: component.onOpenGrid,
-                  activeBonusRow: component.activeGlobalPanel,
-                  onToggleBonusRow: _handleTogglePanel,
-                  likedImageIds: component.likedImageIds,
-                  initialImageStats: component.initialImageStats,
-                  authState: component.authState,
-                  authBloc: component.authBloc,
-                  isEditingMode: component.isEditingMode,
-                ),
-                if (component.activeGlobalPanel != null && component.activeGlobalPanel != BonusRowType.settings)
-                  _buildPanelContent(imageId, component.activeGlobalPanel!),
-              ]
-          )
-        ]
+      classes: 'reader-list-item-card bg-white rounded-lg border border-gray-300 shadow-md mb-6 w-full flex-col overflow-hidden',
+      attributes: const {
+        'style': 'background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); overflow: hidden; margin-bottom: 24px; width: 100%; box-sizing: border-box;'
+      },
+      [
+        div(
+          classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center border-b border-gray-200 w-full',
+          attributes: const {
+            'style': 'aspect-ratio: 5 / 8; background-color: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #e2e8f0; width: 100%;'
+          },
+          [
+            if (url != null && url.isNotEmpty)
+              img(
+                src: url,
+                classes: 'w-full h-full',
+                attributes: const {
+                  'style': 'width: 100%; height: 100%; object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
+                  'draggable': 'false',
+                  'loading': 'lazy',
+                },
+              )
+            else
+              div(classes: 'flex-col gap-2 py-4 w-full h-full justify-center items-center p-8', [
+                div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 80%; height: 16px; margin-bottom: 12px;'}),
+                div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'width: 90%; height: 16px; margin-bottom: 12px;'}),
+                div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 70%; height: 16px; margin-bottom: 12px;'}),
+                div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'width: 50%; height: 16px; margin-bottom: 12px;'}),
+              ])
+          ],
+        ),
+        div(
+          classes: 'bg-white p-3 flex-col w-full',
+          attributes: const {
+            'style': 'background-color: #ffffff; padding: 12px; display: flex; flex-direction: column; width: 100%; box-sizing: border-box;'
+          },
+          [
+            SocialToolbar(
+              imageId: imageId,
+              fanzineId: component.fanzineId,
+              shortCode: component.shortCode,
+              fanzineType: component.fanzineType,
+              pageNumber: resolvedPageNumber,
+              activeScope: component.activeScope,
+              onOpenGrid: component.onOpenGrid,
+              activeBonusRow: component.activeGlobalPanel,
+              onToggleBonusRow: _handleTogglePanel,
+              likedImageIds: component.likedImageIds,
+              initialImageStats: component.initialImageStats,
+              authState: component.authState,
+              authBloc: component.authBloc,
+              isEditingMode: component.isEditingMode,
+            ),
+            if (component.activeGlobalPanel != null && component.activeGlobalPanel != BonusRowType.settings)
+              _buildPanelContent(imageId, component.activeGlobalPanel!),
+          ],
+        )
+      ],
     );
   }
 

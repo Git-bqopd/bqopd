@@ -4,10 +4,41 @@ enum ToolScope {
   curator, // FanzineCurator SocialToolbar
 }
 
+/// Extension providing centralized, type-safe route slug mapping for tool scopes
+/// across both Jaspr Web and Flutter platforms.
+extension ToolScopeRouting on ToolScope {
+  /// Maps enum to the public URL path slug
+  String toRouteSlug() {
+    switch (this) {
+      case ToolScope.reader:
+        return 'reader';
+      case ToolScope.editor:
+        return 'maker';
+      case ToolScope.curator:
+        return 'curator';
+    }
+  }
+
+  /// Resolves route path strings safely to their enum representation
+  static ToolScope fromRouteSlug(String? slug, {ToolScope fallback = ToolScope.reader}) {
+    if (slug == null) return fallback;
+    switch (slug.toLowerCase().trim()) {
+      case 'curator':
+        return ToolScope.curator;
+      case 'maker':
+      case 'editor':
+        return ToolScope.editor;
+      case 'reader':
+      default:
+        return ToolScope.reader;
+    }
+  }
+}
+
 enum ToolAction {
   openBonusRow,     // Opens the associated widget drawer
   toggleLike,       // Hits the engagement service to toggle like state
-  copyShareLink,    // Copies the deep link to clipboard
+  copyShareLink,    // Copies the canonical deep link to clipboard
   switchToGridView, // Triggers layout change back to the Grid/Navigation view
 }
 
@@ -50,7 +81,6 @@ class ReaderTool {
   final String defaultIcon; // String ID: e.g. "article_outlined"
   final String? activeIcon;
   final String? darkIcon;
-
   final Set<ToolScope> scopes;
   final ToolAction action;
   final ToolCondition condition;
