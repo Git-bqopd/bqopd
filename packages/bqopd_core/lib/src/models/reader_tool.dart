@@ -36,7 +36,7 @@ extension ToolScopeRouting on ToolScope {
 }
 
 enum ToolAction {
-  openBonusRow,     // Opens the associated widget drawer
+  openBonusRow,     // Opens the associated widget drawer or panel
   toggleLike,       // Hits the engagement service to toggle like state
   copyShareLink,    // Copies the canonical deep link to clipboard
   switchToGridView, // Triggers layout change back to the Grid/Navigation view
@@ -74,6 +74,8 @@ enum BonusRowType {
 
 /// Pure Dart data model for a dynamic toolbar button.
 /// Icons are stored as Strings to avoid Flutter dependencies.
+/// Supports dedicated bonus row (mobile accordion drawer) and bonus column
+/// (desktop 3rd column window) panel targets per workspace scope.
 class ReaderTool {
   final String id;
   final String label;
@@ -84,7 +86,22 @@ class ReaderTool {
   final Set<ToolScope> scopes;
   final ToolAction action;
   final ToolCondition condition;
-  final BonusRowType? bonusRow;
+
+  /// General fallback bonus row (used if scope-specific bonus rows are omitted).
+  final BonusRowType? _bonusRow;
+
+  /// Scope-specific panel destinations for mobile / inline bonus row:
+  final BonusRowType? readerBonusRow;
+  final BonusRowType? editorBonusRow;
+  final BonusRowType? curatorBonusRow;
+
+  /// General fallback bonus column (used if scope-specific bonus columns are omitted).
+  final BonusRowType? _bonusColumn;
+
+  /// Scope-specific panel destinations for desktop 3rd column:
+  final BonusRowType? readerBonusColumn;
+  final BonusRowType? editorBonusColumn;
+  final BonusRowType? curatorBonusColumn;
 
   const ReaderTool({
     required this.id,
@@ -96,6 +113,50 @@ class ReaderTool {
     this.scopes = const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
     this.action = ToolAction.openBonusRow,
     this.condition = ToolCondition.always,
-    this.bonusRow,
-  });
+    BonusRowType? bonusRow,
+    this.readerBonusRow,
+    this.editorBonusRow,
+    this.curatorBonusRow,
+    BonusRowType? bonusColumn,
+    this.readerBonusColumn,
+    this.editorBonusColumn,
+    this.curatorBonusColumn,
+  })  : _bonusRow = bonusRow,
+        _bonusColumn = bonusColumn;
+
+  /// Backward-compatible getter resolving either the general or scope-specific panel.
+  BonusRowType? get bonusRow =>
+      _bonusRow ?? readerBonusRow ?? editorBonusRow ?? curatorBonusRow;
+
+  /// Backward-compatible getter resolving either the general or scope-specific bonus column,
+  /// falling back to [bonusRow] if no column-specific configuration exists.
+  BonusRowType? get bonusColumn =>
+      _bonusColumn ??
+          readerBonusColumn ??
+          editorBonusColumn ??
+          curatorBonusColumn ??
+          bonusRow;
+
+  /// Returns the specific panel configured for the given [ToolScope] in mobile / inline bonus row mode.
+  BonusRowType? getBonusRowForScope(ToolScope scope) {
+    switch (scope) {
+      case ToolScope.reader:
+        return readerBonusRow ?? _bonusRow;
+      case ToolScope.editor:
+        return editorBonusRow ?? _bonusRow;
+      case ToolScope.curator:
+        return curatorBonusRow ?? _bonusRow;
+    }
+  }
+
+  /// Returns the specific panel configured for the given [ToolScope] in desktop 3rd column mode,
+  /// falling back to [getBonusRowForScope] if no column-specific panel is provided.
+  BonusRowType? getBonusColumnForScope(ToolScope scope) {
+    final specificColumn = switch (scope) {
+      ToolScope.reader => readerBonusColumn,
+      ToolScope.editor => editorBonusColumn,
+      ToolScope.curator => curatorBonusColumn,
+    };
+    return specificColumn ?? _bonusColumn ?? getBonusRowForScope(scope);
+  }
 }

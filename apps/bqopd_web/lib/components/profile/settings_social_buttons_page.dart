@@ -4,9 +4,16 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/icon_utils.dart';
 import '../social_toolbar.dart';
 
+/// Presentation mode toggle for inspecting mobile inline drawer targets
+/// versus desktop third column panel destinations.
+enum MatrixLayoutMode {
+  bonusRow,
+  bonusColumn,
+}
+
 /// Interactive visual inspection and configuration matrix for social buttons.
 /// Accurately renders each tool scope (FanzineReaderPage, FanzineCurator, FanzineEditor)
-/// matching the exact live app toolbar visibility rules.
+/// matching the exact live app toolbar visibility and panel destination rules.
 class SettingsSocialButtonsPage extends StatefulComponent {
   final String targetUserId;
   final UserAccount? viewerAccount;
@@ -26,14 +33,23 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
   BonusRowType? _previewCuratorBonusRow;
   BonusRowType? _previewEditorBonusRow;
 
+  // Layout mode switcher: inspect Mobile Drawer vs Desktop Column
+  MatrixLayoutMode _layoutMode = MatrixLayoutMode.bonusRow;
+
   // Context simulation toggles for preview inspection
   bool _previewHasYoutube = false;
   bool _previewIsGame = false;
   bool _previewIsIndicia = false;
   bool _previewCanOpenGrid = true;
 
-  // Active matrix feature/context column filters
-  final Set<String> _activeMatrixColumns = {'position', 'reader', 'maker', 'curator', 'guests'};
+  // Strict canonical order of columns across the dashboard matrix
+  static const List<String> _orderedColumnKeys = [
+    'position',
+    'reader',
+    'maker',
+    'curator',
+    'guests',
+  ];
 
   static const Map<String, String> _matrixColumnLabels = {
     'position': 'position',
@@ -41,6 +57,15 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
     'maker': 'maker / editor',
     'curator': 'curator pipeline',
     'guests': 'public guests',
+  };
+
+  // Active matrix feature/context column filters
+  final Set<String> _activeMatrixColumns = {
+    'position',
+    'reader',
+    'maker',
+    'curator',
+    'guests',
   };
 
   List<ReaderTool> _tools = [];
@@ -51,19 +76,92 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
     _tools = List<ReaderTool>.from(ReaderToolsConfig.tools);
   }
 
-  bool _hasFeature(ReaderTool tool, String colKey) {
-    switch (colKey) {
-      case 'reader':
-        return tool.scopes.contains(ToolScope.reader);
-      case 'maker':
-        return tool.scopes.contains(ToolScope.editor);
-      case 'curator':
-        return tool.scopes.contains(ToolScope.curator);
-      case 'guests':
-        return tool.id == 'Like' || tool.id == 'Comment' || tool.id == 'Text' || tool.id == 'Grid';
-      default:
-        return false;
+  /// Returns active columns strictly sorted according to the canonical column order.
+  List<String> get _visibleColumns =>
+      _orderedColumnKeys.where((k) => _activeMatrixColumns.contains(k)).toList();
+
+  /// Converts a camelCase enum identifier (e.g. `textReader`, `analyticsDashboard`)
+  /// into a clean, human-readable lowercase label (`text reader`, `analytics dashboard`).
+  String _formatEnumName(String raw) {
+    return raw
+        .replaceAllMapped(
+      RegExp(r'([a-z])([A-Z])'),
+          (match) => '${match.group(1)} ${match.group(2)}',
+    )
+        .toLowerCase();
+  }
+
+  /// Resolves the live panel or action triggered when clicking a tool within a given column.
+  /// Dynamically evaluates either `tool.getBonusRowForScope` (mobile) or `tool.getBonusColumnForScope` (desktop).
+  Component _buildCellContent(ReaderTool tool, String colKey) {
+    // 1. Resolve effective scope for this column
+    final ToolScope? scope = switch (colKey) {
+      'reader' || 'guests' => ToolScope.reader,
+      'maker' => ToolScope.editor,
+      'curator' => ToolScope.curator,
+      _ => null,
+    };
+
+    if (scope == null || !tool.scopes.contains(scope)) {
+      return span(
+        [text('—')],
+        attributes: const {
+          'style': 'font-size: 13px; color: #d1d5db; line-height: 1; user-select: none;',
+        },
+      );
     }
+
+    // 2. Handle Public Guests authentication-gated checkpoints
+    if (colKey == 'guests') {
+      if (tool.id == 'Like' || tool.id == 'Settings' || tool.id == 'Terminal') {
+        return _buildPillBadge('prompt login', '#fef3c7', '#92400e', '#fde68a');
+      }
+    }
+
+    // 3. Direct Action buttons (no panel)
+    if (tool.action == ToolAction.switchToGridView) {
+      return _buildPillBadge('grid view', '#eff6ff', '#1e40af', '#bfdbfe');
+    }
+    if (tool.action == ToolAction.copyShareLink) {
+      return _buildPillBadge('copy link', '#eff6ff', '#1e40af', '#bfdbfe');
+    }
+    if (tool.action == ToolAction.toggleLike) {
+      return _buildPillBadge('toggle like', '#fdf2f8', '#9d174d', '#fbcfe8');
+    }
+
+    // 4. Panel Opening: dynamically interrogate the scope and layout mode
+    final BonusRowType? targetPanel = (_layoutMode == MatrixLayoutMode.bonusColumn)
+        ? tool.getBonusColumnForScope(scope)
+        : tool.getBonusRowForScope(scope);
+
+    if (targetPanel != null) {
+      String displayLabel = _formatEnumName(targetPanel.name);
+
+      // Distinguish view vs edit modes if the panel differs conceptually between reader and editor/curator
+      if (targetPanel == BonusRowType.entities) {
+        displayLabel = (scope == ToolScope.curator) ? 'entities (edit)' : 'entities (view)';
+      } else if (targetPanel == BonusRowType.indicia) {
+        displayLabel = (scope == ToolScope.reader) ? 'indicia (view)' : 'indicia (edit)';
+      }
+
+      return _buildPillBadge(displayLabel, '#f3f4f6', '#374151', '#e5e7eb');
+    }
+
+    return span(
+      [text('—')],
+      attributes: const {
+        'style': 'font-size: 13px; color: #d1d5db; line-height: 1; user-select: none;',
+      },
+    );
+  }
+
+  Component _buildPillBadge(String label, String bgColor, String textColor, String borderColor) {
+    return span(
+      [text(label)],
+      attributes: {
+        'style': 'font-size: 10px; font-weight: 600; color: $textColor; background-color: $bgColor; border: 1px solid $borderColor; padding: 2px 7px; border-radius: 4px; text-transform: lowercase; white-space: nowrap; line-height: 1.2; letter-spacing: 0.2px; text-align: center; max-width: 100px; overflow: hidden; text-overflow: ellipsis;',
+      },
+    );
   }
 
   Component _buildColumnChip(String colKey, String label) {
@@ -127,6 +225,7 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
         'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; min-height: 48px; box-sizing: border-box; width: 100%; transition: background-color 0.15s ease;',
       },
       [
+        // Icon circular badge
         div(
           attributes: const {
             'style': 'display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #000; flex-shrink: 0; background-color: #ffffff;'
@@ -149,6 +248,8 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
               )
           ],
         ),
+
+        // Title and description
         div(
           attributes: const {
             'style': 'display: flex; flex-direction: column; justify-content: center; flex: 1; overflow: hidden;'
@@ -168,7 +269,9 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
             )
           ],
         ),
-        for (var colKey in _activeMatrixColumns)
+
+        // Feature and context columns strictly in canonical order
+        for (var colKey in _visibleColumns)
           div(
             attributes: const {
               'style': 'width: 110px; display: flex; justify-content: center; align-items: center; flex-shrink: 0;'
@@ -177,7 +280,7 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
               if (colKey == 'position')
                 _buildPositionCell(index)
               else
-                _buildCheckIndicatorCell(tool, colKey),
+                _buildCellContent(tool, colKey),
             ],
           )
       ],
@@ -191,20 +294,6 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
         'style': 'font-size: 13px; font-weight: bold; color: #49454F; font-family: monospace;',
       },
     );
-  }
-
-  Component _buildCheckIndicatorCell(ReaderTool tool, String colKey) {
-    final bool hasFeature = _hasFeature(tool, colKey);
-    if (hasFeature) {
-      return img(
-        src: 'assets/social_toolbar/check.svg',
-        attributes: const {
-          'style': 'width: 18px; height: 18px; object-fit: contain; display: block;',
-          'alt': 'enabled',
-        },
-      );
-    }
-    return span([], attributes: const {'style': 'display: inline-block; width: 18px; height: 18px;'});
   }
 
   @override
@@ -396,6 +485,73 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
           ],
         ),
 
+        div(
+          classes: 'flex-row justify-between items-center w-full mb-4 pb-4 border-b border-gray-100',
+          attributes: const {
+            'style': 'display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 16px; border-bottom: 1px solid #eee; padding-bottom: 12px; flex-wrap: wrap; gap: 12px;'
+          },
+          [
+            div([
+              span(
+                [text("TARGET VIEWPORT PANEL")],
+                attributes: const {
+                  'style': 'font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; display: block;'
+                },
+              ),
+              span(
+                  [text("inspect mobile bonus row drawer vs desktop 3rd column targets")],
+                  attributes: const {'style': 'font-size: 10px; color: #9ca3af;'}
+              )
+            ]),
+            div(
+              attributes: const {
+                'style': 'display: flex; border: 1px solid #ccc; border-radius: 100px; overflow: hidden; background: white;'
+              },
+              [
+                button(
+                  [
+                    span(
+                      classes: 'material-symbols-outlined',
+                      attributes: const {'style': 'font-size: 13px; margin-right: 4px; vertical-align: middle;'},
+                      [text('smartphone')],
+                    ),
+                    text("bonus row (mobile)")
+                  ],
+                  attributes: {
+                    'type': 'button',
+                    'style': 'border: none; padding: 6px 14px; font-size: 11px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; '
+                        'background-color: ${_layoutMode == MatrixLayoutMode.bonusRow ? "#E8DEF8" : "transparent"}; '
+                        'color: ${_layoutMode == MatrixLayoutMode.bonusRow ? "#1D192B" : "#49454F"};'
+                  },
+                  events: {
+                    'click': (e) => setState(() => _layoutMode = MatrixLayoutMode.bonusRow)
+                  },
+                ),
+                div(attributes: const {'style': 'width: 1px; background: #ccc;'}, []),
+                button(
+                  [
+                    span(
+                      classes: 'material-symbols-outlined',
+                      attributes: const {'style': 'font-size: 13px; margin-right: 4px; vertical-align: middle;'},
+                      [text('desktop_windows')],
+                    ),
+                    text("bonus column (desktop)")
+                  ],
+                  attributes: {
+                    'type': 'button',
+                    'style': 'border: none; padding: 6px 14px; font-size: 11px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; '
+                        'background-color: ${_layoutMode == MatrixLayoutMode.bonusColumn ? "#E8DEF8" : "transparent"}; '
+                        'color: ${_layoutMode == MatrixLayoutMode.bonusColumn ? "#1D192B" : "#49454F"};'
+                  },
+                  events: {
+                    'click': (e) => setState(() => _layoutMode = MatrixLayoutMode.bonusColumn)
+                  },
+                ),
+              ],
+            )
+          ],
+        ),
+
         // MATRIX TOGGLES
         div(
           classes: 'flex-col gap-2 w-full mb-4',
@@ -411,7 +567,7 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
               classes: 'flex-row flex-wrap gap-2 items-center',
               attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 8px; align-items: center;'},
               [
-                for (var colKey in _matrixColumnLabels.keys)
+                for (var colKey in _orderedColumnKeys)
                   _buildColumnChip(colKey, _matrixColumnLabels[colKey]!)
               ],
             ),
@@ -419,14 +575,14 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
         ),
 
         // MATRIX HEADER
-        if (_activeMatrixColumns.isNotEmpty)
+        if (_visibleColumns.isNotEmpty)
           div(
             attributes: const {
               'style': 'display: flex; flex-direction: row; align-items: center; padding: 0 12px 8px 12px; border-bottom: 2px solid #e5e7eb; width: 100%; box-sizing: border-box;'
             },
             [
               div([text("BUTTON / PANEL")], attributes: const {'style': 'flex: 1; font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase;'}),
-              for (var colKey in _activeMatrixColumns)
+              for (var colKey in _visibleColumns)
                 div(
                   [text(_matrixColumnLabels[colKey] ?? colKey)],
                   attributes: const {
