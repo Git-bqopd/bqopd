@@ -60,59 +60,96 @@ Future<String> resolveAndReplaceShortcodes(String fanzineId, String text) async 
       }).toList();
     }
 
-    // 2. Extract distinct image IDs utilized in this fanzine
-    final Set<String> imageIds = pagesList
+    // 2. Extract image IDs from pages AND query top-level images for inline/folio assets
+    final Set<String> pageImageIds = pagesList
         .map((p) => p['imageId'] as String?)
         .where((id) => id != null && id.isNotEmpty)
         .cast<String>()
         .toSet();
 
-    final List<Map<String, dynamic>> images = [];
-    if (imageIds.isNotEmpty) {
-      // Fetch details of all associated images in parallel
-      final List<Future<void>> fetches = [];
+    final Map<String, Map<String, dynamic>> allImagesMap = {};
 
-      for (final imageId in imageIds) {
+    // Fetch inline and folio-associated assets from the images collection
+    try {
+      final List<Future<String>> folioQueries = [
+        fsQuery('images', 'folioContext', '==', jsonEncode(fanzineId), ''),
+        fsQuery('images', 'usedInFanzines', 'array-contains', jsonEncode(fanzineId), ''),
+      ];
+
+      final currentUid = getCurrentUserId();
+      if (currentUid != null && currentUid.isNotEmpty) {
+        folioQueries.add(fsQuery('images', 'uploaderId', '==', jsonEncode(currentUid), ''));
+      }
+
+      final queryResults = await Future.wait(folioQueries);
+      for (final resStr in queryResults) {
+        try {
+          final List decoded = jsonDecode(resStr) as List;
+          for (final item in decoded) {
+            final data = Map<String, dynamic>.from(item['data'] as Map);
+            final String id = item['id'] as String? ?? '';
+            if (id.isEmpty) continue;
+            data['id'] = id;
+            final List usedIn = data['usedInFanzines'] ?? [];
+            final String? contextId = data['folioContext'];
+            if (contextId == fanzineId || usedIn.contains(fanzineId)) {
+              allImagesMap[id] = data;
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      print('[resolveAndReplaceShortcodes] Error querying folio images: $e');
+    }
+
+    // Fetch details of any remaining page images not captured above
+    final List<Future<void>> missingFetches = [];
+    for (final imageId in pageImageIds) {
+      if (!allImagesMap.containsKey(imageId)) {
         if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
-          fetches.add(
+          missingFetches.add(
             fsGetDoc('images/$imageId').then((imgRes) {
               final imgDoc = jsonDecode(imgRes);
               if (imgDoc['exists'] == true) {
                 final data = Map<String, dynamic>.from(imgDoc['data'] as Map);
                 data['id'] = imgDoc['id'];
-                images.add(data);
+                allImagesMap[imageId] = data;
               } else {
-                // Create local fallback representation
-                images.add({
+                allImagesMap[imageId] = {
                   'id': imageId,
                   'fileUrl': pagesList.firstWhere((p) => p['imageId'] == imageId, orElse: () => {})['imageUrl'] ?? '',
                   'timestamp': DateTime.now().millisecondsSinceEpoch,
-                });
+                };
               }
             }),
           );
         } else {
-          fetches.add(
+          missingFetches.add(
             fsGetDoc('images/$imageId').then((imgRes) {
               final imgDoc = jsonDecode(imgRes);
               if (imgDoc['exists'] == true) {
                 final data = Map<String, dynamic>.from(imgDoc['data'] as Map);
                 data['id'] = imgDoc['id'];
-                images.add(data);
+                allImagesMap[imageId] = data;
               }
             }),
           );
         }
       }
-      await Future.wait(fetches);
-
-      // Sort images in ascending order of upload timestamp to match exact same shortname indexing logic
-      images.sort((a, b) {
-        final aT = a['timestamp'] ?? a['createdAt'] ?? '';
-        final bT = b['timestamp'] ?? b['createdAt'] ?? '';
-        return aT.toString().compareTo(bT.toString());
-      });
     }
+    if (missingFetches.isNotEmpty) {
+      await Future.wait(missingFetches);
+    }
+
+    // Sort images in ascending order of upload timestamp to match the exact same shortname indexing logic
+    final List<Map<String, dynamic>> images = allImagesMap.values.toList();
+    images.sort((a, b) {
+      final aT = a['timestamp'] ?? a['createdAt'] ?? '';
+      final bT = b['timestamp'] ?? b['createdAt'] ?? '';
+      final cmp = aT.toString().compareTo(bT.toString());
+      if (cmp != 0) return cmp;
+      return (a['id'] ?? '').toString().compareTo((b['id'] ?? '').toString());
+    });
 
     // 3. Replace each local imgXX shortname with the correct IMAGE tag format
     String processedText = text;
@@ -122,14 +159,16 @@ Future<String> resolveAndReplaceShortcodes(String fanzineId, String text) async 
       if (fileUrl != null && fileUrl.isNotEmpty) {
         final String shortName = "img${(i + 1).toString().padLeft(2, '0')}";
 
-        // Support both [[img01]] and {{img01}}
-        processedText = processedText
-            .replaceAll("[[$shortName]]", "{{IMAGE: $fileUrl}}")
-            .replaceAll("{{$shortName}}", "{{IMAGE: $fileUrl}}");
+        // Robust case-insensitive replace supporting both [[img01]] and {{img01}} with optional spaces
+        final regexShort = RegExp(
+          r'(?:\{\{|\[\[)\s*' + RegExp.escape(shortName) + r'\s*(?:\}\}|\]\])',
+          caseSensitive: false,
+        );
+        processedText = processedText.replaceAll(regexShort, "{{IMAGE: $fileUrl}}");
       }
     }
 
-    // --- 4. NEW: DYNAMIC FANZINE SHORTCODE RESOLUTION ---
+    // --- 4. DYNAMIC FANZINE SHORTCODE RESOLUTION ---
     // Extract candidates of potentially custom Base36 shortcodes in double brackets or braces
     final regexBraces = RegExp(r'\{\{([a-zA-Z0-9]{5,12})\}\}');
     final regexBrackets = RegExp(r'\[\[([a-zA-Z0-9]{5,12})\]\]');
