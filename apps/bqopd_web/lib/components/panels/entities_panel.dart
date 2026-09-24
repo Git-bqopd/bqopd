@@ -8,24 +8,6 @@ import '../../utils/web_firebase_interop.dart' hide initAddressAutocomplete;
 import '../../utils/web_utils.dart';
 import '../../repositories/repositories.dart';
 
-/// The 'entities' social panel displaying Cards for any [[wiki-linked]] text.
-/// Supports both Person (user:uid) and Place (address:normalized_address) types.
-class EntitiesPanel extends StatefulComponent {
-  final String imageId;
-  final String? fanzineId;
-  final bool isEditingMode;
-
-  const EntitiesPanel({
-    required this.imageId,
-    this.fanzineId,
-    required this.isEditingMode,
-    super.key,
-  });
-
-  @override
-  State<EntitiesPanel> createState() => _EntitiesPanelState();
-}
-
 class EntityLink {
   final String label; // The Canonical Name/Display Address
   final String? ref; // user:uid or address:normalized_address
@@ -34,7 +16,250 @@ class EntityLink {
   EntityLink({required this.label, this.ref, required this.rawMatch});
 }
 
-class _EntitiesPanelState extends State<EntitiesPanel> {
+/// Normalizes handle strings
+String normalizeEntityHandle(String input) {
+  return input.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+}
+
+/// Dedicated inline drawer (bonusRow) view for wiki-linked entities.
+/// Fast, read-only entity cards with direct navigation links.
+class EntitiesRowPanel extends StatefulComponent {
+  final String imageId;
+  final String? fanzineId;
+
+  const EntitiesRowPanel({
+    required this.imageId,
+    this.fanzineId,
+    super.key,
+  });
+
+  @override
+  State<EntitiesRowPanel> createState() => _EntitiesRowPanelState();
+}
+
+class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
+  List<EntityLink> _entities = [];
+  Map<String, Map<String, dynamic>> _loadedProfiles = {};
+  bool _loading = true;
+  final IUserRepository _userRepo = createUserRepository();
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      _loadEntities();
+    }
+  }
+
+  @override
+  void didUpdateComponent(EntitiesRowPanel oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.imageId != component.imageId && kIsWeb) {
+      _loadEntities();
+    }
+  }
+
+  Future<void> _loadEntities() async {
+    if (component.imageId.isEmpty) {
+      setState(() {
+        _entities = [];
+        _loading = false;
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final res = await fsGetDoc('images/${component.imageId}');
+      final doc = jsonDecode(res);
+      if (doc['exists'] && mounted) {
+        final data = doc['data'] as Map<String, dynamic>;
+        final textLinked = data['text_linked'] ?? '';
+        final textCorrected = data['text_corrected'] ?? data['text'] ?? '';
+        final textRaw = data['text_raw'] ?? '';
+        final rawFullText = textLinked.isNotEmpty ? textLinked : (textCorrected.isNotEmpty ? textCorrected : textRaw);
+
+        final regex = RegExp(r'\[\[(.*?)\]\]');
+        final matches = regex.allMatches(rawFullText);
+        final Map<String, EntityLink> uniqueEntities = {};
+
+        for (final m in matches) {
+          final content = m.group(1) ?? '';
+          final parts = content.split('|');
+          final raw = m.group(0) ?? '';
+          if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+            final canonical = parts[0].trim();
+            String? ref;
+            if (parts.length == 2 && parts[1].contains(':')) {
+              ref = parts[1].trim();
+            } else if (parts.length >= 3) {
+              ref = parts[2].trim();
+            }
+            final key = canonical.toLowerCase();
+            if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
+              uniqueEntities[key] = EntityLink(label: canonical, ref: ref, rawMatch: raw);
+            }
+          }
+        }
+
+        final parsedList = uniqueEntities.values.toList();
+        setState(() {
+          _entities = parsedList;
+          _loading = false;
+        });
+        _loadProfiles(parsedList);
+      } else {
+        setState(() {
+          _entities = [];
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadProfiles(List<EntityLink> links) async {
+    final Map<String, Map<String, dynamic>> tempProfiles = {};
+    final List<Future<void>> fetches = [];
+    for (var link in links) {
+      if (link.ref != null && link.ref!.startsWith('user:')) {
+        final uid = link.ref!.substring(5);
+        if (!tempProfiles.containsKey(uid)) {
+          fetches.add(
+            _userRepo.watchUser(uid).first.then((profile) {
+              if (profile != null) tempProfiles[uid] = profile.toMap();
+            }).catchError((_) {}),
+          );
+        }
+      }
+    }
+    if (fetches.isNotEmpty) {
+      await Future.wait(fetches);
+      if (mounted) {
+        setState(() => _loadedProfiles = tempProfiles);
+      }
+    }
+  }
+
+  void _onTap(EntityLink entity) {
+    if (entity.ref == null) return;
+    if (entity.ref!.startsWith('user:')) {
+      final uid = entity.ref!.substring(5);
+      final username = _loadedProfiles[uid]?['username'];
+      if (username != null && username.isNotEmpty) {
+        Router.of(context).push('/@$username');
+      }
+    } else if (entity.ref!.startsWith('address:')) {
+      final addressVal = entity.ref!.substring(8);
+      openWindow('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(addressVal)}', '_blank');
+    }
+  }
+
+  @override
+  Component build(BuildContext context) {
+    if (_loading) {
+      return div(
+        [
+          div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}),
+          div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 85%;'}),
+        ],
+        classes: 'flex-col gap-2 py-4',
+        attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
+      );
+    }
+
+    if (_entities.isEmpty) {
+      return div(
+        [text('No entity links found in page text.')],
+        classes: 'p-6 text-center text-gray italic text-xs',
+      );
+    }
+
+    return div(
+      [
+        for (var entity in _entities)
+          _buildEntityCard(entity),
+      ],
+      classes: 'flex-col gap-3',
+      attributes: const {'style': 'display: flex; flex-direction: column; gap: 12px; width: 100%;'},
+    );
+  }
+
+  Component _buildEntityCard(EntityLink entity) {
+    final bool isAddress = entity.ref != null && entity.ref!.startsWith('address:');
+    final String? normalizedAddress = isAddress ? entity.ref!.substring(8) : null;
+    final String? uid = entity.ref != null && entity.ref!.startsWith('user:') ? entity.ref!.substring(5) : null;
+    final Map<String, dynamic>? profile = uid != null ? _loadedProfiles[uid] : null;
+
+    final bool isLinked = profile != null || isAddress;
+    final String labelText = profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
+    final String? subtitleText = isAddress ? normalizedAddress : (profile != null ? '@${profile['username']}' : null);
+    final String? photoUrl = profile != null ? profile['photoUrl'] : null;
+
+    return div(
+      [
+        div(
+          [
+            div(
+              [
+                if (isAddress)
+                  span([text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
+                else if (photoUrl != null && photoUrl.isNotEmpty)
+                  img(classes: 'user-avatar', src: photoUrl)
+                else
+                  div(classes: 'user-avatar-placeholder', [text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
+              ],
+              classes: 'user-avatar-container',
+              attributes: const {
+                'style': 'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'
+              },
+            ),
+            div(
+              [
+                div([text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
+                if (subtitleText != null)
+                  div([text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
+              ],
+              classes: 'user-info',
+              attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center;'},
+            )
+          ],
+          classes: 'user-tile',
+          attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'},
+        ),
+        if (isLinked)
+          span(classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px; color: #6750A4;'}, [
+            text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
+          ])
+      ],
+      classes: 'hover:shadow-md transition-all',
+      attributes: const {
+        'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 8px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
+      },
+      events: {
+        'click': (e) => _onTap(entity),
+      },
+    );
+  }
+}
+
+/// Dedicated desktop 3rd column (bonusColumn) view for managing entity wikilinks.
+/// Hosts inline entity linking and alias administration modals cleanly.
+class EntitiesColumnPanel extends StatefulComponent {
+  final String imageId;
+  final String? fanzineId;
+
+  const EntitiesColumnPanel({
+    required this.imageId,
+    this.fanzineId,
+    super.key,
+  });
+
+  @override
+  State<EntitiesColumnPanel> createState() => _EntitiesColumnPanelState();
+}
+
+class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
   List<EntityLink> _entities = [];
   Map<String, Map<String, dynamic>> _loadedProfiles = {};
   String _rawFullText = '';
@@ -42,9 +267,9 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
 
   // Modal Editing State
   EntityLink? _editingEntity;
-  String _entityType = 'person'; // 'person' or 'place'
-  String _handleInput = '';      // For Person type
-  String _addressInput = '';     // For Place type
+  String _entityType = 'person';
+  String _handleInput = '';
+  String _addressInput = '';
   bool _modalSaving = false;
   String? _modalError;
   String? _suggestedHandle;
@@ -61,15 +286,11 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
   }
 
   @override
-  void didUpdateComponent(EntitiesPanel oldComponent) {
+  void didUpdateComponent(EntitiesColumnPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.imageId != component.imageId && kIsWeb) {
       _loadTextData();
     }
-  }
-
-  String _normalize(String input) {
-    return input.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
   }
 
   Future<void> _loadTextData() async {
@@ -80,7 +301,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
       });
       return;
     }
-    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final res = await fsGetDoc('images/${component.imageId}');
@@ -92,7 +312,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         final textRaw = data['text_raw'] ?? '';
         _rawFullText = textLinked.isNotEmpty ? textLinked : (textCorrected.isNotEmpty ? textCorrected : textRaw);
 
-        // Parse wiki links [[Label]] with support for multi-part layout structures
         final regex = RegExp(r'\[\[(.*?)\]\]');
         final matches = regex.allMatches(_rawFullText);
         final Map<String, EntityLink> uniqueEntities = {};
@@ -112,20 +331,19 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
             }
 
             final key = canonical.toLowerCase();
-            // If the entity doesn't exist yet OR has a more complete reference, insert/upgrade it
             if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
               uniqueEntities[key] = EntityLink(label: canonical, ref: ref, rawMatch: raw);
             }
           }
         }
 
+        final parsedList = uniqueEntities.values.toList();
         setState(() {
-          _entities = uniqueEntities.values.toList();
+          _entities = parsedList;
           _loading = false;
         });
 
-        // Load profiles for linked user entities in parallel
-        _loadEntityProfiles(_entities);
+        _loadEntityProfiles(parsedList);
       } else {
         setState(() {
           _entities = [];
@@ -133,7 +351,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         });
       }
     } catch (e) {
-      print('[ENTITIES PANEL ERROR] Failed loading: $e');
+      print('[ENTITIES COLUMN PANEL ERROR] Failed loading: $e');
       setState(() {
         _entities = [];
         _loading = false;
@@ -179,7 +397,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
     });
 
     final String label = entity.label;
-    final String handle = _normalize(label);
+    final String handle = normalizeEntityHandle(label);
 
     try {
       final String userRes = await fsGetDoc('usernames/$handle');
@@ -197,9 +415,7 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           return;
         }
       }
-    } catch (e) {
-      print('[EntitiesPanel _findSuggestedHandle] Error checking usernames: $e');
-    }
+    } catch (_) {}
 
     if (component.fanzineId != null && component.fanzineId!.isNotEmpty) {
       try {
@@ -231,70 +447,47 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
             }
           }
         }
-      } catch (e) {
-        print('[EntitiesPanel _findSuggestedHandle] Error checking fanzine pages: $e');
-      }
+      } catch (_) {}
     }
   }
 
   void _onEntityTap(EntityLink entity) {
-    if (component.isEditingMode) {
-      String initialHandle = '';
-      String initialAddress = '';
-      String resolvedType = 'person';
+    String initialHandle = '';
+    String initialAddress = '';
+    String resolvedType = 'person';
 
-      if (entity.ref != null) {
-        if (entity.ref!.startsWith('user:')) {
-          final uid = entity.ref!.substring(5);
-          initialHandle = _loadedProfiles[uid]?['username'] ?? '';
-          resolvedType = 'person';
-        } else if (entity.ref!.startsWith('address:')) {
-          initialAddress = entity.ref!.substring(8);
-          resolvedType = 'place';
-        }
-      }
-
-      setState(() {
-        _editingEntity = entity;
-        _entityType = resolvedType;
-        _handleInput = initialHandle;
-        _addressInput = initialAddress;
-        _modalError = null;
-        _modalSaving = false;
-        _suggestedHandle = null;
-      });
-
-      if (resolvedType == 'person') {
-        _findSuggestedHandle(entity);
-      } else {
-        // Auto-initialize Google places on modal element display
-        Timer(const Duration(milliseconds: 120), () {
-          initAddressAutocomplete('modal-address-input', (String address) {
-            setState(() {
-              _addressInput = address;
-            });
-          });
-        });
-      }
-    } else {
-      if (entity.ref != null) {
-        if (entity.ref!.startsWith('user:')) {
-          final uid = entity.ref!.substring(5);
-          final String? username = _loadedProfiles[uid]?['username'];
-          if (username != null && username.isNotEmpty) {
-            Router.of(context).push('/@$username');
-          }
-        } else if (entity.ref!.startsWith('address:')) {
-          final addressVal = entity.ref!.substring(8);
-          final encoded = Uri.encodeComponent(addressVal);
-          openMapLauncher(encoded);
-        }
+    if (entity.ref != null) {
+      if (entity.ref!.startsWith('user:')) {
+        final uid = entity.ref!.substring(5);
+        initialHandle = _loadedProfiles[uid]?['username'] ?? '';
+        resolvedType = 'person';
+      } else if (entity.ref!.startsWith('address:')) {
+        initialAddress = entity.ref!.substring(8);
+        resolvedType = 'place';
       }
     }
-  }
 
-  void openMapLauncher(String encodedAddress) {
-    openWindow('https://www.google.com/maps/search/?api=1&query=$encodedAddress', '_blank');
+    setState(() {
+      _editingEntity = entity;
+      _entityType = resolvedType;
+      _handleInput = initialHandle;
+      _addressInput = initialAddress;
+      _modalError = null;
+      _modalSaving = false;
+      _suggestedHandle = null;
+    });
+
+    if (resolvedType == 'person') {
+      _findSuggestedHandle(entity);
+    } else {
+      Timer(const Duration(milliseconds: 120), () {
+        initAddressAutocomplete('modal-address-input', (String address) {
+          setState(() {
+            _addressInput = address;
+          });
+        });
+      });
+    }
   }
 
   Future<void> _saveEntityLink() async {
@@ -326,7 +519,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           replacement = "[[${entity.label}|address:$cleanAddress]]";
         }
       } else {
-        // Person linking flow
         final cleanHandle = _handleInput.trim().toLowerCase().replaceAll('@', '');
         if (cleanHandle.isEmpty) {
           setState(() {
@@ -436,7 +628,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
         [
           div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}),
           div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 85%;'}),
-          div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}),
         ],
         classes: 'flex-col gap-2 py-4',
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
@@ -504,18 +695,13 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
           classes: 'user-tile',
           attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'},
         ),
-        if (component.isEditingMode)
-          span(classes: 'material-symbols-outlined text-gray', attributes: const {'style': 'font-size: 18px; color: #79747E;'}, [
-            text(isLinked ? 'edit_note' : 'link_off')
-          ])
-        else if (isLinked)
-          span(classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px; color: #6750A4;'}, [
-            text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
-          ])
+        span(classes: 'material-symbols-outlined text-gray', attributes: const {'style': 'font-size: 18px; color: #79747E;'}, [
+          text(isLinked ? 'edit_note' : 'link_off')
+        ])
       ],
       classes: 'hover:shadow-md transition-all',
       attributes: const {
-        'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 12px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
+        'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 8px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
       },
       events: {
         'click': (e) => _onEntityTap(entity),
@@ -543,7 +729,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                             ],
                             attributes: const {'style': 'font-size: 12px; color: #555; line-height: 1.4; margin: 0;'}
                         ),
-                        // Toggle Segmented Button for Person vs Place
                         div(
                           attributes: const {
                             'style': 'display: flex; border: 1px solid #ccc; border-radius: 100px; overflow: hidden; margin-top: 14px; background: white;'
@@ -582,7 +767,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                                       _entityType = 'place';
                                       _modalError = null;
                                     });
-                                    // Auto-initialize Google places on toggle switch click
                                     Timer(const Duration(milliseconds: 120), () {
                                       initAddressAutocomplete('modal-address-input', (String address) {
                                         setState(() {
@@ -595,7 +779,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
                             ),
                           ],
                         ),
-                        // Dynamic inputs depending on entityType selected
                         if (_entityType == 'person')
                           div(
                             [
@@ -725,3 +908,6 @@ class _EntitiesPanelState extends State<EntitiesPanel> {
     );
   }
 }
+
+/// Backwards-compatible alias for the default row panel
+typedef EntitiesPanel = EntitiesRowPanel;

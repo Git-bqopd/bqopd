@@ -3,7 +3,6 @@ import '../services/username_service.dart';
 import '../services/user_bootstrap.dart';
 
 // Import core logic
-import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:file_picker/file_picker.dart';

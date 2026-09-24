@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:bqopd_core/bqopd_core.dart';
 import '../../../utils/web_firebase_interop.dart';
 
 /// Selection drawer for orphan library assets inside Curator scopes.

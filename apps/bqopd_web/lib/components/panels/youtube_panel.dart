@@ -3,16 +3,16 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import '../../utils/web_firebase_interop.dart';
 
-/// Safe YouTube IFrame wrapper component, avoiding heavy third-party compilation crashes.
-class YoutubePanel extends StatefulComponent {
+/// Dedicated inline drawer (bonusRow) YouTube player.
+class YoutubeRowPanel extends StatefulComponent {
   final String imageId;
-  const YoutubePanel({required this.imageId, super.key});
+  const YoutubeRowPanel({required this.imageId, super.key});
 
   @override
-  State<YoutubePanel> createState() => _YoutubePanelState();
+  State<YoutubeRowPanel> createState() => _YoutubeRowPanelState();
 }
 
-class _YoutubePanelState extends State<YoutubePanel> {
+class _YoutubeRowPanelState extends State<YoutubeRowPanel> {
   String? _youtubeId;
   bool _loading = true;
 
@@ -23,7 +23,7 @@ class _YoutubePanelState extends State<YoutubePanel> {
   }
 
   @override
-  void didUpdateComponent(YoutubePanel oldComponent) {
+  void didUpdateComponent(YoutubeRowPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.imageId != component.imageId) {
       _load();
@@ -50,13 +50,11 @@ class _YoutubePanelState extends State<YoutubePanel> {
     if (_loading) {
       return div(classes: 'skeleton-line shimmer-bg', []);
     }
-
     if (_youtubeId == null || _youtubeId!.isEmpty) {
       return div(classes: 'p-6 text-center text-gray italic text-xs', [
         text('No video resource linked to this page.')
       ]);
     }
-
     return div(attributes: const {
       'style': 'width: 100%; aspect-ratio: 16 / 9; background-color: #000; border-radius: 8px; overflow: hidden;'
     }, [
@@ -74,3 +72,17 @@ class _YoutubePanelState extends State<YoutubePanel> {
     ]);
   }
 }
+
+/// Dedicated desktop 3rd column (bonusColumn) YouTube player taking over the window.
+class YoutubeColumnPanel extends StatelessComponent {
+  final String imageId;
+  const YoutubeColumnPanel({required this.imageId, super.key});
+
+  @override
+  Component build(BuildContext context) {
+    return YoutubeRowPanel(imageId: imageId);
+  }
+}
+
+/// Backwards-compatible alias
+typedef YoutubePanel = YoutubeColumnPanel;

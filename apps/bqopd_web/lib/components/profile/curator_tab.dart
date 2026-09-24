@@ -1,15 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
-import '../../utils/firebase_mocks.dart';
 import '../../utils/web_utils.dart';
 import '../../utils/web_shortcode_service.dart';
-import '../../utils/unsaved_fanzine_registry.dart';
 import '../../repositories/repositories.dart';
 import '../editor/modals/confirm_modal.dart';
 import 'curator_upload_helper.dart';

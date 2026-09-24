@@ -1,6 +1,5 @@
 import 'package:bqopd_core/bqopd_core.dart';
 import 'package:flutter/material.dart';
-import '../../services/engagement_service.dart';
 import '../../services/view_service.dart';
 import '../../game/game_lobby.dart';
 import 'comments_panel.dart';

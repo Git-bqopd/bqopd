@@ -2,9 +2,7 @@ import 'dart:convert';
 import 'dart:async'; // REQUIRED for scheduleMicrotask
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
-import '../../utils/firebase_mocks.dart';
 import '../../utils/web_utils.dart';
 
 /// Local utility to normalize user-provided names/handles consistently.

@@ -13,9 +13,11 @@ import '../panels/youtube_panel.dart';
 import '../panels/analytics_panel.dart';
 import '../panels/publisher_text_panel.dart';
 import '../panels/terminal_panel.dart';
+import '../panels/hashtag_panel.dart';
+import '../panels/settings_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
-/// Delegates structure to either SingleWindowColumnLayout or MultiPageColumnLayout.
+/// Directly maps each active tool to its dedicated ColumnPanel implementation.
 class PanelColumnRenderer extends StatelessComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
@@ -38,6 +40,8 @@ class PanelColumnRenderer extends StatelessComponent {
     if (activePanel == BonusRowType.comments) title = "Comments";
     if (activePanel == BonusRowType.editText) title = "";
     if (activePanel == BonusRowType.entities) title = "";
+    if (activePanel == BonusRowType.tags) title = "Hashtags & Community Tags";
+    if (activePanel == BonusRowType.settings) title = "Toolbar Settings";
     if (activePanel == BonusRowType.newPage) title = "New Page Layout Editor";
     if (activePanel == BonusRowType.terminal) title = "Combat Terminal";
 
@@ -68,12 +72,18 @@ class PanelColumnRenderer extends StatelessComponent {
   Component _buildSingletonWidget(String imageId) {
     switch (activePanel) {
       case BonusRowType.youtube:
-        return YoutubePanel(imageId: imageId);
+        return YoutubeColumnPanel(imageId: imageId);
       case BonusRowType.analyticsDashboard:
       case BonusRowType.views:
-        return AnalyticsPanel(imageId: imageId);
+        return AnalyticsColumnPanel(
+          fanzineId: fanzineId,
+          imageId: imageId,
+          pages: pages,
+        );
       case BonusRowType.terminal:
-        return TerminalPanel(imageId: imageId);
+        return TerminalColumnPanel(imageId: imageId);
+      case BonusRowType.settings:
+        return const SettingsColumnPanel();
       default:
         return div([text('Singleton panel type not configured.')]);
     }
@@ -83,24 +93,28 @@ class PanelColumnRenderer extends StatelessComponent {
     final imageId = pageData['imageId'] ?? '';
     if (imageId.isEmpty) return div([]);
 
-    if (activePanel == BonusRowType.textReader) {
-      return TextReaderPanel(imageId: imageId, fanzineId: fanzineId);
-    } else if (activePanel == BonusRowType.comments) {
-      return CommentsPanel(imageId: imageId);
-    } else if (activePanel == BonusRowType.editText || activePanel == BonusRowType.linkedText) {
-      return EditTextPanel(imageId: imageId, fanzineId: fanzineId);
-    } else if (activePanel == BonusRowType.entities) {
-      return EntitiesPanel(imageId: imageId, fanzineId: fanzineId, isEditingMode: false);
-    } else if (activePanel == BonusRowType.rawText) {
-      return RawTextPanel(imageId: imageId);
-    } else if (activePanel == BonusRowType.indicia) {
-      return IndiciaPanel(fanzineId: fanzineId, isEditingMode: false);
-    } else if (activePanel == BonusRowType.credits) {
-      return CreditsPanel(imageId: imageId);
-    } else if (activePanel == BonusRowType.newPage) {
-      return PublisherTextPanel(imageId: imageId, fanzineId: fanzineId);
-    } else {
-      return div([text('Panel type not yet implemented in web column.')]);
+    switch (activePanel) {
+      case BonusRowType.textReader:
+        return TextReaderColumnPanel(imageId: imageId, fanzineId: fanzineId);
+      case BonusRowType.comments:
+        return CommentsColumnPanel(imageId: imageId, fanzineId: fanzineId);
+      case BonusRowType.editText:
+      case BonusRowType.linkedText:
+        return EditTextColumnPanel(imageId: imageId, fanzineId: fanzineId);
+      case BonusRowType.entities:
+        return EntitiesColumnPanel(imageId: imageId, fanzineId: fanzineId);
+      case BonusRowType.tags:
+        return HashtagColumnPanel(imageId: imageId);
+      case BonusRowType.rawText:
+        return RawTextColumnPanel(imageId: imageId);
+      case BonusRowType.indicia:
+        return IndiciaColumnPanel(fanzineId: fanzineId, isEditingMode: isEditingMode);
+      case BonusRowType.credits:
+        return CreditsColumnPanel(imageId: imageId);
+      case BonusRowType.newPage:
+        return PublisherTextColumnPanel(imageId: imageId, fanzineId: fanzineId);
+      default:
+        return div([text('Panel type not implemented in column view.')]);
     }
   }
 }

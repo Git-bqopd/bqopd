@@ -5,20 +5,6 @@ import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
-import '../utils/icon_utils.dart';
-import 'panels/panel_container.dart';
-import 'panels/text_reader_panel.dart';
-import 'panels/comments_panel.dart';
-import 'panels/hashtag_panel.dart';
-import 'panels/edit_text_panel.dart';
-import 'panels/entities_panel.dart';
-import 'panels/raw_text_panel.dart';
-import 'panels/indicia_panel.dart';
-import 'panels/credits_panel.dart';
-import 'panels/youtube_panel.dart';
-import 'panels/analytics_panel.dart';
-import 'panels/publisher_text_panel.dart';
-import 'panels/terminal_panel.dart';
 
 /// SocialToolbar manages the interactive social action buttons for each page item.
 /// It dynamically evaluates button visibility via [ReaderToolsConfig.isToolVisibleInContext],

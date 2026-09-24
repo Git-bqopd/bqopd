@@ -4,16 +4,17 @@ import 'package:jaspr/dom.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 
-class HashtagPanel extends StatefulComponent {
+/// Dedicated inline drawer (bonusRow) view for hashtag voting.
+class HashtagRowPanel extends StatefulComponent {
   final String imageId;
 
-  const HashtagPanel({required this.imageId, super.key});
+  const HashtagRowPanel({required this.imageId, super.key});
 
   @override
-  State<HashtagPanel> createState() => _HashtagPanelState();
+  State<HashtagRowPanel> createState() => _HashtagRowPanelState();
 }
 
-class _HashtagPanelState extends State<HashtagPanel> {
+class _HashtagRowPanelState extends State<HashtagRowPanel> {
   Map<String, dynamic> _tags = {};
   bool _isAdding = false;
   String _newTagText = "";
@@ -23,6 +24,15 @@ class _HashtagPanelState extends State<HashtagPanel> {
   void initState() {
     super.initState();
     if (kIsWeb) {
+      _startListening();
+    }
+  }
+
+  @override
+  void didUpdateComponent(HashtagRowPanel oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.imageId != component.imageId && kIsWeb) {
+      _stopListening();
       _startListening();
     }
   }
@@ -91,12 +101,10 @@ class _HashtagPanelState extends State<HashtagPanel> {
         ));
       }
     });
-
     tagList.sort((a, b) => a.name == 'approved' ? -1 : (b.name == 'approved' ? 1 : b.count.compareTo(a.count)));
 
     return div(classes: 'flex-row flex-wrap gap-3 items-center py-4', [
       for (var tag in tagList) _buildTagChip(tag),
-
       if (_isAdding)
         _buildSplitButton()
       else
@@ -164,9 +172,205 @@ class _HashtagPanelState extends State<HashtagPanel> {
   }
 }
 
+/// Dedicated desktop 3rd column (bonusColumn) view for hashtags and tagging.
+class HashtagColumnPanel extends StatefulComponent {
+  final String imageId;
+
+  const HashtagColumnPanel({required this.imageId, super.key});
+
+  @override
+  State<HashtagColumnPanel> createState() => _HashtagColumnPanelState();
+}
+
+class _HashtagColumnPanelState extends State<HashtagColumnPanel> {
+  Map<String, dynamic> _tags = {};
+  bool _isAdding = false;
+  String _newTagText = "";
+  dynamic _unsub;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      _startListening();
+    }
+  }
+
+  @override
+  void didUpdateComponent(HashtagColumnPanel oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.imageId != component.imageId && kIsWeb) {
+      _stopListening();
+      _startListening();
+    }
+  }
+
+  void _startListening() {
+    if (component.imageId.isEmpty) return;
+    _unsub = fsListenDoc('images/${component.imageId}', (jsonStr) {
+      final doc = jsonDecode(jsonStr);
+      if (doc['exists'] && mounted) {
+        setState(() {
+          _tags = doc['data']['tags'] as Map<String, dynamic>? ?? {};
+        });
+      }
+    });
+  }
+
+  void _stopListening() {
+    if (_unsub != null) {
+      try { _unsub.callAsFunction(); } catch (_) {}
+      _unsub = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopListening();
+    super.dispose();
+  }
+
+  Future<void> _toggleVote(String tag, bool isSelected) async {
+    final uid = getCurrentUserId();
+    if (uid == null) {
+      GlobalModalBus.show();
+      return;
+    }
+    final cleanTag = tag.toLowerCase().replaceAll('#', '').trim();
+    if (isSelected) {
+      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$cleanTag': WebFieldValue.arrayRemove([uid])}));
+    } else {
+      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$cleanTag': WebFieldValue.arrayUnion([uid])}));
+    }
+  }
+
+  Future<void> _submitNewTag() async {
+    final text = _newTagText.trim().toLowerCase().replaceAll('#', '');
+    if (text.isEmpty) { setState(() => _isAdding = false); return; }
+    final uid = getCurrentUserId();
+    if (uid == null) {
+      GlobalModalBus.show();
+      return;
+    }
+    await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$text': WebFieldValue.arrayUnion([uid])}));
+    setState(() { _newTagText = ""; _isAdding = false; });
+  }
+
+  @override
+  Component build(BuildContext context) {
+    final uid = getCurrentUserId();
+    final List<_TagData> tagList = [];
+    _tags.forEach((key, value) {
+      if (value is List) {
+        tagList.add(_TagData(
+            name: key,
+            count: value.length,
+            hasVoted: uid != null && value.contains(uid)
+        ));
+      }
+    });
+    tagList.sort((a, b) => a.name == 'approved' ? -1 : (b.name == 'approved' ? 1 : b.count.compareTo(a.count)));
+
+    return div(
+      [
+        div(
+          [
+            span([text('PAGE TAGS & COMMUNITY VOTING')], attributes: const {
+              'style': 'font-size: 11px; font-weight: bold; color: #475569; letter-spacing: 0.5px; text-transform: uppercase;'
+            }),
+            span([text('Vote or add discoverability tags')], attributes: const {
+              'style': 'font-size: 10px; color: #94a3b8;'
+            }),
+          ],
+          attributes: const {
+            'style': 'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; width: 100%;'
+          },
+        ),
+        div(
+          [
+            for (var tag in tagList) _buildTagChip(tag),
+            if (_isAdding)
+              _buildSplitButton()
+            else
+              button(
+                  classes: 'm3-chip hover:bg-gray-100',
+                  attributes: const {'type': 'button'},
+                  events: {
+                    'click': (e) {
+                      if (getCurrentUserId() == null) {
+                        GlobalModalBus.show();
+                      } else {
+                        setState(() => _isAdding = true);
+                      }
+                    }
+                  },
+                  [
+                    span(classes: 'material-symbols-outlined chip-icon', [text('add')]),
+                    text('add tag')
+                  ]
+              )
+          ],
+          classes: 'flex-row flex-wrap gap-2 items-center',
+          attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%;'},
+        )
+      ],
+      classes: 'flex-col text-left',
+      attributes: const {'style': 'display: flex; flex-direction: column; width: 100%;'},
+    );
+  }
+
+  Component _buildTagChip(_TagData tag) {
+    return div(
+        classes: 'm3-chip ${tag.hasVoted ? 'active' : ''}',
+        events: {'click': (e) => _toggleVote(tag.name, tag.hasVoted)},
+        [
+          text('#${tag.name}'),
+          div(classes: 'v-divider', []),
+          span(
+              classes: 'material-symbols-outlined chip-icon',
+              attributes: {'style': tag.hasVoted ? "font-variation-settings: 'FILL' 1;" : "font-variation-settings: 'FILL' 0;"},
+              [text('star')]
+          ),
+          text('${tag.count}'),
+        ]
+    );
+  }
+
+  Component _buildSplitButton() {
+    return div(classes: 'm3-split-button', [
+      input(
+        attributes: {
+          'placeholder': 'new tag...',
+          'value': _newTagText,
+          'autofocus': 'true'
+        },
+        events: {
+          'input': (e) => _newTagText = getInputValue(e),
+          'keypress': (e) { if ((e as dynamic).key == 'Enter') _submitNewTag(); }
+        },
+      ),
+      div(classes: 'v-divider', []),
+      div(
+          classes: 'split-action',
+          events: {'click': (e) => _submitNewTag()},
+          [span(classes: 'material-symbols-outlined text-green-600', [text('check')])]
+      ),
+      div(classes: 'v-divider', []),
+      div(
+          classes: 'split-action',
+          events: {'click': (e) => setState(() => _isAdding = false)},
+          [span(classes: 'material-symbols-outlined text-gray-400', [text('close')])]
+      ),
+    ]);
+  }
+}
+
 class _TagData {
   final String name;
   final int count;
   final bool hasVoted;
   _TagData({required this.name, required this.count, required this.hasVoted});
 }
+
+/// Backwards-compatible alias for the default row panel
+typedef HashtagPanel = HashtagRowPanel;

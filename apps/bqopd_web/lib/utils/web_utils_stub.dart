@@ -1,7 +1,6 @@
 /// No-op fallback implementation for the Dart VM (server-side context).
 /// This prevents package:web from being compiled during server pre-rendering.
 import 'dart:async';
-import 'web_firebase_interop_stub.dart';
 
 // EXPORT the stub relatively to align import resolution paths between compiler environments
 export 'web_firebase_interop_stub.dart';

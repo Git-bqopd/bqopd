@@ -20,6 +20,7 @@ import '../panels/terminal_panel.dart';
 
 /// Renders an individual fanzine page container inside the list reading view,
 /// hosting the high-resolution image, social toolbar, and expandable detail panels.
+/// Directly maps bonusRow accordion drawers to specialized RowPanel implementations.
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
   final String? shortCode;
@@ -88,6 +89,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     final imageId = component.pageData['imageId'];
     final templateId = component.pageData['templateId'];
     if (imageId == null || imageId.isEmpty || templateId != 'basic_text') return;
+
     _imgDataUnsub = fsListenDoc('images/$imageId', (String jsonStr) {
       try {
         final doc = jsonDecode(jsonStr);
@@ -179,57 +181,56 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     switch (activePanel) {
       case BonusRowType.textReader:
         title = "";
-        inner = TextReaderPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = TextReaderRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.comments:
         title = "Comments";
-        inner = CommentsPanel(imageId: imageId);
+        inner = CommentsRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.tags:
         title = "Hashtags & Voting";
-        inner = HashtagPanel(imageId: imageId);
+        inner = HashtagRowPanel(imageId: imageId);
         break;
       case BonusRowType.rawText:
         title = "Raw OCR Text";
-        inner = RawTextPanel(imageId: imageId);
+        inner = RawTextRowPanel(imageId: imageId);
         break;
       case BonusRowType.editText:
       case BonusRowType.linkedText:
         title = "";
-        inner = EditTextPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = EditTextRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:
         title = "";
-        inner = EntitiesPanel(imageId: imageId, fanzineId: component.fanzineId, isEditingMode: false);
+        inner = EntitiesRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
-        inner = IndiciaPanel(fanzineId: component.fanzineId, isEditingMode: false);
+        inner = IndiciaRowPanel(fanzineId: component.fanzineId);
         break;
       case BonusRowType.credits:
         title = "Creators";
-        inner = CreditsPanel(imageId: imageId);
+        inner = CreditsRowPanel(imageId: imageId);
         break;
       case BonusRowType.youtube:
         title = "Video Resource";
-        inner = YoutubePanel(imageId: imageId);
+        inner = YoutubeRowPanel(imageId: imageId);
         break;
       case BonusRowType.analyticsDashboard:
         title = "Analytics Dashboard";
-        inner = AnalyticsPanel(imageId: imageId);
+        inner = AnalyticsRowPanel(imageId: imageId);
         break;
       case BonusRowType.newPage:
         title = "New Page Text Editor";
-        inner = PublisherTextPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = PublisherTextRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.terminal:
         title = "Combat Terminal";
-        inner = TerminalPanel(imageId: imageId);
+        inner = TerminalRowPanel(imageId: imageId);
         break;
       default:
         return div([]);
     }
-
     return PanelContainer(
       title: title,
       type: activePanel,

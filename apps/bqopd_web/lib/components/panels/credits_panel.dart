@@ -7,17 +7,86 @@ import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 import '../../repositories/repositories.dart';
 
-/// Credits Panel displaying standard list of authors and contributors for the issue page.
-/// Aligns with Clean Architecture by utilizing abstract Repository interfaces.
-class CreditsPanel extends StatefulComponent {
+/// Dedicated inline drawer (bonusRow) credits viewer.
+class CreditsRowPanel extends StatefulComponent {
   final String imageId;
-  const CreditsPanel({required this.imageId, super.key});
+  const CreditsRowPanel({required this.imageId, super.key});
 
   @override
-  State<CreditsPanel> createState() => _CreditsPanelState();
+  State<CreditsRowPanel> createState() => _CreditsRowPanelState();
 }
 
-class _CreditsPanelState extends State<CreditsPanel> {
+class _CreditsRowPanelState extends State<CreditsRowPanel> {
+  List<Map<String, dynamic>> _creators = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateComponent(CreditsRowPanel oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.imageId != component.imageId) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    if (component.imageId.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final res = await fsGetDoc('images/${component.imageId}');
+      final doc = jsonDecode(res);
+      if (doc['exists'] == true) {
+        final d = doc['data'] as Map<String, dynamic>;
+        setState(() {
+          _creators = (d['creators'] as List? ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        });
+      }
+    } catch (_) {}
+    setState(() => _loading = false);
+  }
+
+  @override
+  Component build(BuildContext context) {
+    if (_loading) {
+      return div([], classes: 'skeleton-line shimmer-bg');
+    }
+    if (_creators.isEmpty) {
+      return div([text('No contributors listed for this page.')], classes: 'text-xs text-gray italic text-center py-2');
+    }
+    return div(
+      [
+        for (var c in _creators)
+          div(
+            [
+              span([text('${c['name']} ')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: black;'}),
+              span([text('(${c['role']})')], attributes: const {'style': 'font-size: 11px; color: #64748b;'}),
+            ],
+            classes: 'p-1',
+          )
+      ],
+      classes: 'flex-col gap-1',
+    );
+  }
+}
+
+/// Dedicated desktop 3rd column (bonusColumn) credits manager.
+/// Full creator management controls with handle lookup.
+class CreditsColumnPanel extends StatefulComponent {
+  final String imageId;
+  const CreditsColumnPanel({required this.imageId, super.key});
+
+  @override
+  State<CreditsColumnPanel> createState() => _CreditsColumnPanelState();
+}
+
+class _CreditsColumnPanelState extends State<CreditsColumnPanel> {
   List<Map<String, dynamic>> _creators = [];
   bool _loading = true;
   bool _saving = false;
@@ -27,7 +96,6 @@ class _CreditsPanelState extends State<CreditsPanel> {
 
   String _newHandle = '';
   String _newRole = '';
-
   final IUploadRepository _uploadRepo = createUploadRepository();
 
   @override
@@ -37,7 +105,7 @@ class _CreditsPanelState extends State<CreditsPanel> {
   }
 
   @override
-  void didUpdateComponent(CreditsPanel oldComponent) {
+  void didUpdateComponent(CreditsColumnPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.imageId != component.imageId) {
       _load();
@@ -112,12 +180,9 @@ class _CreditsPanelState extends State<CreditsPanel> {
     final handle = _newHandle.trim();
     final role = _newRole.trim();
     if (handle.isEmpty) return;
-
-    // Use abstract IUploadRepository lookup logic cleanly
     final result = await _uploadRepo.lookupUserByHandle(handle);
     final String resolvedName = result != null ? result['name'] : handle;
     final String? resolvedUid = result?['uid'];
-
     setState(() {
       _creators.add({
         'uid': resolvedUid,
@@ -132,13 +197,8 @@ class _CreditsPanelState extends State<CreditsPanel> {
   @override
   Component build(BuildContext context) {
     if (_loading) {
-      return div(
-          [],
-          classes: 'skeleton-line shimmer-bg',
-          attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}
-      );
+      return div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'});
     }
-
     return div(
       [
         div(
@@ -157,9 +217,8 @@ class _CreditsPanelState extends State<CreditsPanel> {
                   )
                 ],
                 classes: 'flex-row items-center justify-between bg-gray-50 border border-gray-150 p-2 rounded-md mb-2',
-                attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 8px; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; box-sizing: border-box; width: 100%;'},
+                attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 8px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; box-sizing: border-box; width: 100%;'},
               ),
-
             // Composer Row
             div(
               [
@@ -207,7 +266,6 @@ class _CreditsPanelState extends State<CreditsPanel> {
           classes: 'flex-col gap-2',
           attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'},
         ),
-
         div(
           [
             span(
@@ -236,3 +294,6 @@ class _CreditsPanelState extends State<CreditsPanel> {
     );
   }
 }
+
+/// Backwards-compatible alias for the default row panel
+typedef CreditsPanel = CreditsRowPanel;

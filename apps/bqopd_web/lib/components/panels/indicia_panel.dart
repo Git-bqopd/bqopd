@@ -5,19 +5,78 @@ import 'package:jaspr/dom.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 
-/// Indicia Panel containing fanzine publisher details and copyright metadata.
-/// Supports inline rich text updates in editing mode.
-class IndiciaPanel extends StatefulComponent {
+/// Dedicated inline drawer (bonusRow) view for issue indicia and copyright.
+class IndiciaRowPanel extends StatefulComponent {
+  final String fanzineId;
+  const IndiciaRowPanel({required this.fanzineId, super.key});
+
+  @override
+  State<IndiciaRowPanel> createState() => _IndiciaRowPanelState();
+}
+
+class _IndiciaRowPanelState extends State<IndiciaRowPanel> {
+  String _indiciaText = '';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateComponent(IndiciaRowPanel oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.fanzineId != component.fanzineId) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    if (component.fanzineId.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final res = await fsGetDoc('fanzines/${component.fanzineId}');
+      final doc = jsonDecode(res);
+      if (doc['exists'] == true) {
+        setState(() {
+          _indiciaText = doc['data']['masterIndicia'] ?? '© 2026 BQOPD Collective.';
+        });
+      }
+    } catch (_) {}
+    setState(() => _loading = false);
+  }
+
+  @override
+  Component build(BuildContext context) {
+    if (_loading) {
+      return div(classes: 'skeleton-line shimmer-bg', []);
+    }
+    return div([
+      p([text(_indiciaText)], attributes: const {
+        'style': "font-family: Georgia, serif; font-size: 13px; line-height: 1.6; text-align: justify; color: #333; white-space: pre-wrap;"
+      })
+    ]);
+  }
+}
+
+/// Dedicated desktop 3rd column (bonusColumn) view for publication indicia.
+/// Supports inline rich text editing for editor and curator workspaces.
+class IndiciaColumnPanel extends StatefulComponent {
   final String fanzineId;
   final bool isEditingMode;
 
-  const IndiciaPanel({required this.fanzineId, required this.isEditingMode, super.key});
+  const IndiciaColumnPanel({
+    required this.fanzineId,
+    this.isEditingMode = true,
+    super.key,
+  });
 
   @override
-  State<IndiciaPanel> createState() => _IndiciaPanelState();
+  State<IndiciaColumnPanel> createState() => _IndiciaColumnPanelState();
 }
 
-class _IndiciaPanelState extends State<IndiciaPanel> {
+class _IndiciaColumnPanelState extends State<IndiciaColumnPanel> {
   String _indiciaText = '';
   bool _loading = true;
   bool _saving = false;
@@ -32,7 +91,7 @@ class _IndiciaPanelState extends State<IndiciaPanel> {
   }
 
   @override
-  void didUpdateComponent(IndiciaPanel oldComponent) {
+  void didUpdateComponent(IndiciaColumnPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.fanzineId != component.fanzineId) {
       _load();
@@ -121,6 +180,7 @@ class _IndiciaPanelState extends State<IndiciaPanel> {
             attributes: {
               'placeholder': 'Enter master publication indicia or copyright details...',
               'oninput': 'this.parentNode.dataset.replicatedValue = this.value',
+              'style': 'min-height: 120px;',
             },
             events: {
               'input': (e) => setState(() => _indiciaText = getInputValue(e))
@@ -135,7 +195,7 @@ class _IndiciaPanelState extends State<IndiciaPanel> {
         button(
             classes: 'btn-primary nav-pill mb-0',
             attributes: {
-              'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',
+              'style': 'padding: 8px 18px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',
               if (_saving) 'disabled': 'true'
             },
             events: {'click': (e) => _save()},
@@ -143,5 +203,20 @@ class _IndiciaPanelState extends State<IndiciaPanel> {
         )
       ])
     ]);
+  }
+}
+
+/// Backwards-compatible alias for the default row panel
+class IndiciaPanel extends StatelessComponent {
+  final String fanzineId;
+  final bool isEditingMode;
+  const IndiciaPanel({required this.fanzineId, this.isEditingMode = false, super.key});
+
+  @override
+  Component build(BuildContext context) {
+    if (isEditingMode) {
+      return IndiciaColumnPanel(fanzineId: fanzineId, isEditingMode: true);
+    }
+    return IndiciaRowPanel(fanzineId: fanzineId);
   }
 }
