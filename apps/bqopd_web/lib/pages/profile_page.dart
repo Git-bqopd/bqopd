@@ -7,7 +7,6 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 
-// Decoupled sub-tab widgets
 import '../components/profile/profile_card.dart';
 import '../components/profile/maker_tab.dart';
 import '../components/profile/index_tab.dart';
@@ -64,8 +63,12 @@ class _ProfilePageState extends State<ProfilePage> {
 
   String? _activeSubTabName;
 
-  String get _targetUid => component.userId ?? component.authState?.user?.uid ?? '';
-  bool get _isMe => component.authState?.user?.uid != null && component.authState?.user?.uid == _targetUid;
+  String get _targetUid =>
+      component.userId ?? component.authState?.user?.uid ?? '';
+
+  bool get _isMe =>
+      component.authState?.user?.uid != null &&
+          component.authState?.user?.uid == _targetUid;
 
   @override
   void initState() {
@@ -86,7 +89,8 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void didUpdateComponent(ProfilePage oldComponent) {
     super.didUpdateComponent(oldComponent);
-    final String oldTarget = oldComponent.userId ?? oldComponent.authState?.user?.uid ?? '';
+    final String oldTarget =
+        oldComponent.userId ?? oldComponent.authState?.user?.uid ?? '';
     final String currentTarget = _targetUid;
 
     if (oldComponent.initialSubTab != component.initialSubTab) {
@@ -94,7 +98,8 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     // Reactively update BLoC active tab when URL route parameters change
-    if (oldComponent.initialTab != component.initialTab && component.initialTab != null) {
+    if (oldComponent.initialTab != component.initialTab &&
+        component.initialTab != null) {
       final tabs = _blocState.visibleTabs;
       if (tabs.contains(component.initialTab)) {
         final newIndex = tabs.indexOf(component.initialTab!);
@@ -104,7 +109,8 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     }
 
-    if (oldTarget != currentTarget || oldComponent.authState?.user?.uid != component.authState?.user?.uid) {
+    if (oldTarget != currentTarget ||
+        oldComponent.authState?.user?.uid != component.authState?.user?.uid) {
       _cleanupDataPipeline();
       if (kIsWeb) {
         Future.microtask(() {
@@ -146,17 +152,22 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     final currentUid = component.authState?.user?.uid;
-    final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
-    final bool isViewerModerator = _viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false);
-    final bool isViewerCurator = _viewerAccount?.role == 'curator' || (_viewerAccount?.roles.contains('curator') ?? false) || (_viewerAccount?.isCurator ?? false);
+    final bool isViewerAdmin = _viewerAccount?.role == 'admin' ||
+        (_viewerAccount?.roles.contains('admin') ?? false);
+    final bool isViewerModerator = _viewerAccount?.role == 'moderator' ||
+        (_viewerAccount?.roles.contains('moderator') ?? false);
+    final bool isViewerCurator = _viewerAccount?.role == 'curator' ||
+        (_viewerAccount?.roles.contains('curator') ?? false) ||
+        (_viewerAccount?.isCurator ?? false);
 
     // CLIENT REDIRECTION: If viewing my own profile without a vanity URL, resolve and redirect
     if (component.userId == null && currentUid != null) {
-      _viewerRedirectSub = component.userRepository.watchUser(currentUid).listen((profile) {
-        if (profile != null && profile.username.isNotEmpty && mounted) {
-          Router.of(context).replace('/@${profile.username}');
-        }
-      });
+      _viewerRedirectSub =
+          component.userRepository.watchUser(currentUid).listen((profile) {
+            if (profile != null && profile.username.isNotEmpty && mounted) {
+              Router.of(context).replace('/@${profile.username}');
+            }
+          });
       return;
     }
 
@@ -200,36 +211,40 @@ class _ProfilePageState extends State<ProfilePage> {
 
     _listenToViewerAccount();
 
-    // Setup public metric monitors to reactively filter tabs on someone else's profile
     if (!_isMe) {
-      _rawWorksSub = component.userRepository.watchUserWorks(_targetUid).listen((works) {
-        if (mounted) {
-          setState(() {
-            _userWorks = works;
-            _publicWorksCount = works.where((w) => w['isLive'] == true).length;
-          });
-        }
-      });
-
-      _rawImagesSub = fsListenQuery('images', 'uploaderId', '==', jsonEncode(_targetUid), '', false, (jsonStr) {
-        try {
-          final List decoded = jsonDecode(jsonStr);
-          int approvedCount = 0;
-          for (var d in decoded) {
-            final data = d['data'] as Map<String, dynamic>? ?? {};
-            if (data['status'] == 'approved' || data['status'] != 'pending') {
-              approvedCount++;
+      _rawWorksSub =
+          component.userRepository.watchUserWorks(_targetUid).listen((works) {
+            if (mounted) {
+              setState(() {
+                _userWorks = works;
+                _publicWorksCount = works.where((w) => w['isLive'] == true).length;
+              });
             }
-          }
-          if (mounted) {
-            setState(() {
-              _publicImagesCount = approvedCount;
-            });
-          }
-        } catch (_) {}
-      });
+          });
 
-      _rawMentionsSub = component.userRepository.watchUserMentions(_targetUid).listen((mentions) {
+      _rawImagesSub = fsListenQuery(
+          'images', 'uploaderId', '==', jsonEncode(_targetUid), '', false,
+              (jsonStr) {
+            try {
+              final List decoded = jsonDecode(jsonStr);
+              int approvedCount = 0;
+              for (var d in decoded) {
+                final data = d['data'] as Map<String, dynamic>? ?? {};
+                if (data['status'] == 'approved' || data['status'] != 'pending') {
+                  approvedCount++;
+                }
+              }
+              if (mounted) {
+                setState(() {
+                  _publicImagesCount = approvedCount;
+                });
+              }
+            } catch (_) {}
+          });
+
+      _rawMentionsSub = component.userRepository
+          .watchUserMentions(_targetUid)
+          .listen((mentions) {
         if (mounted) {
           setState(() {
             _publicMentionsCount = mentions.length;
@@ -237,16 +252,17 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       });
 
-      _rawCommentsSub = fsListenQuery('artifacts/bqopd/public/data/comments', 'userId', '==', jsonEncode(_targetUid), '', false, (jsonStr) {
-        try {
-          final List decoded = jsonDecode(jsonStr);
-          if (mounted) {
-            setState(() {
-              _publicCommentsCount = decoded.length;
-            });
-          }
-        } catch (_) {}
-      });
+      _rawCommentsSub = fsListenQuery('artifacts/bqopd/public/data/comments',
+          'userId', '==', jsonEncode(_targetUid), '', false, (jsonStr) {
+            try {
+              final List decoded = jsonDecode(jsonStr);
+              if (mounted) {
+                setState(() {
+                  _publicCommentsCount = decoded.length;
+                });
+              }
+            } catch (_) {}
+          });
     }
   }
 
@@ -259,7 +275,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _viewerAccountSub = null;
     _viewerRedirectSub?.cancel();
     _viewerRedirectSub = null;
-
     _rawWorksSub?.cancel();
     _rawWorksSub = null;
     _rawImagesSub?.callAsFunction();
@@ -273,55 +288,57 @@ class _ProfilePageState extends State<ProfilePage> {
   void _listenToViewerAccount() {
     _viewerAccountSub?.cancel();
     _viewerAccountSub = null;
-
     final uid = component.authState?.user?.uid;
     if (uid != null) {
-      _viewerAccountSub = component.userRepository.watchUserAccount(uid).listen((account) {
-        if (account != null && mounted) {
-          setState(() {
-            _viewerAccount = account;
+      _viewerAccountSub =
+          component.userRepository.watchUserAccount(uid).listen((account) {
+            if (account != null && mounted) {
+              setState(() {
+                _viewerAccount = account;
+              });
+              final isViewerAdmin =
+                  account.role == 'admin' || account.roles.contains('admin');
+              final isViewerModerator = account.role == 'moderator' ||
+                  account.roles.contains('moderator');
+              final isViewerCurator = account.role == 'curator' ||
+                  account.roles.contains('curator') ||
+                  account.isCurator;
+
+              // Preserve active tab state during viewer account stream emissions
+              String? activeTab;
+              if (_blocState.visibleTabs.isNotEmpty &&
+                  _blocState.currentTabIndex < _blocState.visibleTabs.length) {
+                activeTab = _blocState.visibleTabs[_blocState.currentTabIndex];
+              } else {
+                activeTab = component.initialTab;
+              }
+
+              _profileBloc?.add(LoadProfileRequested(
+                userId: _targetUid,
+                currentAuthId: uid,
+                isViewerAdmin: isViewerAdmin,
+                isViewerModerator: isViewerModerator,
+                isViewerCurator: isViewerCurator,
+                initialTab: activeTab,
+              ));
+            }
           });
-
-          final isViewerAdmin = account.role == 'admin' || account.roles.contains('admin');
-          final isViewerModerator = account.role == 'moderator' || account.roles.contains('moderator');
-          final isViewerCurator = account.role == 'curator' || account.roles.contains('curator') || account.isCurator;
-
-          // Preserve active tab state during viewer account stream emissions
-          String? activeTab;
-          if (_blocState.visibleTabs.isNotEmpty && _blocState.currentTabIndex < _blocState.visibleTabs.length) {
-            activeTab = _blocState.visibleTabs[_blocState.currentTabIndex];
-          } else {
-            activeTab = component.initialTab;
-          }
-
-          _profileBloc?.add(LoadProfileRequested(
-            userId: _targetUid,
-            currentAuthId: uid,
-            isViewerAdmin: isViewerAdmin,
-            isViewerModerator: isViewerModerator,
-            isViewerCurator: isViewerCurator,
-            initialTab: activeTab,
-          ));
-        }
-      });
     }
   }
 
   void _updateProfileUrl({String? mainTab, String? subTab}) {
     final username = _blocState.userData?.username;
     if (username == null || username.isEmpty) return;
-
     final String tab = mainTab ??
-        (_blocState.visibleTabs.isNotEmpty && _blocState.currentTabIndex < _blocState.visibleTabs.length
+        (_blocState.visibleTabs.isNotEmpty &&
+            _blocState.currentTabIndex < _blocState.visibleTabs.length
             ? _blocState.visibleTabs[_blocState.currentTabIndex]
             : '');
     if (tab.isEmpty) return;
-
     String path = '/@$username/$tab';
     if (subTab != null && subTab.isNotEmpty) {
       path += '/$subTab';
     }
-
     if (kIsWeb) {
       try {
         Router.of(context).replace(path);
@@ -333,25 +350,20 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!_isMe) return;
     final uid = component.authState?.user?.uid;
     if (uid == null) return;
-
     String mainTab = '';
     try {
       if (_blocState.visibleTabs.isNotEmpty) {
         mainTab = _blocState.visibleTabs[_blocState.currentTabIndex];
       }
     } catch (_) {}
-
     if (mainTab.isEmpty) return;
-
     final prefsData = {
       'mainTab': mainTab,
       'settingsSubTab': _activeSubTabName ?? '',
     };
-
     try {
       saveLocalPreference('profile_sticky_prefs_$uid', jsonEncode(prefsData));
     } catch (_) {}
-
     fsUpdateDoc('Users/$uid', jsonEncode({
       'preferences.profile': prefsData,
     })).catchError((_) {
@@ -364,8 +376,10 @@ class _ProfilePageState extends State<ProfilePage> {
   Component _buildMainNavigationTab(String name, int index) {
     final bool isActive = _blocState.currentTabIndex == index;
     return span(
-      [text(name.toLowerCase())],
-      classes: isActive ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+      [Component.text(name.toLowerCase())],
+      classes: isActive
+          ? 'text-xs font-bold text-black border-b border-black cursor-pointer'
+          : 'text-xs text-gray cursor-pointer',
       events: {
         'click': (e) {
           _profileBloc?.add(ChangeTabRequested(index));
@@ -386,7 +400,14 @@ class _ProfilePageState extends State<ProfilePage> {
         return ProfileMakerTab(
           targetUserId: _targetUid,
           isMe: _isMe,
-          canSeeDrafts: _isMe || (_viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false)) || (_viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false)) || (_viewerAccount?.role == 'curator' || (_viewerAccount?.roles.contains('curator') ?? false) || (_viewerAccount?.isCurator ?? false)),
+          canSeeDrafts: _isMe ||
+              (_viewerAccount?.role == 'admin' ||
+                  (_viewerAccount?.roles.contains('admin') ?? false)) ||
+              (_viewerAccount?.role == 'moderator' ||
+                  (_viewerAccount?.roles.contains('moderator') ?? false)) ||
+              (_viewerAccount?.role == 'curator' ||
+                  (_viewerAccount?.roles.contains('curator') ?? false) ||
+                  (_viewerAccount?.isCurator ?? false)),
           userRepository: component.userRepository,
           authState: component.authState,
           initialSubTab: _activeSubTabName,
@@ -399,7 +420,9 @@ class _ProfilePageState extends State<ProfilePage> {
       case 'index':
         return ProfileIndexTab(
           targetUserId: _targetUid,
-          profileName: _blocState.userData?.displayName ?? _blocState.userData?.username ?? '',
+          profileName: _blocState.userData?.displayName ??
+              _blocState.userData?.username ??
+              '',
           userRepository: component.userRepository,
           initialSubTab: _activeSubTabName,
           onSubTabChanged: (subTabName) {
@@ -436,9 +459,15 @@ class _ProfilePageState extends State<ProfilePage> {
       default:
         return div(
           [
-            span([text('analytics')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 56px;'}),
-            h3([text('${tabName.toUpperCase()} coming soon')], classes: 'font-bold text-black text-lg mt-4'),
-            p([text('Archival features are currently being generated on our backend.')], classes: 'text-sm text-gray mt-2')
+            span([Component.text('analytics')],
+                classes: 'material-symbols-outlined text-gray-300',
+                attributes: const {'style': 'font-size: 56px;'}),
+            h3([Component.text('${tabName.toUpperCase()} coming soon')],
+                classes: 'font-bold text-black text-lg mt-4'),
+            p([
+              Component.text(
+                  'Archival features are currently being generated on our backend.')
+            ], classes: 'text-sm text-gray mt-2')
           ],
           classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
         );
@@ -448,29 +477,24 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Component build(BuildContext context) {
     final state = _blocState;
-
     if (state.isLoading) {
       return div(
-        [p([text('Loading profile...')])],
+        [p([Component.text('Loading profile...')])],
         classes: 'flex-col items-center justify-center w-full',
         attributes: const {'style': 'min-height: 100vh;'},
       );
     }
-
     if (state.errorMessage != null) {
       return div(
-        [p([text(state.errorMessage!)], classes: 'error-msg')],
+        [p([Component.text(state.errorMessage!)], classes: 'error-msg')],
         classes: 'flex-col items-center justify-center w-full',
         attributes: const {'style': 'min-height: 100vh;'},
       );
     }
-
     final userData = state.userData!;
 
-    // Dynamic Hiding Filter logic
     final List<String> originalTabs = state.visibleTabs;
     final List<String> filteredTabs = [];
-
     for (var tab in originalTabs) {
       if (_isMe) {
         // Profile owners see every tab regardless of contents
@@ -493,7 +517,8 @@ class _ProfilePageState extends State<ProfilePage> {
           continue;
         }
         if (tab == 'curator') {
-          final draftsCount = _userWorks.where((w) => w['isLive'] != true).length;
+          final draftsCount =
+              _userWorks.where((w) => w['isLive'] != true).length;
           if (draftsCount > 0) {
             filteredTabs.add(tab);
           }
@@ -507,7 +532,6 @@ class _ProfilePageState extends State<ProfilePage> {
     if (state.currentTabIndex < originalTabs.length) {
       activeTabName = originalTabs[state.currentTabIndex];
     }
-
     int resolvedTabIndex = filteredTabs.indexOf(activeTabName);
     if (resolvedTabIndex == -1) {
       resolvedTabIndex = 0;
@@ -526,27 +550,29 @@ class _ProfilePageState extends State<ProfilePage> {
                 _profileBloc?.add(ToggleFollowRequested());
               },
             ),
-
             div([], classes: 'profile-spacer'),
-
             // 2. Tab selection bar
             if (filteredTabs.isNotEmpty)
               div(
                 [
                   for (int i = 0; i < filteredTabs.length; i++) ...[
-                    _buildMainNavigationTab(filteredTabs[i], originalTabs.indexOf(filteredTabs[i])),
+                    _buildMainNavigationTab(
+                        filteredTabs[i], originalTabs.indexOf(filteredTabs[i])),
                     if (i < filteredTabs.length - 1)
-                      span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+                      span([Component.text('|')],
+                          classes: 'text-xs text-gray',
+                          attributes: const {
+                            'style': 'display: inline-block; margin: 0 8px;'
+                          }),
                   ]
                 ],
                 classes: 'bg-white rounded-md shadow-sm py-4',
                 attributes: const {
-                  'style': 'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%;'
+                  'style':
+                  'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%;'
                 },
               ),
-
             div([], classes: 'profile-spacer'),
-
             // 3. Main content tab view
             if (filteredTabs.isNotEmpty)
               _buildContentBody(filteredTabs[resolvedTabIndex])
@@ -555,7 +581,8 @@ class _ProfilePageState extends State<ProfilePage> {
         )
       ],
       attributes: const {
-        'style': 'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 16px; padding-bottom: 80px; box-sizing: border-box;'
+        'style':
+        'min-height: 100vh; background-color: #e5e5e5; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 16px; padding-bottom: 80px; box-sizing: border-box;'
       },
     );
   }

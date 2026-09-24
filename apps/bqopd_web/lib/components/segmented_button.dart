@@ -76,9 +76,9 @@ class SegmentedButton<T> extends StatelessComponent {
               'style': 'font-size: 14px; '
                   'font-variation-settings: "FILL" ${isSelected ? 1 : 0};'
             },
-            [text(iconName)],
+            [Component.text(iconName)],
           ),
-        text(labelBuilder(segment).toLowerCase()),
+        Component.text(labelBuilder(segment).toLowerCase()),
       ],
     );
   }

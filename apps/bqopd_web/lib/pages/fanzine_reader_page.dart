@@ -345,7 +345,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
   Component build(BuildContext context) {
     if (_loading) {
       return div(
-        [p([text('Loading fanzine...')])],
+        [p([Component.text('Loading fanzine...')])],
         classes: 'flex-col items-center justify-center w-full',
         attributes: const {'style': 'min-height: 100vh;'},
       );
@@ -353,14 +353,13 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     if (_fanzine == null) {
       return div(
         [
-          p([text('Fanzine not found.')]),
-          a(href: '/', [text('Go Home')])
+          p([Component.text('Fanzine not found.')]),
+          a(href: '/', [Component.text('Go Home')])
         ],
         classes: 'flex-col items-center justify-center w-full',
         attributes: const {'style': 'min-height: 100vh;'},
       );
     }
-
     final String fanzineType = _fanzine!['type'] ?? 'ingested';
     final String? shortCode = _fanzine!['shortCode'];
     final ToolScope effectiveScope = component.activeScope ??
@@ -369,7 +368,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             ? ToolScope.editor
             : ToolScope.curator)
             : ToolScope.reader);
-
     final Component listHeader;
     if (effectiveScope == ToolScope.curator) {
       listHeader = FanzineCurator(
@@ -417,7 +415,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         authBloc: component.authBloc,
       );
     }
-
     final Component gridHeader = FanzineHeader(
       fanzineId: component.fanzineId,
       shortCode: shortCode,
@@ -429,7 +426,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       authState: component.authState,
       authBloc: component.authBloc,
     );
-
     return div(
       [
         FanzineLayout(

@@ -39,7 +39,6 @@ class ShortLinkPage extends StatefulComponent {
 class _ShortLinkPageState extends State<ShortLinkPage>
     with PreloadStateMixin, SyncStateMixin<ShortLinkPage, String> {
   String _preloadedJson = '{}';
-
   Map<String, dynamic> get _preloadedData {
     try {
       return jsonDecode(_preloadedJson) as Map<String, dynamic>;
@@ -199,7 +198,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       return div(
           classes: 'flex-col items-center justify-center w-full',
           attributes: {'style': 'min-height: 100vh;'},
-          [div(classes: 'text-lg font-bold', [text(_status)])]);
+          [div(classes: 'text-lg font-bold', [Component.text(_status)])]);
     }
 
     if (_targetFanzineId != null) {
@@ -236,7 +235,6 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
       final bool isViewerModerator = _viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false);
       final bool isViewerCurator = _viewerAccount?.role == 'curator' || (_viewerAccount?.roles.contains('curator') ?? false) || (_viewerAccount?.isCurator ?? false);
-
       final bool canEdit = isOwnerOrEditor || isViewerAdmin || isViewerModerator || isViewerCurator;
       final bool isDraft = _fanzineData?['isLive'] != true;
 
@@ -248,15 +246,15 @@ class _ShortLinkPageState extends State<ShortLinkPage>
               div(
                   classes: 'max-w-md w-full bg-white border border-gray-200 rounded-xl p-8 shadow-sm flex flex-col items-center',
                   [
-                    div(classes: 'text-5xl mb-4', [text('🔒')]),
-                    h3(classes: 'text-xl font-bold text-gray-800 mb-2', [text('This Fanzine is Private')]),
+                    div(classes: 'text-5xl mb-4', [Component.text('🔒')]),
+                    h3(classes: 'text-xl font-bold text-gray-800 mb-2', [Component.text('This Fanzine is Private')]),
                     p(classes: 'text-gray-500 mb-6 text-sm', [
-                      text('The editor or curator has set this fanzine visibility to hidden. Only creators with management access can view it.')
+                      Component.text('The editor or curator has set this fanzine visibility to hidden. Only creators with management access can view it.')
                     ]),
                     a(
                         href: '/',
                         classes: 'inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow transition duration-200',
-                        [text('Return Home')]
+                        [Component.text('Return Home')]
                     )
                   ]
               )
@@ -318,8 +316,8 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         classes: 'flex-col items-center justify-center w-full',
         attributes: {'style': 'min-height: 100vh;'},
         [
-          p(classes: 'text-lg font-bold', [text(_status)]),
-          a(href: '/', [text('Go Home')])
+          p(classes: 'text-lg font-bold', [Component.text(_status)]),
+          a(href: '/', [Component.text('Go Home')])
         ]);
   }
 }

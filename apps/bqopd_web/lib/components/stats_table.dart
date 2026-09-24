@@ -21,27 +21,26 @@ class StatsTable extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final includeLabelColumn = isFanzine;
-
     return div(classes: 'flex-col items-center w-full mt-4', [
       div(classes: 'stats-table-wrapper', [
         table(classes: 'stats-table', [
           thead([
             tr([
-              if (includeLabelColumn) th(attributes: {'rowspan': '2'}, [text('Page')]),
+              if (includeLabelColumn) th(attributes: {'rowspan': '2'}, [Component.text('Page')]),
               th(attributes: {'colspan': '2'}, [
-                span(classes: 'material-symbols-outlined', attributes: {'style': 'font-size: 14px; vertical-align: middle; margin-right: 4px;'}, [text('grid_view')]),
-                text('Grid (Glance)')
+                span(classes: 'material-symbols-outlined', attributes: {'style': 'font-size: 14px; vertical-align: middle; margin-right: 4px;'}, [Component.text('grid_view')]),
+                Component.text('Grid (Glance)')
               ]),
               th(attributes: {'colspan': '2'}, [
-                span(classes: 'material-symbols-outlined', attributes: {'style': 'font-size: 14px; vertical-align: middle; margin-right: 4px;'}, [text('view_list')]),
-                text('List (Read)')
+                span(classes: 'material-symbols-outlined', attributes: {'style': 'font-size: 14px; vertical-align: middle; margin-right: 4px;'}, [Component.text('view_list')]),
+                Component.text('List (Read)')
               ]),
             ]),
             tr([
-              th([text('User')]),
-              th([text('Anon')]),
-              th([text('User')]),
-              th([text('Anon')]),
+              th([Component.text('User')]),
+              th([Component.text('Anon')]),
+              th([Component.text('User')]),
+              th([Component.text('Anon')]),
             ])
           ]),
           tbody([
@@ -65,18 +64,17 @@ class StatsTable extends StatelessComponent {
   /// No state, no streams, no delay.
   Component _renderRow(String imageId, String? label) {
     final stats = preloadedStats[imageId] ?? {};
-
     final regGrid = stats['regGridCount'] ?? 0;
     final anonGrid = stats['anonGridCount'] ?? 0;
     final regList = stats['regListCount'] ?? 0;
     final anonList = stats['anonListCount'] ?? 0;
 
     return tr([
-      if (label != null) td([text(label)]),
-      td([text('$regGrid')]),
-      td([text('$anonGrid')]),
-      td(classes: 'highlight', [text('$regList')]),
-      td([text('$anonList')]),
+      if (label != null) td([Component.text(label)]),
+      td([Component.text('$regGrid')]),
+      td([Component.text('$anonGrid')]),
+      td(classes: 'highlight', [Component.text('$regList')]),
+      td([Component.text('$anonList')]),
     ]);
   }
 }
