@@ -1,4 +1,3 @@
-// Core package provides logic and shared models
 import 'package:bqopd_core/bqopd_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../services/engagement_service.dart';
 import '../services/view_service.dart';
 import '../components/dynamic_social_toolbar.dart';
-// Local app imports
 import '../services/user_provider.dart';
 import '../widgets/hashtag_bar.dart';
 import '../widgets/page_wrapper.dart';
@@ -26,9 +24,11 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
     final userProvider = Provider.of<UserProvider>(context);
     if (!userProvider.isModerator) {
       return const Scaffold(
-          body: Center(child: Text("Restricted Area. Authorized Personnel Only.")));
+        body: Center(
+          child: Text("Restricted Area. Authorized Personnel Only."),
+        ),
+      );
     }
-
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
@@ -49,16 +49,13 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
             if (snapshot.hasError) {
               return Center(child: SelectableText("Error: ${snapshot.error}"));
             }
-
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
-
             final docs = snapshot.data!.docs;
             if (docs.isEmpty) {
               return const Center(child: Text("Queue clear. Good job!"));
             }
-
             return ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: docs.length,
@@ -78,7 +75,6 @@ class _ModeratorFeedPageState extends State<ModeratorFeedPage> {
 class _ModeratorCard extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;
-
   const _ModeratorCard({required this.docId, required this.data});
 
   @override
@@ -94,11 +90,11 @@ class _ModeratorCardState extends State<_ModeratorCard> {
 
   void _submitComment() async {
     final text = _commentController.text.trim();
-    if (text.isEmpty) return;
-
+    if (text.isEmpty) {
+      return;
+    }
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     _commentController.clear();
-
     await _engagementService.addComment(
       imageId: widget.docId,
       fanzineId: 'moderation_queue',
@@ -121,14 +117,12 @@ class _ModeratorCardState extends State<_ModeratorCard> {
     final imageUrl = widget.data['fileUrl'] as String?;
     final tags = widget.data['tags'] as Map<String, dynamic>? ?? {};
     final uploaderId = widget.data['uploaderId'] as String? ?? 'unknown';
-
     final bool isApproved =
         tags.containsKey('approved') && (tags['approved'] as List).isNotEmpty;
-
     final String tLinked = widget.data['text_linked'] ?? '';
-    final String tCorrected = widget.data['text_corrected'] ?? widget.data['text'] ?? '';
+    final String tCorrected =
+        widget.data['text_corrected'] ?? widget.data['text'] ?? '';
     final String tRaw = widget.data['text_raw'] ?? '';
-
     final String actualText = tLinked.trim().isNotEmpty
         ? tLinked
         : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
@@ -138,10 +132,14 @@ class _ModeratorCardState extends State<_ModeratorCard> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
         ],
         border: isApproved
-            ? Border.all(color: Colors.green.withOpacity(0.5), width: 2)
+            ? Border.all(color: Colors.green.withValues(alpha: 0.5), width: 2)
             : null,
       ),
       child: Column(
@@ -154,19 +152,25 @@ class _ModeratorCardState extends State<_ModeratorCard> {
               child: const Text(
                 "NOT YET APPROVED",
                 style: TextStyle(
-                    fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.amber,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
           if (imageUrl != null)
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(12)),
               child: Image.network(
                 imageUrl,
                 fit: BoxFit.cover,
                 height: 400,
                 errorBuilder: (c, e, s) => const SizedBox(
-                    height: 200, child: Center(child: Icon(Icons.broken_image))),
+                  height: 200,
+                  child: Center(child: Icon(Icons.broken_image)),
+                ),
               ),
             ),
           Padding(
@@ -181,12 +185,21 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                       .get(),
                   builder: (context, snap) {
                     if (snap.hasData && snap.data!.exists) {
-                      final profile = UserProfile.fromMap(snap.data!.id, snap.data!.data() as Map<String, dynamic>);
-                      return Text("Uploaded by @${profile.username}",
-                          style: const TextStyle(color: Colors.grey, fontSize: 12));
+                      final profile = UserProfile.fromMap(
+                        snap.data!.id,
+                        snap.data!.data() as Map<String, dynamic>,
+                      );
+                      return Text(
+                        "Uploaded by @${profile.username}",
+                        style:
+                        const TextStyle(color: Colors.grey, fontSize: 12),
+                      );
                     }
-                    return Text("Uploaded by @$uploaderId",
-                        style: const TextStyle(color: Colors.grey, fontSize: 12));
+                    return Text(
+                      "Uploaded by @$uploaderId",
+                      style:
+                      const TextStyle(color: Colors.grey, fontSize: 12),
+                    );
                   },
                 ),
                 const SizedBox(height: 8),
@@ -201,7 +214,8 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                   activeBonusRow: _activePanel,
                   onToggleBonusRow: (rowType) {
                     setState(() {
-                      _activePanel = _activePanel == rowType ? null : rowType;
+                      _activePanel =
+                      _activePanel == rowType ? null : rowType;
                     });
                   },
                 ),
@@ -218,7 +232,8 @@ class _ModeratorCardState extends State<_ModeratorCard> {
                       textRaw: tRaw,
                       textCorrected: tCorrected,
                       textLinked: tLinked,
-                      textCorrectedAi: widget.data['text_corrected_ai'] ?? '',
+                      textCorrectedAi:
+                      widget.data['text_corrected_ai'] ?? '',
                       textLinkedAi: widget.data['text_linked_ai'] ?? '',
                       isEditingMode: true,
                       viewService: _viewService,

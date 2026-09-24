@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 
@@ -15,7 +15,6 @@ class ShortcodeService {
   }) async {
     String displayCode;
     String dbKey;
-
     bool isUnique = false;
     int retries = 0;
     const int maxRetries = 10;
@@ -27,7 +26,6 @@ class ShortcodeService {
       } else {
         displayCode = ShortcodeGenerator.generateStandardCode();
       }
-
       dbKey = displayCode.toUpperCase();
 
       // Check collisions in 'shortcodes' (Master Lookup)
@@ -39,7 +37,6 @@ class ShortcodeService {
       final userSnapshot = await userRef.get();
 
       if (!docSnapshot.exists && !userSnapshot.exists) {
-        isUnique = true;
         try {
           // Store in Master Lookup using the UPPERCASE key
           await docRef.set({
@@ -48,11 +45,11 @@ class ShortcodeService {
             'displayCode': displayCode, // Store how it should look visually
             'createdAt': FieldValue.serverTimestamp(),
           });
-
+          isUnique = true;
           // Return the DISPLAY version to the UI
           return displayCode;
         } catch (e) {
-          print('Error assigning shortcode: $e');
+          debugPrint('Error assigning shortcode: $e');
           rethrow;
         }
       }

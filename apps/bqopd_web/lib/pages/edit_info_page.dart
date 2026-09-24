@@ -4,7 +4,6 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
 
 /// Full-featured Web Profile & Account Editor Page for Jaspr.
@@ -47,7 +46,6 @@ class _EditInfoPageState extends State<EditInfoPage> {
   // User Private Account Fields
   String _firstName = '';
   String _lastName = '';
-  String _email = '';
   String _street1 = '';
   String _street2 = '';
   String _city = '';
@@ -97,7 +95,6 @@ class _EditInfoPageState extends State<EditInfoPage> {
     }
 
     setState(() => _loading = true);
-
     _profileSub?.cancel();
     _accountSub?.cancel();
 
@@ -120,7 +117,6 @@ class _EditInfoPageState extends State<EditInfoPage> {
     _accountSub = component.userRepository.watchUserAccount(uid).listen((account) {
       if (account != null && mounted) {
         setState(() {
-          _email = account.email;
           _firstName = account.firstName;
           _lastName = account.lastName;
           _street1 = account.street1 ?? '';
@@ -161,11 +157,9 @@ class _EditInfoPageState extends State<EditInfoPage> {
         'githubHandle': _cleanHandle(_githubHandle),
         'updatedAt': WebFieldValue.serverTimestamp(),
       };
-
       if (finalUsername.isNotEmpty) {
         publicData['username'] = finalUsername;
       }
-
       await fsSetDoc('profiles/$uid', jsonEncode(publicData), true);
 
       // 2. Update private user account details
@@ -180,7 +174,6 @@ class _EditInfoPageState extends State<EditInfoPage> {
         'country': _country.trim(),
         'updatedAt': WebFieldValue.serverTimestamp(),
       };
-
       await fsSetDoc('Users/$uid', jsonEncode(privateData), true);
 
       // 3. Update username mapping if handle was changed
@@ -239,7 +232,7 @@ class _EditInfoPageState extends State<EditInfoPage> {
       return div(
         classes: 'flex-col items-center justify-center w-full',
         attributes: const {'style': 'min-height: 100vh; background-color: #e5e5e5;'},
-        [p([text('Loading profile details...')])],
+        [p([Component.text('Loading profile details...')])],
       );
     }
 
@@ -262,27 +255,24 @@ class _EditInfoPageState extends State<EditInfoPage> {
                   attributes: const {'style': 'width: 100%; padding: 24px; box-sizing: border-box; background: white; border-radius: 8px;'},
                   [
                     // --- SECTION 1: PUBLIC PROFILE DETAILS ---
-                    h2([text('PUBLIC PROFILE')], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0'),
-
+                    h2([Component.text('PUBLIC PROFILE')], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0'),
                     div(classes: 'flex-col gap-3 w-full mb-6', [
                       div([
-                        span([text('Display Name')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('Display Name')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': 'Jane Doe', 'value': _displayName, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _displayName = getInputValue(e))},
                         )
                       ]),
-
                       div([
-                        span([text('Username / Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('Username / Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': 'janedoe', 'value': _username, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _username = getInputValue(e))},
                         )
                       ]),
-
                       div([
-                        span([text('Biography')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('Biography')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         textarea(
                             classes: 'border border-gray-300 rounded-md',
                             attributes: {
@@ -290,12 +280,11 @@ class _EditInfoPageState extends State<EditInfoPage> {
                               'style': 'width: 100%; min-height: 70px; font-size: 13px; background: white; margin-bottom: 0;',
                             },
                             events: {'input': (e) => setState(() => _bio = getInputValue(e))},
-                            [text(_bio)]
+                            [Component.text(_bio)]
                         )
                       ]),
-
                       div([
-                        span([text('Profile Photo URL')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('Profile Photo URL')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': 'https://example.com/avatar.jpg', 'value': _photoUrl, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _photoUrl = getInputValue(e))},
@@ -306,27 +295,24 @@ class _EditInfoPageState extends State<EditInfoPage> {
                     div([], attributes: const {'style': 'height: 1px; background: #eee; margin: 16px 0;'}),
 
                     // --- SECTION 2: SOCIAL MEDIA HANDLES ---
-                    h2([text('EXTERNAL SOCIALS')], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0'),
-
+                    h2([Component.text('EXTERNAL SOCIALS')], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0'),
                     div(classes: 'flex-col gap-3 w-full mb-6', [
                       div([
-                        span([text('X / Twitter Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('X / Twitter Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': '@handle', 'value': _xHandle, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _xHandle = getInputValue(e))},
                         )
                       ]),
-
                       div([
-                        span([text('Instagram Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('Instagram Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': '@handle', 'value': _instagramHandle, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _instagramHandle = getInputValue(e))},
                         )
                       ]),
-
                       div([
-                        span([text('GitHub Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('GitHub Handle')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': 'username', 'value': _githubHandle, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _githubHandle = getInputValue(e))},
@@ -337,69 +323,64 @@ class _EditInfoPageState extends State<EditInfoPage> {
                     div([], attributes: const {'style': 'height: 1px; background: #eee; margin: 16px 0;'}),
 
                     // --- SECTION 3: PERSONAL & CONTACT INFORMATION ---
-                    h2([text('PERSONAL & MAILING DETAILS - NOT DISPLAYED PUBLICLY')], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0'),
-
+                    h2([Component.text('PERSONAL & MAILING DETAILS - NOT DISPLAYED PUBLICLY')], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0'),
                     div(classes: 'flex-col gap-3 w-full mb-6', [
                       div(classes: 'flex-row gap-2', attributes: const {'style': 'display: flex; gap: 8px; width: 100%;'}, [
                         div(classes: 'flex-1', [
-                          span([text('First Name')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                          span([Component.text('First Name')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                           input(
                             attributes: {'type': 'text', 'placeholder': 'First Name', 'value': _firstName, 'style': 'margin-bottom: 0; background: white;'},
                             events: {'input': (e) => setState(() => _firstName = getInputValue(e))},
                           )
                         ]),
                         div(classes: 'flex-1', [
-                          span([text('Last Name')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                          span([Component.text('Last Name')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                           input(
                             attributes: {'type': 'text', 'placeholder': 'Last Name', 'value': _lastName, 'style': 'margin-bottom: 0; background: white;'},
                             events: {'input': (e) => setState(() => _lastName = getInputValue(e))},
                           )
                         ]),
                       ]),
-
                       div([
-                        span([text('Street Address Line 1')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('Street Address Line 1')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': '123 Main St', 'value': _street1, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _street1 = getInputValue(e))},
                         )
                       ]),
-
                       div([
-                        span([text('Street Address Line 2')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span([Component.text('Street Address Line 2')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                         input(
                           attributes: {'type': 'text', 'placeholder': 'Apt / Suite / Unit', 'value': _street2, 'style': 'margin-bottom: 0; background: white;'},
                           events: {'input': (e) => setState(() => _street2 = getInputValue(e))},
                         )
                       ]),
-
                       div(classes: 'flex-row gap-2', attributes: const {'style': 'display: flex; gap: 8px; width: 100%;'}, [
                         div(classes: 'flex-1', [
-                          span([text('City')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                          span([Component.text('City')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                           input(
                             attributes: {'type': 'text', 'placeholder': 'City', 'value': _city, 'style': 'margin-bottom: 0; background: white;'},
                             events: {'input': (e) => setState(() => _city = getInputValue(e))},
                           )
                         ]),
                         div(classes: 'flex-1', [
-                          span([text('State / Province')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                          span([Component.text('State / Province')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                           input(
                             attributes: {'type': 'text', 'placeholder': 'State', 'value': _state, 'style': 'margin-bottom: 0; background: white;'},
                             events: {'input': (e) => setState(() => _state = getInputValue(e))},
                           )
                         ]),
                       ]),
-
                       div(classes: 'flex-row gap-2', attributes: const {'style': 'display: flex; gap: 8px; width: 100%;'}, [
                         div(classes: 'flex-1', [
-                          span([text('ZIP / Postal Code')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                          span([Component.text('ZIP / Postal Code')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                           input(
                             attributes: {'type': 'text', 'placeholder': 'ZIP Code', 'value': _zipCode, 'style': 'margin-bottom: 0; background: white;'},
                             events: {'input': (e) => setState(() => _zipCode = getInputValue(e))},
                           )
                         ]),
                         div(classes: 'flex-1', [
-                          span([text('Country')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                          span([Component.text('Country')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
                           input(
                             attributes: {'type': 'text', 'placeholder': 'Country', 'value': _country, 'style': 'margin-bottom: 0; background: white;'},
                             events: {'input': (e) => setState(() => _country = getInputValue(e))},
@@ -411,7 +392,7 @@ class _EditInfoPageState extends State<EditInfoPage> {
                     // Status Message Feedback Bar
                     if (_statusMessage != null)
                       p(
-                        [text(_statusMessage!)],
+                        [Component.text(_statusMessage!)],
                         classes: _isError ? 'text-xs font-bold text-red-500 mb-3' : 'text-xs font-bold text-green-600 mb-3',
                         attributes: {
                           'style': 'color: ${_isError ? "#ef4444" : "#16a34a"}; margin-bottom: 12px; font-weight: bold; text-align: center;'
@@ -424,7 +405,7 @@ class _EditInfoPageState extends State<EditInfoPage> {
                       attributes: const {'style': 'display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px;'},
                       [
                         button(
-                          [text('cancel')],
+                          [Component.text('cancel')],
                           classes: 'profile-btn',
                           attributes: const {
                             'type': 'button',
@@ -441,7 +422,7 @@ class _EditInfoPageState extends State<EditInfoPage> {
                           },
                         ),
                         button(
-                          [text(_saving ? 'saving...' : 'save changes')],
+                          [Component.text(_saving ? 'saving...' : 'save changes')],
                           classes: 'btn-primary nav-pill mb-0',
                           attributes: {
                             'type': 'button',

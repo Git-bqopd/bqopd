@@ -7,9 +7,8 @@ import './editor/settings_tab.dart';
 import './editor/order_tab.dart';
 import './editor/upload_tab.dart';
 
-/// Refactoring Blueprint: Fanzine Workspace Editor.
-/// BLoC-driven tab coordinator connecting with bqopd_core's FanzineEditorBloc.
-/// Streamlines folio adjustments, sequenced ordering flatplan controls, and uploads.
+/// A standalone, 3-tab workstation editor specifically designed for general folios.
+/// Uses decoupled Settings, Order, and Upload tab components.
 class FanzineEditor extends StatefulComponent {
   final String frefFanzineId;
   final String? shortCode;
@@ -19,7 +18,6 @@ class FanzineEditor extends StatefulComponent {
   final List<Map<String, dynamic>> pageStructure;
   final AuthState? authState;
   final AuthBloc? authBloc;
-  // Layout preference triggers
   final bool? twoPage;
   final void Function(bool)? onTwoPageChanged;
 
@@ -55,15 +53,12 @@ class _FanzineEditorState extends State<FanzineEditor> {
       pipelineRepository: createPipelineRepository(),
       fanzineId: _frefFrefFanzineIdSafe,
     );
-    // Initial load requested
     _bloc.add(LoadFanzineRequested(_frefFrefFanzineIdSafe));
-    // Listen to bloc state mutations
     _blocSubscription = _bloc.stream.listen((state) {
       if (mounted) {
         setState(() {
           _blocState = state;
         });
-        // Inform parent layout of spread layout shifts
         if (state is FanzineEditorLoaded && component.onTwoPageChanged != null) {
           component.onTwoPageChanged!(state.fanzine.twoPage);
         }
@@ -71,7 +66,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
     });
   }
 
-  // Safe accessor to bridge frefFanzineId name matching
   String get _frefFrefFanzineIdSafe => component.frefFanzineId;
 
   @override
@@ -86,7 +80,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
     return span(
       classes: 'text-xs cursor-pointer ${isActive ? 'font-bold' : 'text-gray'}',
       events: {'click': (e) => setState(() => _activeTab = index)},
-      [text(label)],
+      [Component.text(label)],
     );
   }
 
@@ -96,7 +90,7 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (state is FanzineEditorLoading || state is FanzineEditorInitial) {
       return div(
         [
-          p([text("Synchronizing editor workspace...")])
+          p([Component.text("Synchronizing workspace...")])
         ],
         classes: 'white-sticker-flexible w-full mt-2 p-8 text-center text-gray italic',
       );
@@ -104,8 +98,8 @@ class _FanzineEditorState extends State<FanzineEditor> {
     if (state is FanzineEditorFailure) {
       return div(
         [
-          h3([text("Editor Failure")], attributes: const {'style': 'color: #ff5252; margin: 0 0 8px 0;'}),
-          p([text(state.message)], attributes: const {'style': 'font-size: 13px; margin: 0;'})
+          h3([Component.text("Editor Interface Failure")], attributes: const {'style': 'color: #ff5252; margin: 0 0 8px 0;'}),
+          p([Component.text(state.message)], attributes: const {'style': 'font-size: 13px; margin: 0;'})
         ],
         classes: 'white-sticker-flexible w-full mt-2 p-8 text-center',
       );
@@ -114,26 +108,25 @@ class _FanzineEditorState extends State<FanzineEditor> {
       final fanzine = state.fanzine;
       final pages = state.pages;
       final isProcessing = state.isProcessing;
+
       return div(
         [
-          // 1. Core Segmented Tab selection Row
           div(
             [
               _buildTabButton('settings', 0),
-              span([text('|')], classes: 'px-4 text-gray text-xs'),
+              span([Component.text('|')], classes: 'px-4 text-gray text-xs'),
               _buildTabButton('order', 1),
-              span([text('|')], classes: 'px-4 text-gray text-xs'),
+              span([Component.text('|')], classes: 'px-4 text-gray text-xs'),
               _buildTabButton('upload', 2),
             ],
             classes: 'flex-row justify-center items-center py-2 bg-gray-100',
           ),
-          // 2. Active Tab body panel
           div(
             [
               if (_activeTab == 0)
-                EditorSettingsTab(fanzine: fanzine, pages: pages, bloc: _bloc, isSaving: isProcessing),
+                SettingsTab(fanzine: fanzine, pages: pages, bloc: _bloc, isSaving: isProcessing),
               if (_activeTab == 1)
-                EditorOrderTab(fanzine: fanzine, pages: pages, bloc: _bloc),
+                OrderTab(fanzine: fanzine, pages: pages, bloc: _bloc),
               if (_activeTab == 2)
                 UploadTab(fanzine: fanzine, pages: pages, bloc: _bloc, isUploading: isProcessing),
             ],

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 import '../../utils/web_shortcode_service.dart';
 import '../../repositories/repositories.dart';
@@ -32,7 +31,6 @@ class UploadTab extends StatefulComponent {
 class _UploadTabState extends State<UploadTab> {
   dynamic _imagesSub;
   List<Map<String, dynamic>> _userImages = [];
-  bool _loadingImages = true;
   bool _showOrphanModal = false;
   bool _isGcsUploading = false;
 
@@ -56,16 +54,13 @@ class _UploadTabState extends State<UploadTab> {
 
   void _listenToUserImages() {
     _imagesSub?.cancel();
-
     final uid = getCurrentUserId();
     if (uid == null) {
       setState(() {
         _userImages = [];
-        _loadingImages = false;
       });
       return;
     }
-
     _imagesSub = fsListenQuery('images', 'uploaderId', '==', jsonEncode(uid), '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr) as List;
@@ -74,16 +69,13 @@ class _UploadTabState extends State<UploadTab> {
           data['id'] = d['id'];
           return data;
         }).toList();
-
         if (mounted) {
           setState(() {
             _userImages = images;
-            _loadingImages = false;
           });
         }
       } catch (e) {
         print("Error streaming user gallery in UploadTab: $e");
-        if (mounted) setState(() => _loadingImages = false);
       }
     });
   }
@@ -108,19 +100,14 @@ class _UploadTabState extends State<UploadTab> {
         final height = dims['height'] ?? 0;
         final double ratio = (width > 0 && height > 0) ? width / height : 0.625;
         final bool is5x8 = (ratio >= 0.58 && ratio <= 0.67);
-
         final uid = getCurrentUserId();
         if (uid == null) throw Exception("Session authentication required.");
-
         final String path = 'uploads/$uid/folio_assets/${component.fanzine.id}/${DateTime.now().millisecondsSinceEpoch}_$fileName';
         final bytes = base64Decode(base64);
-
         final downloadUrl = await stUpload(path, bytes, 'image/jpeg');
         final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
-
         final String? email = createAuthRepository().currentUser?.email;
         final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
-
         final shortCode = await WebShortcodeService.assignShortcode(
           contentType: 'image',
           contentId: imageId,
@@ -147,7 +134,6 @@ class _UploadTabState extends State<UploadTab> {
           'aspectRatio': ratio,
           'is5x8': is5x8,
         };
-
         await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
 
         if (is5x8) {
@@ -179,7 +165,6 @@ class _UploadTabState extends State<UploadTab> {
         final String? url = img['fileUrl'] ?? img['gridUrl'];
         final int width = img['width'] ?? 0;
         final int height = img['height'] ?? 0;
-
         if (imageId.isNotEmpty && url != null) {
           if (_isImage5x8(img)) {
             component.bloc.add(AddExistingImageRequested(imageId, url, width: width, height: height));
@@ -201,19 +186,14 @@ class _UploadTabState extends State<UploadTab> {
     component.bloc.add(AddPageRequested('generating_template...'));
     final IFanzineRepository repo = createFanzineRepository();
     final int afterPageNum = component.pages.isNotEmpty ? component.pages.length : 0;
-
     final initialText = """
 # THE PUBLISHER
 ## New Custom Page Created
-
 Start typing directly inside the text editor panel below to generate columns of printable markdown text.
-
 {{IMAGE}}
-
 * Enter bullet lists with an asterisk
 * Customize headers with # or ##
 """;
-
     repo.insertPublisherPage(component.fanzine.id, afterPageNum, initialText, component.pages).then((_) {
       component.bloc.add(LoadFanzineRequested(component.fanzine.id));
     }).catchError((e) {
@@ -226,7 +206,6 @@ Start typing directly inside the text editor panel below to generate columns of 
     component.bloc.add(AddPageRequested('generating_calendar...'));
     final int nextNum = component.pages.length + 1;
     final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
-
     fsSetDoc('fanzines/${component.fanzine.id}/pages/$pageId', jsonEncode({
       'pageNumber': nextNum,
       'status': 'ready',
@@ -278,10 +257,10 @@ Start typing directly inside the text editor panel below to generate columns of 
               button(
                   [
                     if (_isUploading)
-                      span([text('progress_activity')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px; animation: spin 1s linear infinite;'})
+                      span([Component.text('progress_activity')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px; animation: spin 1s linear infinite;'})
                     else
-                      span([text('upload')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
-                    text(_isUploading ? "uploading..." : "upload new image")
+                      span([Component.text('upload')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                    Component.text(_isUploading ? "uploading..." : "upload new image")
                   ],
                   attributes: {
                     'style': 'background-color: #9e9e9e; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
@@ -293,8 +272,8 @@ Start typing directly inside the text editor panel below to generate columns of 
               ),
               button(
                   [
-                    span([text('photo_library')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
-                    text("select orphan image")
+                    span([Component.text('photo_library')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                    Component.text("select orphan image")
                   ],
                   attributes: {
                     'style': 'background-color: #9e9e9e; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
@@ -306,8 +285,6 @@ Start typing directly inside the text editor panel below to generate columns of 
               ),
             ]
         ),
-
-        // Custom Template Creation Buttons
         div(
             attributes: const {
               'style': 'display: flex; gap: 12px; justify-content: center; width: 100%; margin-bottom: 20px; flex-wrap: wrap;'
@@ -315,8 +292,8 @@ Start typing directly inside the text editor panel below to generate columns of 
             [
               button(
                   [
-                    span([text('note_add')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
-                    text("new text page")
+                    span([Component.text('note_add')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                    Component.text("new text page")
                   ],
                   attributes: {
                     'style': 'background-color: #7e57c2; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
@@ -328,8 +305,8 @@ Start typing directly inside the text editor panel below to generate columns of 
               ),
               button(
                   [
-                    span([text('calendar_today')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
-                    text("new calendar page")
+                    span([Component.text('calendar_today')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 18px; margin-right: 6px;'}),
+                    Component.text("new calendar page")
                   ],
                   attributes: {
                     'style': 'background-color: #7e57c2; color: white; border-radius: 20px; border: none; padding: 10px 18px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;',
@@ -341,8 +318,6 @@ Start typing directly inside the text editor panel below to generate columns of 
               ),
             ]
         ),
-
-        // Processing Progress bar
         if (_isUploading)
           div(
               [
@@ -354,11 +329,9 @@ Start typing directly inside the text editor panel below to generate columns of 
                 'style': 'width: 100%; height: 3px; background-color: #eee; border-radius: 2px; overflow: hidden; margin-top: -12px; margin-bottom: 16px;'
               }
           ),
-
-        // Empty portfolio state
         if (folioImages.isEmpty && !_isUploading)
           div(
-            [text("no images in this folio yet.")],
+            [Component.text("no images in this folio yet.")],
             attributes: const {
               'style': 'text-align: center; padding: 40px 16px; color: #888; font-size: 13px; font-style: italic; width: 100%; border-top: 1px solid #f0f0f0;'
             },
@@ -368,19 +341,18 @@ Start typing directly inside the text editor panel below to generate columns of 
           if (fiveByEightDocs.isNotEmpty || (_isUploading && fiveByEightDocs.isEmpty && otherDocs.isEmpty)) ...[
             div([
               span(
-                [text("full pages (5x8)")],
+                [Component.text("full pages (5x8)")],
                 attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
               )
             ], attributes: const {'style': 'margin-top: 12px; margin-bottom: 8px;'}),
             _buildUploadedImagesGrid(fiveByEightDocs, imageShortNames, showUploadPlaceholder: _isUploading),
             div([], attributes: const {'style': 'height: 16px;'})
           ],
-
           // Inline Assets category grid
           if (otherDocs.isNotEmpty && !(_isUploading && fiveByEightDocs.isEmpty && otherDocs.isEmpty)) ...[
             div([
               span(
-                [text("inline assets")],
+                [Component.text("inline assets")],
                 attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
               )
             ], attributes: const {'style': 'margin-top: 12px; margin-bottom: 8px;'}),
@@ -388,16 +360,13 @@ Start typing directly inside the text editor panel below to generate columns of 
             div([], attributes: const {'style': 'height: 16px;'})
           ]
         ],
-
-        // Modals
         if (_showOrphanModal)
           OrphanSelectorModal(
             fanzineId: component.fanzine.id,
             userId: getCurrentUserId() ?? '',
             onCancel: () => setState(() => _showOrphanModal = false),
-            onAddSelected: _addSelectedOrphans, // FIXED: Corrected callback mapping to _addSelectedOrphans
+            onAddSelected: _addSelectedOrphans,
           ),
-
         if (_pendingDeleteId != null)
           ConfirmModal(
             title: _isPendingDeleteDirect ? "Delete Image Completely?" : "Remove from Folio?",
@@ -436,10 +405,10 @@ Start typing directly inside the text editor panel below to generate columns of 
         [
           div(
               [
-                span([text('progress_activity')], classes: 'material-symbols-outlined', attributes: const {
+                span([Component.text('progress_activity')], classes: 'material-symbols-outlined', attributes: const {
                   'style': 'font-size: 24px; color: #6750A4; animation: spin 1s linear infinite;'
                 }),
-                span([text("processing...")], attributes: const {
+                span([Component.text("processing...")], attributes: const {
                   'style': 'font-size: 9px; color: #6750A4; font-weight: bold; margin-top: 8px;'
                 })
               ],
@@ -470,10 +439,10 @@ Start typing directly inside the text editor panel below to generate columns of 
         // Background Image or Template icon preview
         if (isTemplate)
           div([
-            span([text('description')], classes: 'material-symbols-outlined', attributes: const {
+            span([Component.text('description')], classes: 'material-symbols-outlined', attributes: const {
               'style': 'font-size: 40px; color: #6750A4;'
             }),
-            span([text('Generated Page')], attributes: const {
+            span([Component.text('Generated Page')], attributes: const {
               'style': 'font-size: 8px; font-weight: bold; color: #6750A4; margin-top: 4px;'
             })
           ], attributes: const {
@@ -485,19 +454,18 @@ Start typing directly inside the text editor panel below to generate columns of 
               attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover; display: block;'}
           )
         else
-          div([text("no preview")], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 11px;'}),
-
+          div([Component.text("no preview")], attributes: const {'style': 'display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 11px;'}),
         // Badges Layer
         div(
           [
             div(
-              [text(isDirect ? "direct" : "added")],
+              [Component.text(isDirect ? "direct" : "added")],
               attributes: const {
                 'style': 'background-color: rgba(33,33,33,0.75); color: white; font-size: 8px; font-weight: bold; border-radius: 4px; padding: 2px 4px; text-align: center; text-transform: lowercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
               },
             ),
             div(
-              [text("${width}x${height}")],
+              [Component.text("${width}x${height}")],
               attributes: const {
                 'style': 'background-color: rgba(0,0,0,0.65); color: white; font-size: 8px; font-weight: bold; border-radius: 4px; padding: 2px 4px; text-align: center;'
               },
@@ -507,12 +475,11 @@ Start typing directly inside the text editor panel below to generate columns of 
             'style': 'position: absolute; top: 4px; left: 4px; right: 4px; display: flex; flex-direction: column; gap: 2px; pointer-events: none;'
           },
         ),
-
         // Remove trigger button
         div(
           [
             button(
-                [span([text(isDirect || isTemplate ? 'delete' : 'close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+                [span([Component.text(isDirect || isTemplate ? 'delete' : 'close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
                 attributes: {
                   'style': 'border: none; background: rgba(0,0,0,0.7); border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: ${isDirect || isTemplate ? '#ff5252' : 'white'}; border: 1px solid white;'
                 },
@@ -530,19 +497,18 @@ Start typing directly inside the text editor panel below to generate columns of 
             'style': 'position: absolute; top: 4px; right: 4px;'
           },
         ),
-
         // Overlay text title footer
         div(
           [
             if (shortName.isNotEmpty)
               div(
-                  [text(shortName)],
+                  [Component.text(shortName)],
                   attributes: const {
                     'style': 'background-color: #6750A4; color: white; font-size: 8px; font-weight: bold; border-radius: 4px; padding: 1px 4px; display: inline-block; margin-bottom: 3px; text-transform: lowercase; letter-spacing: 0.5px;'
                   }
               ),
             span(
-              [text(title.toLowerCase())],
+              [Component.text(title.toLowerCase())],
               attributes: const {
                 'style': 'font-size: 8px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; text-align: center;'
               },

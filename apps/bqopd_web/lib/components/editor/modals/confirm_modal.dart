@@ -1,23 +1,24 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 
-/// A premium, highly responsive custom modal for confirming destructive operations.
-/// Replaces low-level browser `confirm()` with a modern, design-consistent dialog.
+/// Confirmation dialog modal for editor destructive actions.
 class ConfirmModal extends StatelessComponent {
   final String title;
   final String message;
   final String confirmLabel;
+  final String cancelLabel;
   final bool isDestructive;
-  final VoidCallback onCancel;
   final VoidCallback onConfirm;
+  final VoidCallback onCancel;
 
   const ConfirmModal({
     required this.title,
     required this.message,
     required this.confirmLabel,
+    this.cancelLabel = 'cancel',
     this.isDestructive = false,
-    required this.onCancel,
     required this.onConfirm,
+    required this.onCancel,
     super.key,
   });
 
@@ -26,52 +27,55 @@ class ConfirmModal extends StatelessComponent {
     return div(
       classes: 'global-modal-overlay',
       attributes: const {
-        'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 30000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
+        'style':
+        'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
       },
       [
         div(
+          classes: 'white-sticker shadow-lg',
           attributes: const {
-            'style': 'background-color: white; border-radius: 12px; width: 100%; max-width: 400px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; margin: 16px; box-sizing: border-box;'
+            'style':
+            'width: 90%; max-width: 420px; background: white; border-radius: 12px; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px;'
           },
           [
-            // Title
             h3(
-              [text(title)],
+              [Component.text(title)],
               attributes: const {
-                'style': 'font-size: 18px; font-weight: bold; margin: 0; color: #1a1a1a;'
+                'style':
+                'margin: 0; font-size: 16px; font-weight: bold; color: #111; letter-spacing: -0.2px;'
               },
             ),
-
-            // Message Description
             p(
-              [text(message)],
+              [Component.text(message)],
               attributes: const {
-                'style': 'font-size: 13.5px; color: #555555; line-height: 1.5; margin: 0;'
+                'style':
+                'margin: 0; font-size: 13px; line-height: 1.5; color: #555;'
               },
             ),
-
-            // Actions
             div(
               attributes: const {
-                'style': 'display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;'
+                'style':
+                'display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;'
               },
               [
-                // Cancel Action Button
                 button(
-                  [text("cancel")],
+                  [Component.text(cancelLabel)],
+                  classes: 'profile-btn',
                   attributes: const {
-                    'style': 'background-color: #f3f4f6; color: #374151; border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: bold; cursor: pointer; transition: background 0.15s;'
+                    'type': 'button',
+                    'style':
+                    'padding: 8px 16px; font-size: 11px; font-weight: bold; border: 1px solid #ccc; background: white; color: #444; border-radius: 6px; cursor: pointer;'
                   },
                   events: {
                     'click': (e) => onCancel(),
                   },
                 ),
-
-                // Confirm Action Button
                 button(
-                  [text(confirmLabel.toLowerCase())],
+                  [Component.text(confirmLabel)],
                   attributes: {
-                    'style': 'background-color: ${isDestructive ? "#ef4444" : "#6750A4"}; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: bold; cursor: pointer; transition: background 0.15s;'
+                    'type': 'button',
+                    'style':
+                    'padding: 8px 18px; font-size: 11px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; background-color: ${isDestructive ? "#ef4444" : "#6750A4"};'
                   },
                   events: {
                     'click': (e) => onConfirm(),
@@ -80,7 +84,7 @@ class ConfirmModal extends StatelessComponent {
               ],
             ),
           ],
-        )
+        ),
       ],
     );
   }

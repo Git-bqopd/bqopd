@@ -60,7 +60,6 @@ class ReaderPageItem extends StatefulComponent {
 }
 
 class _ReaderPageItemState extends State<ReaderPageItem> {
-  String _templateTextValue = '';
   dynamic _imgDataUnsub;
 
   @override
@@ -95,7 +94,6 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         final doc = jsonDecode(jsonStr);
         if (doc['exists'] == true && mounted) {
           setState(() {
-            _templateTextValue = doc['data']['text_linked'] ?? doc['data']['text_corrected'] ?? doc['data']['text'] ?? '';
           });
         }
       } catch (_) {}

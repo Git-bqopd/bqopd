@@ -1,8 +1,7 @@
 import 'dart:convert';
-import 'dart:async'; // REQUIRED for scheduleMicrotask
+import 'dart:async';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 
 /// Local utility to normalize user-provided names/handles consistently.
@@ -39,8 +38,8 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
     if (component.isLoading) {
       return div(
         [
-          span([text('sync')], classes: 'material-symbols-outlined shimmer-bg text-gray-300', attributes: const {'style': 'font-size: 48px; border-radius: 50%; padding: 12px;'}),
-          p([text('Synchronizing entities directory...')], classes: 'text-sm text-gray italic mt-4')
+          span([Component.text('sync')], classes: 'material-symbols-outlined shimmer-bg text-gray-300', attributes: const {'style': 'font-size: 48px; border-radius: 50%; padding: 12px;'}),
+          p([Component.text('Synchronizing entities directory...')], classes: 'text-sm text-gray italic mt-4')
         ],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center border border-gray-100 flex flex-col items-center justify-center w-full mt-4',
       );
@@ -58,7 +57,6 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
           if (ent != null && ent.toString().trim().isNotEmpty) {
             final String entStr = ent.toString().trim();
             entityCounts[entStr] = (entityCounts[entStr] ?? 0) + 1;
-
             // Simple robust heuristic classification: if it contains commas/numbers or starts with numbers, treat as address
             final bool looksLikeAddress = entStr.contains(',') ||
                 RegExp(r'^\d+').hasMatch(entStr) ||
@@ -75,8 +73,8 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
       return div(
         classes: 'bg-white rounded-lg p-16 text-center shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-4 w-full mt-4',
         [
-          span([text('fingerprint')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
-          p([text("No entities detected in draft curator pipeline.")], classes: 'text-sm text-gray italic'),
+          span([Component.text('fingerprint')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
+          p([Component.text("No entities detected in draft curator pipeline.")], classes: 'text-sm text-gray italic'),
         ],
       );
     }
@@ -102,8 +100,8 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
           attributes: const {'style': 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; padding-bottom: 12px; flex-wrap: wrap; gap: 12px;'},
           [
             div([
-              h2([text("CANONICAL ENTITIES DIRECTORY")], attributes: const {'style': 'margin: 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;'}),
-              span([text("Manage alternative name aliases, wiki profiles, or normalized address mappings. (showing ${displayedNames.length} of ${filteredNames.length})")], attributes: const {'style': 'font-size: 11px; color: #666;'})
+              h2([Component.text("CANONICAL ENTITIES DIRECTORY")], attributes: const {'style': 'margin: 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;'}),
+              span([Component.text("Manage alternative name aliases, wiki profiles, or normalized address mappings. (showing ${displayedNames.length} of ${filteredNames.length})")], attributes: const {'style': 'font-size: 11px; color: #666;'})
             ]),
             // Interactive Sub-filters
             div(
@@ -116,17 +114,16 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
             )
           ],
         ),
-
         table(
           classes: 'stats-table text-left w-full',
           [
             thead([
               tr([
-                th([text('Canonical Identity & Aliases')]),
-                th([text('Type')]),
-                th([text('Total Appearances')]),
-                th([text('Mapping Link / Status')]),
-                th([text('Actions')]),
+                th([Component.text('Canonical Identity & Aliases')]),
+                th([Component.text('Type')]),
+                th([Component.text('Total Appearances')]),
+                th([Component.text('Mapping Link / Status')]),
+                th([Component.text('Actions')]),
               ])
             ]),
             tbody([
@@ -140,7 +137,6 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
             ])
           ],
         ),
-
         if (filteredNames.length > _visibleCount)
           div(
               attributes: const {
@@ -149,8 +145,8 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
               [
                 button(
                     [
-                      span([text('expand_more')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; margin-right: 6px; vertical-align: middle;'}),
-                      text('load more (+100)')
+                      span([Component.text('expand_more')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; margin-right: 6px; vertical-align: middle;'}),
+                      Component.text('load more (+100)')
                     ],
                     classes: 'profile-btn',
                     attributes: const {
@@ -173,7 +169,7 @@ class _CuratorEntitiesDirectoryState extends State<CuratorEntitiesDirectory> {
   Component _buildFilterButton(String filterVal, String label) {
     final bool isActive = _activeFilter == filterVal;
     return button(
-        [text(label)],
+        [Component.text(label)],
         attributes: {
           'type': 'button',
           'style': 'border: none; padding: 6px 14px; font-size: 11px; font-weight: bold; cursor: pointer; '
@@ -210,7 +206,6 @@ class EntityRowComponent extends StatefulComponent {
 class _EntityRowComponentState extends State<EntityRowComponent> {
   bool _loading = true;
   bool _exists = false;
-  String? _profileId;
   bool _isAlias = false;
   String? _redirectHandle;
 
@@ -219,7 +214,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   String _addressInputText = '';
   List<Map<String, dynamic>> _predictions = [];
   Timer? _debounceTimer;
-
   bool _showAliasInput = false;
   String _targetAliasInputText = '';
 
@@ -248,11 +242,9 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
     setState(() {
       _loading = true;
     });
-
     try {
       final handle = normalizeHandle(component.name);
       final jsonStr = await fsGetDoc('usernames/$handle');
-
       scheduleMicrotask(() {
         if (!mounted) return;
         try {
@@ -261,11 +253,9 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
             final rawData = doc['data'];
             final Map<String, dynamic> data = rawData is Map ? Map<String, dynamic>.from(rawData) : {};
             final bool isAlias = data['isAlias'] == true;
-
             setState(() {
               _exists = true;
               _isAlias = isAlias;
-              _profileId = data['uid'] ?? data['redirect'];
               _redirectHandle = data['redirect'];
               _loading = false;
             });
@@ -273,7 +263,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
             setState(() {
               _exists = false;
               _isAlias = false;
-              _profileId = null;
               _redirectHandle = null;
               _loading = false;
             });
@@ -291,7 +280,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
     }
   }
 
-  // Google Places integration
   void _onAddressInputChanged(String inputVal) {
     _addressInputText = inputVal;
     _debounceTimer?.cancel();
@@ -318,7 +306,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       final handle = normalizeHandle(component.name);
       final String profileId = 'profile_managed_${handle}_${DateTime.now().millisecondsSinceEpoch}';
       final uid = getCurrentUserId() ?? 'system';
-
       String firstName = component.name;
       String lastName = "";
       if (component.name.contains(' ')) {
@@ -356,7 +343,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
         'displayCode': handle,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
-
       _fetchStatus();
     } catch (e) {
       print("Failed creating managed entity profile: $e");
@@ -368,7 +354,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
     final cleanAddr = _addressInputText.trim();
     if (cleanAddr.isEmpty) return;
     setState(() => _loading = true);
-
     try {
       final handle = normalizeHandle(component.name);
       // Store the place alias in our usernames mappings referencing the direct normalized string
@@ -378,7 +363,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
         'isAddress': true,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
-
       setState(() {
         _showPlaceInput = false;
         _predictions = [];
@@ -393,14 +377,13 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   Future<void> _submitAliasRedirect() async {
     final cleanTarget = normalizeHandle(_targetAliasInputText);
     if (cleanTarget.isEmpty) return;
-
     setState(() => _loading = true);
     try {
       final aliasHandle = normalizeHandle(component.name);
       final uid = getCurrentUserId() ?? 'system';
-
       final checkRes = await fsGetDoc('usernames/$cleanTarget');
       final targetDoc = jsonDecode(checkRes);
+
       if (targetDoc['exists'] != true) {
         setState(() {
           _loading = false;
@@ -431,10 +414,10 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
   Component build(BuildContext context) {
     if (_loading) {
       return tr([
-        td([span([text(component.name)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; opacity: 0.5;'})]),
+        td([span([Component.text(component.name)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; opacity: 0.5;'})]),
         td([]),
-        td([span([text('${component.count} occurrences')], attributes: const {'style': 'color: #999;'})]),
-        td([span([text('syncing...')], attributes: const {'style': 'font-style: italic; color: #999;'})]),
+        td([span([Component.text('${component.count} occurrences')], attributes: const {'style': 'color: #999;'})]),
+        td([span([Component.text('syncing...')], attributes: const {'style': 'font-style: italic; color: #999;'})]),
         td([]),
       ]);
     }
@@ -445,10 +428,10 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       // Canonical Display Label
       td([
         div(classes: 'flex-col gap-1', [
-          span([text(component.name)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; color: black; text-align: left;'}),
+          span([Component.text(component.name)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; color: black; text-align: left;'}),
           if (_isAlias && _redirectHandle != null)
             span(
-                [text(component.isPlace ? 'normalized to: $_redirectHandle' : 'alias redirects to: @$_redirectHandle')],
+                [Component.text(component.isPlace ? 'normalized to: $_redirectHandle' : 'alias redirects to: @$_redirectHandle')],
                 attributes: {
                   'style': 'font-size: 11px; color: ${component.isPlace ? "#16a34a" : "#2563eb"}; font-weight: bold;'
                 }
@@ -458,7 +441,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       // Entity Type Column
       td([
         span(
-            [text(component.isPlace ? 'Place' : 'Person')],
+            [Component.text(component.isPlace ? 'Place' : 'Person')],
             attributes: const {
               'style': 'font-size: 11px; font-weight: bold; color: black;'
             }
@@ -466,7 +449,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
       ]),
       // Appearance instances
       td([
-        span([text('${component.count} occurrences')], attributes: const {'style': 'font-size: 12px; font-weight: 500; color: #4b5563;'})
+        span([Component.text('${component.count} occurrences')], attributes: const {'style': 'font-size: 12px; font-weight: 500; color: #4b5563;'})
       ]),
       // Linked Profile Mapping Status
       td([
@@ -474,8 +457,8 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
           if (component.isPlace)
             a(
                 [
-                  span([text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
-                  text(handle)
+                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
+                  Component.text(handle)
                 ],
                 href: 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(handle)}',
                 attributes: const {'target': '_blank', 'style': 'font-size: 12px; font-weight: bold; color: #16a34a; text-decoration: underline;'}
@@ -483,8 +466,8 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
           else
             a(
                 [
-                  span([text('account_circle')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px;'}),
-                  text('@$handle')
+                  span([Component.text('account_circle')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px;'}),
+                  Component.text('@$handle')
                 ],
                 href: '/@$handle',
                 classes: 'text-green-600 hover:underline inline-flex items-center',
@@ -492,7 +475,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
             )
         else
           span(
-              [text('unlinked')],
+              [Component.text('unlinked')],
               attributes: const {'style': 'font-size: 11px; color: #999; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;'}
           )
       ]),
@@ -505,20 +488,20 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                 if (!_showAliasInput && !_showPlaceInput) ...[
                   if (component.isPlace)
                     button(
-                        [text('normalize')],
+                        [Component.text('normalize')],
                         classes: 'profile-btn',
                         attributes: const {'style': 'padding: 4px 10px; font-size: 11px; background: white; border: 1px solid #ccc; font-weight: bold; border-radius: 0px; cursor: pointer;'},
                         events: {'click': (e) => setState(() => _showPlaceInput = true)}
                     )
                   else ...[
                     button(
-                        [text('create')],
+                        [Component.text('create')],
                         classes: 'profile-btn',
                         attributes: const {'style': 'padding: 4px 10px; font-size: 11px; background: white; border: 1px solid #ccc; font-weight: bold; border-radius: 0px; cursor: pointer;'},
                         events: {'click': (e) => _createProfile()}
                     ),
                     button(
-                        [text('alias')],
+                        [Component.text('alias')],
                         classes: 'profile-btn',
                         attributes: const {'style': 'padding: 4px 10px; font-size: 11px; background: white; border: 1px solid #ccc; font-weight: bold; border-radius: 0px; cursor: pointer;'},
                         events: {'click': (e) => setState(() => _showAliasInput = true)}
@@ -543,7 +526,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                                   }
                               ),
                               button(
-                                  [span([text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+                                  [span([Component.text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
                                   attributes: const {'style': 'border: none; background: transparent; color: #ef4444; cursor: pointer;'},
                                   events: {'click': (e) => setState(() { _showPlaceInput = false; _predictions = []; })}
                               )
@@ -557,7 +540,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                               [
                                 for (var p in _predictions)
                                   div(
-                                      [text(p['description'] ?? '')],
+                                      [Component.text(p['description'] ?? '')],
                                       classes: 'hover:bg-gray-150 p-1.5 cursor-pointer',
                                       attributes: const {'style': 'font-size: 10px; text-align: left; padding: 6px; border-bottom: 1px solid #eee;'},
                                       events: {
@@ -573,7 +556,6 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                       ]
                   )
                 else
-                // Inline alias compositor input
                   div(
                       attributes: const {
                         'style': 'display: flex; gap: 4px; align-items: center;'
@@ -592,12 +574,12 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
                             }
                         ),
                         button(
-                            [span([text('done')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+                            [span([Component.text('done')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
                             attributes: const {'style': 'border: none; background: transparent; padding: 2px; color: #16a34a; cursor: pointer;'},
                             events: {'click': (e) => _submitAliasRedirect()}
                         ),
                         button(
-                            [span([text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+                            [span([Component.text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
                             attributes: const {'style': 'border: none; background: transparent; padding: 2px; color: #ef4444; cursor: pointer;'},
                             events: {'click': (e) => setState(() => _showAliasInput = false)}
                         ),
@@ -606,7 +588,7 @@ class _EntityRowComponentState extends State<EntityRowComponent> {
               ]
           )
         else
-          span([text('OK')], attributes: const {'style': 'color: #16a34a; font-weight: bold; font-size: 11px; letter-spacing: 0.5px;'})
+          span([Component.text('OK')], attributes: const {'style': 'color: #16a34a; font-weight: bold; font-size: 11px; letter-spacing: 0.5px;'})
       ])
     ]);
   }

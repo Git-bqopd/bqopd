@@ -29,11 +29,9 @@ class _AppState extends State<App> {
   late final IPipelineRepository pipelineRepository;
   late final IUploadRepository uploadRepository;
   late final IUserRepository userRepository;
-
   late final AuthBloc authBloc;
   late final UploadBloc uploadBloc;
   late final InteractionBloc interactionBloc;
-
   AuthState? authState;
   StreamSubscription? _sub;
   StreamSubscription? _modalSub;
@@ -94,7 +92,7 @@ class _AppState extends State<App> {
   Component build(BuildContext context) {
     if (_hasError) {
       return div(classes: 'error-msg', [
-        text('Error loading app: $_errorMsg')
+        Component.text('Error loading app: $_errorMsg'),
       ]);
     }
 
@@ -232,7 +230,7 @@ class _AppState extends State<App> {
                         });
                       }
                     },
-                    [text('×')]
+                    [Component.text('✕')]
                 ),
                 _GlobalModalLoginContent(
                   authState: authState,
@@ -292,7 +290,7 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
                 attributes: const {
                   'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 20px; font-family: inherit; letter-spacing: 0.5px;'
                 },
-                [text('bqopd')]
+                [Component.text('bqopd')]
             ),
             div(
                 classes: 'flex-col w-full',
@@ -343,7 +341,7 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
                           setState(() { _error = e.toString().replaceAll('Exception:', '').trim(); _loading = false; });
                         }
                       }},
-                      [text(_loading ? 'loading...' : 'register')]
+                      [Component.text(_loading ? 'loading...' : 'register')]
                   ),
                 ]
             ),
@@ -353,20 +351,20 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
                   attributes: const {
                     'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
                   },
-                  [text(_error!)]
+                  [Component.text(_error!)]
               ),
             div(
                 attributes: const {
                   'style': 'margin-top: 20px; font-size: 11px; color: #555; text-align: center;'
                 },
                 [
-                  text('already cool? '),
+                  Component.text('already cool? '),
                   span(
                       attributes: const {
                         'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
                       },
                       events: {'click': (e) => setState(() { _isRegister = false; _error = null; })},
-                      [text('login here.')]
+                      [Component.text('login here.')]
                   )
                 ]
             )
@@ -390,7 +388,7 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
               attributes: const {
                 'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 20px; font-family: inherit; letter-spacing: 0.5px;'
               },
-              [text('bqopd')]
+              [Component.text('bqopd')]
           ),
           div(
               classes: 'flex-col w-full',
@@ -433,7 +431,7 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
                         setState(() { _error = e.toString().replaceAll('Exception:', '').trim(); _loading = false; });
                       }
                     }},
-                    [text(_loading ? 'loading...' : 'login')]
+                    [Component.text(_loading ? 'loading...' : 'login')]
                 ),
               ]
           ),
@@ -443,20 +441,20 @@ class _GlobalModalLoginContentState extends State<_GlobalModalLoginContent> {
                 attributes: const {
                   'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
                 },
-                [text(_error!)]
+                [Component.text(_error!)]
             ),
           div(
               attributes: const {
                 'style': 'margin-top: 20px; font-size: 11px; color: #555; text-align: center;'
               },
               [
-                text('not cool yet? '),
+                Component.text('not cool yet? '),
                 span(
                     attributes: const {
                       'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
                     },
                     events: {'click': (e) => setState(() { _isRegister = true; _error = null; })},
-                    [text('register here.')]
+                    [Component.text('register here.')]
                 )
               ]
           )

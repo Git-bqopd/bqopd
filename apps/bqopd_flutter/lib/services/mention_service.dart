@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Service responsible for parsing wiki-links and resolving user mentions.
 /// Moved from utils to be a proper service in the Flutter app layer.
 class MentionService {
+  // ignore: deprecated_member_use
   static final RegExp _wikiLinkRegex = RegExp(r'\[\[(.*?)\]\]');
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -12,8 +13,9 @@ class MentionService {
     for (final match in matches) {
       final content = match.group(1) ?? '';
       final parts = content.split('|');
-      if (parts.isEmpty) continue;
-
+      if (parts.isEmpty) {
+        continue;
+      }
       String display = parts[0].trim();
       String? explicitId;
       if (parts.length == 2 && parts[1].contains(':')) {
@@ -21,14 +23,14 @@ class MentionService {
       } else if (parts.length >= 3) {
         explicitId = parts[2].trim();
       }
-
       if (explicitId != null && explicitId.isNotEmpty) {
         mentions.add(explicitId);
         continue;
       }
-
       String code = display;
-      if (code.isEmpty) continue;
+      if (code.isEmpty) {
+        continue;
+      }
       String handleCandidate = code.toLowerCase();
       var userDoc = await _db.collection('usernames').doc(handleCandidate).get();
       if (!userDoc.exists) {

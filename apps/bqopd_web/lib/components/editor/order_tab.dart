@@ -1,300 +1,300 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../segmented_button.dart';
 
-/// Flatplan sequence order and spread/side preference configuration tab.
-/// Manages the layout adjustments for individual pages within a folio or calendar.
-class EditorOrderTab extends StatelessComponent {
+/// Isolated Order tab for managing flatplan sequence, spreads, and page orientations.
+class OrderTab extends StatefulComponent {
   final Fanzine fanzine;
   final List<FanzinePage> pages;
   final FanzineEditorBloc bloc;
 
-  const EditorOrderTab({
+  const OrderTab({
     required this.fanzine,
     required this.pages,
     required this.bloc,
     super.key,
   });
 
+  @override
+  State<OrderTab> createState() => _OrderTabState();
+}
+
+class _OrderTabState extends State<OrderTab> {
   bool _isPage5x8(FanzinePage page) {
-    if (page.templateId != null) return true;
+    if (page.templateId != null) {
+      return true;
+    }
     final w = page.width;
     final h = page.height;
-    if (w != null && h != null && w != 0 && h != 0) {
+    if (w != null && h != null && h > 0) {
       final ratio = w / h;
       return ratio >= 0.58 && ratio <= 0.67;
     }
-    return true; // Web asset default fallback
-  }
-
-  void _onSpreadPosChanged(FanzinePage page, int idx, List<FanzinePage> fullPages, String clickedVal) {
-    final String currentSpreadPos = page.spreadPosition ?? '';
-
-    if (clickedVal == 'start') {
-      if (currentSpreadPos == 'start') {
-        _disassembleSpread(idx, idx + 1, fullPages, 'either', 'either');
-      } else {
-        if (idx < fullPages.length - 1) {
-          _assembleSpread(idx, idx + 1, fullPages);
-        }
-      }
-    } else if (clickedVal == 'end') {
-      if (currentSpreadPos == 'end') {
-        _disassembleSpread(idx, idx - 1, fullPages, 'either', 'either');
-      } else {
-        if (idx > 0) {
-          _assembleSpread(idx - 1, idx, fullPages);
-        }
-      }
-    }
-  }
-
-  void _onSidePrefChanged(FanzinePage page, int idx, List<FanzinePage> fullPages, String clickedVal) {
-    final String currentSpreadPos = page.spreadPosition ?? '';
-
-    if (currentSpreadPos == 'start') {
-      if (clickedVal != 'left') {
-        _disassembleSpread(idx, idx + 1, fullPages, clickedVal, 'either');
-      } else {
-        bloc.add(UpdatePageLayoutRequested(page, 'start', 'left', pages));
-      }
-    } else if (currentSpreadPos == 'end') {
-      if (clickedVal != 'right') {
-        _disassembleSpread(idx, idx - 1, fullPages, clickedVal, 'either');
-      } else {
-        bloc.add(UpdatePageLayoutRequested(page, 'end', 'right', pages));
-      }
-    } else {
-      bloc.add(UpdatePageLayoutRequested(page, null, clickedVal, pages));
-    }
-  }
-
-  void _assembleSpread(int startIdx, int endIdx, List<FanzinePage> fullPages) {
-    if (startIdx < 0 || endIdx >= fullPages.length) return;
-    bloc.add(UpdatePageLayoutRequested(fullPages[startIdx], 'start', 'left', pages));
-    bloc.add(UpdatePageLayoutRequested(fullPages[endIdx], 'end', 'right', pages));
-  }
-
-  void _disassembleSpread(int activeIdx, int siblingIdx, List<FanzinePage> fullPages, String activeTargetSide, String siblingTargetSide) {
-    bloc.add(UpdatePageLayoutRequested(fullPages[activeIdx], null, activeTargetSide, pages));
-    if (siblingIdx >= 0 && siblingIdx < fullPages.length) {
-      bloc.add(UpdatePageLayoutRequested(fullPages[siblingIdx], null, siblingTargetSide, pages));
-    }
+    return true;
   }
 
   @override
   Component build(BuildContext context) {
-    final fullPages = pages.where((p) => _isPage5x8(p)).toList();
-
-    if (fullPages.isEmpty) {
-      return div(
-        [
-          span([text('format_list_numbered')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
-          p([text('No pages added to zine flatplan yet.')])
-        ],
-        classes: 'p-16 text-center text-gray italic',
-      );
-    }
+    final fullPages = component.pages.where((p) => _isPage5x8(p)).toList();
+    final ordered = fullPages.where((p) => p.pageNumber > 0).toList()
+      ..sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+    final unordered = fullPages.where((p) => p.pageNumber == 0).toList();
 
     return div(
+      classes: 'flex-col gap-4 text-left p-2',
+      attributes: const {
+        'style': 'display: flex; flex-direction: column; gap: 16px; width: 100%; box-sizing: border-box;'
+      },
       [
-        h2(
-          [text('Folio Flatplan Sequence')],
-          classes: 'text-sm font-bold text-gray uppercase tracking-wider mb-3',
+        // Flatplan Sequence Header
+        div(
+          attributes: const {
+            'style': 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px;'
+          },
+          [
+            span(
+              [Component.text('flatplan sequence')],
+              attributes: const {
+                'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'
+              },
+            ),
+            span(
+              [Component.text('${ordered.length} ordered • ${unordered.length} unordered')],
+              attributes: const {'style': 'font-size: 11px; color: #999;'},
+            ),
+          ],
         ),
 
-        for (int i = 0; i < fullPages.length; i++)
-          _buildOrderPageRow(fullPages[i], i, fullPages.length, fullPages)
+        if (ordered.isEmpty)
+          div(
+            [
+              span(
+                [Component.text('no pages in the sequence.')],
+                attributes: const {'style': 'font-size: 12px; color: #888; font-style: italic;'},
+              ),
+            ],
+            attributes: const {
+              'style': 'padding: 24px; text-align: center; background-color: #fafafa; border-radius: 8px; border: 1px dashed #e0e0e0;'
+            },
+          )
+        else
+          div(
+            attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
+            [
+              for (int i = 0; i < ordered.length; i++)
+                _buildOrderedPageRow(ordered[i], i, ordered),
+            ],
+          ),
+
+        if (unordered.isNotEmpty) ...[
+          div(
+            attributes: const {'style': 'margin-top: 16px; border-top: 1px solid #f0f0f0; padding-top: 12px;'},
+            [
+              span(
+                [Component.text('unordered full pages (${unordered.length})')],
+                attributes: const {
+                  'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'
+                },
+              ),
+            ],
+          ),
+          div(
+            attributes: const {
+              'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; width: 100%; margin-top: 8px;'
+            },
+            [
+              for (var page in unordered)
+                _buildUnorderedPageTile(page),
+            ],
+          ),
+        ],
       ],
-      classes: 'flex-col gap-3 text-left p-2',
     );
   }
 
-  Component _buildOrderPageRow(FanzinePage page, int idx, int totalCount, List<FanzinePage> fullPages) {
-    final String? optimalUrl = page.gridUrl ?? page.listUrl ?? page.imageUrl;
-    final bool isPending = optimalUrl == null || optimalUrl.isEmpty;
-    final String? templateId = page.templateId;
+  Component _buildOrderedPageRow(FanzinePage page, int index, List<FanzinePage> ordered) {
+    final num = page.pageNumber;
+    final bool isFirstPage = num == 1;
+    final bool showLayoutButtons = !(isFirstPage && component.fanzine.hasCover);
+    final String? thumbUrl = page.gridUrl ?? page.imageUrl;
 
-    final String selectedSpreadPos = page.spreadPosition ?? '';
-    final String selectedSidePref = page.sidePreference;
-
-    final bool isPage1Cover = idx == 0 && fanzine.hasCover;
-
-    Component layoutButtonsComponent = !isPage1Cover
-        ? SegmentedButton<String>(
-      segments: const ['start', 'end'],
-      selected: selectedSpreadPos,
-      labelBuilder: (val) => val,
-      onSelectionChanged: (val) {
-        _onSpreadPosChanged(page, idx, fullPages, val);
-      },
-    )
-        : div([], attributes: const {'style': 'width: 140px;'});
-
-    Component sidePreferenceComponent = SegmentedButton<String>(
-      segments: const ['left', 'either', 'right'],
-      selected: isPage1Cover ? 'right' : selectedSidePref,
-      labelBuilder: (val) => val,
-      onSelectionChanged: (val) {
-        if (isPage1Cover) return;
-        _onSidePrefChanged(page, idx, fullPages, val);
-      },
-    );
-
-    Component coverSwitchComponent = idx == 0
-        ? div(
-      [
-        span([text('cover')], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #49454F; margin-right: 6px;'}),
-        _buildCustomToggleSwitchForCover(fanzine.hasCover),
-      ],
+    return div(
       attributes: const {
-        'style': 'display: inline-flex; align-items: center; margin-left: auto;'
+        'style': 'display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background-color: white; border: 1px solid #eee; border-radius: 8px; box-sizing: border-box; width: 100%; gap: 12px; flex-wrap: wrap;'
+      },
+      [
+        // Page Number & Thumbnail & Type Description
+        div(
+          attributes: const {'style': 'display: flex; align-items: center; gap: 10px; min-width: 140px;'},
+          [
+            span(
+              [Component.text('$num.')],
+              attributes: const {'style': 'font-weight: bold; font-size: 12px; width: 24px; color: black;'},
+            ),
+            div(
+              attributes: {
+                'style': 'width: 32px; height: 48px; background-color: #f0f0f0; border-radius: 4px; border: 1px solid #ddd; overflow: hidden; display: flex; align-items: center; justify-content: center;'
+              },
+              [
+                if (thumbUrl != null && thumbUrl.isNotEmpty)
+                  img(src: thumbUrl, attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'})
+                else
+                  span([Component.text('auto_awesome_motion')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px; color: #aaa;'}),
+              ],
+            ),
+            span(
+              [Component.text(page.templateId != null ? 'template page' : 'image page')],
+              attributes: const {'style': 'font-size: 11px; color: #555;'},
+            ),
+          ],
+        ),
+
+        if (showLayoutButtons)
+          div(
+            attributes: const {'style': 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;'},
+            [
+              // Spread Position Segment (start / end)
+              div(
+                attributes: const {'style': 'display: flex; border: 1px solid #ccc; border-radius: 14px; overflow: hidden; background: white;'},
+                [
+                  _buildSegmentItem('start', page.spreadPosition == 'start', () {
+                    final newVal = page.spreadPosition == 'start' ? null : 'start';
+                    component.bloc.add(UpdatePageLayoutRequested(page, newVal, page.sidePreference, component.pages));
+                  }),
+                  _buildSegmentItem('end', page.spreadPosition == 'end', () {
+                    final newVal = page.spreadPosition == 'end' ? null : 'end';
+                    component.bloc.add(UpdatePageLayoutRequested(page, newVal, page.sidePreference, component.pages));
+                  }),
+                ],
+              ),
+              // Side Preference Segment (left / either / right)
+              div(
+                attributes: const {'style': 'display: flex; border: 1px solid #ccc; border-radius: 14px; overflow: hidden; background: white;'},
+                [
+                  _buildSegmentItem('left', page.sidePreference == 'left', () {
+                    component.bloc.add(UpdatePageLayoutRequested(page, page.spreadPosition, 'left', component.pages));
+                  }),
+                  _buildSegmentItem('either', page.sidePreference == 'either' || page.sidePreference.isEmpty, () {
+                    component.bloc.add(UpdatePageLayoutRequested(page, page.spreadPosition, 'either', component.pages));
+                  }),
+                  _buildSegmentItem('right', page.sidePreference == 'right', () {
+                    component.bloc.add(UpdatePageLayoutRequested(page, page.spreadPosition, 'right', component.pages));
+                  }),
+                ],
+              ),
+            ],
+          ),
+
+        div(
+          attributes: const {'style': 'display: flex; align-items: center; gap: 8px; margin-left: auto;'},
+          [
+            if (isFirstPage)
+              div(
+                attributes: const {'style': 'display: flex; align-items: center; gap: 6px; margin-right: 8px;'},
+                [
+                  span([Component.text('cover')], attributes: const {'style': 'font-size: 10px; color: #666;'}),
+                  input(
+                    type: InputType.checkbox,
+                    attributes: {
+                      'style': 'cursor: pointer; width: 14px; height: 14px;',
+                      if (component.fanzine.hasCover) 'checked': 'true',
+                    },
+                    events: {
+                      'change': (e) {
+                        component.bloc.add(ToggleHasCoverRequested(!component.fanzine.hasCover));
+                      }
+                    },
+                  ),
+                ],
+              ),
+            button(
+              [span([Component.text('arrow_upward')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})],
+              attributes: {
+                'type': 'button',
+                'title': 'move up',
+                'style': 'border: none; background: transparent; cursor: ${num > 1 ? "pointer" : "default"}; color: ${num > 1 ? "#333" : "#ccc"}; padding: 4px;'
+              },
+              events: {
+                'click': (e) {
+                  if (num > 1) {
+                    component.bloc.add(ReorderPageRequested(page, -1, component.pages));
+                  }
+                }
+              },
+            ),
+            button(
+              [span([Component.text('arrow_downward')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})],
+              attributes: {
+                'type': 'button',
+                'title': 'move down',
+                'style': 'border: none; background: transparent; cursor: ${num < ordered.length ? "pointer" : "default"}; color: ${num < ordered.length ? "#333" : "#ccc"}; padding: 4px;'
+              },
+              events: {
+                'click': (e) {
+                  if (num < ordered.length) {
+                    component.bloc.add(ReorderPageRequested(page, 1, component.pages));
+                  }
+                }
+              },
+            ),
+            button(
+              [span([Component.text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})],
+              attributes: const {
+                'type': 'button',
+                'title': 'unorder page',
+                'style': 'border: none; background: transparent; cursor: pointer; color: #ef4444; padding: 4px;'
+              },
+              events: {
+                'click': (e) {
+                  component.bloc.add(TogglePageOrderingRequested(page, false));
+                }
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Component _buildUnorderedPageTile(FanzinePage page) {
+    final String? thumbUrl = page.gridUrl ?? page.imageUrl;
+
+    return div(
+      attributes: const {
+        'style': 'aspect-ratio: 5 / 8; background-color: #f5f5f5; border: 1px dashed #ccc; border-radius: 6px; position: relative; overflow: hidden; cursor: pointer; display: flex; align-items: center; justify-content: center;'
       },
       events: {
         'click': (e) {
-          final nextVal = !fanzine.hasCover;
-          bloc.add(ToggleHasCoverRequested(nextVal));
-
-          if (nextVal) {
-            bloc.add(UpdatePageLayoutRequested(page, null, 'right', pages));
-          } else {
-            bloc.add(UpdatePageLayoutRequested(page, null, 'either', pages));
-          }
+          component.bloc.add(TogglePageOrderingRequested(page, true));
         }
       },
-    )
-        : div([]);
-
-    return div(
       [
-        // Top row
+        if (thumbUrl != null && thumbUrl.isNotEmpty)
+          img(src: thumbUrl, attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'})
+        else
+          span([Component.text('auto_awesome_motion')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 24px; color: #aaa;'}),
         div(
-          [
-            div(
-              [
-                span(
-                  [text('${idx + 1}.')],
-                  classes: 'font-black text-xs text-gray-400',
-                  attributes: const {'style': 'width: 20px; text-align: right; margin-right: 8px; display: inline-block;'},
-                ),
-                div(
-                  [
-                    if (templateId == 'basic_text')
-                      div([
-                        span([text('description')], classes: 'material-symbols-outlined', attributes: const {
-                          'style': 'font-size: 16px; color: #6750A4;'
-                        })
-                      ], classes: 'w-full h-full flex items-center justify-center')
-                    else if (templateId == 'calendar_left' || templateId == 'calendar_right')
-                      div([
-                        span([text('calendar_today')], classes: 'material-symbols-outlined', attributes: const {
-                          'style': 'font-size: 16px; color: #6750A4;'
-                        })
-                      ], classes: 'w-full h-full flex items-center justify-center')
-                    else if (!isPending)
-                        img(
-                            src: optimalUrl,
-                            attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
-                        )
-                      else
-                        div(
-                          [
-                            span(
-                              [text('progress_activity')],
-                              classes: 'material-symbols-outlined text-gray-300',
-                              attributes: const {'style': 'font-size: 16px;'},
-                            )
-                          ],
-                          classes: 'shimmer-bg w-full h-full flex items-center justify-center',
-                        )
-                  ],
-                  classes: 'rounded border border-gray-200 overflow-hidden bg-white',
-                  attributes: const {'style': 'width: 36px; height: 50px; position: relative; display: inline-block; vertical-align: middle; margin-right: 12px;'},
-                ),
-                span(
-                  [
-                    text(templateId == 'basic_text'
-                        ? 'Generated Text Page'
-                        : (templateId != null && templateId.startsWith('calendar')
-                        ? 'Generated Calendar Page'
-                        : (isPending ? 'Processing web asset...' : 'Archival Page')))
-                  ],
-                  classes: 'text-xs font-bold text-gray-700',
-                  attributes: const {'style': 'display: inline-block; vertical-align: middle;'},
-                )
-              ],
-              attributes: const {'style': 'display: flex; align-items: center;'},
-            ),
-
-            // Page positioning and deletions
-            div(
-              [
-                button(
-                  [span([text('arrow_upward')], classes: 'material-symbols-outlined text-sm')],
-                  classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: (idx == 0) ? {'disabled': 'true'} : const {},
-                  events: {'click': (e) => bloc.add(ReorderPageRequested(page, -1, pages))},
-                ),
-                button(
-                  [span([text('arrow_downward')], classes: 'material-symbols-outlined text-sm')],
-                  classes: 'p-1 hover:bg-gray-100 rounded border-none bg-transparent cursor-pointer',
-                  attributes: (idx >= totalCount - 1) ? {'disabled': 'true'} : const {},
-                  events: {'click': (e) => bloc.add(ReorderPageRequested(page, 1, pages))},
-                ),
-                span([text('|')], classes: 'px-1 text-gray-300', attributes: const {'style': 'margin: 0 4px;'}),
-                button(
-                  [span([text('close')], classes: 'material-symbols-outlined text-sm text-red-500')],
-                  classes: 'p-1 hover:bg-red-50 rounded border-none bg-transparent cursor-pointer',
-                  events: {'click': (e) => bloc.add(RemovePageRequested(page, pages))},
-                ),
-              ],
-              attributes: const {'style': 'display: flex; gap: 8px; align-items: center;'},
-            )
-          ],
-          classes: 'flex-row items-center justify-between',
+          [Component.text('+ add')],
           attributes: const {
-            'style': 'display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;'
+            'style': 'position: absolute; bottom: 4px; background: rgba(0,0,0,0.65); color: white; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px;'
           },
         ),
-
-        // Controls Segment Row
-        div(
-          [
-            // Column 1: Spread Position
-            div(
-              [layoutButtonsComponent],
-              attributes: const {'style': 'width: 140px; display: flex; align-items: center;'},
-            ),
-
-            // Column 2: Side Preference
-            div(
-              [sidePreferenceComponent],
-              attributes: const {'style': 'width: 200px; display: flex; align-items: center;'},
-            ),
-
-            // Column 3: Cover
-            coverSwitchComponent,
-          ],
-          classes: 'flex-row flex-wrap justify-between items-center pt-3 border-t border-gray-100',
-          attributes: const {
-            'style': 'display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 16px; border-top: 1px solid #f3f4f6; width: 100%;'
-          },
-        )
       ],
-      classes: 'fanzine-page-row-card',
-      attributes: const {
-        'style': 'display: flex; flex-direction: column; gap: 12px; border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; background-color: #ffffff; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'
-      },
     );
   }
 
-  Component _buildCustomToggleSwitchForCover(bool val) {
-    return div(
-      [],
+  Component _buildSegmentItem(String label, bool isSelected, void Function() onTap) {
+    return button(
+      [Component.text(label)],
       attributes: {
-        'style': 'width: 33px; height: 18px; border-radius: 10px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
+        'type': 'button',
+        'style': 'border: none; padding: 4px 8px; font-size: 9px; font-weight: bold; cursor: pointer; '
+            'background-color: ${isSelected ? "#8e8e8e" : "transparent"}; '
+            'color: ${isSelected ? "white" : "#444"};'
       },
+      events: {'click': (e) => onTap()},
     );
   }
 }
+
+typedef EditorOrderTab = OrderTab;

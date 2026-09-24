@@ -5,7 +5,6 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
-import '../../utils/web_utils.dart';
 import '../../utils/web_shortcode_service.dart';
 import '../../repositories/repositories.dart';
 import '../editor/modals/confirm_modal.dart';
@@ -30,12 +29,10 @@ String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
     final year = parts[0];
     final monthInt = parts.length > 1 ? int.tryParse(parts[1]) : null;
     final dayInt = parts.length > 2 ? int.tryParse(parts[2]) : null;
-
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
-
     String result = '';
     if (mode == 'day') {
       if (monthInt != null && monthInt >= 1 && monthInt <= 12) {
@@ -55,7 +52,6 @@ String formatDisplayDate(String? dateStr, String? mode, bool isGuess) {
     } else {
       result = year;
     }
-
     if (isGuess) {
       result += '?';
     }
@@ -88,12 +84,10 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   // 0: curator, 1: curator list, 2: entities, 3: ai training data
   int _activeSubTab = 0;
   bool _showCatalogModal = false;
-
   List<Map<String, dynamic>> _userWorks = [];
   bool _loadingWorks = true;
   StreamSubscription? _worksSub;
   FirebaseSubscription? _worksFirebaseSub;
-
   List<Map<String, dynamic>> _aiTrainingData = [];
   bool _loadingTraining = true;
   StreamSubscription? _trainingSub;
@@ -103,9 +97,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   Map<String, int> _fanzineErrorCounts = {};
   final Map<String, FirebaseSubscription> _fanzinePagesSubscriptions = {};
 
-  // Uploading and Processing States
-  bool _isUploadingPdf = false;
-  double _uploadProgress = 0.0;
+  // Status Message
   String _uploadStatusMessage = '';
 
   // Deletion and Dialog confirmation modal states
@@ -116,7 +108,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   void initState() {
     super.initState();
     _resolveActiveSubTab();
-
     // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
     if (kIsWeb) {
       Future.microtask(() {
@@ -203,11 +194,8 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     _worksSub?.cancel();
     _worksFirebaseSub?.callAsFunction();
     _worksFirebaseSub = null;
-
     setState(() => _loadingWorks = true);
-
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
-
     _worksFirebaseSub = fsListenQuery('fanzines', '', '', '', '', false, (String jsonStr) {
       scheduleMicrotask(() {
         try {
@@ -218,13 +206,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             data['id'] = d['id'];
             return data;
           }).toList();
-
           list.sort((a, b) {
             final aT = a['creationDate'] ?? a['createdAt'] ?? '';
             final bT = b['creationDate'] ?? b['createdAt'] ?? '';
             return bT.toString().compareTo(aT.toString());
           });
-
           if (!controller.isClosed) {
             controller.add(list);
           }
@@ -233,7 +219,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         }
       });
     });
-
     _worksSub = controller.stream.listen((works) {
       if (mounted) {
         setState(() {
@@ -247,14 +232,12 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
 
   void _syncPageErrorObservers(List<Map<String, dynamic>> works) {
     final activeIds = works.map((w) => w['id'] as String?).where((id) => id != null).cast<String>().toSet();
-
     final keysToRemove = _fanzinePagesSubscriptions.keys.where((k) => !activeIds.contains(k)).toList();
     for (var key in keysToRemove) {
       _fanzinePagesSubscriptions[key]?.callAsFunction();
       _fanzinePagesSubscriptions.remove(key);
       _fanzineErrorCounts.remove(key);
     }
-
     for (var fid in activeIds) {
       if (!_fanzinePagesSubscriptions.containsKey(fid)) {
         _fanzinePagesSubscriptions[fid] = fsListenQuery('fanzines/$fid/pages', '', '', '', '', false, (jsonStr) {
@@ -287,11 +270,8 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     _trainingSub?.cancel();
     _trainingFirebaseSub?.callAsFunction();
     _trainingFirebaseSub = null;
-
     setState(() => _loadingTraining = true);
-
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
-
     _trainingFirebaseSub = fsListenQuery('images', 'isTrainingData', '==', 'true', '', false, (String jsonStr) {
       scheduleMicrotask(() {
         try {
@@ -302,7 +282,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             data['id'] = d['id'];
             return data;
           }).toList();
-
           if (!controller.isClosed) {
             controller.add(list);
           }
@@ -311,7 +290,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         }
       });
     });
-
     _trainingSub = controller.stream.listen((list) {
       if (mounted) {
         setState(() {
@@ -328,7 +306,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       onStatus: (message) {
         if (mounted) {
           setState(() {
-            _isUploadingPdf = true;
             _uploadStatusMessage = message;
           });
         }
@@ -342,7 +319,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         try {
           final String path = 'uploads/raw_pdfs/$fileName';
           await stUpload(path, bytes, 'image/jpeg');
-
           if (mounted) {
             setState(() {
               _uploadStatusMessage = 'PDF Upload complete! Processing backend ingest pipeline...';
@@ -350,7 +326,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             Future.delayed(const Duration(seconds: 4), () {
               if (mounted) {
                 setState(() {
-                  _isUploadingPdf = false;
                   _uploadStatusMessage = '';
                 });
               }
@@ -370,13 +345,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     print("Error picking/uploading PDF: $err");
     if (mounted) {
       setState(() {
-        _isUploadingPdf = false;
         _uploadStatusMessage = 'Upload failed: $err';
       });
       Future.delayed(const Duration(seconds: 4), () {
         if (mounted) {
           setState(() {
-            _isUploadingPdf = false;
             _uploadStatusMessage = '';
           });
         }
@@ -384,20 +357,18 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
-  Future _createArchivalFanzine(String userId) async {
+  Future<void> _createArchivalFanzine(String userId) async {
     final uid = getCurrentUserId() ?? 'system';
     setState(() => _loadingWorks = true);
     try {
       final fanzineId = 'ingested_${DateTime.now().millisecondsSinceEpoch}';
       final String? email = createAuthRepository().currentUser?.email;
       final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
-
       final shortCode = await WebShortcodeService.assignShortcode(
         contentType: 'fanzine',
         contentId: fanzineId,
         isVanity: useVanity,
       ) ?? ShortcodeGenerator.generateStandardCode();
-
       final data = {
         'title': 'New Archival Ingest',
         'ownerId': uid,
@@ -415,7 +386,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         'draftEntities': [],
         'masterCreators': [],
       };
-
       await fsSetDoc('fanzines/$fanzineId', jsonEncode(data), true);
       if (mounted) {
         setState(() => _loadingWorks = false);
@@ -441,7 +411,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     });
   }
 
-  Future _deleteFanzine() async {
+  Future<void> _deleteFanzine() async {
     final fid = _pendingDeleteId;
     if (fid == null) return;
     setState(() {
@@ -467,7 +437,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     }
   }
 
-  Future _toggleInCurator(String fanzineId, bool currentVal) async {
+  Future<void> _toggleInCurator(String fanzineId, bool currentVal) async {
     if (fanzineId.isEmpty) return;
     final bool newVal = !currentVal;
     try {
@@ -535,21 +505,19 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   Component _buildCuratorListSubView(List<Map<String, dynamic>> works) {
     if (_loadingWorks) {
       return div(
-        [p([text('Loading curated list...')])],
+        [p([Component.text('Loading curated list...')])],
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (works.isEmpty) {
       return div(
         [
-          span([text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
-          p([text('No curated fanzines found for this profile.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
+          span([Component.text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
+          p([Component.text('No curated fanzines found for this profile.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
         ],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center border border-gray-100 flex flex-col items-center justify-center w-full mt-4',
       );
     }
-
     return div(
       classes: 'bg-white rounded-lg p-6 shadow-sm border border-gray-200 w-full mt-4',
       [
@@ -557,8 +525,8 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           attributes: const {'style': 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; padding-bottom: 12px;'},
           [
             div([
-              h2([text("CURATED FANZINES")], attributes: const {'style': 'margin: 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;'}),
-              span([text("A complete historical log of all ingested fanzines curated by this profile.")], attributes: const {'style': 'font-size: 11px; color: #666;'})
+              h2([Component.text("CURATED FANZINES")], attributes: const {'style': 'margin: 0; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;'}),
+              span([Component.text("A complete historical log of all ingested fanzines curated by this profile.")], attributes: const {'style': 'font-size: 11px; color: #666;'})
             ]),
           ],
         ),
@@ -567,10 +535,10 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           [
             thead([
               tr([
-                th([text('Fanzine Title')]),
-                th([text('Visibility')]),
-                th([text('Pipeline Status')]),
-                th([text('In Curator')], attributes: const {'style': 'text-align: center; width: 110px;'}),
+                th([Component.text('Fanzine Title')]),
+                th([Component.text('Visibility')]),
+                th([Component.text('Pipeline Status')]),
+                th([Component.text('In Curator')], attributes: const {'style': 'text-align: center; width: 110px;'}),
               ])
             ]),
             tbody([
@@ -598,9 +566,9 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
             div(
                 attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px;'},
                 [
-                  span([text(title)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; color: black;'}),
+                  span([Component.text(title)], attributes: const {'style': 'font-weight: bold; font-size: 13.5px; color: black;'}),
                   if (fanzineId.isNotEmpty)
-                    span([text('ID: $fanzineId')], attributes: const {'style': 'font-size: 9px; color: #888; font-family: monospace;'})
+                    span([Component.text('ID: $fanzineId')], attributes: const {'style': 'font-size: 9px; color: #888; font-family: monospace;'})
                 ]
             )
           ],
@@ -610,7 +578,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       ]),
       td([
         span(
-            [text(isLive ? 'visible' : 'hidden')],
+            [Component.text(isLive ? 'visible' : 'hidden')],
             attributes: {
               'style': 'font-size: 11px; font-weight: bold; text-transform: uppercase; color: ${isLive ? "#16a34a" : "#ca8a04"};'
             }
@@ -618,7 +586,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       ]),
       td([
         span(
-            [text(processingStatus)],
+            [Component.text(processingStatus)],
             attributes: const {'style': 'font-size: 11px; font-weight: 500; font-family: monospace; color: #4b5563;'}
         )
       ]),
@@ -665,21 +633,19 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   Component _buildWorksGridSchema(List<Map<String, dynamic>> works) {
     if (_loadingWorks) {
       return div(
-        [p([text('Loading queue...')])],
+        [p([Component.text('Loading queue...')])],
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (works.isEmpty) {
       return div(
         [
-          span([text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
-          p([text('No items in queue.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
+          span([Component.text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
+          p([Component.text('No items in queue.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
         ],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
-
     return div(
         attributes: const {
           'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; width: 100%; box-sizing: border-box;'
@@ -703,25 +669,23 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
   Component _buildAITrainingDataPortal() {
     if (_loadingTraining) {
       return div(
-        [p([text('Loading AI training logs...')])],
+        [p([Component.text('Loading AI training logs...')])],
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (_aiTrainingData.isEmpty) {
       return div(
         [
-          p([text("No training data yet.")], classes: 'text-sm text-gray italic', attributes: const {'style': 'margin: 0;'})
+          p([Component.text("No training data yet.")], classes: 'text-sm text-gray italic', attributes: const {'style': 'margin: 0;'})
         ],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
-
     return div(
         classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white;'},
         [
-          h2([text("AI REINFORCEMENT BASELINES")], classes: 'font-bold text-sm text-gray mb-2', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
+          h2([Component.text("AI REINFORCEMENT BASELINES")], classes: 'font-bold text-sm text-gray mb-2', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
           for (var item in _aiTrainingData)
             div(
                 attributes: const {'style': 'display: flex; align-items: center; padding: 12px; border: 1px solid #eee; border-radius: 8px; font-size: 13px;'},
@@ -732,9 +696,9 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                   div(
                       attributes: const {'style': 'display: flex; flex-direction: column; gap: 4px;'},
                       [
-                        span([text(item['title'] ?? 'Archival Page')], attributes: const {'style': 'font-weight: bold;'}),
+                        span([Component.text(item['title'] ?? 'Archival Page')], attributes: const {'style': 'font-weight: bold;'}),
                         span([
-                          text("Correction Score: ${item['correctionScore'] ?? 0} | Link Score: ${item['linkingScore'] ?? 0}")
+                          Component.text("Correction Score: ${item['correctionScore'] ?? 0} | Link Score: ${item['linkingScore'] ?? 0}")
                         ], attributes: const {'style': 'font-size: 11px; color: #666;'}
                         )
                       ]
@@ -750,7 +714,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
       classes: 'white-sticker p-6 w-full h-full flex flex-col justify-center items-center',
       attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 24px; box-sizing: border-box; width: 100%; height: 100%;'},
       [
-        h1([text('curator options')], classes: 'font-bold text-lg text-center mb-6', attributes: const {'style': 'margin-top: 0;'}),
+        h1([Component.text('curator options')], classes: 'font-bold text-lg text-center mb-6', attributes: const {'style': 'margin-top: 0;'}),
         button(
             classes: 'profile-btn mb-4',
             attributes: const {
@@ -762,7 +726,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 _triggerPdfUpload();
               }
             },
-            [text("upload PDF")]
+            [Component.text("upload PDF")]
         ),
         button(
             classes: 'profile-btn mb-4',
@@ -775,7 +739,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 _createArchivalFanzine(component.targetUserId);
               }
             },
-            [text("upload images")]
+            [Component.text("upload images")]
         ),
       ],
     );
@@ -794,7 +758,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                     classes: 'modal-close-btn',
                     attributes: const {'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 200;'},
                     events: {'click': (e) => setState(() => _showCatalogModal = false)},
-                    [text('×')]
+                    [Component.text('close')]
                 ),
                 _buildCatalogOptionsContent()
               ]
@@ -808,10 +772,9 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
     if (!kIsWeb) {
       return div(
           classes: 'p-16 text-center text-gray italic text-sm',
-          [p([text('Loading curator queue...')])]
+          [p([Component.text('Loading curator queue...')])]
       );
     }
-
     return div(
       [
         // Navigation segment
@@ -819,7 +782,7 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           [
             // Catalog trigger button
             button(
-              [text("catalog")],
+              [Component.text("catalog")],
               classes: 'transition-all cursor-pointer flex items-center',
               attributes: {
                 'style': 'height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid #ccc; background: ${_showCatalogModal ? "black" : "transparent"}; color: ${_showCatalogModal ? "white" : "black"}; font-size: 13px; text-transform: lowercase; font-family: inherit; cursor: pointer; border-radius: 0; font-weight: normal;'
@@ -828,11 +791,10 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 'click': (e) => setState(() => _showCatalogModal = true)
               },
             ),
-            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
+            span([Component.text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
             // 'curator' text subtab
             span(
-              [text("curator")],
+              [Component.text("curator")],
               classes: _activeSubTab == 0
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
@@ -840,11 +802,10 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 'click': (e) => _selectSubTab(0)
               },
             ),
-            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
+            span([Component.text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
             // 'curator list' text subtab
             span(
-              [text("curator list")],
+              [Component.text("curator list")],
               classes: _activeSubTab == 1
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
@@ -852,11 +813,10 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 'click': (e) => _selectSubTab(1)
               },
             ),
-            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
+            span([Component.text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
             // 'entities' text subtab
             span(
-              [text("entities")],
+              [Component.text("entities")],
               classes: _activeSubTab == 2
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
@@ -864,11 +824,10 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
                 'click': (e) => _selectSubTab(2)
               },
             ),
-            span([text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
-
+            span([Component.text('|')], classes: 'text-xs text-gray-300', attributes: const {'style': 'display: inline-block; margin: 0 12px;'}),
             // 'ai training data' text subtab
             span(
-              [text("ai training data")],
+              [Component.text("ai training data")],
               classes: _activeSubTab == 3
                   ? 'text-xs font-bold text-black border-b-2 border-black cursor-pointer pb-1'
                   : 'text-xs text-gray-500 hover:text-black cursor-pointer transition-colors',
@@ -880,7 +839,6 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
           classes: 'bg-white rounded-md p-4 shadow-sm',
           attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'},
         ),
-
         // Prominent live upload status bar
         if (_uploadStatusMessage.isNotEmpty)
           div(
@@ -888,19 +846,16 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
               attributes: const {'style': 'margin-bottom: 16px;'},
               [
                 span(
-                  [text(_uploadStatusMessage)],
+                  [Component.text(_uploadStatusMessage)],
                   attributes: const {'style': 'font-style: italic; font-weight: bold; color: #16a34a; font-size: 13px;'},
                 )
               ]
           ),
-
         // Sub-Tab Content Routing
         _buildActiveSubTabContent(),
-
         // Dynamic Modal Overlays
         if (_showCatalogModal)
           _buildCatalogModalOverlay(),
-
         // Delete verification dialog modal
         if (_pendingDeleteId != null)
           ConfirmModal(
@@ -952,7 +907,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     }
   }
 
-  Future _resolveThumbnail() async {
+  Future<void> _resolveThumbnail() async {
     final String fanzineId = component.fanzineData['id'] ?? '';
     final String? coverUrl = component.fanzineData['gridCoverImage'];
     if (coverUrl != null && coverUrl.isNotEmpty) {
@@ -963,11 +918,9 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
       }
       return;
     }
-
     final fallbackUrl = component.fanzineData['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio';
-
     if (!kIsWeb || fanzineId.isEmpty) {
       if (mounted) {
         setState(() {
@@ -976,7 +929,6 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
       }
       return;
     }
-
     try {
       final pagesRes = await fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber');
       final List decodedPages = jsonDecode(pagesRes);
@@ -985,7 +937,6 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
           _pagesCount = decodedPages.length;
         });
       }
-
       if (decodedPages.isNotEmpty) {
         final firstPage = decodedPages.firstWhere((p) => p['data']['pageNumber'] == 1, orElse: () => decodedPages.first);
         final rawData = firstPage['data'];
@@ -1000,7 +951,6 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
           return;
         }
       }
-
       final imagesRes = await fsQuery('images', 'folioContext', '==', jsonEncode(fanzineId), '');
       final List decodedImages = jsonDecode(imagesRes);
       if (decodedImages.isNotEmpty) {
@@ -1024,7 +974,6 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     } catch (e) {
       print("[CuratorWorkGridTile] Error resolving cover thumbnail: $e");
     }
-
     if (mounted && _resolvedCoverUrl == null) {
       setState(() {
         _resolvedCoverUrl = fallbackUrl;
@@ -1041,12 +990,10 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
     final String displayYear = (component.fanzineData['startYear'] ?? '').toString();
     final int resolvedPageCount = component.fanzineData['pageCount'] ?? _pagesCount;
     final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
-
     final String? publishedDateVal = component.fanzineData['publishedDate'];
     final String? publishedDateMode = component.fanzineData['publishedDateMode'] ?? 'year';
     final bool publishedDateGuess = component.fanzineData['publishedDateGuess'] ?? false;
     String resolvedYear = '';
-
     if (publishedDateVal != null && publishedDateVal.isNotEmpty) {
       resolvedYear = formatDisplayDate(publishedDateVal, publishedDateMode, publishedDateGuess);
     } else if (displayYear.isNotEmpty) {
@@ -1067,14 +1014,14 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
             div(
                 [
                   div(
-                      [text("$fanzineType • $resolvedPageCount pages")],
+                      [Component.text("$fanzineType • $resolvedPageCount pages")],
                       attributes: const {
                         'style': 'background-color: rgba(33, 33, 33, 0.85); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center; text-transform: lowercase;'
                       }
                   ),
                   if (resolvedYear.isNotEmpty)
                     div(
-                        [text(resolvedYear)],
+                        [Component.text(resolvedYear)],
                         attributes: const {
                           'style': 'background-color: rgba(0, 0, 0, 0.7); color: white; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 2px; text-align: center;'
                         }
@@ -1087,7 +1034,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
             if (component.onDelete != null)
               button(
                 [
-                  span([text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})
+                  span([Component.text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})
                 ],
                 attributes: const {
                   'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(0, 0, 0, 0.7); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; border: 1px solid rgba(255, 255, 255, 0.4); z-index: 10; pointer-events: auto;'
@@ -1109,7 +1056,7 @@ class _CuratorWorkGridTileState extends State<CuratorWorkGridTile> {
         ),
         div(
           [
-            span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
+            span([Component.text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
           ],
           attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'},
         )

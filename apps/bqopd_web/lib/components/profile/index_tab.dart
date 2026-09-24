@@ -29,11 +29,9 @@ class ProfileIndexTab extends StatefulComponent {
 
 class _ProfileIndexTabState extends State<ProfileIndexTab> {
   int _activeSubTab = 0; // 0: mentions, 1: comments
-
   List<Map<String, dynamic>> _mentions = [];
   bool _loadingMentions = true;
   StreamSubscription? _mentionsSub;
-
   List<Map<String, dynamic>> _comments = [];
   bool _loadingComments = true;
   FirebaseSubscription? _commentsSub;
@@ -42,7 +40,6 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   void initState() {
     super.initState();
     _resolveActiveSubTab();
-
     // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
     if (kIsWeb) {
       Future.microtask(() {
@@ -110,9 +107,7 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   void _listenToComments() {
     _commentsSub?.callAsFunction();
     _commentsSub = null;
-
     setState(() => _loadingComments = true);
-
     _commentsSub = fsListenQuery('artifacts/bqopd/public/data/comments', 'userId', '==', jsonEncode(component.targetUserId), '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
@@ -121,7 +116,6 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
           data['_id'] = d['id'];
           return data;
         }).toList();
-
         list.sort((a, b) {
           final DateTime? tA = a['createdAt'] as DateTime?;
           final DateTime? tB = b['createdAt'] as DateTime?;
@@ -129,7 +123,6 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
           if (tB == null) return -1;
           return tB.compareTo(tA);
         });
-
         if (mounted) {
           setState(() {
             _comments = list;
@@ -146,21 +139,19 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   Component _buildWorksGridSchema() {
     if (_loadingMentions) {
       return div(
-        [p([text('Loading mentions...')])],
+        [p([Component.text('Loading mentions...')])],
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (_mentions.isEmpty) {
       return div(
         [
-          span([text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
-          p([text('No mentions available yet.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
+          span([Component.text('library_books')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
+          p([Component.text('No mentions available yet.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
         ],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
-
     return div(
         [
           for (var w in _mentions)
@@ -175,36 +166,34 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   Component _buildCommentsListSubView() {
     if (_loadingComments) {
       return div(
-        [p([text('Loading thoughts...')])],
+        [p([Component.text('Loading thoughts...')])],
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (_comments.isEmpty) {
       return div(
         [
-          span([text('chat_bubble')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
-          p([text('No comments posted by this profile.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
+          span([Component.text('chat_bubble')], classes: 'material-symbols-outlined text-gray-300', attributes: const {'style': 'font-size: 48px;'}),
+          p([Component.text('No comments posted by this profile.')], classes: 'text-sm text-gray italic mt-4', attributes: const {'style': 'margin-top: 16px;'})
         ],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
-
     return div(
         [
-          h2([text("COMMENTS POSTED")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 16px;'}),
+          h2([Component.text("COMMENTS POSTED")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 16px;'}),
           for (var c in _comments)
             div(
                 [
                   div(
                       [
-                        span([text(c['createdAt'] is DateTime ? (c['createdAt'] as DateTime).toIso8601String().split('T').first : '')]),
+                        span([Component.text(c['createdAt'] is DateTime ? (c['createdAt'] as DateTime).toIso8601String().split('T').first : '')]),
                         if (c['context'] != null && c['context']['fanzineTitle'] != null)
-                          span([text("via ${c['context']['fanzineTitle']}")], attributes: const {'style': 'font-style: italic;'})
+                          span([Component.text("via ${c['context']['fanzineTitle']}")], attributes: const {'style': 'font-style: italic;'})
                       ],
                       attributes: const {'style': 'display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 8px;'}
                   ),
-                  p([text(c['text'] ?? '')], attributes: const {'style': 'border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; margin-bottom: 16px; margin-top: 0;'})
+                  p([Component.text(c['text'] ?? '')], attributes: const {'style': 'border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; margin-bottom: 16px; margin-top: 0;'})
                 ],
                 attributes: const {'style': 'border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; margin-bottom: 16px; display: flex; flex-direction: column;'}
             )
@@ -218,34 +207,28 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
   Component build(BuildContext context) {
     if (!kIsWeb) {
       return div(
-        [p([text('Loading index...')])],
+        [p([Component.text('Loading index...')])],
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     final currentUid = getCurrentUserId();
     final bool isMe = currentUid != null && currentUid == component.targetUserId;
-
     final bool showMentions = isMe || _mentions.isNotEmpty;
     final bool showComments = isMe || _comments.isNotEmpty;
-
     if (!showMentions && !showComments) {
       return div([]);
     }
-
     int activeSubTab = _activeSubTab;
     if (!showMentions) {
       activeSubTab = 1;
     } else if (!showComments) {
       activeSubTab = 0;
     }
-
     final List<Component> subTabSpans = [];
-
     if (showMentions) {
       subTabSpans.add(
           span(
-              [text("mentions (${_mentions.length})")],
+              [Component.text("mentions (${_mentions.length})")],
               classes: activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
               events: {
                 'click': (e) => _selectSubTab(0)
@@ -253,15 +236,13 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
           )
       );
     }
-
     if (showMentions && showComments) {
-      subTabSpans.add(span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}));
+      subTabSpans.add(span([Component.text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}));
     }
-
     if (showComments) {
       subTabSpans.add(
           span(
-              [text("comments (${_comments.length})")],
+              [Component.text("comments (${_comments.length})")],
               classes: activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
               events: {
                 'click': (e) => _selectSubTab(1)
@@ -269,7 +250,6 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
           )
       );
     }
-
     return div(
       [
         if (subTabSpans.isNotEmpty)
@@ -292,6 +272,7 @@ class _ProfileIndexTabState extends State<ProfileIndexTab> {
 /// Dynamic, self-resolving grid tile for showing mentioned fanzines.
 class MentionsWorkGridTile extends StatefulComponent {
   final Map<String, dynamic> fanzineData;
+
   const MentionsWorkGridTile({
     required this.fanzineData,
     super.key,
@@ -303,7 +284,6 @@ class MentionsWorkGridTile extends StatefulComponent {
 
 class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
   String? _resolvedCoverUrl;
-  int _pagesCount = 0;
 
   @override
   void initState() {
@@ -330,11 +310,9 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
       }
       return;
     }
-
     final fallbackUrl = component.fanzineData['sourceFile'] != null
         ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
         : 'https://placehold.co/450x720/png?text=Folio';
-
     if (!kIsWeb || fanzineId.isEmpty) {
       if (mounted) {
         setState(() {
@@ -343,16 +321,9 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
       }
       return;
     }
-
     try {
       final pagesRes = await fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber');
       final List decodedPages = jsonDecode(pagesRes);
-      if (mounted) {
-        setState(() {
-          _pagesCount = decodedPages.length;
-        });
-      }
-
       if (decodedPages.isNotEmpty) {
         final firstPage = decodedPages.firstWhere((p) => p['data']['pageNumber'] == 1, orElse: () => decodedPages.first);
         final rawData = firstPage['data'];
@@ -367,7 +338,6 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
           return;
         }
       }
-
       final imagesRes = await fsQuery('images', 'folioContext', '==', jsonEncode(fanzineId), '');
       final List decodedImages = jsonDecode(imagesRes);
       if (decodedImages.isNotEmpty) {
@@ -391,7 +361,6 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
     } catch (e) {
       print("[MentionsWorkGridTile] Error resolving cover thumbnail: $e");
     }
-
     if (mounted && _resolvedCoverUrl == null) {
       setState(() {
         _resolvedCoverUrl = fallbackUrl;
@@ -407,12 +376,10 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
     final String volume = component.fanzineData['volume'] ?? '';
     final String issue = component.fanzineData['issue'] ?? '';
     final String wholeNumber = component.fanzineData['wholeNumber'] ?? '';
-
     String displaySuffix = '';
     if (volume.isNotEmpty) displaySuffix += " Vol. $volume";
     if (issue.isNotEmpty) displaySuffix += " No. $issue";
     if (wholeNumber.isNotEmpty) displaySuffix += " ($wholeNumber)";
-
     final String codeKey = component.fanzineData['shortCode'] ?? fanzineId;
 
     return a(
@@ -425,9 +392,9 @@ class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
           ),
           div(
               [
-                span([text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
+                span([Component.text(title)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
                 if (displaySuffix.isNotEmpty)
-                  span([text(displaySuffix)], attributes: const {'style': 'font-size: 11px; color: #666;'})
+                  span([Component.text(displaySuffix)], attributes: const {'style': 'font-size: 11px; color: #666;'})
               ],
               attributes: const {'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'}
           )

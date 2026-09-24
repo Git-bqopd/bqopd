@@ -12,7 +12,10 @@ class RawTextPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (text.isEmpty) {
-      return const Text("No raw OCR text available yet.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic));
+      return const Text(
+        "No raw OCR text available yet.",
+        style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+      );
     }
     return SelectableText(
       text,
@@ -47,7 +50,7 @@ class EditTextPanel extends StatelessWidget {
       imageId: imageId,
       initialText: initialText,
       aiBaselineText: aiBaselineText,
-      mode: 'edit', // FIXED: Changed from 'master' to 'edit' to enforce uniform naming conventions
+      mode: 'edit',
       fanzineId: fanzineId,
     );
   }
@@ -74,7 +77,7 @@ class LinkedTextPanel extends StatelessWidget {
       imageId: imageId,
       initialText: initialText,
       aiBaselineText: aiBaselineText,
-      mode: 'edit', // FIXED: Changed from 'master' to 'edit' to enforce uniform naming conventions
+      mode: 'edit',
       fanzineId: fanzineId,
     );
   }
@@ -128,11 +131,18 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
   }
 
   int _calculateEditDistance(String s1, String s2) {
-    if (s1 == s2) return 0;
-    if (s1.isEmpty) return s2.length;
-    if (s2.isEmpty) return s1.length;
+    if (s1 == s2) {
+      return 0;
+    }
+    if (s1.isEmpty) {
+      return s2.length;
+    }
+    if (s2.isEmpty) {
+      return s1.length;
+    }
     List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
     List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
     for (int i = 0; i < s1.length; i++) {
       v1[0] = i + 1;
       for (int j = 0; j < s2.length; j++) {
@@ -147,17 +157,19 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
   }
 
   Future<void> _save() async {
-    if (widget.imageId.isEmpty) return;
+    if (widget.imageId.isEmpty) {
+      return;
+    }
     setState(() => _s = true);
     try {
       final Map<String, dynamic> updates = {};
       int score = _calculateEditDistance(widget.aiBaselineText, _c.text);
-
       updates['text_corrected'] = _c.text;
-      updates['text_linked'] = _c.text; // Keeps fields aligned programmatically
-      updates['needs_linking'] = false; // Bypasses the backend AI linking queue completely!
+      updates['text_linked'] = _c.text;
+      updates['needs_linking'] = false;
 
       // Parse manual [[Entity]] bracket annotations programmatically
+      // ignore: deprecated_member_use
       final regex = RegExp(r'\[\[(.*?)\]\]');
       final matches = regex.allMatches(_c.text);
       final List<String> manualEntities = [];
@@ -172,20 +184,26 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
 
       if (widget.fanzineId.isNotEmpty && manualEntities.isNotEmpty) {
         FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).update({
-          'draftEntities': FieldValue.arrayUnion(manualEntities)
+          'draftEntities': FieldValue.arrayUnion(manualEntities),
         });
       }
 
       if (widget.aiBaselineText.isNotEmpty) {
         updates['human_correction_score'] = score;
-        if (score > 0) updates['isTrainingData'] = true;
+        if (score > 0) {
+          updates['isTrainingData'] = true;
+        }
       }
 
       await FirebaseFirestore.instance.collection('images').doc(widget.imageId).update(updates);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved! (Score: $score)')));
     } finally {
-      if (mounted) setState(() => _s = false);
+      if (mounted) {
+        setState(() => _s = false);
+      }
     }
   }
 
@@ -228,7 +246,10 @@ class _InlineTextEditorState extends State<_InlineTextEditor> {
         ),
         const Padding(
           padding: EdgeInsets.only(bottom: 8.0),
-          child: Text("Edit typos and adjust [[Exact Name]] or [[Exact Name|user:uid]] wiki-links directly.", style: TextStyle(fontSize: 10, color: Colors.grey)),
+          child: Text(
+            "Edit typos and adjust [[Exact Name]] or [[Exact Name|user:uid]] wiki-links directly.",
+            style: TextStyle(fontSize: 10, color: Colors.grey),
+          ),
         ),
         TextField(
           controller: _c,

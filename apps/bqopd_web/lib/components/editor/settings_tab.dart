@@ -4,15 +4,14 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_utils.dart';
 
-/// Decoupled Editor Settings sub-tab for updating fanzine metadata and layout rules.
-/// Features local text state synchronization to prevent trailing-space trimming bugs on input.
-class EditorSettingsTab extends StatefulComponent {
+/// Isolated Settings tab for managing metadata, title, volume/issue numbers, and spread mode.
+class SettingsTab extends StatefulComponent {
   final Fanzine fanzine;
   final List<FanzinePage> pages;
   final FanzineEditorBloc bloc;
   final bool isSaving;
 
-  const EditorSettingsTab({
+  const SettingsTab({
     required this.fanzine,
     required this.pages,
     required this.bloc,
@@ -21,10 +20,10 @@ class EditorSettingsTab extends StatefulComponent {
   });
 
   @override
-  State<EditorSettingsTab> createState() => _EditorSettingsTabState();
+  State<SettingsTab> createState() => _SettingsTabState();
 }
 
-class _EditorSettingsTabState extends State<EditorSettingsTab> {
+class _SettingsTabState extends State<SettingsTab> {
   String _title = '';
   String _volume = '';
   String _issue = '';
@@ -37,7 +36,7 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
   }
 
   @override
-  void didUpdateComponent(EditorSettingsTab oldComponent) {
+  void didUpdateComponent(SettingsTab oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.fanzine != component.fanzine) {
       _syncLocalFields();
@@ -52,20 +51,19 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
   }
 
   void _handleSaveAndNavigate() {
-    // 1. Locate the first page in the folio page list and assign its thumbnail to 'gridCoverImage'
     String? firstPageImage;
     if (component.pages.isNotEmpty) {
       final sortedPages = List<FanzinePage>.from(component.pages)
         ..sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-
       final firstPage = sortedPages.firstWhere(
-            (p) => (p.gridUrl != null && p.gridUrl!.isNotEmpty) || (p.imageUrl != null && p.imageUrl!.isNotEmpty),
+            (p) =>
+        (p.gridUrl != null && p.gridUrl!.isNotEmpty) ||
+            (p.imageUrl != null && p.imageUrl!.isNotEmpty),
         orElse: () => sortedPages.first,
       );
       firstPageImage = firstPage.gridUrl ?? firstPage.imageUrl;
     }
 
-    // 2. Dispatch the master save & commit events to the BLoC
     component.bloc.add(UpdateFanzineMetadata(
       _title,
       _volume,
@@ -74,7 +72,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
       gridCoverImage: firstPageImage,
     ));
 
-    // 3. Safely route the user back to their personal profile dashboard
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) {
         Router.of(context).push('/profile');
@@ -87,13 +84,17 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
     final String currentShortcode = component.fanzine.shortCode != null
         ? component.fanzine.shortCode!.toUpperCase().replaceAll('BQOPD', 'bqopd')
         : 'pending...';
+
     return div(
+      classes: 'flex-col text-left p-2',
+      attributes: const {'style': 'gap: 12px; display: flex; width: 100%; box-sizing: border-box;'},
       [
-        // Shortcode indicator
+        // Shortcode Indicator
         div(
-          [text('shortcode: $currentShortcode')],
+          [Component.text('shortcode: $currentShortcode')],
           classes: 'text-xs text-gray-500 font-semibold mb-1 text-left',
         ),
+
         // Fanzine Title Input
         div(
           [
@@ -102,7 +103,7 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
                 'type': 'text',
                 'placeholder': 'new folio name',
                 'value': _title,
-                'style': 'margin-bottom: 0;'
+                'style': 'margin-bottom: 0; width: 100%; box-sizing: border-box;'
               },
               events: {
                 'input': (e) {
@@ -115,10 +116,10 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
           ],
           classes: 'flex-col mb-1',
         ),
+
         // Volume / Issue / Whole Number Row
         div(
           [
-            // Volume
             div(
               [
                 input(
@@ -126,7 +127,7 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
                     'type': 'text',
                     'placeholder': 'vol.',
                     'value': _volume,
-                    'style': 'margin-bottom: 0;'
+                    'style': 'margin-bottom: 0; width: 100%; box-sizing: border-box;'
                   },
                   events: {
                     'input': (e) {
@@ -139,7 +140,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
               ],
               classes: 'flex-1 flex-col',
             ),
-            // Issue
             div(
               [
                 input(
@@ -147,7 +147,7 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
                     'type': 'text',
                     'placeholder': 'num.',
                     'value': _issue,
-                    'style': 'margin-bottom: 0;'
+                    'style': 'margin-bottom: 0; width: 100%; box-sizing: border-box;'
                   },
                   events: {
                     'input': (e) {
@@ -160,7 +160,6 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
               ],
               classes: 'flex-1 flex-col',
             ),
-            // Whole Number
             div(
               [
                 input(
@@ -168,7 +167,7 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
                     'type': 'text',
                     'placeholder': 'whole num.',
                     'value': _wholeNumber,
-                    'style': 'margin-bottom: 0;'
+                    'style': 'margin-bottom: 0; width: 100%; box-sizing: border-box;'
                   },
                   events: {
                     'input': (e) {
@@ -185,23 +184,25 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
           classes: 'flex-row gap-2 mb-1',
           attributes: const {'style': 'display: flex; gap: 8px; width: 100%; box-sizing: border-box;'},
         ),
-        // Two-Page Spread Custom Toggle Switch
+
+        // Two-Page Spread Option Toggle
         div(
           [
             span(
-                [
-                  text(component.fanzine.twoPage
-                      ? 'two page spread (switch: single page view)'
-                      : 'single page view (switch: two page spread)')
-                ],
-                classes: 'text-xs font-medium',
-                attributes: const {'style': 'color: #4a4a4a;'}
+              [
+                Component.text(component.fanzine.twoPage
+                    ? 'two page spread (switch: single page view)'
+                    : 'single page view (switch: two page spread)')
+              ],
+              classes: 'text-xs font-medium',
+              attributes: const {'style': 'color: #4a4a4a;'},
             ),
             _buildCustomToggleSwitch(component.fanzine.twoPage)
           ],
           classes: 'flex-row items-center justify-between cursor-pointer',
           attributes: const {
-            'style': 'padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;'
+            'style':
+            'padding: 10px 12px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 8px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;'
           },
           events: {
             'click': (e) {
@@ -209,9 +210,10 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
             }
           },
         ),
-        // Save metadata button
+
+        // Save Button
         button(
-          [text(component.isSaving ? 'saving folio...' : 'save folio')],
+          [Component.text(component.isSaving ? 'saving folio...' : 'save folio')],
           classes: 'btn-primary w-full',
           attributes: component.isSaving ? {'disabled': 'true'} : const {},
           events: {
@@ -219,19 +221,26 @@ class _EditorSettingsTabState extends State<EditorSettingsTab> {
           },
         )
       ],
-      classes: 'flex-col text-left p-2',
-      attributes: const {
-        'style': 'gap: 12px; display: flex;'
-      },
     );
   }
 
   Component _buildCustomToggleSwitch(bool val) {
     return div(
-      [],
+      [
+        div(
+          [],
+          attributes: {
+            'style':
+            'width: 18px; height: 18px; border-radius: 50%; background-color: white; position: absolute; top: 3px; left: ${val ? "23px" : "3px"}; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.35);'
+          },
+        )
+      ],
       attributes: {
-        'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? '#808080' : '#ccc'}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
+        'style':
+        'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? "#6750A4" : "#ccc"}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
       },
     );
   }
 }
+
+typedef EditorSettingsTab = SettingsTab;

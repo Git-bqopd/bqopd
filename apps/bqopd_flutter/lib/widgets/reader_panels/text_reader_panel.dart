@@ -10,7 +10,6 @@ import 'package:go_router/go_router.dart';
 class TextReaderPanel extends StatefulWidget {
   final String text;
   final ValueNotifier<double> fontSizeNotifier;
-
   const TextReaderPanel({
     super.key,
     required this.text,
@@ -43,6 +42,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
   }
 
   Future<void> _loadEntityProfiles() async {
+    // ignore: deprecated_member_use
     final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(_processedText);
     final Set<String> uidsToFetch = {};
@@ -62,6 +62,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
         }
       }
     }
+
     if (uidsToFetch.isEmpty) {
       if (mounted) {
         setState(() {
@@ -70,6 +71,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       }
       return;
     }
+
     if (mounted) {
       setState(() {
         _loadingProfiles = true;
@@ -80,7 +82,11 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       final Map<String, Map<String, dynamic>> fetchedProfiles = {};
       for (var uid in uidsToFetch) {
         fetches.add(
-          FirebaseFirestore.instance.collection('profiles').doc(uid).get().then((doc) {
+          FirebaseFirestore.instance
+              .collection('profiles')
+              .doc(uid)
+              .get()
+              .then((doc) {
             if (doc.exists && doc.data() != null) {
               fetchedProfiles[uid] = doc.data()!;
             }
@@ -106,8 +112,13 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
     }
   }
 
-  List<InlineSpan> _parseAndRenderContent(BuildContext context, String textContent, TextStyle baseStyle) {
+  List<InlineSpan> _parseAndRenderContent(
+      BuildContext context,
+      String textContent,
+      TextStyle baseStyle,
+      ) {
     final List<InlineSpan> spans = [];
+    // ignore: deprecated_member_use
     final regex = RegExp(r'\[\[(.*?)\]\]');
     int currentIndex = 0;
     final matches = regex.allMatches(textContent);
@@ -123,7 +134,6 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       final parts = content.split('|');
       String display = '';
       String? ref;
-
       if (parts.length == 1) {
         display = parts[0].trim();
       } else if (parts.length == 2) {
@@ -176,6 +186,7 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
       }
       currentIndex = match.end;
     }
+
     // Add remaining plain text
     if (currentIndex < textContent.length) {
       spans.add(TextSpan(
@@ -212,7 +223,11 @@ class _TextReaderPanelState extends State<TextReaderPanel> {
             );
             return SelectableText.rich(
               TextSpan(
-                children: _parseAndRenderContent(context, _processedText, baseStyle),
+                children: _parseAndRenderContent(
+                  context,
+                  _processedText,
+                  baseStyle,
+                ),
               ),
               textAlign: TextAlign.justify,
             );
@@ -241,8 +256,10 @@ class _FontSizeSlider extends StatelessWidget {
                 return SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                     trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                    thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 14),
                     activeTrackColor: Colors.black54,
                     inactiveTrackColor: Colors.black12,
                     thumbColor: Colors.black,

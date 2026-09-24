@@ -8,6 +8,7 @@ class EntitiesPanel extends StatelessWidget {
   const EntitiesPanel({super.key, required this.text});
 
   List<String> _parseEntities(String content) {
+    // ignore: deprecated_member_use
     final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(content);
     final Set<String> results = {};
@@ -27,10 +28,24 @@ class EntitiesPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("DETECTED ENTITIES", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const Text(
+          "DETECTED ENTITIES",
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+          ),
+        ),
         const SizedBox(height: 8),
         if (entities.isEmpty)
-          const Text("No entity links found in page text.", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey))
+          const Text(
+            "No entity links found in page text.",
+            style: TextStyle(
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+              color: Colors.grey,
+            ),
+          )
         else
           ListView.separated(
             shrinkWrap: true,
@@ -52,36 +67,77 @@ class EntityRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final handle = normalizeHandle(name);
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('usernames').doc(handle).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('usernames')
+          .doc(handle)
+          .snapshots(),
       builder: (context, snapshot) {
         Widget statusWidget;
         if (!snapshot.hasData) {
-          statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
+          statusWidget = const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
         } else if (snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           String linkText = '/$handle';
-          if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
-          statusWidget = Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline));
+          if (data['isAlias'] == true) {
+            linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
+          }
+          statusWidget = Text(
+            linkText,
+            style: const TextStyle(
+              color: Colors.blue,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+              decoration: TextDecoration.underline,
+            ),
+          );
         } else {
-          statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [
-            TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
-            TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
-          ]);
+          statusWidget = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: () => _createProfile(context, name),
+                child: const Text(
+                  "Create",
+                  style: TextStyle(color: Colors.green, fontSize: 11),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _createAlias(context, name),
+                child: const Text(
+                  "Alias",
+                  style: TextStyle(color: Colors.orange, fontSize: 11),
+                ),
+              ),
+            ],
+          );
         }
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Row(children: [
-            Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
-            statusWidget,
-          ]),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(name, style: const TextStyle(fontSize: 13)),
+              ),
+              statusWidget,
+            ],
+          ),
         );
       },
     );
   }
 
   Future<void> _createProfile(BuildContext context, String name) async {
-    String first = name; String last = "";
-    if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
+    String first = name;
+    String last = "";
+    if (name.contains(' ')) {
+      final parts = name.split(' ');
+      first = parts.first;
+      last = parts.sublist(1).join(' ');
+    }
     final expectedHandle = normalizeHandle(name);
     try {
       await createManagedProfile(
@@ -90,27 +146,72 @@ class EntityRow extends StatelessWidget {
         bio: "Auto-created from Editor Widget",
         explicitHandle: expectedHandle,
       );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Created!")));
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile Created!")),
+      );
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
     }
   }
 
   Future<void> _createAlias(BuildContext context, String name) async {
-    final target = await showDialog<String>(context: context, builder: (c) {
-      final controller = TextEditingController();
-      return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]);
-    });
-    if (target == null || target.isEmpty) return;
+    final target = await showDialog<String>(
+      context: context,
+      builder: (c) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: Text("Create Alias for '$name'"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Enter EXISTING username (target):"),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  hintText: "e.g. julius-schwartz",
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(c, controller.text.trim()),
+              child: const Text("Create Alias"),
+            ),
+          ],
+        );
+      },
+    );
+    if (target == null || target.isEmpty) {
+      return;
+    }
     try {
       await createAlias(aliasHandle: name, targetHandle: target);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias Created!")));
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Alias Created!")),
+      );
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
     }
   }
 }

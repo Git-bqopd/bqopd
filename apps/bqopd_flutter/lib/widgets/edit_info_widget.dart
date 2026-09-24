@@ -1,12 +1,8 @@
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart';
 import '../services/username_service.dart';
-import '../env.dart';
 import '../utils/script_loader.dart';
 
 class EditInfoWidget extends StatefulWidget {
@@ -19,8 +15,6 @@ class EditInfoWidget extends StatefulWidget {
 
 class _EditInfoWidgetState extends State<EditInfoWidget> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
-  late final FlutterGooglePlacesSdk _places;
-
   final TextEditingController displayNameController = TextEditingController();
   final TextEditingController userNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
@@ -49,8 +43,6 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   void initState() {
     super.initState();
     loadGoogleMapsScript();
-    String apiKey = kIsWeb ? Env.googleApiKeyWeb : Env.googleApiKeyAndroid;
-    _places = FlutterGooglePlacesSdk(apiKey);
     _loadData();
     firstNameController.addListener(_updateDefaultUsername);
     stateController.addListener(_updateDefaultUsername);
@@ -60,26 +52,41 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
   void dispose() {
     firstNameController.removeListener(_updateDefaultUsername);
     stateController.removeListener(_updateDefaultUsername);
-    displayNameController.dispose(); userNameController.dispose(); emailController.dispose();
-    bioController.dispose(); street1Controller.dispose(); street2Controller.dispose();
-    cityController.dispose(); stateController.dispose(); zipController.dispose();
-    countryController.dispose(); firstNameController.dispose(); lastNameController.dispose();
-    xHandleController.dispose(); instagramHandleController.dispose(); githubHandleController.dispose();
+    displayNameController.dispose();
+    userNameController.dispose();
+    emailController.dispose();
+    bioController.dispose();
+    street1Controller.dispose();
+    street2Controller.dispose();
+    cityController.dispose();
+    stateController.dispose();
+    zipController.dispose();
+    countryController.dispose();
+    firstNameController.dispose();
+    lastNameController.dispose();
+    xHandleController.dispose();
+    instagramHandleController.dispose();
+    githubHandleController.dispose();
     super.dispose();
   }
 
   void _updateDefaultUsername() {
-    if (_isUsernameManuallyEdited) return;
+    if (_isUsernameManuallyEdited) {
+      return;
+    }
     final name = firstNameController.text.trim();
     final state = stateController.text.trim();
     if (name.isNotEmpty && state.isNotEmpty) {
+      // ignore: deprecated_member_use
       String generated = "$name-from-$state".toLowerCase().replaceAll(' ', '-').replaceAll(RegExp(r'[^a-z0-9-]'), '');
       setState(() => userNameController.text = generated);
     }
   }
 
   Future<void> _loadData() async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() => _isLoadingData = true);
     if (_editingUid.isNotEmpty) {
       try {
@@ -108,36 +115,79 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
           instagramHandleController.text = data['instagramHandle'] ?? '';
           githubHandleController.text = data['githubHandle'] ?? '';
           _profilePhotoUrl = data['photoUrl'];
-          if (_initialUsername.isNotEmpty) _isUsernameManuallyEdited = true;
+          if (_initialUsername.isNotEmpty) {
+            _isUsernameManuallyEdited = true;
+          }
         }
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error loading profile")));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Error loading profile")),
+          );
+        }
       }
     }
-    if (mounted) setState(() => _isLoadingData = false);
+    if (mounted) {
+      setState(() => _isLoadingData = false);
+    }
   }
 
   Future<void> saveProfile() async {
-    if (_isSaving) return;
+    if (_isSaving) {
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       if (_editingUid.isNotEmpty) {
         final db = FirebaseFirestore.instance;
         final finalUsername = normalizeHandle(userNameController.text);
         final batch = db.batch();
-        final publicData = {'username': finalUsername, 'displayName': displayNameController.text.trim(), 'bio': bioController.text.trim(), 'photoUrl': _profilePhotoUrl, 'xHandle': xHandleController.text.trim().replaceAll('@', ''), 'instagramHandle': instagramHandleController.text.trim().replaceAll('@', ''), 'githubHandle': githubHandleController.text.trim().replaceAll('@', ''), 'updatedAt': FieldValue.serverTimestamp(), 'uid': _editingUid};
+        final publicData = {
+          'username': finalUsername,
+          'displayName': displayNameController.text.trim(),
+          'bio': bioController.text.trim(),
+          'photoUrl': _profilePhotoUrl,
+          'xHandle': xHandleController.text.trim().replaceAll('@', ''),
+          'instagramHandle': instagramHandleController.text.trim().replaceAll('@', ''),
+          'githubHandle': githubHandleController.text.trim().replaceAll('@', ''),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'uid': _editingUid,
+        };
         batch.set(db.collection('profiles').doc(_editingUid), publicData, SetOptions(merge: true));
-        final privateData = {'firstName': firstNameController.text.trim(), 'lastName': lastNameController.text.trim(), 'street1': street1Controller.text.trim(), 'street2': street2Controller.text.trim(), 'city': cityController.text.trim(), 'state': stateController.text.trim(), 'zipCode': zipController.text.trim(), 'country': countryController.text.trim(), 'updatedAt': FieldValue.serverTimestamp(), 'uid': _editingUid};
+        final privateData = {
+          'firstName': firstNameController.text.trim(),
+          'lastName': lastNameController.text.trim(),
+          'street1': street1Controller.text.trim(),
+          'street2': street2Controller.text.trim(),
+          'city': cityController.text.trim(),
+          'state': stateController.text.trim(),
+          'zipCode': zipController.text.trim(),
+          'country': countryController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'uid': _editingUid,
+        };
         batch.set(db.collection('Users').doc(_editingUid), privateData, SetOptions(merge: true));
         await batch.commit();
-        if (finalUsername.isNotEmpty && finalUsername != _initialUsername) await claimHandle(finalUsername);
+        if (finalUsername.isNotEmpty && finalUsername != _initialUsername) {
+          await claimHandle(finalUsername);
+        }
         _initialUsername = finalUsername;
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Saved!")));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Profile Saved!")),
+          );
+        }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error saving: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error saving: $e")),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -146,18 +196,54 @@ class _EditInfoWidgetState extends State<EditInfoWidget> {
     return Container(
       decoration: const BoxDecoration(color: Color(0xFFF1B255)),
       child: Padding(
-          padding: const EdgeInsets.all(25.0),
-          child: _isLoadingData ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('Profile Editor', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            TextField(controller: displayNameController, decoration: const InputDecoration(labelText: "Display Name", filled: true, fillColor: Colors.white)),
-            const SizedBox(height: 10),
-            TextField(controller: userNameController, decoration: const InputDecoration(labelText: "Username", filled: true, fillColor: Colors.white)),
-            const SizedBox(height: 10),
-            TextField(controller: bioController, maxLines: 3, decoration: const InputDecoration(labelText: "Bio", filled: true, fillColor: Colors.white)),
-            const SizedBox(height: 20),
-            ElevatedButton(onPressed: _isSaving ? null : saveProfile, child: Text(_isSaving ? "Saving..." : "Save Profile"))
-          ]))
+        padding: const EdgeInsets.all(25.0),
+        child: _isLoadingData
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Profile Editor',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: displayNameController,
+                decoration: const InputDecoration(
+                  labelText: "Display Name",
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: userNameController,
+                decoration: const InputDecoration(
+                  labelText: "Username",
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: bioController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: "Bio",
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _isSaving ? null : saveProfile,
+                child: Text(_isSaving ? "Saving..." : "Save Profile"),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

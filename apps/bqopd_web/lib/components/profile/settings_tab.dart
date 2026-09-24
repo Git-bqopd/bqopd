@@ -68,7 +68,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
   // Real-time Managed profiles streams
   List<Map<String, dynamic>> _managedProfiles = [];
-  bool _loadingManaged = true;
   FirebaseSubscription? _managedSub;
 
   // Real-time User Accounts list
@@ -183,8 +182,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   void _listenToManagedProfiles() {
     _managedSub?.callAsFunction();
     _managedSub = null;
-    setState(() => _loadingManaged = true);
-
     _managedSub = fsListenQuery('profiles', '', '', '', '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
@@ -194,10 +191,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           final String id = d['id'] as String? ?? '';
           if (id.isEmpty) continue;
           data['id'] = id;
-
           final List managers = data['managers'] ?? [];
           final String username = (data['username'] ?? '').toString().trim().toLowerCase();
-
           if (managers.contains(component.targetUserId)) {
             final String key = username.isNotEmpty ? username : id;
             if (!uniqueProfiles.containsKey(key)) {
@@ -209,12 +204,10 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         if (mounted) {
           setState(() {
             _managedProfiles = profiles;
-            _loadingManaged = false;
           });
         }
       } catch (e) {
         print("Error parsing managed profiles: $e");
-        if (mounted) setState(() => _loadingManaged = false);
       }
     });
   }
@@ -223,7 +216,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     _usersSub?.callAsFunction();
     _usersSub = null;
     setState(() => _loadingUsers = true);
-
     _usersSub = fsListenQuery('Users', '', '', '', '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
@@ -232,7 +224,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           data['id'] = d['id'];
           return data;
         }).toList();
-
         if (mounted) {
           setState(() {
             _allSystemUsers = users;
@@ -252,13 +243,11 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _settingsFeedback = "Saving global settings...";
       _isSettingsError = false;
     });
-
     try {
       await fsSetDoc('app_settings/main_settings', jsonEncode({
         'login_zine_shortcode': _loginZineShortcode.trim(),
         'register_zine_shortcode': _registerZineShortcode.trim()
       }), true);
-
       setState(() {
         _settingsFeedback = 'Global settings updated successfully!';
         _isSettingsError = false;
@@ -281,17 +270,14 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       });
       return;
     }
-
     setState(() {
       _isCreatingManagedProfile = true;
       _managedProfileFeedback = "Generating managed profile identity...";
       _isManagedProfileError = false;
     });
-
     try {
       final String baseHandle = normalizeHandle("${_newManagedFirstName.trim()} ${_newManagedLastName.trim()}");
       final String uniqueId = 'managed_${DateTime.now().millisecondsSinceEpoch}';
-
       final publicData = {
         'uid': uniqueId,
         'username': baseHandle,
@@ -306,7 +292,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'followingCount': 0,
         'updatedAt': WebFieldValue.serverTimestamp()
       };
-
       await fsSetDoc('profiles/$uniqueId', jsonEncode(publicData), true);
       await fsSetDoc('usernames/$baseHandle', jsonEncode({
         'uid': uniqueId,
@@ -319,7 +304,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'displayCode': baseHandle,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
-
       setState(() {
         _newManagedFirstName = '';
         _newManagedLastName = '';
@@ -343,22 +327,17 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _managedProfileFeedback = "Deleting managed profile @$username...";
       _isManagedProfileError = false;
     });
-
     try {
       final cleanUsername = username.trim().toLowerCase();
       final profileDocId = id.isNotEmpty ? id : cleanUsername;
-
       final List<Future<void>> deletions = [
         fsDeleteDoc('profiles/$profileDocId'),
       ];
-
       if (cleanUsername.isNotEmpty) {
         deletions.add(fsDeleteDoc('usernames/$cleanUsername'));
         deletions.add(fsDeleteDoc('shortcodes/${cleanUsername.toUpperCase()}'));
       }
-
       await Future.wait(deletions);
-
       setState(() {
         _managedProfileFeedback = "Managed profile @$username deleted successfully.";
         _isManagedProfileError = false;
@@ -377,19 +356,16 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _permissionFeedbackUid = uid;
       _permissionFeedback = "Updating access levels...";
     });
-
     try {
       final bool isCurator = newRole == 'curator' || newRole == 'admin' || newRole == 'moderator';
       await fsUpdateDoc('Users/$uid', jsonEncode({
         'role': newRole,
         'isCurator': isCurator
       }));
-
       await fsUpdateDoc('profiles/$uid', jsonEncode({
         'isCurator': isCurator,
         'isAdmin': newRole == 'admin'
       }));
-
       setState(() {
         _permissionFeedback = "Access privileges saved!";
       });
@@ -405,8 +381,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         [
           div(
             [
-              h3([text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin-top: 0;'}),
-              p([text("Initialize dedicated gallery portfolios representing historical creators or archives you manage.")], classes: 'text-xs text-gray italic mb-2', attributes: const {'style': 'margin: 0 0 8px 0;'}),
+              h3([Component.text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin-top: 0;'}),
+              p([Component.text("Initialize dedicated gallery portfolios representing historical creators or archives you manage.")], classes: 'text-xs text-gray italic mb-2', attributes: const {'style': 'margin: 0 0 8px 0;'}),
               div(
                 [
                   input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
@@ -417,11 +393,11 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               ),
               input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedBio = getInputValue(e)},),
               if (_managedProfileFeedback != null)
-                p([text(_managedProfileFeedback!)], attributes: {
+                p([Component.text(_managedProfileFeedback!)], attributes: {
                   'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isManagedProfileError ? "#ef4444" : "#16a34a"}'
                 }),
               button(
-                  [text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
+                  [Component.text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
                   classes: 'btn-primary nav-pill',
                   attributes: _isCreatingManagedProfile
                       ? const {'disabled': 'true', 'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px;'}
@@ -433,7 +409,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           ),
           if (_managedProfiles.isNotEmpty) ...[
             div([], attributes: const {'style': 'height: 24px;'}),
-            h3([text("PROFILES CURRENTLY UNDER YOUR MANAGEMENT")], classes: 'font-bold text-xs text-gray mt-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
+            h3([Component.text("PROFILES CURRENTLY UNDER YOUR MANAGEMENT")], classes: 'font-bold text-xs text-gray mt-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
             div(
                 [
                   for (var p in _managedProfiles)
@@ -444,8 +420,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                         [
                           a(
                               [
-                                span([text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'}),
-                                span([text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'})
+                                span([Component.text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'}),
+                                span([Component.text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'})
                               ],
                               href: '/@${p['username']}',
                               classes: 'hover:bg-gray-100 transition-all flex-1',
@@ -455,7 +431,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                           ),
                           button(
                               [
-                                span([text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})
+                                span([Component.text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})
                               ],
                               attributes: const {
                                 'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(0,0,0,0.04); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; transition: background 0.15s;'
@@ -489,12 +465,12 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   Component _buildShortcodesSettingsView() {
     return div(
         [
-          h2([text("GLOBAL CONGESTION ROUTING SHORTCODES")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
-          p([text("Configure the default shortcode bindings representing the Global 'Book of the Week' presented to guests on sign in or registration workflows.")], classes: 'text-xs text-gray italic leading-relaxed', attributes: const {'style': 'margin: 0;'}),
+          h2([Component.text("GLOBAL CONGESTION ROUTING SHORTCODES")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+          p([Component.text("Configure the default shortcode bindings representing the Global 'Book of the Week' presented to guests on sign in or registration workflows.")], classes: 'text-xs text-gray italic leading-relaxed', attributes: const {'style': 'margin: 0;'}),
           div([], attributes: const {'style': 'height: 12px;'}),
           div(
               [
-                span([text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
+                span([Component.text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
                 input(attributes: {'value': _loginZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _loginZineShortcode = getInputValue(e)})
               ],
               classes: 'flex-col gap-2',
@@ -502,7 +478,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           ),
           div(
               [
-                span([text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
+                span([Component.text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
                 input(attributes: {'value': _registerZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _registerZineShortcode = getInputValue(e)})
               ],
               classes: 'flex-col gap-2',
@@ -510,11 +486,11 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           ),
           div([], attributes: const {'style': 'height: 12px;'}),
           if (_settingsFeedback != null)
-            p([text(_settingsFeedback!)], attributes: {
+            p([Component.text(_settingsFeedback!)], attributes: {
               'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isSettingsError ? "#ef4444" : "#16a34a"}'
             }),
           button(
-              [text(_isSavingSettings ? "saving..." : "save settings")],
+              [Component.text(_isSavingSettings ? "saving..." : "save settings")],
               classes: 'btn-primary nav-pill',
               attributes: _isSavingSettings
                   ? const {'disabled': 'true', 'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px;'}
@@ -530,23 +506,21 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   Component _buildPermissionsSettingsView() {
     if (_loadingUsers) {
       return div(
-        [p([text('Loading system accounts...')])],
+        [p([Component.text('Loading system accounts...')])],
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     if (_allSystemUsers.isEmpty) {
       return div(
-        [p([text('No registered Users loaded.')], classes: 'text-sm text-gray italic')],
+        [p([Component.text('No registered Users loaded.')], classes: 'text-sm text-gray italic')],
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
-
     return div(
         [
-          h2([text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+          h2([Component.text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
           if (_permissionFeedback != null)
-            p([text(_permissionFeedback!)], attributes: const {
+            p([Component.text(_permissionFeedback!)], attributes: const {
               'style': 'font-size: 12px; font-weight: bold; color: #6750A4; margin-bottom: 12px;'
             }),
           for (var u in _allSystemUsers)
@@ -567,10 +541,10 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         [
           div(
               [
-                span([text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-                span([text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'}),
+                span([Component.text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
+                span([Component.text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'}),
                 if (isUserActiveInPerm && _permissionFeedback != null)
-                  span([text(_permissionFeedback!)], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #6750A4; margin-top: 2px;'})
+                  span([Component.text(_permissionFeedback!)], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #6750A4; margin-top: 2px;'})
               ],
               classes: 'flex-col gap-1',
               attributes: const {'style': 'display: flex; flex-direction: column; gap: 4px;'}
@@ -598,7 +572,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   Component _buildRoleBadgeSelector(String uid, String role, String activeRole) {
     final bool isSelected = activeRole == role;
     return button(
-        [text(role)],
+        [Component.text(role)],
         classes: isSelected ? 'active m3-chip' : 'm3-chip',
         attributes: const {
           'style': 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: none; text-transform: uppercase;'
@@ -615,7 +589,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     // 1. Shortcodes segment
     if (isViewerAdmin) {
       subTabs.add(span(
-          [text("shortcodes")],
+          [Component.text("shortcodes")],
           classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
             'click': (e) => _selectSubTab(0)
@@ -626,7 +600,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     // 2. Managed Profiles segment
     if (component.isMe || isViewerAdmin) {
       subTabs.add(span(
-          [text("managed profiles")],
+          [Component.text("managed profiles")],
           classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
             'click': (e) => _selectSubTab(1)
@@ -637,7 +611,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     // 3. Permissions segment
     if (isViewerAdmin) {
       subTabs.add(span(
-          [text("permissions")],
+          [Component.text("permissions")],
           classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
             'click': (e) => _selectSubTab(2)
@@ -648,7 +622,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     // 4. Social Buttons segment
     if (component.isMe) {
       subTabs.add(span(
-          [text("social buttons")],
+          [Component.text("social buttons")],
           classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
           events: {
             'click': (e) => _selectSubTab(3)
@@ -660,7 +634,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     for (int i = 0; i < subTabs.length; i++) {
       navItems.add(subTabs[i]);
       if (i < subTabs.length - 1) {
-        navItems.add(span([text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}));
+        navItems.add(span([Component.text('|')], classes: 'text-xs text-gray', attributes: const {'style': 'display: inline-block; margin: 0 8px;'}));
       }
     }
 
@@ -685,6 +659,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               _buildPermissionsSettingsView()
             else
               div([]),
+
         if (_pendingDeleteProfileId != null)
           ConfirmModal(
             title: 'Delete Managed Profile?',

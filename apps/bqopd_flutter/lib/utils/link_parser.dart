@@ -5,8 +5,15 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class LinkParser {
-  static final RegExp _wikiLinkRegex = RegExp(r'\[\[(.*?)\]\]');
-  static final RegExp _headerRegex = RegExp(r'^(#{1,6})\s+(.*)$', multiLine: true);
+  // ignore: deprecated_member_use
+  static final RegExp _wikiLinkRegex =
+  // ignore: deprecated_member_use
+  RegExp(r'\[\[(.*?)\]\]');
+
+  // ignore: deprecated_member_use
+  static final RegExp _headerRegex =
+  // ignore: deprecated_member_use
+  RegExp(r'^(#{1,6})\s+(.*)$', multiLine: true);
 
   static TextSpan renderLinks(
       BuildContext context,
@@ -26,24 +33,32 @@ class LinkParser {
         final double fontSize = (baseStyle?.fontSize ?? 16.0) + (4.0 * (6 - level));
         spans.add(TextSpan(
           children: _parseLineForLinks(
-              context,
-              content,
-              baseStyle?.copyWith(fontSize: fontSize, fontWeight: FontWeight.bold) ??
-                  TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
-              linkStyle),
+            context,
+            content,
+            baseStyle?.copyWith(fontSize: fontSize, fontWeight: FontWeight.bold) ??
+                TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+            linkStyle,
+          ),
         ));
         spans.add(const TextSpan(text: '\n'));
       } else {
         spans.add(TextSpan(
           children: _parseLineForLinks(context, line, baseStyle, linkStyle),
         ));
-        if (i < lines.length - 1) spans.add(const TextSpan(text: '\n'));
+        if (i < lines.length - 1) {
+          spans.add(const TextSpan(text: '\n'));
+        }
       }
     }
     return TextSpan(children: spans);
   }
 
-  static List<InlineSpan> _parseLineForLinks(BuildContext context, String lineText, TextStyle? style, TextStyle? linkStyle) {
+  static List<InlineSpan> _parseLineForLinks(
+      BuildContext context,
+      String lineText,
+      TextStyle? style,
+      TextStyle? linkStyle,
+      ) {
     final List<InlineSpan> spans = [];
     int currentIndex = 0;
     final matches = _wikiLinkRegex.allMatches(lineText);
@@ -55,7 +70,6 @@ class LinkParser {
       final parts = content.split('|');
       String display = '';
       String? ref;
-
       if (parts.length == 1) {
         display = parts[0].trim();
       } else if (parts.length == 2) {
@@ -69,11 +83,16 @@ class LinkParser {
         display = parts[1].trim();
         ref = parts[2].trim();
       }
-
       spans.add(TextSpan(
         text: display,
-        style: linkStyle ?? const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
-        recognizer: TapGestureRecognizer()..onTap = () => _handleLinkTap(context, ref ?? display),
+        style: linkStyle ??
+            const TextStyle(
+              color: Colors.blue,
+              fontWeight: FontWeight.bold,
+              decoration: TextDecoration.underline,
+            ),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () => _handleLinkTap(context, ref ?? display),
       ));
       currentIndex = match.end;
     }
@@ -92,12 +111,16 @@ class LinkParser {
         if (userDoc.exists) {
           final username = userDoc.data()?['username'];
           if (username != null) {
-            if (!context.mounted) return;
+            if (!context.mounted) {
+              return;
+            }
             context.go('/$username');
             return;
           }
         }
-        if (!context.mounted) return;
+        if (!context.mounted) {
+          return;
+        }
         context.pushNamed('editInfo', queryParameters: {'userId': id});
       } else if (parts[0] == 'fanzine') {
         context.push('/reader/$id');

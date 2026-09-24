@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import '../../../utils/web_firebase_interop.dart';
+import '../../../utils/web_utils.dart';
 
-/// Selection drawer for orphan library assets inside Curator scopes.
-/// Decoupled from Editor selection states.
+/// Modal dialog allowing curators to pick orphan images or library assets
+/// and attach them directly to the active fanzine sequence.
 class CuratorOrphanSelectorModal extends StatefulComponent {
   final String fanzineId;
   final String userId;
   final VoidCallback onCancel;
-  final Function(List<Map<String, dynamic>>) onAddSelected;
+  final void Function(List<Map<String, dynamic>> selected) onAddSelected;
 
   const CuratorOrphanSelectorModal({
     required this.fanzineId,
@@ -24,55 +24,60 @@ class CuratorOrphanSelectorModal extends StatefulComponent {
 }
 
 class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal> {
-  bool _loading = true;
+  bool _isLoading = true;
   List<Map<String, dynamic>> _orphanImages = [];
   final Set<String> _selectedImageIds = {};
-  dynamic _imagesUnsub;
 
   @override
   void initState() {
     super.initState();
-    _listenToOrphans();
+    _loadOrphanImages();
   }
 
-  @override
-  void dispose() {
-    _imagesUnsub?.callAsFunction(); // FIXED: Changed _imagesSub to _imagesUnsub and cancel() to callAsFunction()
-    super.dispose();
-  }
+  Future<void> _loadOrphanImages() async {
+    setState(() => _isLoading = true);
+    try {
+      final jsonStr = await fsQuery(
+        'images',
+        'uploaderId',
+        '==',
+        jsonEncode(component.userId),
+        '',
+      );
+      final List decoded = jsonDecode(jsonStr);
+      final List<Map<String, dynamic>> candidates = [];
 
-  void _listenToOrphans() {
-    _imagesUnsub?.callAsFunction(); // FIXED: Changed cancel() to callAsFunction()
-    _imagesUnsub = null;
+      for (var item in decoded) {
+        final data = item['data'] as Map<String, dynamic>;
+        data['id'] = item['id'];
+        final List usedIn = data['usedInFanzines'] ?? [];
+        final String? contextId = data['folioContext'];
 
-    // Listen in real-time to images uploaded by this user
-    _imagesUnsub = fsListenQuery('images', 'uploaderId', '==', jsonEncode(component.userId), '', false, (String jsonStr) {
-      try {
-        final List decoded = jsonDecode(jsonStr) as List;
-        final images = decoded.map((d) {
-          final data = d['data'] as Map<String, dynamic>;
-          data['id'] = d['id'];
-          return data;
-        }).toList();
-
-        // Filter out images that are already attached to this fanzine
-        final orphans = images.where((img) {
-          final List usedIn = img['usedInFanzines'] ?? [];
-          final String? contextId = img['folioContext'];
-          return contextId != component.fanzineId && !usedIn.contains(component.fanzineId);
-        }).toList();
-
-        if (mounted) {
-          setState(() {
-            _orphanImages = orphans;
-            _loading = false;
-          });
+        // Consider as candidate if not currently used in this fanzine
+        final bool isAlreadyInFolio = contextId == component.fanzineId || usedIn.contains(component.fanzineId);
+        if (!isAlreadyInFolio) {
+          candidates.add(data);
         }
-      } catch (e) {
-        print("Error listening to orphan library assets: $e");
-        if (mounted) setState(() => _loading = false);
       }
-    });
+
+      candidates.sort((a, b) {
+        final aT = a['timestamp'] ?? a['createdAt'] ?? '';
+        final bT = b['timestamp'] ?? b['createdAt'] ?? '';
+        return bT.toString().compareTo(aT.toString());
+      });
+
+      if (mounted) {
+        setState(() {
+          _orphanImages = candidates;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error loading orphan images in curator modal: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _toggleSelection(String id) {
@@ -86,149 +91,198 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
   }
 
   void _confirmSelection() {
-    final selectedMetadata = _orphanImages
+    final selectedDocs = _orphanImages
         .where((img) => _selectedImageIds.contains(img['id']))
         .toList();
-    component.onAddSelected(selectedMetadata);
+    component.onAddSelected(selectedDocs);
   }
 
   @override
   Component build(BuildContext context) {
+    final selectedCount = _selectedImageIds.length;
+
     return div(
       classes: 'global-modal-overlay',
       attributes: const {
-        'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.65); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);'
+        'style':
+        'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.65); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
       },
       [
         div(
+          classes: 'white-sticker shadow-lg',
           attributes: const {
-            'style': 'background-color: white; border-radius: 12px; width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: left; margin: 16px; box-sizing: border-box;'
+            'style':
+            'width: 90%; max-width: 640px; max-height: 80vh; background: white; border-radius: 12px; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px;'
           },
           [
-            // Modal Header
+            // Header Bar
             div(
               attributes: const {
-                'style': 'padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between;'
+                'style':
+                'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px;'
               },
               [
-                h2(
-                  [text("Select Orphan Images to Add (${_selectedImageIds.length})")],
+                h3(
+                  [Component.text('Select Images from Library')],
                   attributes: const {
-                    'style': 'font-size: 16px; font-weight: bold; margin: 0; color: #1a1a1a;'
+                    'style':
+                    'margin: 0; font-size: 16px; font-weight: bold; color: #111;'
                   },
                 ),
-                div(
-                  attributes: const {'style': 'display: flex; gap: 8px; align-items: center;'},
-                  [
-                    if (_selectedImageIds.isNotEmpty)
-                      button(
-                        [text("add selected")],
-                        attributes: const {
-                          'style': 'background-color: #6750A4; color: white; border: none; border-radius: 20px; padding: 6px 14px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.15s;'
-                        },
-                        events: {
-                          'click': (e) => _confirmSelection(),
-                        },
-                      ),
-                    button(
-                      [text("×")],
-                      attributes: const {
-                        'style': 'border: none; background: #f3f4f6; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; font-weight: bold; transition: background 0.15s;'
-                      },
-                      events: {
-                        'click': (e) => component.onCancel(),
-                      },
-                    )
-                  ],
-                )
+                span(
+                  [Component.text('${_orphanImages.length} available')],
+                  attributes: const {'style': 'font-size: 12px; color: #888;'},
+                ),
               ],
             ),
 
-            // Modal Body Grid
+            // Content Area
+            if (_isLoading)
+              div(
+                [Component.text('Loading candidate images...')],
+                attributes: const {
+                  'style':
+                  'padding: 40px; text-align: center; color: #888; font-size: 13px; font-style: italic;'
+                },
+              )
+            else if (_orphanImages.isEmpty)
+              div(
+                attributes: const {
+                  'style':
+                  'padding: 40px; text-align: center; color: #888; font-size: 13px; font-style: italic;'
+                },
+                [
+                  span(
+                    [Component.text('photo_library')],
+                    classes: 'material-symbols-outlined',
+                    attributes: const {'style': 'font-size: 36px; color: #ccc; margin-bottom: 8px; display: block;'},
+                  ),
+                  Component.text('No available orphan images found in your master library.'),
+                ],
+              )
+            else
+              div(
+                attributes: const {
+                  'style':
+                  'display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; overflow-y: auto; max-height: 50vh; padding: 4px;'
+                },
+                [
+                  for (var img in _orphanImages)
+                    _buildImageTile(img),
+                ],
+              ),
+
+            // Footer Action Bar
             div(
               attributes: const {
-                'style': 'padding: 20px; overflow-y: auto; flex: 1; box-sizing: border-box; min-height: 180px;'
+                'style':
+                'display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #eee; padding-top: 12px; margin-top: auto;'
               },
               [
-                if (_loading)
-                  div(
-                    [text("Loading gallery...")],
-                    attributes: const {
-                      'style': 'text-align: center; padding: 40px 0; color: #888; font-style: italic; font-size: 13px;'
+                button(
+                  [Component.text('cancel')],
+                  classes: 'profile-btn',
+                  attributes: const {
+                    'type': 'button',
+                    'style':
+                    'padding: 8px 16px; font-size: 11px; font-weight: bold; border: 1px solid #ccc; background: white; color: #444; border-radius: 6px; cursor: pointer;'
+                  },
+                  events: {
+                    'click': (e) => component.onCancel(),
+                  },
+                ),
+                button(
+                  [Component.text(selectedCount > 0 ? 'add selected ($selectedCount)' : 'add selected')],
+                  attributes: {
+                    'type': 'button',
+                    'style':
+                    'padding: 8px 18px; font-size: 11px; font-weight: bold; border: none; border-radius: 6px; cursor: ${selectedCount > 0 ? "pointer" : "default"}; color: white; background-color: ${selectedCount > 0 ? "#6750A4" : "#ccc"};',
+                    if (selectedCount == 0) 'disabled': 'true',
+                  },
+                  events: {
+                    'click': (e) {
+                      if (selectedCount > 0) {
+                        _confirmSelection();
+                      }
                     },
-                  )
-                else if (_orphanImages.isEmpty)
-                  div(
-                    [
-                      span([text('image_not_supported')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 48px; color: #ccc;'}),
-                      p([text("No orphan images available in your library.")], attributes: const {'style': 'font-size: 13px; font-style: italic; margin-top: 8px; margin-bottom: 0;'})
-                    ],
-                    attributes: const {
-                      'style': 'display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 0; color: #888;'
-                    },
-                  )
-                else
-                  div(
-                    attributes: const {
-                      'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; width: 100%; box-sizing: border-box;'
-                    },
-                    [
-                      for (var imgData in _orphanImages)
-                        _buildOrphanGridItem(imgData)
-                    ],
-                  )
+                  },
+                ),
               ],
-            )
+            ),
           ],
-        )
+        ),
       ],
     );
   }
 
-  Component _buildOrphanGridItem(Map<String, dynamic> imgData) {
-    final String imageId = imgData['id'] ?? '';
-    final bool isSelected = _selectedImageIds.contains(imageId);
-    final String? thumbUrl = imgData['gridUrl'] ?? imgData['fileUrl'];
+  Component _buildImageTile(Map<String, dynamic> imageDoc) {
+    final String id = imageDoc['id'] ?? '';
+    final String? optimalUrl = imageDoc['gridUrl'] ?? imageDoc['fileUrl'];
+    final String title = imageDoc['title'] ?? imageDoc['fileName'] ?? 'untitled';
+    final int width = imageDoc['width'] ?? 0;
+    final int height = imageDoc['height'] ?? 0;
+    final bool isSelected = _selectedImageIds.contains(id);
 
     return div(
       attributes: {
-        'style': 'aspect-ratio: 5/8; background-color: #f3f4f6; border-radius: 6px; overflow: hidden; border: 2.5px solid ${isSelected ? '#6750A4' : 'transparent'}; position: relative; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: border-color 0.15s;'
+        'style':
+        'aspect-ratio: 5 / 8; background-color: #f5f5f5; border: 2px solid ${isSelected ? "#6750A4" : "rgba(0,0,0,0.1)"}; border-radius: 6px; position: relative; overflow: hidden; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'
       },
       events: {
-        'click': (e) => _toggleSelection(imageId),
+        'click': (e) => _toggleSelection(id),
       },
       [
-        if (thumbUrl != null && thumbUrl.isNotEmpty)
+        if (optimalUrl != null && optimalUrl.isNotEmpty)
           img(
-              src: thumbUrl,
-              attributes: const {
-                'style': 'width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-select: none; user-select: none;'
-              }
+            src: optimalUrl,
+            attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover; display: block;'},
           )
         else
           div(
-              [text("no preview")],
-              attributes: const {
-                'style': 'display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 11px;'
-              }
+            [Component.text('no preview')],
+            attributes: const {
+              'style':
+              'display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 10px;'
+            },
           ),
-
-        // Selected Status Icon Badge
+        // Selection Checkmark Badge
         if (isSelected)
           div(
             [
               span(
-                [text('check')],
+                [Component.text('check_circle')],
                 classes: 'material-symbols-outlined',
-                attributes: const {
-                  'style': 'font-size: 12px; color: white; font-weight: bold;'
-                },
+                attributes: const {'style': 'font-size: 20px; color: #6750A4; background: white; border-radius: 50%;'},
               )
             ],
             attributes: const {
-              'style': 'position: absolute; top: 6px; right: 6px; background-color: #6750A4; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.2);'
+              'style': 'position: absolute; top: 4px; right: 4px;'
             },
-          )
+          ),
+        // Dimension badge
+        div(
+          [Component.text('${width}x$height')],
+          attributes: const {
+            'style':
+            'position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,0.65); color: white; font-size: 8px; font-weight: bold; border-radius: 3px; padding: 2px 4px;'
+          },
+        ),
+        // Bottom Title Label
+        div(
+          [
+            span(
+              [Component.text(title.toLowerCase())],
+              attributes: const {
+                'style':
+                'font-size: 8px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; text-align: center;'
+              },
+            )
+          ],
+          attributes: const {
+            'style':
+            'position: absolute; bottom: 0; left: 0; right: 0; background-color: rgba(0,0,0,0.65); padding: 4px 6px; text-align: center;'
+          },
+        ),
       ],
     );
   }

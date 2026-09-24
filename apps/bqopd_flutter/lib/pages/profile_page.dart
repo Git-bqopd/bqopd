@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../services/username_service.dart';
 import '../services/user_bootstrap.dart';
 import '../services/user_provider.dart';
@@ -37,7 +38,6 @@ class ProfilePage extends StatelessWidget {
     final extra = GoRouterState.of(context).extra;
     final extraMap = extra is Map<String, dynamic> ? extra : null;
     final queryParams = GoRouterState.of(context).uri.queryParameters;
-
     final isMe = targetUserId == currentUid;
     final prefs = userProvider.userAccount?.preferences['profile'] as Map<String, dynamic>? ?? {};
 
@@ -59,7 +59,6 @@ class ProfilePage extends StatelessWidget {
 
     return BlocProvider(
       create: (context) => ProfileBloc(
-        // FIXED: Use Interfaces for lookup instead of concrete classes to align with Phase 5 core
         userRepository: context.read<IUserRepository>(),
         engagementRepository: context.read<IEngagementRepository>(),
       )..add(LoadProfileRequested(
@@ -100,7 +99,6 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   int _indexSubTabIndex = 0;
   int _settingsSubTabIndex = 0;
   bool _isUploadingPdf = false;
-
   final _loginZineController = TextEditingController();
   final _registerZineController = TextEditingController();
   final _firstNameController = TextEditingController();
@@ -159,10 +157,13 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   }
 
   void _savePrefs({String? newMainTab}) {
-    if (!widget.isMe) return;
+    if (!widget.isMe) {
+      return;
+    }
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
+    if (uid == null) {
+      return;
+    }
     String mainTab = newMainTab ?? '';
     if (mainTab.isEmpty) {
       try {
@@ -172,9 +173,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         }
       } catch (_) {}
     }
-
-    if (mainTab.isEmpty) return;
-
+    if (mainTab.isEmpty) {
+      return;
+    }
     FirebaseFirestore.instance.collection('Users').doc(uid).update({
       'preferences.profile': {
         'mainTab': mainTab,
@@ -201,9 +202,15 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   bool _canEdit(String uid, bool isManaged, List<String> managers) {
     final provider = Provider.of<UserProvider>(context, listen: false);
     final currentUid = provider.currentUserId;
-    if (currentUid == null) return false;
-    if (uid == currentUid) return true;
-    if (isManaged && managers.contains(currentUid)) return true;
+    if (currentUid == null) {
+      return false;
+    }
+    if (uid == currentUid) {
+      return true;
+    }
+    if (isManaged && managers.contains(currentUid)) {
+      return true;
+    }
     return false;
   }
 
@@ -308,10 +315,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         'shortCodeKey': shortCode.toUpperCase(),
         'twoPage': true,
       });
-
       await fanzineRef.collection('pages').add({'pageNumber': 1, 'templateId': 'calendar_left', 'status': 'ready'});
       await fanzineRef.collection('pages').add({'pageNumber': 2, 'templateId': 'calendar_right', 'status': 'ready'});
-
       if (mounted) {
         context.push('/editor/${fanzineRef.id}');
       }
@@ -323,7 +328,9 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   }
 
   Future<void> _handlePdfUpload(String userId) async {
-    if (_isUploadingPdf) return;
+    if (_isUploadingPdf) {
+      return;
+    }
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf'], withData: true);
       if (result != null) {
@@ -340,9 +347,13 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
         }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload Error: $e')));
+      }
     } finally {
-      if (mounted) setState(() => _isUploadingPdf = false);
+      if (mounted) {
+        setState(() => _isUploadingPdf = false);
+      }
     }
   }
 
@@ -353,10 +364,16 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     }
     try {
       await createManagedProfile(firstName: _firstNameController.text, lastName: _lastNameController.text, bio: _bioController.text);
-      _firstNameController.clear(); _lastNameController.clear(); _bioController.clear();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Managed Profile Created!')));
+      _firstNameController.clear();
+      _lastNameController.clear();
+      _bioController.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Managed Profile Created!')));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error creating profile: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error creating profile: $e')));
+      }
     }
   }
 
@@ -398,12 +415,17 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           }
         },
         builder: (context, state) {
-          if (state.isLoading) return const Center(child: CircularProgressIndicator());
-          if (state.userData == null) return const Center(child: Text("Profile not found."));
-
+          if (state.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state.userData == null) {
+            return const Center(child: Text("Profile not found."));
+          }
           final userData = state.userData!;
           final targetUserId = userData.uid;
-          final String profileName = (userData.displayName != null && userData.displayName!.trim().isNotEmpty) ? userData.displayName! : userData.username;
+          final String profileName = userData.displayName.trim().isNotEmpty
+              ? userData.displayName
+              : userData.username;
           final userProvider = context.read<UserProvider>();
           final isOwner = userProvider.currentUserId == targetUserId;
           final canEditProfile = _canEdit(userData.uid, userData.isManaged, userData.managers);
@@ -440,10 +462,17 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                           onTabChanged: (idx) {
                             context.read<ProfileBloc>().add(ChangeTabRequested(idx));
                             if (!widget.isMe) {
-                              setState(() { _showDrafts = false; _curatorSubTabIndex = 0; _indexSubTabIndex = 0; _settingsSubTabIndex = 0; });
+                              setState(() {
+                                _showDrafts = false;
+                                _curatorSubTabIndex = 0;
+                                _indexSubTabIndex = 0;
+                                _settingsSubTabIndex = 0;
+                              });
                             }
                             final tabs = context.read<ProfileBloc>().state.visibleTabs;
-                            if (idx < tabs.length) _savePrefs(newMainTab: tabs[idx]);
+                            if (idx < tabs.length) {
+                              _savePrefs(newMainTab: tabs[idx]);
+                            }
                           },
                           canEdit: canEditProfile,
                           onUploadImage: () => _showImageUpload(targetUserId),
@@ -538,13 +567,19 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                                 ),
                               if (isOwner) const SizedBox(width: 12),
                               GestureDetector(
-                                onTap: () { setState(() => _showDrafts = false); _savePrefs(); },
+                                onTap: () {
+                                  setState(() => _showDrafts = false);
+                                  _savePrefs();
+                                },
                                 child: Text("published", style: TextStyle(color: !_showDrafts ? Colors.black : Colors.grey, fontWeight: !_showDrafts ? FontWeight.bold : FontWeight.normal, decoration: !_showDrafts ? TextDecoration.underline : null)),
                               ),
                               if (canSeeDrafts) ...[
                                 const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text("|", style: TextStyle(color: Colors.grey))),
                                 GestureDetector(
-                                  onTap: () { setState(() => _showDrafts = true); _savePrefs(); },
+                                  onTap: () {
+                                    setState(() => _showDrafts = true);
+                                    _savePrefs();
+                                  },
                                   child: Text("drafts", style: TextStyle(color: _showDrafts ? Colors.black : Colors.grey, fontWeight: _showDrafts ? FontWeight.bold : FontWeight.normal, decoration: _showDrafts ? TextDecoration.underline : null)),
                                 ),
                               ],
@@ -589,9 +624,13 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     return GestureDetector(
       onTap: () {
         setState(() {
-          if (type == 'curator') _curatorSubTabIndex = index;
-          else if (type == 'index') _indexSubTabIndex = index;
-          else _settingsSubTabIndex = index;
+          if (type == 'curator') {
+            _curatorSubTabIndex = index;
+          } else if (type == 'index') {
+            _indexSubTabIndex = index;
+          } else {
+            _settingsSubTabIndex = index;
+          }
         });
         _savePrefs();
       },
@@ -602,16 +641,23 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   Widget _buildContentSliver(String targetUserId, bool isOwner, String activeTab, bool canSeeDrafts, String profileName) {
     switch (activeTab) {
       case 'settings':
-        if (_settingsSubTabIndex == 3) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: SocialMatrixTab())));
+        if (_settingsSubTabIndex == 3) {
+          return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: SocialMatrixTab())));
+        }
         return _buildSettingsSubView(targetUserId);
       case 'curator':
-        if (_curatorSubTabIndex == 2) return _buildEntitiesSubView(targetUserId);
-        else if (_curatorSubTabIndex == 3) return _buildAITrainingDataSubView(targetUserId);
+        if (_curatorSubTabIndex == 2) {
+          return _buildEntitiesSubView(targetUserId);
+        } else if (_curatorSubTabIndex == 3) {
+          return _buildAITrainingDataSubView(targetUserId);
+        }
         return _buildCuratorSubView(targetUserId, canSeeDrafts);
       case 'maker':
         return _MakerCombinedView(targetUserId: targetUserId, showDrafts: _showDrafts && canSeeDrafts);
       case 'index':
-        if (_indexSubTabIndex == 1) return _UserCommentsView(userId: targetUserId);
+        if (_indexSubTabIndex == 1) {
+          return _UserCommentsView(userId: targetUserId);
+        }
         return _buildIndexSubView(profileName);
       case 'collection':
         return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Collection Coming Soon"))));
@@ -624,8 +670,12 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('images').where('isTrainingData', isEqualTo: true).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
-        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
+        }
+        if (!snapshot.hasData) {
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        }
         final docs = snapshot.data!.docs;
         final List<Map<String, dynamic>> trainingCandidates = [];
         for (var doc in docs) {
@@ -636,19 +686,40 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
             String displayTitle = data['title'] ?? data['fileName'] ?? 'Untitled';
             final wNum = (data['wholeNumber'] ?? '').toString().trim();
             final iss = (data['issue'] ?? '').toString().trim();
-            if (wNum.isNotEmpty) displayTitle = "$displayTitle $wNum";
-            else if (iss.isNotEmpty) displayTitle = "$displayTitle $iss";
-            trainingCandidates.add({'id': doc.id, 'title': displayTitle, 'correctionScore': correctionScore, 'linkingScore': linkingScore, 'fileUrl': data['fileUrl'] ?? data['gridUrl'], 'folioContext': data['folioContext']});
+            if (wNum.isNotEmpty) {
+              displayTitle = "$displayTitle $wNum";
+            } else if (iss.isNotEmpty) {
+              displayTitle = "$displayTitle $iss";
+            }
+            trainingCandidates.add({
+              'id': doc.id,
+              'title': displayTitle,
+              'correctionScore': correctionScore,
+              'linkingScore': linkingScore,
+              'fileUrl': data['fileUrl'] ?? data['gridUrl'],
+              'folioContext': data['folioContext'],
+            });
           }
         }
-        if (trainingCandidates.isEmpty) return const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(48.0), child: Center(child: Text("No training data yet.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic), textAlign: TextAlign.center))));
+        if (trainingCandidates.isEmpty) {
+          return const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(48.0), child: Center(child: Text("No training data yet.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic), textAlign: TextAlign.center))));
+        }
         trainingCandidates.sort((a, b) => ((b['correctionScore'] as int) + (b['linkingScore'] as int)).compareTo((a['correctionScore'] as int) + (a['linkingScore'] as int)));
         return SliverPadding(
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              final item = trainingCandidates[index]; final String? folioContext = item['folioContext'];
-              Widget buildCard(String title) => Card(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)), child: ListTile(leading: item['fileUrl'] != null ? Image.network(item['fileUrl'], width: 40, height: 40, fit: BoxFit.cover) : const Icon(Icons.image), title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), subtitle: Text("Correction Edits: ${item['correctionScore']} | Link Edits: ${item['linkingScore']}", style: const TextStyle(fontSize: 11))));
+              final item = trainingCandidates[index];
+              final String? folioContext = item['folioContext'];
+              Widget buildCard(String title) => Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
+                child: ListTile(
+                  leading: item['fileUrl'] != null ? Image.network(item['fileUrl'], width: 40, height: 40, fit: BoxFit.cover) : const Icon(Icons.image),
+                  title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text("Correction Edits: ${item['correctionScore']} | Link Edits: ${item['linkingScore']}", style: const TextStyle(fontSize: 11)),
+                ),
+              );
               if (folioContext != null && folioContext.isNotEmpty) {
                 return FutureBuilder<DocumentSnapshot>(
                   future: FirebaseFirestore.instance.collection('fanzines').doc(folioContext).get(),
@@ -659,9 +730,13 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
                       final fzTitle = fzData['title'] ?? 'Untitled';
                       final wNum = (fzData['wholeNumber'] ?? '').toString().trim();
                       final iss = (fzData['issue'] ?? '').toString().trim();
-                      if (wNum.isNotEmpty) finalTitle = "$fzTitle $wNum";
-                      else if (iss.isNotEmpty) finalTitle = "$fzTitle $iss";
-                      else finalTitle = fzTitle;
+                      if (wNum.isNotEmpty) {
+                        finalTitle = "$fzTitle $wNum";
+                      } else if (iss.isNotEmpty) {
+                        finalTitle = "$fzTitle $iss";
+                      } else {
+                        finalTitle = fzTitle;
+                      }
                     }
                     return buildCard(finalTitle);
                   },
@@ -679,13 +754,19 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
       builder: (context, snap) {
-        if (snap.hasError) return SliverToBoxAdapter(child: Center(child: Text("Error: ${snap.error}", style: const TextStyle(color: Colors.grey))));
-        if (!snap.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        if (snap.hasError) {
+          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snap.error}", style: const TextStyle(color: Colors.grey))));
+        }
+        if (!snap.hasData) {
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        }
         final filtered = snap.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
           final bool isTargetUserItem = (owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId));
-          if (!isTargetUserItem) return false;
+          if (!isTargetUserItem) {
+            return false;
+          }
           final hasSource = data.containsKey('sourceFile');
           final isLive = data['isLive'] ?? false;
           return (_curatorSubTabIndex == 0) ? (hasSource && !isLive) : (!hasSource || isLive);
@@ -700,10 +781,16 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').where('draftEntities', arrayContains: profileName).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) return SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Error loading mentions: ${snapshot.error}", style: const TextStyle(fontSize: 10, color: Colors.grey)))));
-        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("Error loading mentions: ${snapshot.error}", style: const TextStyle(fontSize: 10, color: Colors.grey)))));
+        }
+        if (!snapshot.hasData) {
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        }
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No mentions found.", style: TextStyle(color: Colors.grey)))));
+        if (docs.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No mentions found.", style: TextStyle(color: Colors.grey)))));
+        }
         return _buildGrid(docs, false, thumbnailOnly: true);
       },
     );
@@ -712,62 +799,203 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   Widget _buildSettingsSubView(String targetUserId) {
     final userProvider = context.read<UserProvider>();
     if (_settingsSubTabIndex == 0) {
-      return SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.all(24.0), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const Text("GLOBAL APP SHORTCODES", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey, letterSpacing: 1.2)), const SizedBox(height: 24), TextField(controller: _loginZineController, decoration: const InputDecoration(labelText: 'Login Zine ShortCode', border: OutlineInputBorder(), isDense: true)), const SizedBox(height: 16), TextField(controller: _registerZineController, decoration: const InputDecoration(labelText: 'Register Zine ShortCode', border: OutlineInputBorder(), isDense: true)), const SizedBox(height: 24), ElevatedButton(onPressed: _saveGlobalShortcodes, style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)), child: const Text("SAVE CONFIGURATION", style: TextStyle(fontWeight: FontWeight.bold)))])));
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text("GLOBAL APP SHORTCODES", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey, letterSpacing: 1.2)),
+              const SizedBox(height: 24),
+              TextField(controller: _loginZineController, decoration: const InputDecoration(labelText: 'Login Zine ShortCode', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 16),
+              TextField(controller: _registerZineController, decoration: const InputDecoration(labelText: 'Register Zine ShortCode', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _saveGlobalShortcodes,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                child: const Text("SAVE CONFIGURATION", style: TextStyle(fontWeight: FontWeight.bold)),
+              )
+            ],
+          ),
+        ),
+      );
     } else if (_settingsSubTabIndex == 1) {
       return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('profiles').where('isManaged', isEqualTo: true).where('managers', arrayContains: targetUserId).snapshots(),
-          builder: (context, snapshot) {
-            final List<Widget> buttons = [_QuickActionTile(label: "+ managed profile", color: Colors.grey.shade800, onTap: _showCreateManagedProfileDialog)];
-            if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-            final docs = snapshot.data!.docs;
-            return SliverPadding(padding: const EdgeInsets.all(8.0), sliver: SliverGrid(gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8), delegate: SliverChildBuilderDelegate((context, index) { if (index < buttons.length) return buttons[index]; return _MakerItemTile(doc: docs[index - buttons.length], shouldEdit: true); }, childCount: docs.length + buttons.length)));
+        stream: FirebaseFirestore.instance.collection('profiles').where('isManaged', isEqualTo: true).where('managers', arrayContains: targetUserId).snapshots(),
+        builder: (context, snapshot) {
+          final List<Widget> buttons = [_QuickActionTile(label: "+ managed profile", color: Colors.grey.shade800, onTap: _showCreateManagedProfileDialog)];
+          if (!snapshot.hasData) {
+            return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
           }
+          final docs = snapshot.data!.docs;
+          return SliverPadding(
+            padding: const EdgeInsets.all(8.0),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
+              delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                  if (index < buttons.length) {
+                    return buttons[index];
+                  }
+                  return _MakerItemTile(doc: docs[index - buttons.length], shouldEdit: true);
+                },
+                childCount: docs.length + buttons.length,
+              ),
+            ),
+          );
+        },
       );
     } else if (_settingsSubTabIndex == 2) {
-      if (!userProvider.isAdmin) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("Access restricted to Administrators."))));
+      if (!userProvider.isAdmin) {
+        return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("Access restricted to Administrators."))));
+      }
       return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('Users').snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-            final docs = snapshot.data!.docs;
-            return SliverPadding(padding: const EdgeInsets.all(16), sliver: SliverList(delegate: SliverChildBuilderDelegate((context, index) {
-              final uid = docs[index].id; final userData = docs[index].data() as Map<String, dynamic>;
-              final dynamic rolesData = userData['roles']; final Set<String> selectedRolesSet = rolesData != null ? Set<String>.from(rolesData) : (userData['role'] != null && userData['role'] != 'user' ? {userData['role']} : <String>{});
-              return FutureBuilder<DocumentSnapshot>(
-                  future: FirebaseFirestore.instance.collection('profiles').doc(uid).get(),
-                  builder: (context, profileSnap) {
-                    final pData = profileSnap.data?.data() as Map?; final name = pData?['displayName'] ?? pData?['username'] ?? 'unknown'; final username = pData?['username'] ?? 'unknown';
-                    return Card(margin: const EdgeInsets.only(bottom: 12), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)), child: ListTile(title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), subtitle: Text("UID: $uid", style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'monospace')), trailing: Row(mainAxisSize: MainAxisSize.min, children: [InkWell(onTap: () => context.go('/$username'), child: Text('/$username', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline))), const SizedBox(width: 16), SegmentedButton<String>(showSelectedIcon: false, segments: const [ButtonSegment(value: 'admin', label: Text('ADMIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))), ButtonSegment(value: 'moderator', label: Text('MODERATOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))), ButtonSegment(value: 'curator', label: Text('CURATOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)))], selected: selectedRolesSet, onSelectionChanged: (newSelection) async { if (!context.read<UserProvider>().isAdmin) return; final rolesList = newSelection.toList(); final bool isCurator = newSelection.contains('curator'); final bool isAdmin = newSelection.contains('admin'); final bool isModerator = newSelection.contains('moderator'); String legacyRole = 'user'; if (isAdmin) legacyRole = 'admin'; else if (isModerator) legacyRole = 'moderator'; else if (isCurator) legacyRole = 'curator'; final batch = FirebaseFirestore.instance.batch(); batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {'roles': rolesList, 'role': legacyRole, 'isCurator': isCurator || isAdmin || isModerator}); batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {'isCurator': isCurator || isAdmin || isModerator, 'isAdmin': isAdmin}); await batch.commit(); }, multiSelectionEnabled: true, emptySelectionAllowed: true)])));
-                  }
-              );
-            }, childCount: docs.length)));
+        stream: FirebaseFirestore.instance.collection('Users').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
           }
+          final docs = snapshot.data!.docs;
+          return SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                  final uid = docs[index].id;
+                  final userData = docs[index].data() as Map<String, dynamic>;
+                  final dynamic rolesData = userData['roles'];
+                  final Set<String> selectedRolesSet = rolesData != null
+                      ? Set<String>.from(rolesData)
+                      : (userData['role'] != null && userData['role'] != 'user' ? {userData['role']} : <String>{});
+                  return FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance.collection('profiles').doc(uid).get(),
+                    builder: (context, profileSnap) {
+                      final pData = profileSnap.data?.data() as Map?;
+                      final name = pData?['displayName'] ?? pData?['username'] ?? 'unknown';
+                      final username = pData?['username'] ?? 'unknown';
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
+                        child: ListTile(
+                          title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          subtitle: Text("UID: $uid", style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'monospace')),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: () => context.go('/$username'),
+                                child: Text('/$username', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline)),
+                              ),
+                              const SizedBox(width: 16),
+                              SegmentedButton<String>(
+                                showSelectedIcon: false,
+                                segments: const [
+                                  ButtonSegment(value: 'admin', label: Text('ADMIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                                  ButtonSegment(value: 'moderator', label: Text('MODERATOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                                  ButtonSegment(value: 'curator', label: Text('CURATOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                                ],
+                                selected: selectedRolesSet,
+                                onSelectionChanged: (newSelection) async {
+                                  if (!context.read<UserProvider>().isAdmin) {
+                                    return;
+                                  }
+                                  final rolesList = newSelection.toList();
+                                  final bool isCurator = newSelection.contains('curator');
+                                  final bool isAdmin = newSelection.contains('admin');
+                                  final bool isModerator = newSelection.contains('moderator');
+                                  String legacyRole = 'user';
+                                  if (isAdmin) {
+                                    legacyRole = 'admin';
+                                  } else if (isModerator) {
+                                    legacyRole = 'moderator';
+                                  } else if (isCurator) {
+                                    legacyRole = 'curator';
+                                  }
+                                  final batch = FirebaseFirestore.instance.batch();
+                                  batch.update(FirebaseFirestore.instance.collection('Users').doc(uid), {
+                                    'roles': rolesList,
+                                    'role': legacyRole,
+                                    'isCurator': isCurator || isAdmin || isModerator,
+                                  });
+                                  batch.update(FirebaseFirestore.instance.collection('profiles').doc(uid), {
+                                    'isCurator': isCurator || isAdmin || isModerator,
+                                    'isAdmin': isAdmin,
+                                  });
+                                  await batch.commit();
+                                },
+                                multiSelectionEnabled: true,
+                                emptySelectionAllowed: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+                childCount: docs.length,
+              ),
+            ),
+          );
+        },
       );
-    } return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
 
   Widget _buildGrid(List<dynamic> docs, bool edit, {bool isDraftView = false, bool thumbnailOnly = false}) {
-    return SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 8.0), sliver: SliverGrid(gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8), delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: docs[index], shouldEdit: edit, isDraftView: isDraftView, thumbnailOnly: thumbnailOnly), childCount: docs.length)));
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
+        delegate: SliverChildBuilderDelegate(
+              (context, index) => _MakerItemTile(doc: docs[index], shouldEdit: edit, isDraftView: isDraftView, thumbnailOnly: thumbnailOnly),
+          childCount: docs.length,
+        ),
+      ),
+    );
   }
 
   Widget _buildEntitiesSubView(String targetUserId) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
-        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(child: Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.grey))));
+        }
+        if (!snapshot.hasData) {
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        }
         final Map<String, int> entityCounts = {};
         for (var doc in snapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
           final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
-          if (!(owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId))) continue;
-          if (!data.containsKey('sourceFile') || (data['isLive'] ?? false)) continue;
-          final entities = List<String>.from(data['draftEntities'] ?? []);
-          for (var name in entities) entityCounts[name] = (entityCounts[name] ?? 0) + 1;
+          if (!(owner == targetUserId || (data['editors'] as List? ?? []).contains(targetUserId))) {
+            continue;
+          }
+          if (!data.containsKey('sourceFile') || (data['isLive'] ?? false)) {
+            continue;
+          }
+          final entities = List.from(data['draftEntities'] ?? []);
+          for (var name in entities) {
+            entityCounts[name] = (entityCounts[name] ?? 0) + 1;
+          }
         }
-        if (entityCounts.isEmpty) return const SliverToBoxAdapter(child: Center(child: Text("No entities found.")));
+        if (entityCounts.isEmpty) {
+          return const SliverToBoxAdapter(child: Center(child: Text("No entities found.")));
+        }
         final sortedNames = entityCounts.keys.toList()..sort((a, b) => entityCounts[b]!.compareTo(entityCounts[a]!));
-        return SliverPadding(padding: const EdgeInsets.all(16), sliver: SliverList(delegate: SliverChildBuilderDelegate((context, index) => _EntityRow(name: sortedNames[index], count: entityCounts[sortedNames[index]]!), childCount: sortedNames.length)));
+        return SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+                  (context, index) => _EntityRow(name: sortedNames[index], count: entityCounts[sortedNames[index]]!),
+              childCount: sortedNames.length,
+            ),
+          ),
+        );
       },
     );
   }
@@ -776,60 +1004,111 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
 class _UserCommentsView extends StatelessWidget {
   final String userId;
   const _UserCommentsView({required this.userId});
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('artifacts').doc('bqopd').collection('public').doc('data').collection('comments').where('userId', isEqualTo: userId).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
-        if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        if (snapshot.hasError) {
+          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
+        }
+        if (!snapshot.hasData) {
+          return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+        }
         final docs = snapshot.data!.docs.toList();
-        if (docs.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
-        docs.sort((a, b) { final aT = (a.data() as Map)['createdAt'] as Timestamp?; final bT = (b.data() as Map)['createdAt'] as Timestamp?; return (bT ?? Timestamp.now()).compareTo(aT ?? Timestamp.now()); });
-        return SliverPadding(padding: const EdgeInsets.all(16), sliver: SliverList(delegate: SliverChildBuilderDelegate((context, index) { final data = docs[index].data() as Map<String, dynamic>; data['_id'] = docs[index].id; return CommentItem(data: data); }, childCount: docs.length)));
+        if (docs.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No comments found.", style: TextStyle(color: Colors.grey)))));
+        }
+        docs.sort((a, b) {
+          final aT = (a.data() as Map)['createdAt'] as Timestamp?;
+          final bT = (b.data() as Map)['createdAt'] as Timestamp?;
+          return (bT ?? Timestamp.now()).compareTo(aT ?? Timestamp.now());
+        });
+        return SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                final data = docs[index].data() as Map<String, dynamic>;
+                data['_id'] = docs[index].id;
+                return CommentItem(data: data);
+              },
+              childCount: docs.length,
+            ),
+          ),
+        );
       },
     );
   }
 }
 
 class _MakerCombinedView extends StatelessWidget {
-  final String targetUserId; final bool showDrafts;
+  final String targetUserId;
+  final bool showDrafts;
   const _MakerCombinedView({required this.targetUserId, required this.showDrafts});
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
-        stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
-        builder: (context, _) {
-          return StreamBuilder(
-              stream: FirebaseFirestore.instance.collection('images').snapshots(),
-              builder: (context, _) {
-                return FutureBuilder<List<dynamic>>(
-                    future: _getCombinedData(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-                      final items = snapshot.data!;
-                      if (items.isEmpty) return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
-                      return SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 8.0), sliver: SliverGrid(gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8), delegate: SliverChildBuilderDelegate((context, index) => _MakerItemTile(doc: items[index], shouldEdit: true, isDraftView: showDrafts), childCount: items.length)));
-                    }
+      stream: FirebaseFirestore.instance.collection('fanzines').snapshots(),
+      builder: (context, _) {
+        return StreamBuilder(
+          stream: FirebaseFirestore.instance.collection('images').snapshots(),
+          builder: (context, _) {
+            return FutureBuilder<List<dynamic>>(
+              future: _getCombinedData(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
+                }
+                final items = snapshot.data!;
+                if (items.isEmpty) {
+                  return const SliverToBoxAdapter(child: SizedBox(height: 100, child: Center(child: Text("No items found"))));
+                }
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 5 / 8, mainAxisSpacing: 8, crossAxisSpacing: 8),
+                    delegate: SliverChildBuilderDelegate(
+                          (context, index) => _MakerItemTile(doc: items[index], shouldEdit: true, isDraftView: showDrafts),
+                      childCount: items.length,
+                    ),
+                  ),
                 );
-              }
-          );
-        }
+              },
+            );
+          },
+        );
+      },
     );
   }
+
   Future<List<dynamic>> _getCombinedData() async {
     final fzSnap = await FirebaseFirestore.instance.collection('fanzines').get();
     final imgSnap = await FirebaseFirestore.instance.collection('images').get();
     final List<dynamic> combined = [];
     for (var doc in fzSnap.docs) {
-      final data = doc.data(); if (data['type'] != 'folio' && data['type'] != 'calendar') continue;
+      final data = doc.data();
+      if (data['type'] != 'folio' && data['type'] != 'calendar') {
+        continue;
+      }
       final owner = data['ownerId'] ?? data['editorId'] ?? data['uploaderId'] ?? '';
-      if (owner != targetUserId) continue;
-      if (showDrafts ? !(data['isLive'] ?? false) : (data['isLive'] ?? false)) combined.add(doc);
+      if (owner != targetUserId) {
+        continue;
+      }
+      if (showDrafts ? !(data['isLive'] ?? false) : (data['isLive'] ?? false)) {
+        combined.add(doc);
+      }
     }
     for (var doc in imgSnap.docs) {
-      final data = doc.data(); if (data['uploaderId'] != targetUserId) continue;
-      if (showDrafts ? data['status'] == 'pending' : data['status'] != 'pending') combined.add(doc);
+      final data = doc.data();
+      if (data['uploaderId'] != targetUserId) {
+        continue;
+      }
+      if (showDrafts ? data['status'] == 'pending' : data['status'] != 'pending') {
+        combined.add(doc);
+      }
     }
     combined.sort((a, b) {
       final aT = (a.data() as Map)['creationDate'] ?? (a.data() as Map)['timestamp'] as Timestamp?;
@@ -841,14 +1120,35 @@ class _MakerCombinedView extends StatelessWidget {
 }
 
 class _QuickActionTile extends StatelessWidget {
-  final String label; final Color color; final VoidCallback onTap;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
   const _QuickActionTile({required this.label, required this.color, required this.onTap});
-  @override Widget build(BuildContext context) => GestureDetector(onTap: onTap, child: Container(color: color, padding: const EdgeInsets.all(8), child: Center(child: Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)))));
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      color: color,
+      padding: const EdgeInsets.all(8),
+      child: Center(
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+        ),
+      ),
+    ),
+  );
 }
 
 class _EntityRow extends StatelessWidget {
-  final String name; final int count;
+  final String name;
+  final int count;
+
   const _EntityRow({required this.name, required this.count});
+
   @override
   Widget build(BuildContext context) {
     final handle = normalizeHandle(name);
@@ -856,76 +1156,292 @@ class _EntityRow extends StatelessWidget {
       stream: FirebaseFirestore.instance.collection('usernames').doc(handle).snapshots(),
       builder: (context, snapshot) {
         Widget statusWidget;
-        if (!snapshot.hasData) statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
-        else if (snapshot.data!.exists) {
+        if (!snapshot.hasData) {
+          statusWidget = const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
+        } else if (snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
-          String linkText = '/$handle'; if (data['isAlias'] == true) linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
-          statusWidget = InkWell(onTap: () => context.go('/$handle'), child: Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline)));
+          String linkText = '/$handle';
+          if (data['isAlias'] == true) {
+            linkText = '/$handle -> /${data['redirect'] ?? 'unknown'}';
+          }
+          statusWidget = InkWell(
+            onTap: () => context.go('/$handle'),
+            child: Text(linkText, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11, decoration: TextDecoration.underline)),
+          );
         } else {
-          statusWidget = Row(mainAxisSize: MainAxisSize.min, children: [TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))), TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11)))]);
+          statusWidget = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(onPressed: () => _createProfile(context, name), child: const Text("Create", style: TextStyle(color: Colors.green, fontSize: 11))),
+              TextButton(onPressed: () => _createAlias(context, name), child: const Text("Alias", style: TextStyle(color: Colors.orange, fontSize: 11))),
+            ],
+          );
         }
-        return Padding(padding: const EdgeInsets.symmetric(vertical: 4.0), child: Row(children: [SizedBox(width: 30, child: Text("$count", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))), Expanded(child: Text(name, style: const TextStyle(fontSize: 13))), statusWidget]));
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Row(
+            children: [
+              SizedBox(width: 30, child: Text("$count", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
+              Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
+              statusWidget,
+            ],
+          ),
+        );
       },
     );
   }
+
   Future<void> _createProfile(BuildContext context, String name) async {
     final messenger = ScaffoldMessenger.of(context);
-    String first = name; String last = ""; if (name.contains(' ')) { final parts = name.split(' '); first = parts.first; last = parts.sublist(1).join(' '); }
-    try { await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from dashboard", explicitHandle: normalizeHandle(name)); if (context.mounted) messenger.showSnackBar(const SnackBar(content: Text("Profile Created!"))); } catch (e) { if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Error: $e"))); }
+    String first = name;
+    String last = "";
+    if (name.contains(' ')) {
+      final parts = name.split(' ');
+      first = parts.first;
+      last = parts.sublist(1).join(' ');
+    }
+    try {
+      await createManagedProfile(firstName: first, lastName: last, bio: "Auto-created from dashboard", explicitHandle: normalizeHandle(name));
+      if (context.mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text("Profile Created!")));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        messenger.showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
   }
+
   Future<void> _createAlias(BuildContext context, String name) async {
     final messenger = ScaffoldMessenger.of(context);
-    final target = await showDialog<String>(context: context, builder: (c) { final controller = TextEditingController(); return AlertDialog(title: Text("Create Alias for '$name'"), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter EXISTING username (target):"), TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz"))]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias"))]); });
-    if (target == null || target.isEmpty) return;
-    try { await createAlias(aliasHandle: name, targetHandle: target); if (context.mounted) messenger.showSnackBar(const SnackBar(content: Text("Alias Created!"))); } catch (e) { if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Error: $e"))); }
+    final target = await showDialog<String>(
+      context: context,
+      builder: (c) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: Text("Create Alias for '$name'"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Enter EXISTING username (target):"),
+              TextField(controller: controller, decoration: const InputDecoration(hintText: "e.g. julius-schwartz")),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+            TextButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text("Create Alias")),
+          ],
+        );
+      },
+    );
+    if (target == null || target.isEmpty) {
+      return;
+    }
+    try {
+      await createAlias(aliasHandle: name, targetHandle: target);
+      if (context.mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text("Alias Created!")));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        messenger.showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
   }
 }
 
 class _ProfileTabsDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child; _ProfileTabsDelegate({required this.child});
-  @override Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Material(elevation: overlapsContent ? 4 : 0, child: child);
-  @override double get maxExtent => 50.0; @override double get minExtent => 50.0; @override bool shouldRebuild(covariant _ProfileTabsDelegate oldDelegate) => true;
+  final Widget child;
+  _ProfileTabsDelegate({required this.child});
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Material(elevation: overlapsContent ? 4 : 0, child: child);
+
+  @override
+  double get maxExtent => 50.0;
+
+  @override
+  double get minExtent => 50.0;
+
+  @override
+  bool shouldRebuild(covariant _ProfileTabsDelegate oldDelegate) => true;
 }
 
 class _MakerItemTile extends StatelessWidget {
-  final dynamic doc; final bool shouldEdit; final bool isDraftView; final bool thumbnailOnly;
-  const _MakerItemTile({required this.doc, this.shouldEdit = false, this.isDraftView = false, this.thumbnailOnly = false});
-  bool _is5x8(Map<String, dynamic> data) { if (data['is5x8'] == true) return true; final w = data['width'] as num?; final h = data['height'] as num?; return (w != null && h != null) ? (w / h >= 0.58 && w / h <= 0.67) : false; }
+  final dynamic doc;
+  final bool shouldEdit;
+  final bool isDraftView;
+  final bool thumbnailOnly;
+
+  const _MakerItemTile({
+    required this.doc,
+    this.shouldEdit = false,
+    this.isDraftView = false,
+    this.thumbnailOnly = false,
+  });
+
+  bool _is5x8(Map<String, dynamic> data) {
+    if (data['is5x8'] == true) {
+      return true;
+    }
+    final w = data['width'] as num?;
+    final h = data['height'] as num?;
+    return (w != null && h != null) ? (w / h >= 0.58 && w / h <= 0.67) : false;
+  }
+
   Future<void> _confirmDelete(BuildContext context, String displayTitle) async {
     final isFanzine = doc.reference.path.startsWith('fanzines/');
-    final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: Text("Delete $displayTitle?"), content: Text(isFanzine ? "Are you sure you want to delete this folio?" : "Are you sure you want to delete this image?"), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")), TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red)))]));
-    if (confirm == true && context.mounted) { if (isFanzine) context.read<ProfileBloc>().add(DeleteFolioRequested(doc.id)); else context.read<ProfileBloc>().add(DeleteImageRequested(doc.id)); }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Delete $displayTitle?"),
+        content: Text(isFanzine ? "Are you sure you want to delete this folio?" : "Are you sure you want to delete this image?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm == true && context.mounted) {
+      if (isFanzine) {
+        context.read<ProfileBloc>().add(DeleteFolioRequested(doc.id));
+      } else {
+        context.read<ProfileBloc>().add(DeleteImageRequested(doc.id));
+      }
+    }
   }
+
   Future<String?> _getFolioThumbnail(String fanzineId) async {
     final db = FirebaseFirestore.instance;
     try {
       final coverSnap = await db.collection('fanzines').doc(fanzineId).collection('pages').where('pageNumber', isEqualTo: 1).limit(1).get();
-      if (coverSnap.docs.isNotEmpty) { final d = coverSnap.docs.first.data(); final url = d['gridUrl'] ?? d['thumbnailUrl'] ?? d['imageUrl']; if (url != null) return url; }
+      if (coverSnap.docs.isNotEmpty) {
+        final d = coverSnap.docs.first.data();
+        final url = d['gridUrl'] ?? d['thumbnailUrl'] ?? d['imageUrl'];
+        if (url != null) {
+          return url;
+        }
+      }
       final imagesSnap = await db.collection('images').where('folioContext', isEqualTo: fanzineId).get();
-      if (imagesSnap.docs.isNotEmpty) { final docs = imagesSnap.docs.toList(); docs.sort((a, b) => ((b.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0).compareTo((a.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0)); return docs.first.data()['gridUrl'] ?? docs.first.data()['fileUrl']; }
-    } catch (_) {} return null;
+      if (imagesSnap.docs.isNotEmpty) {
+        final docs = imagesSnap.docs.toList();
+        docs.sort((a, b) => ((b.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0).compareTo((a.data()['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0));
+        return docs.first.data()['gridUrl'] ?? docs.first.data()['fileUrl'];
+      }
+    } catch (_) {}
+    return null;
   }
+
   @override
   Widget build(BuildContext context) {
-    final data = doc.data() as Map<String, dynamic>; final isFanzine = doc.reference.path.startsWith('fanzines/'); final title = data['title'] ?? 'Untitled';
-    String displayTitle = title; if (isFanzine) { final wNum = (data['wholeNumber'] ?? '').toString().trim(); final iss = (data['issue'] ?? '').toString().trim(); if (wNum.isNotEmpty) displayTitle = "$title $wNum"; else if (iss.isNotEmpty) displayTitle = "$title $iss"; }
-    final fileUrl = data['fileUrl']; final displayUrl = data['gridUrl'] ?? data['fileUrl'];
+    final data = doc.data() as Map<String, dynamic>;
+    final isFanzine = doc.reference.path.startsWith('fanzines/');
+    final title = data['title'] ?? 'Untitled';
+    String displayTitle = title;
+    if (isFanzine) {
+      final wNum = (data['wholeNumber'] ?? '').toString().trim();
+      final iss = (data['issue'] ?? '').toString().trim();
+      if (wNum.isNotEmpty) {
+        displayTitle = "$title $wNum";
+      } else if (iss.isNotEmpty) {
+        displayTitle = "$title $iss";
+      }
+    }
+    final fileUrl = data['fileUrl'];
+    final displayUrl = data['gridUrl'] ?? data['fileUrl'];
+
     return GestureDetector(
-      onTap: () { if (!isFanzine) showDialog(context: context, builder: (_) => ImageViewModal(imageUrl: fileUrl ?? '', imageId: doc.id, imageText: data['text'] ?? data['text_raw'])); else context.push(shouldEdit ? '/editor/${doc.id}' : '/reader/${doc.id}'); },
+      onTap: () {
+        if (!isFanzine) {
+          showDialog(context: context, builder: (_) => ImageViewModal(imageUrl: fileUrl ?? '', imageId: doc.id, imageText: data['text'] ?? data['text_raw']));
+        } else {
+          context.push(shouldEdit ? '/editor/${doc.id}' : '/reader/${doc.id}');
+        }
+      },
       child: Container(
         decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black12)),
-        child: Stack(fit: StackFit.expand, children: [
-          Container(color: Colors.grey[200], child: isFanzine ? FutureBuilder<String?>(future: _getFolioThumbnail(doc.id), builder: (context, snapshot) { if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))); final thumbUrl = snapshot.data; return thumbUrl != null ? Image.network(thumbUrl, fit: BoxFit.cover) : const Icon(Icons.menu_book, color: Colors.black12, size: 40); }) : (displayUrl != null ? Image.network(displayUrl, fit: BoxFit.cover) : const Icon(Icons.image, color: Colors.black12, size: 40))),
-          if (!thumbnailOnly) ...[Positioned(bottom: 0, left: 0, right: 0, child: Container(padding: const EdgeInsets.all(8), color: Colors.black54, child: Text(displayTitle, style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis))), Positioned(top: 26, left: 4, right: 4, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [if (isFanzine) StreamBuilder<QuerySnapshot>(stream: FirebaseFirestore.instance.collection('fanzines').doc(doc.id).collection('pages').where('pageNumber', isGreaterThan: 0).snapshots(), builder: (context, snap) => _Badge(label: "folio (${snap.data?.docs.length ?? 0})", color: Colors.grey.shade800)) else ...[_Badge(label: _is5x8(data) ? "full page 5x8" : "image", color: Colors.grey.shade800), const SizedBox(height: 2), _Badge(label: "${data['width'] ?? '??'}x${data['height'] ?? '??'}", color: Colors.black, opacity: 0.7)]]))],
-          if (isDraftView && !thumbnailOnly) Positioned(top: 2, right: 2, child: GestureDetector(onTap: () => _confirmDelete(context, displayTitle), child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle), child: const Icon(Icons.close, size: 14, color: Colors.white)))),
-        ]),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              color: Colors.grey[200],
+              child: isFanzine
+                  ? FutureBuilder<String?>(
+                future: _getFolioThumbnail(doc.id),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
+                  }
+                  final thumbUrl = snapshot.data;
+                  return thumbUrl != null ? Image.network(thumbUrl, fit: BoxFit.cover) : const Icon(Icons.menu_book, color: Colors.black12, size: 40);
+                },
+              )
+                  : (displayUrl != null ? Image.network(displayUrl, fit: BoxFit.cover) : const Icon(Icons.image, color: Colors.black12, size: 40)),
+            ),
+            if (!thumbnailOnly) ...[
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  color: Colors.black54,
+                  child: Text(displayTitle, style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+              Positioned(
+                top: 26,
+                left: 4,
+                right: 4,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (isFanzine)
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('fanzines').doc(doc.id).collection('pages').where('pageNumber', isGreaterThan: 0).snapshots(),
+                        builder: (context, snap) => _Badge(label: "folio (${snap.data?.docs.length ?? 0})", color: Colors.grey.shade800),
+                      )
+                    else ...[
+                      _Badge(label: _is5x8(data) ? "full page 5x8" : "image", color: Colors.grey.shade800),
+                      const SizedBox(height: 2),
+                      _Badge(label: "${data['width'] ?? '??'}x${data['height'] ?? '??'}", color: Colors.black, opacity: 0.7),
+                    ]
+                  ],
+                ),
+              )
+            ],
+            if (isDraftView && !thumbnailOnly)
+              Positioned(
+                top: 2,
+                right: 2,
+                child: GestureDetector(
+                  onTap: () => _confirmDelete(context, displayTitle),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
+                    child: const Icon(Icons.close, size: 14, color: Colors.white),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _Badge extends StatelessWidget {
-  final String label; final Color color; final double opacity;
+  final String label;
+  final Color color;
+  final double opacity;
+
   const _Badge({required this.label, required this.color, this.opacity = 0.8});
-  @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: color.withValues(alpha: opacity), borderRadius: BorderRadius.circular(4)), child: Text(label.toLowerCase(), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.normal), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis));
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+    decoration: BoxDecoration(color: color.withValues(alpha: opacity), borderRadius: BorderRadius.circular(4)),
+    child: Text(label.toLowerCase(), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.normal), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+  );
 }

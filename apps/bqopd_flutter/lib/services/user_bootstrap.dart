@@ -3,13 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 Future<void> ensureUserDocument() async {
   final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
-
+  if (user == null) {
+    return;
+  }
   final db = FirebaseFirestore.instance;
-
   final userRef = db.collection('Users').doc(user.uid);
   final userSnap = await userRef.get();
-
   if (userSnap.exists) {
     await userRef.update({'updatedAt': FieldValue.serverTimestamp()});
   } else {
@@ -26,10 +25,8 @@ Future<void> ensureUserDocument() async {
 
   final profileRef = db.collection('profiles').doc(user.uid);
   final profileSnap = await profileRef.get();
-
   if (!profileSnap.exists) {
     final defaultUsername = (user.email ?? '').split('@').first;
-
     await profileRef.set({
       'uid': user.uid,
       'username': defaultUsername,
@@ -45,7 +42,6 @@ Future<void> ensureUserDocument() async {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
-
     await db.collection('usernames').doc(defaultUsername.toLowerCase()).set({
       'uid': user.uid,
       'isManaged': false,
@@ -61,15 +57,17 @@ Future<String?> createManagedProfile({
   String? explicitHandle,
 }) async {
   final currentUser = FirebaseAuth.instance.currentUser;
-  if (currentUser == null) return null;
-
+  if (currentUser == null) {
+    return null;
+  }
   final db = FirebaseFirestore.instance;
   final profileRef = db.collection('profiles').doc();
-
   final fullName = "$firstName $lastName".trim();
 
-  String baseHandle = explicitHandle ?? fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
-
+  // ignore: deprecated_member_use
+  String baseHandle = explicitHandle ??
+      // ignore: deprecated_member_use
+      fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
   if (baseHandle.isEmpty) {
     baseHandle = 'entity-${DateTime.now().millisecondsSinceEpoch}';
   }
@@ -91,21 +89,17 @@ Future<String?> createManagedProfile({
     'createdAt': FieldValue.serverTimestamp(),
     'updatedAt': FieldValue.serverTimestamp(),
   };
-
   await profileRef.set(profileData);
-
   await db.collection('usernames').doc(baseHandle).set({
     'uid': profileRef.id,
     'isManaged': true,
     'createdAt': FieldValue.serverTimestamp(),
   });
-
   await db.collection('shortcodes').doc(baseHandle.toUpperCase()).set({
     'type': 'user',
     'contentId': profileRef.id,
     'displayCode': baseHandle,
     'createdAt': FieldValue.serverTimestamp(),
   });
-
   return profileRef.id;
 }
