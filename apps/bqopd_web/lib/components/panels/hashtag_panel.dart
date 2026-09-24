@@ -4,10 +4,21 @@ import 'package:jaspr/dom.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 
+class _TagData {
+  final String name;
+  final int count;
+  final bool hasVoted;
+
+  _TagData({
+    required this.name,
+    required this.count,
+    required this.hasVoted,
+  });
+}
+
 /// Dedicated inline drawer (bonusRow) view for hashtag voting.
 class HashtagRowPanel extends StatefulComponent {
   final String imageId;
-
   const HashtagRowPanel({required this.imageId, super.key});
 
   @override
@@ -51,7 +62,9 @@ class _HashtagRowPanelState extends State<HashtagRowPanel> {
 
   void _stopListening() {
     if (_unsub != null) {
-      try { _unsub.callAsFunction(); } catch (_) {}
+      try {
+        _unsub.callAsFunction();
+      } catch (_) {}
       _unsub = null;
     }
   }
@@ -70,22 +83,37 @@ class _HashtagRowPanelState extends State<HashtagRowPanel> {
     }
     final cleanTag = tag.toLowerCase().replaceAll('#', '').trim();
     if (isSelected) {
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$cleanTag': WebFieldValue.arrayRemove([uid])}));
+      await fsUpdateDoc(
+        'images/${component.imageId}',
+        jsonEncode({'tags.$cleanTag': WebFieldValue.arrayRemove([uid])}),
+      );
     } else {
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$cleanTag': WebFieldValue.arrayUnion([uid])}));
+      await fsUpdateDoc(
+        'images/${component.imageId}',
+        jsonEncode({'tags.$cleanTag': WebFieldValue.arrayUnion([uid])}),
+      );
     }
   }
 
   Future<void> _submitNewTag() async {
     final text = _newTagText.trim().toLowerCase().replaceAll('#', '');
-    if (text.isEmpty) { setState(() => _isAdding = false); return; }
+    if (text.isEmpty) {
+      setState(() => _isAdding = false);
+      return;
+    }
     final uid = getCurrentUserId();
     if (uid == null) {
       GlobalModalBus.show();
       return;
     }
-    await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$text': WebFieldValue.arrayUnion([uid])}));
-    setState(() { _newTagText = ""; _isAdding = false; });
+    await fsUpdateDoc(
+      'images/${component.imageId}',
+      jsonEncode({'tags.$text': WebFieldValue.arrayUnion([uid])}),
+    );
+    setState(() {
+      _newTagText = "";
+      _isAdding = false;
+    });
   }
 
   @override
@@ -95,20 +123,24 @@ class _HashtagRowPanelState extends State<HashtagRowPanel> {
     _tags.forEach((key, value) {
       if (value is List) {
         tagList.add(_TagData(
-            name: key,
-            count: value.length,
-            hasVoted: uid != null && value.contains(uid)
+          name: key,
+          count: value.length,
+          hasVoted: uid != null && value.contains(uid),
         ));
       }
     });
-    tagList.sort((a, b) => a.name == 'approved' ? -1 : (b.name == 'approved' ? 1 : b.count.compareTo(a.count)));
+    tagList.sort((a, b) => a.name == 'approved'
+        ? -1
+        : (b.name == 'approved' ? 1 : b.count.compareTo(a.count)));
 
-    return div(classes: 'flex-row flex-wrap gap-3 items-center py-4', [
-      for (var tag in tagList) _buildTagChip(tag),
-      if (_isAdding)
-        _buildSplitButton()
-      else
-        button(
+    return div(
+      classes: 'flex-row flex-wrap gap-3 items-center py-4',
+      [
+        for (var tag in tagList) _buildTagChip(tag),
+        if (_isAdding)
+          _buildSplitButton()
+        else
+          button(
             classes: 'm3-chip hover:bg-gray-100',
             events: {
               'click': (e) {
@@ -120,26 +152,33 @@ class _HashtagRowPanelState extends State<HashtagRowPanel> {
               }
             },
             [
-              span(classes: 'material-symbols-outlined chip-icon', [text('add')]),
-            ]
-        )
-    ]);
+              span(classes: 'material-symbols-outlined chip-icon', [
+                Component.text('add'),
+              ]),
+            ],
+          ),
+      ],
+    );
   }
 
   Component _buildTagChip(_TagData tag) {
     return div(
-        classes: 'm3-chip ${tag.hasVoted ? 'active' : ''}',
-        events: {'click': (e) => _toggleVote(tag.name, tag.hasVoted)},
-        [
-          text('#${tag.name}'),
-          div(classes: 'v-divider', []),
-          span(
-              classes: 'material-symbols-outlined chip-icon',
-              attributes: {'style': tag.hasVoted ? "font-variation-settings: 'FILL' 1;" : "font-variation-settings: 'FILL' 0;"},
-              [text('star')]
-          ),
-          text('${tag.count}'),
-        ]
+      classes: 'm3-chip ${tag.hasVoted ? 'active' : ''}',
+      events: {'click': (e) => _toggleVote(tag.name, tag.hasVoted)},
+      [
+        Component.text('#${tag.name}'),
+        div(classes: 'v-divider', []),
+        span(
+          classes: 'material-symbols-outlined chip-icon',
+          attributes: {
+            'style': tag.hasVoted
+                ? "font-variation-settings: 'FILL' 1;"
+                : "font-variation-settings: 'FILL' 0;"
+          },
+          [Component.text('star')],
+        ),
+        Component.text('${tag.count}'),
+      ],
     );
   }
 
@@ -149,24 +188,34 @@ class _HashtagRowPanelState extends State<HashtagRowPanel> {
         attributes: {
           'placeholder': 'new tag...',
           'value': _newTagText,
-          'autofocus': 'true'
+          'autofocus': 'true',
         },
         events: {
           'input': (e) => _newTagText = getInputValue(e),
-          'keypress': (e) { if ((e as dynamic).key == 'Enter') _submitNewTag(); }
+          'keypress': (e) {
+            if ((e as dynamic).key == 'Enter') _submitNewTag();
+          },
         },
       ),
       div(classes: 'v-divider', []),
       div(
-          classes: 'split-action',
-          events: {'click': (e) => _submitNewTag()},
-          [span(classes: 'material-symbols-outlined text-green-600', [text('check')])]
+        classes: 'split-action',
+        events: {'click': (e) => _submitNewTag()},
+        [
+          span(classes: 'material-symbols-outlined text-green-600', [
+            Component.text('check'),
+          ]),
+        ],
       ),
       div(classes: 'v-divider', []),
       div(
-          classes: 'split-action',
-          events: {'click': (e) => setState(() => _isAdding = false)},
-          [span(classes: 'material-symbols-outlined text-gray-400', [text('close')])]
+        classes: 'split-action',
+        events: {'click': (e) => setState(() => _isAdding = false)},
+        [
+          span(classes: 'material-symbols-outlined text-gray-400', [
+            Component.text('close'),
+          ]),
+        ],
       ),
     ]);
   }
@@ -175,7 +224,6 @@ class _HashtagRowPanelState extends State<HashtagRowPanel> {
 /// Dedicated desktop 3rd column (bonusColumn) view for hashtags and tagging.
 class HashtagColumnPanel extends StatefulComponent {
   final String imageId;
-
   const HashtagColumnPanel({required this.imageId, super.key});
 
   @override
@@ -219,7 +267,9 @@ class _HashtagColumnPanelState extends State<HashtagColumnPanel> {
 
   void _stopListening() {
     if (_unsub != null) {
-      try { _unsub.callAsFunction(); } catch (_) {}
+      try {
+        _unsub.callAsFunction();
+      } catch (_) {}
       _unsub = null;
     }
   }
@@ -238,22 +288,37 @@ class _HashtagColumnPanelState extends State<HashtagColumnPanel> {
     }
     final cleanTag = tag.toLowerCase().replaceAll('#', '').trim();
     if (isSelected) {
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$cleanTag': WebFieldValue.arrayRemove([uid])}));
+      await fsUpdateDoc(
+        'images/${component.imageId}',
+        jsonEncode({'tags.$cleanTag': WebFieldValue.arrayRemove([uid])}),
+      );
     } else {
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$cleanTag': WebFieldValue.arrayUnion([uid])}));
+      await fsUpdateDoc(
+        'images/${component.imageId}',
+        jsonEncode({'tags.$cleanTag': WebFieldValue.arrayUnion([uid])}),
+      );
     }
   }
 
   Future<void> _submitNewTag() async {
     final text = _newTagText.trim().toLowerCase().replaceAll('#', '');
-    if (text.isEmpty) { setState(() => _isAdding = false); return; }
+    if (text.isEmpty) {
+      setState(() => _isAdding = false);
+      return;
+    }
     final uid = getCurrentUserId();
     if (uid == null) {
       GlobalModalBus.show();
       return;
     }
-    await fsUpdateDoc('images/${component.imageId}', jsonEncode({'tags.$text': WebFieldValue.arrayUnion([uid])}));
-    setState(() { _newTagText = ""; _isAdding = false; });
+    await fsUpdateDoc(
+      'images/${component.imageId}',
+      jsonEncode({'tags.$text': WebFieldValue.arrayUnion([uid])}),
+    );
+    setState(() {
+      _newTagText = "";
+      _isAdding = false;
+    });
   }
 
   @override
@@ -263,27 +328,37 @@ class _HashtagColumnPanelState extends State<HashtagColumnPanel> {
     _tags.forEach((key, value) {
       if (value is List) {
         tagList.add(_TagData(
-            name: key,
-            count: value.length,
-            hasVoted: uid != null && value.contains(uid)
+          name: key,
+          count: value.length,
+          hasVoted: uid != null && value.contains(uid),
         ));
       }
     });
-    tagList.sort((a, b) => a.name == 'approved' ? -1 : (b.name == 'approved' ? 1 : b.count.compareTo(a.count)));
+    tagList.sort((a, b) => a.name == 'approved'
+        ? -1
+        : (b.name == 'approved' ? 1 : b.count.compareTo(a.count)));
 
     return div(
       [
         div(
           [
-            span([text('PAGE TAGS & COMMUNITY VOTING')], attributes: const {
-              'style': 'font-size: 11px; font-weight: bold; color: #475569; letter-spacing: 0.5px; text-transform: uppercase;'
-            }),
-            span([text('Vote or add discoverability tags')], attributes: const {
-              'style': 'font-size: 10px; color: #94a3b8;'
-            }),
+            span(
+              [Component.text('PAGE TAGS & COMMUNITY VOTING')],
+              attributes: const {
+                'style':
+                'font-size: 11px; font-weight: bold; color: #475569; letter-spacing: 0.5px; text-transform: uppercase;'
+              },
+            ),
+            span(
+              [Component.text('Vote or add discoverability tags')],
+              attributes: const {
+                'style': 'font-size: 10px; color: #94a3b8;'
+              },
+            ),
           ],
           attributes: const {
-            'style': 'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; width: 100%;'
+            'style':
+            'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; width: 100%;'
           },
         ),
         div(
@@ -293,46 +368,57 @@ class _HashtagColumnPanelState extends State<HashtagColumnPanel> {
               _buildSplitButton()
             else
               button(
-                  classes: 'm3-chip hover:bg-gray-100',
-                  attributes: const {'type': 'button'},
-                  events: {
-                    'click': (e) {
-                      if (getCurrentUserId() == null) {
-                        GlobalModalBus.show();
-                      } else {
-                        setState(() => _isAdding = true);
-                      }
+                classes: 'm3-chip hover:bg-gray-100',
+                attributes: const {'type': 'button'},
+                events: {
+                  'click': (e) {
+                    if (getCurrentUserId() == null) {
+                      GlobalModalBus.show();
+                    } else {
+                      setState(() => _isAdding = true);
                     }
-                  },
-                  [
-                    span(classes: 'material-symbols-outlined chip-icon', [text('add')]),
-                    text('add tag')
-                  ]
-              )
+                  }
+                },
+                [
+                  span(classes: 'material-symbols-outlined chip-icon', [
+                    Component.text('add'),
+                  ]),
+                  Component.text('add tag'),
+                ],
+              ),
           ],
           classes: 'flex-row flex-wrap gap-2 items-center',
-          attributes: const {'style': 'display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%;'},
-        )
+          attributes: const {
+            'style':
+            'display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%;'
+          },
+        ),
       ],
       classes: 'flex-col text-left',
-      attributes: const {'style': 'display: flex; flex-direction: column; width: 100%;'},
+      attributes: const {
+        'style': 'display: flex; flex-direction: column; width: 100%;'
+      },
     );
   }
 
   Component _buildTagChip(_TagData tag) {
     return div(
-        classes: 'm3-chip ${tag.hasVoted ? 'active' : ''}',
-        events: {'click': (e) => _toggleVote(tag.name, tag.hasVoted)},
-        [
-          text('#${tag.name}'),
-          div(classes: 'v-divider', []),
-          span(
-              classes: 'material-symbols-outlined chip-icon',
-              attributes: {'style': tag.hasVoted ? "font-variation-settings: 'FILL' 1;" : "font-variation-settings: 'FILL' 0;"},
-              [text('star')]
-          ),
-          text('${tag.count}'),
-        ]
+      classes: 'm3-chip ${tag.hasVoted ? 'active' : ''}',
+      events: {'click': (e) => _toggleVote(tag.name, tag.hasVoted)},
+      [
+        Component.text('#${tag.name}'),
+        div(classes: 'v-divider', []),
+        span(
+          classes: 'material-symbols-outlined chip-icon',
+          attributes: {
+            'style': tag.hasVoted
+                ? "font-variation-settings: 'FILL' 1;"
+                : "font-variation-settings: 'FILL' 0;"
+          },
+          [Component.text('star')],
+        ),
+        Component.text('${tag.count}'),
+      ],
     );
   }
 
@@ -342,34 +428,37 @@ class _HashtagColumnPanelState extends State<HashtagColumnPanel> {
         attributes: {
           'placeholder': 'new tag...',
           'value': _newTagText,
-          'autofocus': 'true'
+          'autofocus': 'true',
         },
         events: {
           'input': (e) => _newTagText = getInputValue(e),
-          'keypress': (e) { if ((e as dynamic).key == 'Enter') _submitNewTag(); }
+          'keypress': (e) {
+            if ((e as dynamic).key == 'Enter') _submitNewTag();
+          },
         },
       ),
       div(classes: 'v-divider', []),
       div(
-          classes: 'split-action',
-          events: {'click': (e) => _submitNewTag()},
-          [span(classes: 'material-symbols-outlined text-green-600', [text('check')])]
+        classes: 'split-action',
+        events: {'click': (e) => _submitNewTag()},
+        [
+          span(classes: 'material-symbols-outlined text-green-600', [
+            Component.text('check'),
+          ]),
+        ],
       ),
       div(classes: 'v-divider', []),
       div(
-          classes: 'split-action',
-          events: {'click': (e) => setState(() => _isAdding = false)},
-          [span(classes: 'material-symbols-outlined text-gray-400', [text('close')])]
+        classes: 'split-action',
+        events: {'click': (e) => setState(() => _isAdding = false)},
+        [
+          span(classes: 'material-symbols-outlined text-gray-400', [
+            Component.text('close'),
+          ]),
+        ],
       ),
     ]);
   }
-}
-
-class _TagData {
-  final String name;
-  final int count;
-  final bool hasVoted;
-  _TagData({required this.name, required this.count, required this.hasVoted});
 }
 
 /// Backwards-compatible alias for the default row panel

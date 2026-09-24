@@ -4,7 +4,6 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../../utils/web_firebase_interop.dart' hide initAddressAutocomplete;
 import '../../utils/web_utils.dart';
 import '../../repositories/repositories.dart';
 
@@ -67,7 +66,9 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
       });
       return;
     }
+
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -86,14 +87,17 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
           final content = m.group(1) ?? '';
           final parts = content.split('|');
           final raw = m.group(0) ?? '';
+
           if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
             final canonical = parts[0].trim();
             String? ref;
+
             if (parts.length == 2 && parts[1].contains(':')) {
               ref = parts[1].trim();
             } else if (parts.length >= 3) {
               ref = parts[2].trim();
             }
+
             final key = canonical.toLowerCase();
             if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
               uniqueEntities[key] = EntityLink(label: canonical, ref: ref, rawMatch: raw);
@@ -121,6 +125,7 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
   Future<void> _loadProfiles(List<EntityLink> links) async {
     final Map<String, Map<String, dynamic>> tempProfiles = {};
     final List<Future<void>> fetches = [];
+
     for (var link in links) {
       if (link.ref != null && link.ref!.startsWith('user:')) {
         final uid = link.ref!.substring(5);
@@ -133,6 +138,7 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
         }
       }
     }
+
     if (fetches.isNotEmpty) {
       await Future.wait(fetches);
       if (mounted) {
@@ -170,7 +176,7 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
 
     if (_entities.isEmpty) {
       return div(
-        [text('No entity links found in page text.')],
+        [Component.text('No entity links found in page text.')],
         classes: 'p-6 text-center text-gray italic text-xs',
       );
     }
@@ -203,11 +209,11 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
             div(
               [
                 if (isAddress)
-                  span([text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
+                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
                 else if (photoUrl != null && photoUrl.isNotEmpty)
                   img(classes: 'user-avatar', src: photoUrl)
                 else
-                  div(classes: 'user-avatar-placeholder', [text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
+                  div(classes: 'user-avatar-placeholder', [Component.text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
               ],
               classes: 'user-avatar-container',
               attributes: const {
@@ -216,9 +222,9 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
             ),
             div(
               [
-                div([text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
+                div([Component.text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
                 if (subtitleText != null)
-                  div([text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
+                  div([Component.text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
               ],
               classes: 'user-info',
               attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center;'},
@@ -229,7 +235,7 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
         ),
         if (isLinked)
           span(classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px; color: #6750A4;'}, [
-            text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
+            Component.text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
           ])
       ],
       classes: 'hover:shadow-md transition-all',
@@ -301,7 +307,9 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
       });
       return;
     }
+
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -320,6 +328,7 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
           final content = m.group(1) ?? '';
           final parts = content.split('|');
           final raw = m.group(0) ?? '';
+
           if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
             final canonical = parts[0].trim();
             String? ref;
@@ -342,7 +351,6 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
           _entities = parsedList;
           _loading = false;
         });
-
         _loadEntityProfiles(parsedList);
       } else {
         setState(() {
@@ -512,7 +520,6 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
         }
         final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
         final parts = content.split('|');
-
         if (parts.length >= 2 && !parts[1].startsWith('address:') && !parts[1].startsWith('user:')) {
           replacement = "[[${parts[0].trim()}|${parts[1].trim()}|address:$cleanAddress]]";
         } else {
@@ -569,7 +576,6 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
         _modalSaving = false;
         _modalError = null;
       });
-
       _loadTextData();
     } catch (e) {
       setState(() {
@@ -611,7 +617,6 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
         _modalSaving = false;
         _modalError = null;
       });
-
       _loadTextData();
     } catch (e) {
       setState(() {
@@ -636,7 +641,7 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
 
     if (_entities.isEmpty) {
       return div(
-        [text('No entity links found in page text.')],
+        [Component.text('No entity links found in page text.')],
         classes: 'p-6 text-center text-gray italic text-xs',
       );
     }
@@ -671,11 +676,11 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
             div(
               [
                 if (isAddress)
-                  span([text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
+                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
                 else if (photoUrl != null && photoUrl.isNotEmpty)
                   img(classes: 'user-avatar', src: photoUrl)
                 else
-                  div(classes: 'user-avatar-placeholder', [text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
+                  div(classes: 'user-avatar-placeholder', [Component.text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
               ],
               classes: 'user-avatar-container',
               attributes: const {
@@ -684,9 +689,9 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
             ),
             div(
               [
-                div([text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
+                div([Component.text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
                 if (subtitleText != null)
-                  div([text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
+                  div([Component.text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
               ],
               classes: 'user-info',
               attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center;'},
@@ -696,7 +701,7 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
           attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'},
         ),
         span(classes: 'material-symbols-outlined text-gray', attributes: const {'style': 'font-size: 18px; color: #79747E;'}, [
-          text(isLinked ? 'edit_note' : 'link_off')
+          Component.text(isLinked ? 'edit_note' : 'link_off')
         ])
       ],
       classes: 'hover:shadow-md transition-all',
@@ -720,12 +725,12 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                   [
                     div(
                       [
-                        h2([text('Link Entity')], attributes: const {'style': 'font-size: 16px; font-weight: bold; margin-bottom: 4px; margin-top: 0;'}),
+                        h2([Component.text('Link Entity')], attributes: const {'style': 'font-size: 16px; font-weight: bold; margin-bottom: 4px; margin-top: 0;'}),
                         p(
                             [
-                              text('Link "'),
-                              span([text(_editingEntity!.label)], attributes: const {'style': 'font-weight: bold; color: #6750A4;'}),
-                              text('" to a database profile or places location.')
+                              Component.text('Link "'),
+                              span([Component.text(_editingEntity!.label)], attributes: const {'style': 'font-weight: bold; color: #6750A4;'}),
+                              Component.text('" to a database profile or places location.')
                             ],
                             attributes: const {'style': 'font-size: 12px; color: #555; line-height: 1.4; margin: 0;'}
                         ),
@@ -736,8 +741,8 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                           [
                             button(
                                 [
-                                  span([text('person')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
-                                  text('Person')
+                                  span([Component.text('person')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
+                                  Component.text('Person')
                                 ],
                                 attributes: {
                                   'type': 'button',
@@ -752,8 +757,8 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                             div(attributes: const {'style': 'width: 1px; background: #ccc;'}, []),
                             button(
                                 [
-                                  span([text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
-                                  text('Place')
+                                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
+                                  Component.text('Place')
                                 ],
                                 attributes: {
                                   'type': 'button',
@@ -796,9 +801,9 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                               if (_suggestedHandle != null)
                                 div(
                                   [
-                                    span([text('Suggested Link:')], attributes: const {'style': 'font-size: 10px; color: #666; margin-bottom: 4px;'}),
+                                    span([Component.text('Suggested Link:')], attributes: const {'style': 'font-size: 10px; color: #666; margin-bottom: 4px;'}),
                                     button(
-                                        [text('@$_suggestedHandle')],
+                                        [Component.text('@$_suggestedHandle')],
                                         classes: 'profile-btn',
                                         attributes: const {
                                           'type': 'button',
@@ -842,7 +847,7 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                             attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'},
                           ),
                         if (_modalError != null)
-                          p([text(_modalError!)], classes: 'error-msg mt-2', attributes: const {'style': 'font-size: 11px; margin-top: 4px; color: #ef4444;'})
+                          p([Component.text(_modalError!)], classes: 'error-msg mt-2', attributes: const {'style': 'font-size: 11px; margin-top: 4px; color: #ef4444;'})
                       ],
                       classes: 'flex-col w-full text-left',
                       attributes: const {'style': 'display: flex; flex-direction: column; text-align: left;'},
@@ -851,7 +856,7 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                       [
                         if (_editingEntity!.ref != null)
                           button(
-                            [text('Unlink')],
+                            [Component.text('Unlink')],
                             classes: 'profile-btn text-red-500',
                             attributes: const {'style': 'padding: 8px 16px; font-size: 12px; cursor: pointer; margin-right: auto; border: 1px solid #ff5252; color: #ff5252; border-radius: 4px; background: white;'},
                             events: {
@@ -859,7 +864,7 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                             },
                           ),
                         button(
-                          [text('Cancel')],
+                          [Component.text('Cancel')],
                           classes: 'profile-btn',
                           attributes: const {'style': 'padding: 8px 16px; font-size: 12px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; color: #374151;'},
                           events: {
@@ -874,7 +879,7 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                           },
                         ),
                         button(
-                          [text(_modalSaving ? 'Saving...' : 'Save Link')],
+                          [Component.text(_modalSaving ? 'Saving...' : 'Save Link')],
                           classes: 'btn-primary nav-pill mb-0',
                           attributes: {
                             'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',

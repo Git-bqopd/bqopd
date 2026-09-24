@@ -1,14 +1,13 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
 
 /// FanzineSticker displays the sticker header with user login/register links and forms.
 class FanzineSticker extends StatefulComponent {
   final AuthState? authState;
 
-  const FanzineSticker({this.authState});
+  const FanzineSticker({this.authState, super.key});
 
   @override
   State<FanzineSticker> createState() => _FanzineStickerState();
@@ -40,16 +39,16 @@ class _FanzineStickerState extends State<FanzineSticker> {
           button(
               classes: 'nav-pill',
               events: {'click': (e) => setState(() => _showLogin = false)},
-              [text('Back')]
+              [Component.text('Back')]
           ),
           button(
               classes: 'nav-pill',
               events: {'click': (e) => setState(() { _showLogin = false; _showRegister = true; _error = null; })},
-              [text('Register')]
+              [Component.text('Register')]
           )
         ]),
         div(classes: 'white-sticker p-4', [
-          h1(classes: 'font-bold text-lg text-center mb-2', [text('Login to bqopd')]),
+          h1(classes: 'font-bold text-lg text-center mb-2', [Component.text('Login to bqopd')]),
           div(classes: 'flex-col w-full mt-2', [
             input(
               attributes: {'type': 'email', 'placeholder': 'email'},
@@ -74,10 +73,10 @@ class _FanzineStickerState extends State<FanzineSticker> {
                     setState(() { _error = e.toString(); _loading = false; });
                   }
                 }},
-                [text(_loading ? 'loading...' : 'login')]
+                [Component.text(_loading ? 'loading...' : 'login')]
             ),
             if (_error != null)
-              p(classes: 'error-msg mt-2', [text(_error!)]),
+              p(classes: 'error-msg mt-2', [Component.text(_error!)]),
           ])
         ])
       ]);
@@ -89,16 +88,16 @@ class _FanzineStickerState extends State<FanzineSticker> {
           button(
               classes: 'nav-pill',
               events: {'click': (e) => setState(() => _showRegister = false)},
-              [text('Back')]
+              [Component.text('Back')]
           ),
           button(
               classes: 'nav-pill',
               events: {'click': (e) => setState(() { _showRegister = false; _showLogin = true; _error = null; })},
-              [text('Login')]
+              [Component.text('Login')]
           )
         ]),
         div(classes: 'white-sticker p-4', [
-          h1(classes: 'font-bold text-lg text-center mb-2', [text('Register to bqopd')]),
+          h1(classes: 'font-bold text-lg text-center mb-2', [Component.text('Register to bqopd')]),
           div(classes: 'flex-col w-full mt-2', [
             input(
               attributes: {'type': 'text', 'placeholder': 'username'},
@@ -127,10 +126,10 @@ class _FanzineStickerState extends State<FanzineSticker> {
                     setState(() { _error = e.toString(); _loading = false; });
                   }
                 }},
-                [text(_loading ? 'loading...' : 'register')]
+                [Component.text(_loading ? 'loading...' : 'register')]
             ),
             if (_error != null)
-              p(classes: 'error-msg mt-2', [text(_error!)]),
+              p(classes: 'error-msg mt-2', [Component.text(_error!)]),
           ])
         ])
       ]);
@@ -141,13 +140,13 @@ class _FanzineStickerState extends State<FanzineSticker> {
         button(
             classes: 'nav-pill',
             events: {'click': (e) => setState(() => _showLogin = true)},
-            [text(linkText)]
+            [Component.text(linkText)]
         )
       ]),
       div(classes: 'white-sticker', [
-        h1(classes: 'font-bold text-lg text-center', [text('bqopd')]),
-        p(classes: 'text-center mt-4 text-sm', [text('The Fanzine Platform')]),
-        p(classes: 'text-center mt-2 text-xs text-gray', [text('Upload, Curate, and Share archival works.')]),
+        h1(classes: 'font-bold text-lg text-center', [Component.text('bqopd')]),
+        p(classes: 'text-center mt-4 text-sm', [Component.text('The Fanzine Platform')]),
+        p(classes: 'text-center mt-2 text-xs text-gray', [Component.text('Upload, Curate, and Share archival works.')]),
       ])
     ]);
   }

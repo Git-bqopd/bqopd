@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 import '../../repositories/repositories.dart';
 
@@ -58,15 +57,15 @@ class _CreditsRowPanelState extends State<CreditsRowPanel> {
       return div([], classes: 'skeleton-line shimmer-bg');
     }
     if (_creators.isEmpty) {
-      return div([text('No contributors listed for this page.')], classes: 'text-xs text-gray italic text-center py-2');
+      return div([Component.text('No contributors listed for this page.')], classes: 'text-xs text-gray italic text-center py-2');
     }
     return div(
       [
         for (var c in _creators)
           div(
             [
-              span([text('${c['name']} ')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: black;'}),
-              span([text('(${c['role']})')], attributes: const {'style': 'font-size: 11px; color: #64748b;'}),
+              span([Component.text('${c['name']} ')], attributes: const {'style': 'font-size: 12px; font-weight: bold; color: black;'}),
+              span([Component.text('(${c['role']})')], attributes: const {'style': 'font-size: 11px; color: #64748b;'}),
             ],
             classes: 'p-1',
           )
@@ -93,7 +92,6 @@ class _CreditsColumnPanelState extends State<CreditsColumnPanel> {
   String _statusMessage = '';
   bool _isError = false;
   Timer? _statusTimer;
-
   String _newHandle = '';
   String _newRole = '';
   final IUploadRepository _uploadRepo = createUploadRepository();
@@ -206,9 +204,9 @@ class _CreditsColumnPanelState extends State<CreditsColumnPanel> {
             for (int i = 0; i < _creators.length; i++)
               div(
                 [
-                  span([text('${_creators[i]['name']} (${_creators[i]['role']})')], attributes: const {'style': 'font-size: 13px; font-weight: 500;'}),
+                  span([Component.text('${_creators[i]['name']} (${_creators[i]['role']})')], attributes: const {'style': 'font-size: 13px; font-weight: 500;'}),
                   span(
-                    [text('remove_circle')],
+                    [Component.text('remove_circle')],
                     classes: 'material-symbols-outlined text-red-500 cursor-pointer',
                     attributes: const {'style': 'font-size: 18px; color: #ef4444; cursor: pointer;'},
                     events: {
@@ -253,7 +251,7 @@ class _CreditsColumnPanelState extends State<CreditsColumnPanel> {
                   attributes: const {'style': 'flex: 1;'},
                 ),
                 span(
-                  [text('add_circle')],
+                  [Component.text('add_circle')],
                   classes: 'material-symbols-outlined text-green-600 cursor-pointer',
                   attributes: const {'style': 'font-size: 24px; color: #16a34a; cursor: pointer;'},
                   events: {'click': (e) => _addCreator()},
@@ -269,14 +267,14 @@ class _CreditsColumnPanelState extends State<CreditsColumnPanel> {
         div(
           [
             span(
-                [text(_statusMessage)],
+                [Component.text(_statusMessage)],
                 classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold',
                 attributes: {
                   'style': 'font-size: 11px; font-weight: bold; color: ${_isError ? "#ef4444" : "#16a34a"};'
                 }
             ),
             button(
-              [text(_saving ? 'Saving...' : 'Save Creators')],
+              [Component.text(_saving ? 'Saving...' : 'Save Creators')],
               classes: 'btn-primary nav-pill mb-0',
               attributes: {
                 'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',

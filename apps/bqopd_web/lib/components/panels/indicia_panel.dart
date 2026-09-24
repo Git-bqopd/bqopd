@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 
 /// Dedicated inline drawer (bonusRow) view for issue indicia and copyright.
@@ -53,7 +52,7 @@ class _IndiciaRowPanelState extends State<IndiciaRowPanel> {
       return div(classes: 'skeleton-line shimmer-bg', []);
     }
     return div([
-      p([text(_indiciaText)], attributes: const {
+      p([Component.text(_indiciaText)], attributes: const {
         'style': "font-family: Georgia, serif; font-size: 13px; line-height: 1.6; text-align: justify; color: #333; white-space: pre-wrap;"
       })
     ]);
@@ -164,15 +163,13 @@ class _IndiciaColumnPanelState extends State<IndiciaColumnPanel> {
     if (_loading) {
       return div(classes: 'skeleton-line shimmer-bg', []);
     }
-
     if (!component.isEditingMode) {
       return div([
-        p([text(_indiciaText)], attributes: const {
+        p([Component.text(_indiciaText)], attributes: const {
           'style': "font-family: Georgia, serif; font-size: 13px; line-height: 1.6; text-align: justify; color: #333; white-space: pre-wrap;"
         })
       ]);
     }
-
     return div(classes: 'flex-col text-left', [
       div(classes: 'grow-wrap', attributes: {'data-replicated-value': _indiciaText}, [
         textarea(
@@ -185,12 +182,12 @@ class _IndiciaColumnPanelState extends State<IndiciaColumnPanel> {
             events: {
               'input': (e) => setState(() => _indiciaText = getInputValue(e))
             },
-            [text(_indiciaText)]
+            [Component.text(_indiciaText)]
         )
       ]),
       div(classes: 'flex flex-row justify-between items-center mt-3', [
         span([
-          text(_statusMessage)
+          Component.text(_statusMessage)
         ], classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'),
         button(
             classes: 'btn-primary nav-pill mb-0',
@@ -199,7 +196,7 @@ class _IndiciaColumnPanelState extends State<IndiciaColumnPanel> {
               if (_saving) 'disabled': 'true'
             },
             events: {'click': (e) => _save()},
-            [text(_saving ? 'Saving...' : 'Save Indicia')]
+            [Component.text(_saving ? 'Saving...' : 'Save Indicia')]
         )
       ])
     ]);

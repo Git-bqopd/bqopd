@@ -65,17 +65,18 @@ class _SettingsRowPanelState extends State<SettingsRowPanel> {
 
   @override
   Component build(BuildContext context) {
-    if (_loading) return div(classes: 'p-4 text-center', [text('Loading preferences...')]);
+    if (_loading) return div(classes: 'p-4 text-center', [Component.text('Loading preferences...')]);
     if (_uid == null) {
       return div(classes: 'p-6 text-center flex flex-col justify-center items-center gap-2', [
-        p(classes: 'text-gray text-sm', [text('Please sign in to customize your toolbar.')]),
+        p(classes: 'text-gray text-sm', [Component.text('Please sign in to customize your toolbar.')]),
         button(
             classes: 'btn-primary mt-2',
             events: {'click': (e) => GlobalModalBus.show()},
-            [text('Sign In')]
+            [Component.text('Sign In')]
         )
       ]);
     }
+
     final togglableTools = ReaderToolsConfig.tools
         .where((t) => t.id != 'Settings' && t.scopes.contains(ToolScope.reader))
         .toList();
@@ -95,8 +96,8 @@ class _SettingsRowPanelState extends State<SettingsRowPanel> {
         events: {'click': (e) => _toggle(tool.id)},
         [
           div(classes: 'flex-row items-center gap-3', [
-            span(classes: 'material-symbols-outlined text-gray-500', [text(resolvedIcon)]),
-            span(classes: 'text-sm font-medium', [text(tool.label)]),
+            span(classes: 'material-symbols-outlined text-gray-500', [Component.text(resolvedIcon)]),
+            span(classes: 'text-sm font-medium', [Component.text(tool.label)]),
           ]),
           div(
               classes: 'w-10 h-6 rounded-full relative transition-colors ${isVisible ? 'bg-indigo-600' : 'bg-gray-300'}',
@@ -173,7 +174,7 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
   @override
   Component build(BuildContext context) {
     if (_loading) {
-      return div(classes: 'p-6 text-center text-gray italic text-xs', [text('Loading preferences...')]);
+      return div(classes: 'p-6 text-center text-gray italic text-xs', [Component.text('Loading preferences...')]);
     }
     if (_uid == null) {
       return div(
@@ -182,15 +183,15 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
           'style': 'display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'
         },
         [
-          span([text('tune')], classes: 'material-symbols-outlined text-gray-400', attributes: const {'style': 'font-size: 40px;'}),
-          p([text('Sign in to customize your toolbar buttons.')], classes: 'text-sm text-gray font-medium'),
+          span([Component.text('tune')], classes: 'material-symbols-outlined text-gray-400', attributes: const {'style': 'font-size: 40px;'}),
+          p([Component.text('Sign in to customize your toolbar buttons.')], classes: 'text-sm text-gray font-medium'),
           button(
               classes: 'btn-primary nav-pill mt-2',
               attributes: const {
                 'style': 'padding: 8px 20px; font-size: 12px; background-color: #6750A4; color: white; border: none; border-radius: 50px; cursor: pointer;'
               },
               events: {'click': (e) => GlobalModalBus.show()},
-              [text('Sign In')]
+              [Component.text('Sign In')]
           )
         ],
       );
@@ -205,10 +206,10 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
         div(
             [
               div([
-                span([text('CUSTOMIZE TOOLBAR BUTTONS')], attributes: const {
+                span([Component.text('CUSTOMIZE TOOLBAR BUTTONS')], attributes: const {
                   'style': 'font-size: 11px; font-weight: bold; color: #475569; letter-spacing: 0.5px; text-transform: uppercase;'
                 }),
-                span([text('Toggle buttons shown in your reading toolbar.')], attributes: const {
+                span([Component.text('Toggle buttons shown in your reading toolbar.')], attributes: const {
                   'style': 'font-size: 10px; color: #94a3b8; display: block; margin-top: 2px;'
                 }),
               ]),
@@ -244,11 +245,11 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
         [
           div(
               [
-                span([text(resolvedIcon)], classes: 'material-symbols-outlined text-gray-500', attributes: const {'style': 'font-size: 20px;'}),
+                span([Component.text(resolvedIcon)], classes: 'material-symbols-outlined text-gray-500', attributes: const {'style': 'font-size: 20px;'}),
                 div(
                     [
-                      span([text(tool.label)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: #1e293b;'}),
-                      span([text(tool.description)], attributes: const {'style': 'font-size: 11px; color: #64748b; margin-top: 2px; line-height: 1.3;'}),
+                      span([Component.text(tool.label)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: #1e293b;'}),
+                      span([Component.text(tool.description)], attributes: const {'style': 'font-size: 11px; color: #64748b; margin-top: 2px; line-height: 1.3;'}),
                     ],
                     attributes: const {'style': 'display: flex; flex-direction: column; gap: 1px;'}
                 )

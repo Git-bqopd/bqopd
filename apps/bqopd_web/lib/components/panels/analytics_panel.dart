@@ -38,7 +38,7 @@ class AnalyticsColumnPanel extends StatelessComponent {
       return div(
           [
             div([
-              span([text('ISSUE ANALYTICS OVERVIEW')], attributes: const {
+              span([Component.text('ISSUE ANALYTICS OVERVIEW')], attributes: const {
                 'style': 'font-size: 11px; font-weight: bold; color: #475569; letter-spacing: 0.5px; text-transform: uppercase;'
               }),
             ], attributes: const {'style': 'margin-bottom: 12px;'}),

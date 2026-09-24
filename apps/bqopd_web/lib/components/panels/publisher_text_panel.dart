@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/publisher_compiler.dart';
 import '../../utils/web_utils.dart';
 
@@ -10,6 +9,7 @@ import '../../utils/web_utils.dart';
 class PublisherTextRowPanel extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
+
   const PublisherTextRowPanel({required this.imageId, this.fanzineId, super.key});
 
   @override
@@ -54,6 +54,7 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
       });
       return;
     }
+
     setState(() => _loading = true);
     try {
       final res = await fsGetDoc('images/${component.imageId}');
@@ -70,11 +71,13 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
 
   Future<void> _save() async {
     if (component.imageId.isEmpty || _saving) return;
+
     setState(() {
       _saving = true;
       _statusMessage = 'Compiling & publishing...';
       _isError = false;
     });
+
     try {
       final fanzineId = component.fanzineId ?? 'unknown_fanzine';
       final compiledUrls = await PublisherCompiler.compileAndPublish(
@@ -82,6 +85,7 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
         imageId: component.imageId,
         text: _textValue,
       );
+
       final Map<String, dynamic> updates = {
         'text': _textValue,
         'text_corrected': _textValue,
@@ -90,7 +94,9 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
         'needs_linking': true,
       };
       updates.addAll(compiledUrls);
+
       await fsUpdateDoc('images/${component.imageId}', jsonEncode(updates));
+
       if (mounted) {
         setState(() {
           _saving = false;
@@ -123,6 +129,7 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
         classes: 'flex-col gap-2 py-4',
       );
     }
+
     return div(
       [
         div(
@@ -136,7 +143,7 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
                 events: {
                   'input': (e) => setState(() => _textValue = getInputValue(e))
                 },
-                [text(_textValue)]
+                [Component.text(_textValue)]
             )
           ],
           classes: 'grow-wrap',
@@ -144,9 +151,9 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
         ),
         div(
           [
-            span([text(_statusMessage)], classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'),
+            span([Component.text(_statusMessage)], classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'),
             button(
-              [text(_saving ? 'Publishing...' : 'Publish Page')],
+              [Component.text(_saving ? 'Publishing...' : 'Publish Page')],
               classes: 'btn-primary nav-pill mb-0',
               attributes: {
                 'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',
@@ -168,6 +175,7 @@ class _PublisherTextRowPanelState extends State<PublisherTextRowPanel> {
 class PublisherTextColumnPanel extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
+
   const PublisherTextColumnPanel({required this.imageId, this.fanzineId, super.key});
 
   @override
@@ -181,7 +189,6 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
   String _statusMessage = '';
   bool _isError = false;
   Timer? _statusTimer;
-
   List<Map<String, dynamic>> _userImages = [];
   bool _loadingImages = true;
   dynamic _imagesUnsub;
@@ -218,6 +225,7 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
       });
       return;
     }
+
     setState(() => _loading = true);
     try {
       final res = await fsGetDoc('images/${component.imageId}');
@@ -243,6 +251,7 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
       });
       return;
     }
+
     _imagesUnsub = fsListenQuery('images', 'uploaderId', '==', jsonEncode(uid), '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
@@ -263,11 +272,13 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
 
   Future<void> _save() async {
     if (component.imageId.isEmpty || _saving) return;
+
     setState(() {
       _saving = true;
       _statusMessage = 'Compiling & publishing page layout...';
       _isError = false;
     });
+
     try {
       final fanzineId = component.fanzineId ?? 'unknown_fanzine';
       final compiledUrls = await PublisherCompiler.compileAndPublish(
@@ -275,6 +286,7 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
         imageId: component.imageId,
         text: _textValue,
       );
+
       final Map<String, dynamic> updates = {
         'text': _textValue,
         'text_corrected': _textValue,
@@ -283,7 +295,9 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
         'needs_linking': true,
       };
       updates.addAll(compiledUrls);
+
       await fsUpdateDoc('images/${component.imageId}', jsonEncode(updates));
+
       if (mounted) {
         setState(() {
           _saving = false;
@@ -328,6 +342,7 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
         classes: 'flex-col gap-2 py-4',
       );
     }
+
     final folioImages = _userImages.where((img) {
       if (component.fanzineId == null || component.fanzineId!.isEmpty) return false;
       final List usedIn = img['usedInFanzines'] ?? [];
@@ -361,7 +376,7 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
                 events: {
                   'input': (e) => setState(() => _textValue = getInputValue(e))
                 },
-                [text(_textValue)]
+                [Component.text(_textValue)]
             )
           ],
           classes: 'grow-wrap',
@@ -369,9 +384,9 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
         ),
         div(
           [
-            span([text(_statusMessage)], classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'),
+            span([Component.text(_statusMessage)], classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'),
             button(
-              [text(_saving ? 'Publishing...' : 'Publish Page')],
+              [Component.text(_saving ? 'Publishing...' : 'Publish Page')],
               classes: 'btn-primary nav-pill mb-0',
               attributes: {
                 'style': 'padding: 8px 18px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',
@@ -385,11 +400,11 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
         div([], attributes: const {'style': 'height: 1px; background-color: #eee; margin: 8px 0;'}),
         div(
           [
-            p([text('INSERT FROM YOUR GALLERY')], attributes: const {'style': 'font-size: 10px; font-weight: bold; color: #888; margin: 0 0 8px 0;'}),
+            p([Component.text('INSERT FROM YOUR GALLERY')], attributes: const {'style': 'font-size: 10px; font-weight: bold; color: #888; margin: 0 0 8px 0;'}),
             if (_loadingImages)
               div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 16px; width: 100%; border-radius: 4px;'})
             else if (folioImages.isEmpty)
-              p([text('No images in this folio.')], classes: 'text-xs text-gray italic')
+              p([Component.text('No images in this folio.')], classes: 'text-xs text-gray italic')
             else
               div(
                 [
@@ -402,8 +417,8 @@ class _PublisherTextColumnPanelState extends State<PublisherTextColumnPanel> {
                           },
                           events: {'click': (e) => _insertImageAsset(imageShortNames[img['id']] ?? 'img')}
                       ),
-                      span([text('{{${imageShortNames[img['id']] ?? 'img'}}}')], attributes: const {'style': 'font-size: 9px; color: #6750A4; font-family: monospace;'}),
-                      button([text('+ T1')], attributes: const {'style': 'font-size: 8px; cursor: pointer;'}, events: {'click': (e) => _insertTemplateAsset(imageShortNames[img['id']] ?? 'img', 1)}),
+                      span([Component.text('{{${imageShortNames[img['id']] ?? 'img'}}}')], attributes: const {'style': 'font-size: 9px; color: #6750A4; font-family: monospace;'}),
+                      button([Component.text('+ T1')], attributes: const {'style': 'font-size: 8px; cursor: pointer;'}, events: {'click': (e) => _insertTemplateAsset(imageShortNames[img['id']] ?? 'img', 1)}),
                     ], attributes: const {'style': 'display: flex; flex-direction: column; align-items: center; gap: 2px;'}),
                 ],
                 attributes: const {'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; width: 100%;'},

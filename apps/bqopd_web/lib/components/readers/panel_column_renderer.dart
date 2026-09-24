@@ -53,7 +53,6 @@ class PanelColumnRenderer extends StatelessComponent {
     if (isSingleton) {
       final firstPageData = pages.isNotEmpty ? pages.first : <String, dynamic>{};
       final imageId = firstPageData['imageId'] ?? '';
-
       return SingleWindowColumnLayout(
         title: title,
         onClose: onClose,
@@ -85,7 +84,7 @@ class PanelColumnRenderer extends StatelessComponent {
       case BonusRowType.settings:
         return const SettingsColumnPanel();
       default:
-        return div([text('Singleton panel type not configured.')]);
+        return div([Component.text('Singleton panel type not configured.')]);
     }
   }
 
@@ -114,7 +113,7 @@ class PanelColumnRenderer extends StatelessComponent {
       case BonusRowType.newPage:
         return PublisherTextColumnPanel(imageId: imageId, fanzineId: fanzineId);
       default:
-        return div([text('Panel type not implemented in column view.')]);
+        return div([Component.text('Panel type not implemented in column view.')]);
     }
   }
 }

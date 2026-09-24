@@ -3,7 +3,6 @@ library web_firebase_interop_web;
 
 import 'dart:js_interop';
 import 'dart:typed_data';
-import 'dart:js_util' as js_util;
 import 'web_firebase_interop.dart';
 
 /// Web implementation of the subscription wrapper to bridge the JS unsubscription callback.
@@ -30,7 +29,6 @@ Future<String> fsGetDoc(String path) async {
 
 @JS('fsListenDoc')
 external JSFunction _fsListenDoc(JSString path, JSFunction callback);
-
 FirebaseSubscription fsListenDoc(String path, void Function(String) callback) {
   final jsFunc = _fsListenDoc(path.toJS, ((JSString str) => callback(str.toDart)).toJS);
   return WebSubscription(jsFunc);
@@ -38,7 +36,6 @@ FirebaseSubscription fsListenDoc(String path, void Function(String) callback) {
 
 @JS('fsListenQuery')
 external JSFunction _fsListenQuery(JSString path, JSString field, JSString op, JSString valueJson, JSString orderBy, JSBoolean desc, JSFunction callback);
-
 FirebaseSubscription fsListenQuery(String path, String field, String op, String valueJson, String orderBy, bool desc, void Function(String) callback) {
   final jsFunc = _fsListenQuery(path.toJS, field.toJS, op.toJS, valueJson.toJS, orderBy.toJS, desc.toJS, ((JSString str) => callback(str.toDart)).toJS);
   return WebSubscription(jsFunc);
@@ -92,7 +89,6 @@ Future<String> stUpload(String path, Uint8List bytes, String contentType) async 
 
 @JS('onAuthStateChangedListener')
 external void _onAuthStateChangedListener(JSFunction callback);
-
 void onAuthStateChangedListener(void Function(String?, String?) callback) {
   _onAuthStateChangedListener(((JSString? uid, JSString? email) {
     callback(uid?.toDart, email?.toDart);
@@ -119,7 +115,6 @@ Future<void> logoutFromFirebase() async {
 
 @JS('pickAndReadFile')
 external void _pickAndReadFile(JSString inputId, JSFunction callback);
-
 void pickAndReadFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
   _pickAndReadFile(inputId.toJS, ((JSString base64, JSString fileName, JSString objectUrl) {
     callback(base64.toDart, fileName.toDart, objectUrl.toDart);
@@ -128,34 +123,34 @@ void pickAndReadFile(String inputId, void Function(String base64, String fileNam
 
 @JS('readInputFile')
 external void _readInputFile(JSString inputId, JSFunction callback);
-
 void readInputFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
   _readInputFile(inputId.toJS, ((JSString base64, JSString fileName, JSString objectUrl) {
     callback(base64.toDart, fileName.toDart, objectUrl.toDart);
   }).toJS);
 }
 
-// DYNAMIC JS BINDING RESOLUTION
-// Uses promiseToFuture and globalThis lookup to avoid compiler name mangling issues
+@JS('renderPublisherPage')
+external JSPromise _renderPublisherPage(JSString text);
+
 Future<String> renderPublisherPage(String text) async {
   try {
-    final promise = js_util.callMethod(js_util.globalThis, 'renderPublisherPage', [text]);
-    final jsRes = await js_util.promiseToFuture(promise);
-    return jsRes.toString();
+    final jsRes = await _renderPublisherPage(text.toJS).toDart;
+    return (jsRes as JSString).toDart;
   } catch (e) {
-    print('[renderPublisherPage js_util Error] $e');
+    print('[renderPublisherPage Error] $e');
     rethrow;
   }
 }
 
-// Google Places Autocomplete predictions Promise Interop
+@JS('getPlacePredictions')
+external JSPromise _getPlacePredictions(JSString input);
+
 Future<String> getPlacePredictions(String input) async {
   try {
-    final promise = js_util.callMethod(js_util.globalThis, 'getPlacePredictions', [input]);
-    final jsRes = await js_util.promiseToFuture(promise);
-    return jsRes.toString();
+    final jsRes = await _getPlacePredictions(input.toJS).toDart;
+    return (jsRes as JSString).toDart;
   } catch (e) {
-    print('[getPlacePredictions js_util Error] $e');
+    print('[getPlacePredictions Error] $e');
     return '[]';
   }
 }

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/publisher_compiler.dart';
 import '../../utils/web_utils.dart';
 
@@ -64,8 +63,10 @@ class _LinkedTextPanelState extends State<LinkedTextPanel> {
       });
       return;
     }
+
     if (!mounted) return;
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -101,8 +102,10 @@ class _LinkedTextPanelState extends State<LinkedTextPanel> {
     if (s1 == s2) return 0;
     if (s1.isEmpty) return s2.length;
     if (s2.isEmpty) return s1.length;
+
     List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
     List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
     for (int i = 0; i < s1.length; i++) {
       v1[0] = i + 1;
       for (int j = 0; j < s2.length; j++) {
@@ -118,11 +121,13 @@ class _LinkedTextPanelState extends State<LinkedTextPanel> {
 
   Future<void> _saveLinkedText() async {
     if (component.imageId.isEmpty || _isSaving) return;
+
     setState(() {
       _isSaving = true;
       _statusMessage = 'Saving wiki-links and entities...';
       _isError = false;
     });
+
     try {
       // Parse manual bracket annotations [[Label|ref]] out of content
       final regex = RegExp(r'\[\[(.*?)\]\]');
@@ -218,6 +223,7 @@ class _LinkedTextPanelState extends State<LinkedTextPanel> {
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
       );
     }
+
     return div(
       [
         // Implement the .grow-wrap element mirroring architecture
@@ -236,7 +242,7 @@ class _LinkedTextPanelState extends State<LinkedTextPanel> {
                     });
                   }
                 },
-                [text(_textValue)]
+                [Component.text(_textValue)]
             )
           ],
           classes: 'grow-wrap',
@@ -248,11 +254,11 @@ class _LinkedTextPanelState extends State<LinkedTextPanel> {
         div(
           [
             span(
-                [text(_statusMessage)],
+                [Component.text(_statusMessage)],
                 classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'
             ),
             button(
-              [text(_isSaving ? 'Saving...' : 'Save Links')],
+              [Component.text(_isSaving ? 'Saving...' : 'Save Links')],
               classes: 'btn-primary nav-pill mb-0',
               attributes: {
                 'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',

@@ -87,6 +87,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
   Component build(BuildContext context) {
     final comments = _blocState.comments;
     final isLoading = _blocState.isLoadingComments;
+
     return div(
       [
         if (isLoading)
@@ -100,7 +101,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
           )
         else if (comments.isEmpty)
           div(
-            [text('No thoughts shared yet.')],
+            [Component.text('No thoughts shared yet.')],
             classes: 'p-8 text-center text-gray text-sm italic',
           )
         else
@@ -133,7 +134,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
             ),
             button(
               [
-                span([text('send')], classes: 'material-symbols-outlined text-sm')
+                span([Component.text('send')], classes: 'material-symbols-outlined text-sm')
               ],
               classes: 'nav-pill mb-0',
               attributes: const {
@@ -236,6 +237,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
   Component build(BuildContext context) {
     final comments = _blocState.comments;
     final isLoading = _blocState.isLoadingComments;
+
     return div(
       [
         if (isLoading)
@@ -249,7 +251,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
           )
         else if (comments.isEmpty)
           div(
-            [text('No comments posted for this page.')],
+            [Component.text('No comments posted for this page.')],
             classes: 'p-6 text-center text-gray text-xs italic',
           )
         else
@@ -282,7 +284,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
             ),
             button(
               [
-                span([text('send')], classes: 'material-symbols-outlined text-sm')
+                span([Component.text('send')], classes: 'material-symbols-outlined text-sm')
               ],
               classes: 'nav-pill mb-0',
               attributes: const {
@@ -308,6 +310,7 @@ typedef CommentsPanel = CommentsRowPanel;
 
 class CommentItem extends StatefulComponent {
   final Map<String, dynamic> data;
+
   const CommentItem({required this.data, super.key});
 
   @override
@@ -318,6 +321,7 @@ class _CommentItemState extends State<CommentItem> {
   UserProfile? _profile;
   bool _isLiked = false;
   StreamSubscription? _likeSub;
+
   final IUserRepository _userRepo = createUserRepository();
   final IEngagementRepository _engagementRepo = createEngagementRepository();
 
@@ -371,6 +375,7 @@ class _CommentItemState extends State<CommentItem> {
     final String? photoUrl = _profile?.photoUrl;
     final String textContent = component.data['text'] ?? '';
     final int likeCount = component.data['likeCount'] ?? 0;
+
     String dateStr = '';
     final createdAt = component.data['createdAt'];
     if (createdAt is DateTime) {
@@ -388,7 +393,7 @@ class _CommentItemState extends State<CommentItem> {
               )
             else
               div(
-                [text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')],
+                [Component.text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')],
                 attributes: const {'style': 'font-weight: bold; color: #9ca3af; font-size: 14px;'},
               )
           ],
@@ -403,13 +408,13 @@ class _CommentItemState extends State<CommentItem> {
                   [
                     div(
                       [
-                        span([text(displayName)], classes: 'font-bold text-sm text-black', attributes: const {'style': 'font-weight: bold; font-size: 14px; color: black;'}),
-                        span([text('@$username')], classes: 'text-gray-500 text-xs', attributes: const {'style': 'color: #6b7280; font-size: 12px;'}),
+                        span([Component.text(displayName)], classes: 'font-bold text-sm text-black', attributes: const {'style': 'font-weight: bold; font-size: 14px; color: black;'}),
+                        span([Component.text('@$username')], classes: 'text-gray-500 text-xs', attributes: const {'style': 'color: #6b7280; font-size: 12px;'}),
                       ],
                       classes: 'flex-row items-center gap-1',
                       attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; gap: 4px;'},
                     ),
-                    span([text(dateStr)], classes: 'text-gray-400 text-xs mt-0.5', attributes: const {'style': 'color: #9ca3af; font-size: 11px; margin-top: 2px;'})
+                    span([Component.text(dateStr)], classes: 'text-gray-400 text-xs mt-0.5', attributes: const {'style': 'color: #9ca3af; font-size: 11px; margin-top: 2px;'})
                   ],
                   classes: 'flex-col',
                   attributes: const {'style': 'display: flex; flex-direction: column;'},
@@ -417,14 +422,14 @@ class _CommentItemState extends State<CommentItem> {
                 button(
                   [
                     span(
-                        [text(likeCount > 0 ? '$likeCount' : '')],
+                        [Component.text(likeCount > 0 ? '$likeCount' : '')],
                         classes: 'text-xs font-bold ${_isLiked ? 'text-red-500' : 'text-gray-400'}',
                         attributes: {
                           'style': 'font-size: 11px; font-weight: bold; color: ${_isLiked ? "#ef4444" : "#9ca3af"};'
                         }
                     ),
                     span(
-                        [text('favorite')],
+                        [Component.text('favorite')],
                         classes: 'material-symbols-outlined text-sm ${_isLiked ? 'text-red-500' : 'text-gray-300'}',
                         attributes: {
                           'style': 'font-size: 16px; color: ${_isLiked ? "#ef4444" : "#d1d5db"};'
@@ -439,7 +444,7 @@ class _CommentItemState extends State<CommentItem> {
               classes: 'flex-row justify-between items-start',
               attributes: const {'style': 'display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start;'},
             ),
-            p([text(textContent)], classes: 'text-sm text-gray-800 mt-2 leading-relaxed', attributes: const {'style': 'margin: 8px 0 0 0; font-size: 14px; color: #1f2937; line-height: 1.5; text-align: left;'})
+            p([Component.text(textContent)], classes: 'text-sm text-gray-800 mt-2 leading-relaxed', attributes: const {'style': 'margin: 8px 0 0 0; font-size: 14px; color: #1f2937; line-height: 1.5; text-align: left;'})
           ],
           classes: 'flex-1 flex-col',
           attributes: const {'style': 'flex: 1; display: flex; flex-direction: column; overflow: hidden;'},

@@ -47,54 +47,58 @@ List<Component> renderWikilinkSpans(
         final String? username = profile?['username'];
         if (profile != null && username != null && username.isNotEmpty) {
           children.add(a(
-              href: '/@$username',
-              attributes: const {
-                'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
-              },
-              events: {
-                'click': (e) {
-                  e.preventDefault();
-                  Router.of(context).push('/@$username');
-                }
-              },
-              [Component.text(display)]
+            href: '/@$username',
+            attributes: const {
+              'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
+            },
+            events: {
+              'click': (e) {
+                e.preventDefault();
+                Router.of(context).push('/@$username');
+              }
+            },
+            [Component.text(display)],
           ));
         } else {
           children.add(span(
-              attributes: const {
-                'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
-              },
-              [Component.text(display)]
+            attributes: const {
+              'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+            },
+            [Component.text(display)],
           ));
         }
       } else if (ref.startsWith('address:')) {
         final addressVal = ref.substring(8);
         final encodedAddr = Uri.encodeComponent(addressVal);
         children.add(a(
-            href: 'https://www.google.com/maps/search/?api=1&query=$encodedAddr',
-            attributes: const {
-              'target': '_blank',
-              'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
-            },
-            [
-              span([text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 2px; vertical-align: middle; display: inline-block;'}),
-              Component.text(display)
-            ]
+          href: 'https://www.google.com/maps/search/?api=1&query=$encodedAddr',
+          attributes: const {
+            'target': '_blank',
+            'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
+          },
+          [
+            span(
+              [Component.text('pin_drop')],
+              classes: 'material-symbols-outlined',
+              attributes: const {'style': 'font-size: 14px; margin-right: 2px; vertical-align: middle; display: inline-block;'},
+            ),
+            Component.text(display),
+          ],
         ));
       } else {
         children.add(span(
-            attributes: const {
-              'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
-            },
-            [Component.text(display)]
+          attributes: const {
+            'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+          },
+          [Component.text(display)],
         ));
       }
     } else {
       children.add(span(
-          attributes: const {
-            'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
-          },
-          [Component.text(display)]
+        attributes: const {
+          'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+        },
+        [Component.text(display)],
       ));
     }
     currentIndex = match.end;
@@ -152,6 +156,7 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
       });
       return;
     }
+
     setState(() => _loading = true);
     try {
       final res = await fsGetDoc('images/${component.imageId}');
@@ -165,17 +170,14 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
         final resolvedText = (textVal != null && textVal.trim().isNotEmpty)
             ? textVal
             : "Transcription pending for this page.";
-
         final String fullyResolvedText = await resolveAndReplaceShortcodes(
           component.fanzineId ?? '',
           resolvedText,
         );
-
         setState(() {
           _content = fullyResolvedText;
           _loading = false;
         });
-
         _loadProfiles(fullyResolvedText);
       } else {
         setState(() {
@@ -195,6 +197,7 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
     final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(textContent);
     final Set<String> uidsToFetch = {};
+
     for (final m in matches) {
       final content = m.group(1) ?? '';
       final parts = content.split('|');
@@ -211,7 +214,9 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
         }
       }
     }
+
     if (uidsToFetch.isEmpty) return;
+
     final Map<String, Map<String, dynamic>> fetchedProfiles = {};
     for (var uid in uidsToFetch) {
       try {
@@ -222,6 +227,7 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
         }
       } catch (_) {}
     }
+
     if (mounted && fetchedProfiles.isNotEmpty) {
       setState(() {
         _loadedProfiles.addAll(fetchedProfiles);
@@ -251,10 +257,10 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
         }));
       } else {
         lineComponents.add(p(
-            renderWikilinkSpans(cleanLine, _loadedProfiles, context),
-            attributes: {
-              'style': 'font-size: ${_fontSize}px; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #2D3748; text-align: justify; margin: 0 0 12px 0;'
-            }
+          renderWikilinkSpans(cleanLine, _loadedProfiles, context),
+          attributes: {
+            'style': 'font-size: ${_fontSize}px; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #2D3748; text-align: justify; margin: 0 0 12px 0;'
+          },
         ));
       }
     }
@@ -264,52 +270,52 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
   @override
   Component build(BuildContext context) {
     return div(
-        attributes: const {
-          'style': 'position: relative; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;'
-        },
-        [
-          div(
-              classes: 'flex-row gap-2',
+      attributes: const {
+        'style': 'position: relative; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;'
+      },
+      [
+        div(
+          classes: 'flex-row gap-2',
+          attributes: const {
+            'style': 'position: absolute; top: 0; right: 0; display: flex; gap: 8px; z-index: 10;'
+          },
+          [
+            button(
+              classes: 'nav-pill',
               attributes: const {
-                'style': 'position: absolute; top: 0; right: 0; display: flex; gap: 8px; z-index: 10;'
+                'style': 'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
               },
-              [
-                button(
-                    classes: 'nav-pill',
-                    attributes: const {
-                      'style': 'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
-                    },
-                    events: {'click': (e) => setState(() => _fontSize = (_fontSize > 10) ? _fontSize - 2 : 10)},
-                    [Component.text('A-')]
-                ),
-                button(
-                    classes: 'nav-pill',
-                    attributes: const {
-                      'style': 'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
-                    },
-                    events: {'click': (e) => setState(() => _fontSize = (_fontSize < 48) ? _fontSize + 2 : 48)},
-                    [Component.text('A+')]
-                ),
-              ]
-          ),
-          div(
+              events: {'click': (e) => setState(() => _fontSize = (_fontSize > 10) ? _fontSize - 2 : 10)},
+              [Component.text('A-')],
+            ),
+            button(
+              classes: 'nav-pill',
               attributes: const {
-                'style': 'margin-top: 36px; width: 100%; box-sizing: border-box; overflow: visible;'
+                'style': 'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
               },
-              [
-                if (_loading)
-                  div(classes: 'flex-col gap-2 py-4', [
-                    div(classes: 'skeleton-line shimmer-bg', []),
-                    div(classes: 'skeleton-line medium shimmer-bg', []),
-                  ])
-                else
-                  div(
-                      _renderLines(_content),
-                      attributes: const {'style': 'width: 100%; overflow: visible; display: block;'}
-                  )
-              ]
-          )
-        ]
+              events: {'click': (e) => setState(() => _fontSize = (_fontSize < 48) ? _fontSize + 2 : 48)},
+              [Component.text('A+')],
+            ),
+          ],
+        ),
+        div(
+          attributes: const {
+            'style': 'margin-top: 36px; width: 100%; box-sizing: border-box; overflow: visible;'
+          },
+          [
+            if (_loading)
+              div(classes: 'flex-col gap-2 py-4', [
+                div(classes: 'skeleton-line shimmer-bg', []),
+                div(classes: 'skeleton-line medium shimmer-bg', []),
+              ])
+            else
+              div(
+                _renderLines(_content),
+                attributes: const {'style': 'width: 100%; overflow: visible; display: block;'},
+              )
+          ],
+        )
+      ],
     );
   }
 }
@@ -359,6 +365,7 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
       });
       return;
     }
+
     setState(() => _loading = true);
     try {
       final res = await fsGetDoc('images/${component.imageId}');
@@ -372,17 +379,14 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
         final resolvedText = (textVal != null && textVal.trim().isNotEmpty)
             ? textVal
             : "Transcription pending for this page.";
-
         final String fullyResolvedText = await resolveAndReplaceShortcodes(
           component.fanzineId ?? '',
           resolvedText,
         );
-
         setState(() {
           _content = fullyResolvedText;
           _loading = false;
         });
-
         _loadProfiles(fullyResolvedText);
       } else {
         setState(() {
@@ -402,6 +406,7 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
     final regex = RegExp(r'\[\[(.*?)\]\]');
     final matches = regex.allMatches(textContent);
     final Set<String> uidsToFetch = {};
+
     for (final m in matches) {
       final content = m.group(1) ?? '';
       final parts = content.split('|');
@@ -418,7 +423,9 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
         }
       }
     }
+
     if (uidsToFetch.isEmpty) return;
+
     final Map<String, Map<String, dynamic>> fetchedProfiles = {};
     for (var uid in uidsToFetch) {
       try {
@@ -429,6 +436,7 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
         }
       } catch (_) {}
     }
+
     if (mounted && fetchedProfiles.isNotEmpty) {
       setState(() {
         _loadedProfiles.addAll(fetchedProfiles);
@@ -444,16 +452,17 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
         div(classes: 'skeleton-line medium shimmer-bg', []),
       ]);
     }
+
     return div(
-        [
-          p(
-              renderWikilinkSpans(_content, _loadedProfiles, context),
-              attributes: const {
-                'style': 'font-size: 14px; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #1e293b; text-align: justify; margin: 0; white-space: pre-line;'
-              }
-          )
-        ],
-        attributes: const {'style': 'width: 100%; box-sizing: border-box;'}
+      [
+        p(
+          renderWikilinkSpans(_content, _loadedProfiles, context),
+          attributes: const {
+            'style': 'font-size: 14px; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #1e293b; text-align: justify; margin: 0; white-space: pre-line;'
+          },
+        )
+      ],
+      attributes: const {'style': 'width: 100%; box-sizing: border-box;'},
     );
   }
 }

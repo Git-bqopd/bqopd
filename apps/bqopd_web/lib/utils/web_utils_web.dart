@@ -1,14 +1,35 @@
 import 'package:web/web.dart' as web;
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:async';
-import 'dart:js_util' as js_util;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 
-// EXPORT web_firebase_interop_web relatively to prevent duplicate import resolution issues
+// Export web_firebase_interop_web relatively to prevent duplicate import resolution issues
 export 'web_firebase_interop_web.dart';
 
-/// Browser-specific implementation using package:web.
+/// JS interop extension type for Google Maps Place autocomplete options
+@JS()
+@anonymous
+extension type _AutocompleteOptions._(JSObject _) implements JSObject {
+  external factory _AutocompleteOptions({JSArray<JSString>? fields});
+}
+
+/// JS interop extension type for Google Place result objects
+@JS()
+extension type _PlaceResult(JSObject _) implements JSObject {
+  external JSString? get formatted_address;
+}
+
+/// JS interop extension type for Google Maps Autocomplete instance
+@JS('google.maps.places.Autocomplete')
+extension type _GoogleAutocomplete._(JSObject _) implements JSObject {
+  external factory _GoogleAutocomplete(web.Element element, [_AutocompleteOptions? options]);
+  external void addListener(JSString eventName, JSFunction handler);
+  external _PlaceResult? getPlace();
+}
+
+/// Browser-specific implementation using package:web to scroll element into view.
 void scrollToElement(String id) {
   final el = web.document.getElementById(id);
   if (el != null) {
@@ -19,7 +40,7 @@ void scrollToElement(String id) {
   }
 }
 
-/// Copies text to the system clipboard in web environments.
+/// Copies text to the system clipboard in web environments using Navigator.
 void copyToClipboard(String text) {
   try {
     web.window.navigator.clipboard.writeText(text);
@@ -109,26 +130,47 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
   return completer.future;
 }
 
-/// Client-side implementation of retrieving an input element value with type-safe casts.
-/// Leverages a robust multi-tier fallback to seamlessly bridge new JS interop and legacy types.
+/// Client-side implementation of retrieving an input element value with type-safe inspection.
+/// Uses package:web, dart:js_interop, and dart:js_interop_unsafe to guarantee compatibility.
 String getInputValue(dynamic event) {
   if (event == null) return '';
-  // 1. Try modern js_util property access (highly robust, works on raw JS objects, JSObjects, and native browser Events)
+
+  // 1. Direct package:web Event checking
   try {
-    if (js_util.hasProperty(event, 'target')) {
-      final target = js_util.getProperty(event, 'target');
-      if (target != null && js_util.hasProperty(target, 'value')) {
-        final val = js_util.getProperty(target, 'value');
-        if (val != null) {
-          return val.toString();
+    if (event is web.Event) {
+      final target = event.target;
+      if (target is web.HTMLInputElement) {
+        return target.value;
+      }
+      if (target is web.HTMLTextAreaElement) {
+        return target.value;
+      }
+      if (target is web.HTMLSelectElement) {
+        return target.value;
+      }
+    }
+  } catch (e) {
+    print('[getInputValue web.Event Error] $e');
+  }
+
+  // 2. dart:js_interop and dart:js_interop_unsafe inspection on JSObjects
+  try {
+    if (event is JSObject) {
+      if (event.has('target')) {
+        final target = event['target'];
+        if (target != null && target is JSObject && target.has('value')) {
+          final val = target['value'];
+          if (val != null) {
+            return val.dartify()?.toString() ?? '';
+          }
         }
       }
     }
   } catch (e) {
-    print('[getInputValue js_util Error] $e');
+    print('[getInputValue js_interop Error] $e');
   }
 
-  // 2. Fallback to dynamic property invocation (handles legacy dart:html or wrapped event variants)
+  // 3. Fallback to dynamic property invocation for legacy wrapped objects
   try {
     final target = (event as dynamic).target;
     if (target != null) {
@@ -140,17 +182,6 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue dynamic Fallback Error] $e');
   }
-
-  // 3. Fallback to package:web extension type matching
-  try {
-    if (event is web.Event) {
-      final target = event.target;
-      if (target != null) {
-        final input = target as web.HTMLInputElement;
-        return input.value;
-      }
-    }
-  } catch (_) {}
 
   return '';
 }
@@ -183,52 +214,51 @@ void openWindow(String url, String target) {
   web.window.open(url, target);
 }
 
-/// Dynamically binds Google Places Autocomplete to an input element.
-/// Self-injects the JS helper globally on-the-fly to bypass browser caching of firebase_init.js.
+/// Dynamically binds Google Places Autocomplete to an input element using dart:js_interop and dart:js_interop_unsafe.
 void initAddressAutocomplete(String inputId, void Function(String) callback) {
-  final windowObj = js_util.globalThis;
-  if (!js_util.hasProperty(windowObj, 'initAddressAutocomplete')) {
-    js_util.setProperty(windowObj, 'initAddressAutocomplete', (JSString id, JSFunction cb) {
-      final input = web.document.getElementById(id.toDart) as web.HTMLInputElement?;
-      if (input == null) return;
-      final googleExists = js_util.hasProperty(windowObj, 'google');
-      if (!googleExists) {
-        web.window.setTimeout((() {
-          js_util.callMethod(windowObj, 'initAddressAutocomplete', [id, cb]);
-        }).toJS, 150.toJS);
-        return;
-      }
-      final google = js_util.getProperty(windowObj, 'google');
-      final maps = js_util.getProperty(google, 'maps');
-      if (maps == null || !js_util.hasProperty(maps, 'places')) {
-        web.window.setTimeout((() {
-          js_util.callMethod(windowObj, 'initAddressAutocomplete', [id, cb]);
-        }).toJS, 150.toJS);
-        return;
-      }
-      final places = js_util.getProperty(maps, 'places');
-      final autocompleteClass = js_util.getProperty(places, 'Autocomplete');
-      final options = js_util.newObject();
-      js_util.setProperty(options, 'fields', js_util.jsify(['formatted_address']));
-      final autocompleteInstance = js_util.callConstructor(autocompleteClass, [input, options]);
-      js_util.callMethod(autocompleteInstance, 'addListener', [
-        'place_changed'.toJS,
-        (() {
-          final place = js_util.callMethod(autocompleteInstance, 'getPlace', []);
-          if (place != null) {
-            final formatted = js_util.getProperty(place, 'formatted_address');
-            if (formatted != null) {
-              cb.callAsFunction(null, (formatted as JSString));
-            }
-          }
-        }).toJS
-      ]);
-    }.toJS);
+  final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
+  if (input == null) return;
+
+  // Check if Google Maps Places SDK has finished loading on the global window
+  final jsWindow = web.window as JSObject;
+  if (!jsWindow.has('google')) {
+    web.window.setTimeout((() {
+      initAddressAutocomplete(inputId, callback);
+    }).toJS, 150.toJS);
+    return;
   }
 
-  // Safe invoke
-  js_util.callMethod(windowObj, 'initAddressAutocomplete', [
-    inputId.toJS,
-    ((JSString str) => callback(str.toDart)).toJS
-  ]);
+  final google = jsWindow['google'];
+  if (google == null || google is! JSObject || !google.has('maps')) {
+    web.window.setTimeout((() {
+      initAddressAutocomplete(inputId, callback);
+    }).toJS, 150.toJS);
+    return;
+  }
+
+  final maps = google['maps'];
+  if (maps == null || maps is! JSObject || !maps.has('places')) {
+    web.window.setTimeout((() {
+      initAddressAutocomplete(inputId, callback);
+    }).toJS, 150.toJS);
+    return;
+  }
+
+  try {
+    final options = _AutocompleteOptions(
+      fields: ['formatted_address'.toJS].toJS,
+    );
+    final autocomplete = _GoogleAutocomplete(input, options);
+    autocomplete.addListener('place_changed'.toJS, (() {
+      final place = autocomplete.getPlace();
+      if (place != null) {
+        final formatted = place.formatted_address;
+        if (formatted != null) {
+          callback(formatted.toDart);
+        }
+      }
+    }).toJS);
+  } catch (e) {
+    print('[initAddressAutocomplete Error] $e');
+  }
 }

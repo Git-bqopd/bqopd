@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/publisher_compiler.dart';
 import '../../utils/web_utils.dart';
 
@@ -12,8 +11,10 @@ int calculateEditDistance(String s1, String s2) {
   if (s1 == s2) return 0;
   if (s1.isEmpty) return s2.length;
   if (s2.isEmpty) return s1.length;
+
   List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
   List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
   for (int i = 0; i < s1.length; i++) {
     v1[0] = i + 1;
     for (int j = 0; j < s2.length; j++) {
@@ -83,8 +84,10 @@ class _EditTextRowPanelState extends State<EditTextRowPanel> {
       });
       return;
     }
+
     if (!mounted) return;
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -113,11 +116,13 @@ class _EditTextRowPanelState extends State<EditTextRowPanel> {
 
   Future<void> _saveText() async {
     if (component.imageId.isEmpty || _isSaving) return;
+
     setState(() {
       _isSaving = true;
       _statusMessage = 'Saving page text and links...';
       _isError = false;
     });
+
     try {
       final regex = RegExp(r'\[\[(.*?)\]\]');
       final matches = regex.allMatches(_textValue);
@@ -209,6 +214,7 @@ class _EditTextRowPanelState extends State<EditTextRowPanel> {
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
       );
     }
+
     return div(
       [
         div(
@@ -226,7 +232,7 @@ class _EditTextRowPanelState extends State<EditTextRowPanel> {
                     });
                   }
                 },
-                [text(_textValue)]
+                [Component.text(_textValue)]
             )
           ],
           classes: 'grow-wrap',
@@ -237,11 +243,11 @@ class _EditTextRowPanelState extends State<EditTextRowPanel> {
         div(
           [
             span(
-                [text(_statusMessage)],
+                [Component.text(_statusMessage)],
                 classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'
             ),
             button(
-              [text(_isSaving ? 'Saving...' : 'Save Text')],
+              [Component.text(_isSaving ? 'Saving...' : 'Save Text')],
               classes: 'btn-primary nav-pill mb-0',
               attributes: {
                 'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',
@@ -318,8 +324,10 @@ class _EditTextColumnPanelState extends State<EditTextColumnPanel> {
       });
       return;
     }
+
     if (!mounted) return;
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -348,11 +356,13 @@ class _EditTextColumnPanelState extends State<EditTextColumnPanel> {
 
   Future<void> _saveText() async {
     if (component.imageId.isEmpty || _isSaving) return;
+
     setState(() {
       _isSaving = true;
       _statusMessage = 'Saving text and updating wikilinks...';
       _isError = false;
     });
+
     try {
       final regex = RegExp(r'\[\[(.*?)\]\]');
       final matches = regex.allMatches(_textValue);
@@ -445,14 +455,15 @@ class _EditTextColumnPanelState extends State<EditTextColumnPanel> {
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
       );
     }
+
     return div(
       [
         div(
             [
-              span([text('EDIT TEXT & WIKILINKS')], attributes: const {
+              span([Component.text('EDIT TEXT & WIKILINKS')], attributes: const {
                 'style': 'font-size: 11px; font-weight: bold; color: #475569; letter-spacing: 0.5px; text-transform: uppercase;'
               }),
-              span([text('Edit OCR text and bracket profiles with [[Name]]')], attributes: const {
+              span([Component.text('Edit OCR text and bracket profiles with [[Name]]')], attributes: const {
                 'style': 'font-size: 10px; color: #94a3b8;'
               }),
             ],
@@ -476,7 +487,7 @@ class _EditTextColumnPanelState extends State<EditTextColumnPanel> {
                     });
                   }
                 },
-                [text(_textValue)]
+                [Component.text(_textValue)]
             )
           ],
           classes: 'grow-wrap',
@@ -487,11 +498,11 @@ class _EditTextColumnPanelState extends State<EditTextColumnPanel> {
         div(
           [
             span(
-                [text(_statusMessage)],
+                [Component.text(_statusMessage)],
                 classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'
             ),
             button(
-              [text(_isSaving ? 'Saving...' : 'Save Text & Links')],
+              [Component.text(_isSaving ? 'Saving...' : 'Save Text & Links')],
               classes: 'btn-primary nav-pill mb-0',
               attributes: {
                 'style': 'padding: 8px 18px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',

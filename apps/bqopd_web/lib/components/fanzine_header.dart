@@ -3,7 +3,6 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'dart:convert';
 import 'package:bqopd_core/bqopd_core.dart';
-import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
 import 'stats_table.dart';
 
@@ -129,7 +128,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           }
         }
       },
-      [text(_displayUrl)],
+      [Component.text(_displayUrl)],
     );
 
     if (component.isStickerOnly) {
@@ -193,9 +192,9 @@ class _FanzineHeaderState extends State<FanzineHeader> {
           : div(classes: 'white-sticker-compact w-full mt-2', [
         div(classes: 'flex-row justify-center items-center py-2 bg-gray-100', [
           _buildTab('indicia', 0),
-          span(classes: 'px-4 text-gray text-xs', [text('|')]),
+          span(classes: 'px-4 text-gray text-xs', [Component.text('|')]),
           _buildTab('creators', 1),
-          span(classes: 'px-4 text-gray text-xs', [text('|')]),
+          span(classes: 'px-4 text-gray text-xs', [Component.text('|')]),
           _buildTab('stats', 2),
         ]),
         div(classes: 'flex-col flex-1 p-4 overflow-y-auto', [
@@ -204,12 +203,12 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               p(
                   classes: 'text-xs font-bold mb-2',
                   attributes: {'style': 'font-family: Georgia; line-height: 1.5; color: #666; text-align: left;'},
-                  [text('published date: ${component.fanzineData!['publishedDate']}')]
+                  [Component.text('published date: ${component.fanzineData!['publishedDate']}')]
               ),
             p(
               classes: 'text-xs text-justify',
               attributes: {'style': 'font-family: Georgia; line-height: 1.5;'},
-              [text(indiciaText)],
+              [Component.text(indiciaText)],
             )
           ]),
           div(classes: _activeTab == 1 ? '' : 'hidden', [
@@ -254,7 +253,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                   _error = null;
                 })
               },
-              [text('×')]
+              [Component.text('×')]
           ),
           img(
               src: 'assets/logo200.gif',
@@ -266,7 +265,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               attributes: const {
                 'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
               },
-              [text('bqopd')]
+              [Component.text('bqopd')]
           ),
           div(
               classes: 'flex-col w-full',
@@ -313,7 +312,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                         }
                       }
                     },
-                    [text(_loading ? 'loading...' : 'login')]
+                    [Component.text(_loading ? 'loading...' : 'login')]
                 ),
               ]
           ),
@@ -323,14 +322,14 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 attributes: const {
                   'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
                 },
-                [text(_error!)]
+                [Component.text(_error!)]
             ),
           div(
               attributes: const {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
               },
               [
-                text('not cool yet? '),
+                Component.text('not cool yet? '),
                 span(
                     attributes: const {
                       'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
@@ -342,7 +341,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                         _error = null;
                       })
                     },
-                    [text('register here.')]
+                    [Component.text('register here.')]
                 )
               ]
           )
@@ -370,7 +369,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                   _error = null;
                 })
               },
-              [text('×')]
+              [Component.text('×')]
           ),
           img(
               src: 'assets/logo200.gif',
@@ -382,7 +381,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
               attributes: const {
                 'style': 'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
               },
-              [text('bqopd')]
+              [Component.text('bqopd')]
           ),
           div(
               classes: 'flex-col w-full',
@@ -438,7 +437,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                         }
                       }
                     },
-                    [text(_loading ? 'loading...' : 'register')]
+                    [Component.text(_loading ? 'loading...' : 'register')]
                 ),
               ]
           ),
@@ -448,14 +447,14 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                 attributes: const {
                   'style': 'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
                 },
-                [text(_error!)]
+                [Component.text(_error!)]
             ),
           div(
               attributes: const {
                 'style': 'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
               },
               [
-                text('already cool? '),
+                Component.text('already cool? '),
                 span(
                     attributes: const {
                       'style': 'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
@@ -467,7 +466,7 @@ class _FanzineHeaderState extends State<FanzineHeader> {
                         _error = null;
                       })
                     },
-                    [text('login here.')]
+                    [Component.text('login here.')]
                 )
               ]
           )
@@ -480,12 +479,13 @@ class _FanzineHeaderState extends State<FanzineHeader> {
     return span(
       classes: 'text-xs cursor-pointer ${isActive ? 'font-bold' : 'text-gray'}',
       events: {'click': (e) => setState(() => _activeTab = index)},
-      [text(label)],
+      [Component.text(label)],
     );
   }
 
   Component _buildCreatorsTab(List creators) {
-    if (creators.isEmpty) return p(classes: 'text-xs text-center text-gray', [text('No creators listed.')]);
+    if (creators.isEmpty) return p(classes: 'text-xs text-center text-gray', [Component.text('No creators listed.')]);
+
     return div(classes: 'creator-list', [
       div(attributes: const {'style': 'display: inline-flex; flex-direction: column; align-items: flex-start;'}, [
         for (var c in creators)
@@ -493,8 +493,8 @@ class _FanzineHeaderState extends State<FanzineHeader> {
             classes: 'creator-row',
             attributes: const {'style': 'width: auto;'},
             [
-              span(classes: 'creator-role', [text('${c['role']}')]),
-              span(classes: 'creator-divider', [text('|')]),
+              span(classes: 'creator-role', [Component.text('${c['role']}')]),
+              span(classes: 'creator-divider', [Component.text('|')]),
               div(classes: 'creator-identity', [
                 UserTile(
                   profile: component.creatorProfiles[c['uid']],
@@ -525,11 +525,11 @@ class UserTile extends StatelessComponent {
         if (photoUrl != null && photoUrl.isNotEmpty)
           img(classes: 'user-avatar', src: photoUrl)
         else
-          div(classes: 'user-avatar-placeholder', [text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')])
+          div(classes: 'user-avatar-placeholder', [Component.text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')])
       ]),
       div(classes: 'user-info', [
-        div(classes: 'user-display-name', [text(displayName)]),
-        if (username != null) div(classes: 'user-handle', [text('@$username')])
+        div(classes: 'user-display-name', [Component.text(displayName)]),
+        if (username != null) div(classes: 'user-handle', [Component.text('@$username')])
       ])
     ]);
   }

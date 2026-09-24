@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/publisher_compiler.dart';
 import '../../utils/web_utils.dart';
 
@@ -63,8 +62,10 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
       });
       return;
     }
+
     if (!mounted) return;
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -96,8 +97,10 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
     if (s1 == s2) return 0;
     if (s1.isEmpty) return s2.length;
     if (s2.isEmpty) return s1.length;
+
     List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
     List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
     for (int i = 0; i < s1.length; i++) {
       v1[0] = i + 1;
       for (int j = 0; j < s2.length; j++) {
@@ -113,11 +116,13 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
 
   Future<void> _saveText() async {
     if (component.imageId.isEmpty || _isSaving) return;
+
     setState(() {
       _isSaving = true;
       _statusMessage = 'Saving page text and links...';
       _isError = false;
     });
+
     try {
       // Parse manual bracket annotations [[Label|ref]] out of content programmatically
       final regex = RegExp(r'\[\[(.*?)\]\]');
@@ -135,7 +140,7 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
         'text_corrected': _textValue,
         'text_linked': _textValue, // Maintain aligned fields in combined workflow
         'detected_entities': manualEntities,
-        'needs_linking': false,    // Set to false to bypass background AI wikilinking on save
+        'needs_linking': false, // Set to false to bypass background AI wikilinking on save
       };
 
       if (_aiBaselineText.isNotEmpty) {
@@ -212,6 +217,7 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
         attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
       );
     }
+
     return div(
       [
         div(
@@ -229,7 +235,7 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
                     });
                   }
                 },
-                [text(_textValue)]
+                [Component.text(_textValue)]
             )
           ],
           classes: 'grow-wrap',
@@ -240,11 +246,11 @@ class _MasterTextPanelState extends State<MasterTextPanel> {
         div(
           [
             span(
-                [text(_statusMessage)],
+                [Component.text(_statusMessage)],
                 classes: _isError ? 'text-xs text-red-500 font-bold' : 'text-xs text-green-600 font-bold'
             ),
             button(
-              [text(_isSaving ? 'Saving...' : 'Save Text')],
+              [Component.text(_isSaving ? 'Saving...' : 'Save Text')],
               classes: 'btn-primary nav-pill mb-0',
               attributes: {
                 'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',

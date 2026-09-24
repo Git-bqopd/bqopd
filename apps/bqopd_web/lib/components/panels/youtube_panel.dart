@@ -52,7 +52,7 @@ class _YoutubeRowPanelState extends State<YoutubeRowPanel> {
     }
     if (_youtubeId == null || _youtubeId!.isEmpty) {
       return div(classes: 'p-6 text-center text-gray italic text-xs', [
-        text('No video resource linked to this page.')
+        Component.text('No video resource linked to this page.')
       ]);
     }
     return div(attributes: const {

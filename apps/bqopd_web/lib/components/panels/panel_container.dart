@@ -23,7 +23,6 @@ class PanelContainer extends StatelessComponent {
 
     // Text editors and readers should grow dynamically to arbitrary lengths without any transition-induced clipping.
     // For these panels, we omit 'panel-container-animate' to bypass CSS max-height caps completely.
-    // FIXED: Changed reference from masterText to editText
     final bool isUnlimitedHeight = type == BonusRowType.textReader ||
         type == BonusRowType.editText ||
         type == BonusRowType.linkedText;
@@ -33,23 +32,32 @@ class PanelContainer extends StatelessComponent {
         : 'p-4 mt-2 panel-container-animate';
 
     return div(
-        classes: classesStr,
-        attributes: {
-          'style': 'background-color: $bgColor; border-top: 1px solid #eee; border-bottom: 1px solid #eee; overflow: visible;'
-        },
-        [
-          div(classes: 'flex-col', [
+      classes: classesStr,
+      attributes: {
+        'style':
+        'background-color: $bgColor; border-top: 1px solid #eee; border-bottom: 1px solid #eee; overflow: visible;'
+      },
+      [
+        div(
+          classes: 'flex-col',
+          [
             if (title.isNotEmpty)
-              div(classes: 'mb-2', [
-                span(
+              div(
+                classes: 'mb-2',
+                [
+                  span(
                     classes: 'text-xs font-bold text-gray',
-                    attributes: {'style': 'letter-spacing: 1px; text-transform: uppercase;'},
-                    [text(title)]
-                )
-              ]),
-            child
-          ])
-        ]
+                    attributes: const {
+                      'style': 'letter-spacing: 1px; text-transform: uppercase;'
+                    },
+                    [Component.text(title)],
+                  ),
+                ],
+              ),
+            child,
+          ],
+        )
+      ],
     );
   }
 }
