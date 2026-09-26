@@ -93,7 +93,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
         if (isLoading)
           div(
             [
-              div([], classes: 'w-10 h-10 rounded-full shimmer-bg flex-shrink-0', attributes: const {'style': 'width: 40px; height: 40px; border-radius: 50%;'}),
+              div([], classes: 'w-8 h-8 rounded-full shimmer-bg flex-shrink-0', attributes: const {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; flex: 0 0 32px; aspect-ratio: 1 / 1; border-radius: 50%; box-sizing: border-box;'}),
               div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 85%;'}),
             ],
             classes: 'flex-row gap-3 py-4 border-b border-gray-100 items-start',
@@ -243,7 +243,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
         if (isLoading)
           div(
             [
-              div([], classes: 'w-10 h-10 rounded-full shimmer-bg flex-shrink-0', attributes: const {'style': 'width: 40px; height: 40px; border-radius: 50%;'}),
+              div([], classes: 'w-8 h-8 rounded-full shimmer-bg flex-shrink-0', attributes: const {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; flex: 0 0 32px; aspect-ratio: 1 / 1; border-radius: 50%; box-sizing: border-box;'}),
               div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 85%;'}),
             ],
             classes: 'flex-row gap-3 py-4 border-b border-gray-100 items-start',
@@ -389,16 +389,18 @@ class _CommentItemState extends State<CommentItem> {
             if (photoUrl != null && photoUrl.isNotEmpty)
               img(
                   src: photoUrl,
-                  attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'}
+                  attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%;'}
               )
             else
               div(
                 [Component.text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')],
-                attributes: const {'style': 'font-weight: bold; color: #9ca3af; font-size: 14px;'},
+                attributes: const {'style': 'font-weight: bold; color: #9ca3af; font-size: 12px; line-height: 1; text-align: center;'},
               )
           ],
-          classes: 'w-10 h-10 rounded-full bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-200',
-          attributes: const {'style': 'width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background-color: #f3f4f6; border: 1px solid #ddd;'},
+          classes: 'w-8 h-8 rounded-full bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-200',
+          attributes: const {
+            'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; flex: 0 0 32px; aspect-ratio: 1 / 1; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; background-color: #f3f4f6; border: 1px solid #ddd; box-sizing: border-box;'
+          },
         ),
         div(
           [
