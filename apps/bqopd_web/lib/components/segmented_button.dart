@@ -1,8 +1,9 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 
-/// A reusable, highly-interactive Segmented Button component for the Jaspr web app.
-/// Styled using standard CSS matching Material 3 patterns.
+/// A reusable Segmented Button component adhering strictly to Material Design 3 (M3) specifications.
+/// Matches https://m3.material.io/components/segmented-buttons/overview
+/// Features pill container borders, internal dividers, selected checkmark icons, and M3 color tokens.
 class SegmentedButton<T> extends StatelessComponent {
   /// The list of items representing each segment in the group.
   final List<T> segments;
@@ -13,11 +14,14 @@ class SegmentedButton<T> extends StatelessComponent {
   /// Callback triggered when a segment is tapped.
   final ValueChanged<T> onSelectionChanged;
 
-  /// Builder function to map your raw generic type to a readable display string.
+  /// Builder function to map your generic type to a readable display string.
   final String Function(T) labelBuilder;
 
-  /// Optional builder to map a segment value to a Material Symbol name string (e.g. 'check').
+  /// Optional builder to map a segment value to a custom Material Symbol name string.
   final String? Function(T)? iconBuilder;
+
+  /// Whether to display the checkmark icon on the selected segment (default true in M3 single-select).
+  final bool showSelectedCheckmark;
 
   const SegmentedButton({
     required this.segments,
@@ -25,6 +29,7 @@ class SegmentedButton<T> extends StatelessComponent {
     required this.onSelectionChanged,
     required this.labelBuilder,
     this.iconBuilder,
+    this.showSelectedCheckmark = true,
     super.key,
   });
 
@@ -32,18 +37,19 @@ class SegmentedButton<T> extends StatelessComponent {
   Component build(BuildContext context) {
     return div(
       classes: 'm3-segmented-button-container',
-      attributes: {
-        'style': 'display: inline-flex; align-items: center; border: 1px solid var(--m3-outline); border-radius: 100px; overflow: hidden; background: var(--m3-surface);'
+      attributes: const {
+        'style':
+        'display: inline-flex; align-items: stretch; height: 38px; border: 1px solid var(--m3-outline, #79747E); border-radius: 100px; overflow: hidden; background-color: var(--m3-surface, #ffffff); box-sizing: border-box;'
       },
       [
         for (int i = 0; i < segments.length; i++) ...[
           _buildSegment(segments[i]),
           if (i < segments.length - 1)
-          // Vertical separation border between segments
             div(
-              classes: 'segment-separator',
-              attributes: {
-                'style': 'width: 1px; height: 16px; background-color: var(--m3-outline); opacity: 0.25;'
+              classes: 'm3-segment-divider',
+              attributes: const {
+                'style':
+                'width: 1px; height: 100%; background-color: var(--m3-outline, #79747E); opacity: 0.35; flex-shrink: 0;'
               },
               [],
             ),
@@ -54,16 +60,20 @@ class SegmentedButton<T> extends StatelessComponent {
 
   Component _buildSegment(T segment) {
     final bool isSelected = segment == selected;
-    final String? iconName = iconBuilder != null ? iconBuilder!(segment) : null;
+    final String? customIcon = iconBuilder != null ? iconBuilder!(segment) : null;
+    final String? iconName = isSelected
+        ? (customIcon ?? (showSelectedCheckmark ? 'check' : null))
+        : customIcon;
 
     return button(
-      classes: 'segment-button ${isSelected ? 'active' : ''}',
+      classes: 'm3-segment-button ${isSelected ? 'active' : ''}',
       attributes: {
-        'type': 'button', // Safe guard against default form submissions
-        'style': 'border: none; padding: 6px 14px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s ease-in-out; '
-            'display: inline-flex; align-items: center; justify-content: center; gap: 4px; '
-            'background-color: ${isSelected ? 'var(--m3-secondary-container)' : 'transparent'}; '
-            'color: ${isSelected ? 'var(--m3-on-secondary-container)' : '#49454F'};'
+        'type': 'button',
+        'style':
+        'border: none; padding: 0 16px; height: 100%; font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s; '
+            'display: inline-flex; align-items: center; justify-content: center; gap: 6px; user-select: none; '
+            'background-color: ${isSelected ? "var(--m3-secondary-container, #E8DEF8)" : "transparent"}; '
+            'color: ${isSelected ? "var(--m3-on-secondary-container, #1D192B)" : "#49454F"};'
       },
       events: {
         'click': (e) => onSelectionChanged(segment),
@@ -73,8 +83,8 @@ class SegmentedButton<T> extends StatelessComponent {
           span(
             classes: 'material-symbols-outlined',
             attributes: {
-              'style': 'font-size: 14px; '
-                  'font-variation-settings: "FILL" ${isSelected ? 1 : 0};'
+              'style':
+              'font-size: 18px; line-height: 1; color: ${isSelected ? "var(--m3-on-secondary-container, #1D192B)" : "inherit"};'
             },
             [Component.text(iconName)],
           ),

@@ -6,10 +6,11 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
+import '../fanzine_thumbnail_card.dart';
 import './maker_upload_form.dart';
 
 /// Maker Tab content displaying publications and folios.
-/// Streams live works using clean repositories instead of direct DB lookups.
+/// Streams live works and renders both published and draft lists using FanzineThumbnailCard.
 class ProfileMakerTab extends StatefulComponent {
   final String targetUserId;
   final bool isMe;
@@ -37,14 +38,14 @@ class ProfileMakerTab extends StatefulComponent {
 class _ProfileMakerTabState extends State<ProfileMakerTab> {
   bool _showDrafts = false;
   bool _showMakerModal = false;
+  bool _showIndicia = false;
   String _makerModalMode = 'options'; // 'options', 'upload'
   List<Map<String, dynamic>> _userWorks = [];
   StreamSubscription? _worksSub;
   bool _loading = true;
 
-  // Holds the ID of the folio currently queued for deletion
+  // Holds the ID and shortcode of the folio currently queued for deletion
   String? _pendingDeleteId;
-  // Holds the shortcode of the folio currently queued for deletion
   String? _pendingDeleteShortcode;
 
   @override
@@ -55,7 +56,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     } else if (component.initialSubTab == 'published') {
       _showDrafts = false;
     }
-
     // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
     if (kIsWeb) {
       Future.microtask(() {
@@ -195,6 +195,8 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         id: fanzineId,
         title: 'new folio name',
         ownerId: component.targetUserId,
+        curators: [component.targetUserId],
+        collections: [component.targetUserId],
         type: FanzineType.folio,
         isLive: false,
         processingStatus: 'complete',
@@ -218,6 +220,8 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         id: fanzineId,
         title: 'Convention Calendar 2026',
         ownerId: component.targetUserId,
+        curators: [component.targetUserId],
+        collections: [component.targetUserId],
         type: FanzineType.calendar,
         isLive: false,
         processingStatus: 'complete',
@@ -295,11 +299,11 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
           div(
             [
               button(
-                [Component.text('×')],
+                [Component.text('close')],
                 classes: 'modal-close-btn',
                 attributes: const {
                   'style':
-                  'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 24px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none; z-index: 200;'
+                  'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 18px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none; z-index: 200;'
                 },
                 events: {'click': (e) => setState(() => _showMakerModal = false)},
               ),
@@ -315,11 +319,11 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
           div(
             [
               button(
-                [Component.text('×')],
+                [Component.text('close')],
                 classes: 'modal-close-btn',
                 attributes: const {
                   'style':
-                  'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; z-index: 1000;'
+                  'position: absolute; top: 24px; right: 24px; border: none; background: rgba(255,255,255,0.9); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; font-weight: bold; z-index: 1000;'
                 },
                 events: {'click': (e) => setState(() => _showMakerModal = false)},
               ),
@@ -466,6 +470,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     final String issue = w['issue'] ?? '';
     final String wholeNumber = w['wholeNumber'] ?? '';
     final String shortCode = w['shortCode'] ?? '';
+
     String displaySuffix = '';
     if (volume.isNotEmpty) displaySuffix += " Vol. $volume";
     if (issue.isNotEmpty) displaySuffix += " No. $issue";
@@ -475,7 +480,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         (w['sourceFile'] != null
             ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
             : 'https://placehold.co/450x720/png?text=Folio');
-    final String codeKey = w['shortCode'] ?? fanzineId;
+    final String codeKey = shortCode.isNotEmpty ? shortCode : fanzineId;
 
     // Published works open as unmodified vanity URL (Reader view).
     // Draft works open in the editing workspace (maker by default, or curator if ingested).
@@ -483,68 +488,27 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     final String targetHref =
     _showDrafts ? '/$codeKey/$draftWorkspace' : '/$codeKey';
 
-    return a(
-      [
-        div(
-          [
-            div([Component.text(w['type'] ?? 'ingested')], attributes: const {
-              'style':
-              'position: absolute; top: 8px; left: 8px; background-color: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px; font-size: 8px; font-weight: bold; text-transform: uppercase;'
-            }),
-            // Display delete action button only if the viewer owns this folio
-            if (component.isMe)
-              button(
-                [
-                  span([Component.text('delete')],
-                      classes: 'material-symbols-outlined',
-                      attributes: const {'style': 'font-size: 14px;'})
-                ],
-                attributes: const {
-                  'style':
-                  'position: absolute; top: 8px; right: 8px; border: none; background: rgba(0,0,0,0.7); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; border: 1px solid rgba(255,255,255,0.4); z-index: 10;'
-                },
-                events: {
-                  'click': (dynamic e) {
-                    // Prevent triggering the link navigation of the surrounding <a> card element
-                    try {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    } catch (_) {}
-                    setState(() {
-                      _pendingDeleteId = fanzineId;
-                      _pendingDeleteShortcode = shortCode;
-                    });
-                  }
-                },
-              )
-          ],
-          attributes: {
-            'style':
-            'aspect-ratio: 5/8; background-color: #f3f4f6; background-image: url("$coverUrl"); background-size: cover; background-position: center; position: relative;'
-          },
-        ),
-        div(
-          [
-            span([Component.text(title)],
-                attributes: const {
-                  'style':
-                  'font-size: 13px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
-                }),
-            if (displaySuffix.isNotEmpty)
-              span([Component.text(displaySuffix)],
-                  attributes: const {'style': 'font-size: 11px; color: #666;'}),
-          ],
-          attributes: const {
-            'style': 'padding: 12px; display: flex; flex-direction: column; gap: 4px;'
-          },
-        )
-      ],
-      href: targetHref,
-      classes: 'bg-white rounded-lg shadow-sm overflow-hidden transition-all',
-      attributes: const {
-        'style':
-        'display: flex; flex-direction: column; border: 1px solid #ddd; cursor: pointer; text-decoration: none; position: relative;'
+    final cardData = Map<String, dynamic>.from(w);
+    cardData['title'] = displaySuffix.isNotEmpty ? '$title$displaySuffix' : title;
+
+    return FanzineThumbnailCard(
+      fanzineData: cardData,
+      targetHref: targetHref,
+      customCoverUrl: coverUrl,
+      cardType: 'fanzine',
+      key: ValueKey('maker_card_${fanzineId}_${_showDrafts ? "draft" : "pub"}'),
+      showIndicia: _showIndicia,
+      onToggleShowIndicia: (val) {
+        setState(() => _showIndicia = val);
       },
+      onDelete: component.isMe
+          ? (id, cardTitle) {
+        setState(() {
+          _pendingDeleteId = id;
+          _pendingDeleteShortcode = shortCode;
+        });
+      }
+          : null,
     );
   }
 
@@ -556,7 +520,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
-
     return div(
       [
         // Toolbar switch published / drafts

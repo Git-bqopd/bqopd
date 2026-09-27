@@ -5,7 +5,7 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 
-/// Squared premium presentation profile card.
+/// Squared presentation profile card with no drop shadows on the envelope and white sticker cards.
 /// Eliminates direct mutations, relying on follow-toggle callbacks and mini-tabs.
 class ProfileCard extends StatefulComponent {
   final UserProfile profile;
@@ -30,6 +30,152 @@ class _ProfileCardState extends State<ProfileCard> {
   bool _showModal = false;
   String _modalTitle = '';
   String _modalCollection = '';
+  Map<String, String> _managerUsernames = {};
+  List<String> _publicAddressLines = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      _loadManagerProfiles();
+      _loadPublicAddress();
+    }
+  }
+
+  @override
+  void didUpdateComponent(ProfileCard oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.profile.managers != component.profile.managers ||
+        oldComponent.profile.isManaged != component.profile.isManaged) {
+      if (kIsWeb) {
+        _loadManagerProfiles();
+      }
+    }
+    if (oldComponent.profile.uid != component.profile.uid) {
+      if (kIsWeb) {
+        _loadPublicAddress();
+      }
+    }
+  }
+
+  Future<void> _loadPublicAddress() async {
+    final uid = component.profile.uid;
+    if (uid.isEmpty) return;
+    try {
+      final res = await fsGetDoc('profiles/$uid');
+      final doc = jsonDecode(res);
+      if (doc['exists'] == true && doc['data'] is Map) {
+        final data = doc['data'] as Map<String, dynamic>;
+        final visibility = data['addressVisibility']?.toString() ??
+            (data['isAddressPublic'] == true ? 'address' : 'private');
+
+        if (visibility == 'private') {
+          if (mounted && _publicAddressLines.isNotEmpty) {
+            setState(() => _publicAddressLines = []);
+          }
+          return;
+        }
+
+        final street1 = (data['street1'] ?? '').toString().trim();
+        final street2 = (data['street2'] ?? '').toString().trim();
+        final city = (data['city'] ?? '').toString().trim();
+        final state = (data['state'] ?? '').toString().trim();
+        final zip = (data['zipCode'] ?? '').toString().trim();
+        final country = (data['country'] ?? '').toString().trim();
+
+        final lines = <String>[];
+        if (visibility == 'address') {
+          final streetParts = [
+            if (street1.isNotEmpty) street1,
+            if (street2.isNotEmpty) street2,
+          ];
+          if (streetParts.isNotEmpty) {
+            lines.add(streetParts.join(', '));
+          }
+
+          final cityStateZip = [
+            if (city.isNotEmpty) city,
+            if (state.isNotEmpty) state,
+          ].join(', ') + (zip.isNotEmpty ? ' $zip' : '');
+          if (cityStateZip.trim().isNotEmpty) {
+            lines.add(cityStateZip.trim());
+          }
+
+          if (country.isNotEmpty &&
+              country.toLowerCase() != 'us' &&
+              country.toLowerCase() != 'usa' &&
+              country.toLowerCase() != 'united states') {
+            lines.add(country);
+          }
+        } else if (visibility == 'city') {
+          final parts = <String>[];
+          if (city.isNotEmpty && state.isNotEmpty) {
+            parts.add('$city, $state');
+          } else if (city.isNotEmpty) {
+            parts.add(city);
+          } else if (state.isNotEmpty) {
+            parts.add(state);
+          }
+          if (country.isNotEmpty &&
+              country.toLowerCase() != 'us' &&
+              country.toLowerCase() != 'usa' &&
+              country.toLowerCase() != 'united states') {
+            parts.add(country);
+          }
+          if (parts.isNotEmpty) lines.add(parts.join(', '));
+        } else if (visibility == 'state') {
+          final parts = <String>[];
+          if (state.isNotEmpty) parts.add(state);
+          if (country.isNotEmpty &&
+              country.toLowerCase() != 'us' &&
+              country.toLowerCase() != 'usa' &&
+              country.toLowerCase() != 'united states') {
+            parts.add(country);
+          }
+          if (parts.isNotEmpty) lines.add(parts.join(', '));
+        }
+
+        if (mounted) {
+          setState(() {
+            _publicAddressLines = lines;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadManagerProfiles() async {
+    if (!component.profile.isManaged || component.profile.managers.isEmpty) {
+      if (_managerUsernames.isNotEmpty && mounted) {
+        setState(() => _managerUsernames = {});
+      }
+      return;
+    }
+    final Map<String, String> resolved = {};
+    final List<Future<void>> fetches = [];
+    for (final uid in component.profile.managers) {
+      fetches.add(
+        fsGetDoc('profiles/$uid').then((res) {
+          try {
+            final doc = jsonDecode(res);
+            if (doc['exists'] == true && doc['data'] is Map) {
+              final data = doc['data'] as Map<String, dynamic>;
+              final uname = (data['username'] ?? '').toString().trim();
+              if (uname.isNotEmpty) {
+                resolved[uid] = uname;
+              }
+            }
+          } catch (_) {}
+        }),
+      );
+    }
+    await Future.wait(fetches);
+    if (mounted) {
+      setState(() {
+        _managerUsernames = resolved;
+      });
+    }
+  }
 
   void _openFollowModal(String title, String collectionName) {
     setState(() {
@@ -46,12 +192,21 @@ class _ProfileCardState extends State<ProfileCard> {
     final username = component.profile.username;
     final bio = component.profile.bio;
     final photoUrl = component.profile.photoUrl;
-    final String editHref = component.isMe
-        ? '/edit-info'
+
+    // CANONICAL VANITY ROUTE: /@handle/edit-info
+    final String editHref = username.isNotEmpty
+        ? '/@$username/edit-info'
         : '/edit-info?userId=${component.profile.uid}';
+
+    // Verify if viewer manages this entity
+    final currentUid = getCurrentUserId();
+    final bool canManage = component.profile.isManaged &&
+        currentUid != null &&
+        component.profile.managers.contains(currentUid);
 
     return div(
       [
+        // Top section: Avatar (col 1) + Name, Handle & Actions (col 2)
         div(
           [
             // Avatar Circle
@@ -77,47 +232,56 @@ class _ProfileCardState extends State<ProfileCard> {
                   )
               ],
               attributes: const {
-                'style': 'width: 72px; height: 72px; border-radius: 50%; background-color: #f3f4f6; overflow: hidden; border: 2px solid #ccc; display: flex; justify-content: center; align-items: center;'
+                'style': 'width: 72px; height: 72px; min-width: 72px; min-height: 72px; border-radius: 50%; background-color: #f3f4f6; overflow: hidden; border: 2px solid #ccc; display: flex; justify-content: center; align-items: center; flex-shrink: 0;'
               },
             ),
             span([], attributes: const {'style': 'display: inline-block; width: 16px;'}),
-            // Follow button / Edit details
+            // Next column: Row 1 = Display Name & @handle, Row 2 = Public Address, Row 3 = Followers / Following / Button
             div(
               [
-                if (!component.isMe)
-                  button(
-                    [Component.text(component.isFollowing ? 'unfollow' : 'follow')],
-                    classes: component.isFollowing ? 'profile-btn text-red-500' : 'profile-btn',
+                // Row 1: Display Name & @handle inline
+                div(
+                  [
+                    h1(
+                      [Component.text(displayName)],
+                      attributes: const {
+                        'style': 'font-size: 18px; font-weight: 900; margin: 0; color: black; line-height: 1.2; text-align: left;'
+                      },
+                    ),
+                    span(
+                      [Component.text('@$username')],
+                      attributes: const {
+                        'style': 'font-size: 12px; color: #666; margin: 0; text-align: left;'
+                      },
+                    ),
+                  ],
+                  attributes: const {
+                    'style': 'display: flex; flex-direction: row; align-items: baseline; gap: 6px; flex-wrap: wrap;'
+                  },
+                ),
+                // Row 2: Public Address lines (envelope format, no map pin icon, omitting 'United States')
+                if (_publicAddressLines.isNotEmpty)
+                  div(
+                    [
+                      for (final line in _publicAddressLines)
+                        div(
+                          [Component.text(line)],
+                          attributes: const {
+                            'style': 'font-size: 11px; color: #555; text-align: left; line-height: 1.35;'
+                          },
+                        ),
+                    ],
                     attributes: const {
-                      'style': 'width: 100px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border-radius: 0px !important; cursor: pointer; border: 1px solid black; background: white;'
-                    },
-                    events: {
-                      'click': (e) {
-                        final uid = getCurrentUserId();
-                        if (uid == null) {
-                          GlobalModalBus.show();
-                          return;
-                        }
-                        component.onFollowToggle();
-                      }
-                    },
-                  )
-                else
-                  a(
-                    [Component.text('edit info')],
-                    href: editHref,
-                    classes: 'profile-btn',
-                    attributes: const {
-                      'style': 'width: 100px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important; background: white;'
+                      'style': 'display: flex; flex-direction: column; margin-top: 3px;'
                     },
                   ),
-                div([], attributes: const {'style': 'height: 4px;'}),
+                // Row 3: Followers, Following, and Follow / Edit Info button
                 div(
                   [
                     span(
                       [Component.text('${component.profile.followerCount} followers')],
                       attributes: const {
-                        'style': 'text-decoration: underline; margin-right: 8px; cursor: pointer;'
+                        'style': 'text-decoration: underline; cursor: pointer;'
                       },
                       events: {'click': (e) => _openFollowModal('Followers', 'followers')},
                     ),
@@ -127,10 +291,37 @@ class _ProfileCardState extends State<ProfileCard> {
                         'style': 'text-decoration: underline; cursor: pointer;'
                       },
                       events: {'click': (e) => _openFollowModal('Following', 'following')},
-                    )
+                    ),
+                    if (component.profile.isManaged || !component.isMe)
+                      button(
+                        [Component.text(component.isFollowing ? 'unfollow' : 'follow')],
+                        classes: component.isFollowing ? 'profile-btn text-red-500' : 'profile-btn',
+                        attributes: const {
+                          'style': 'height: 24px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border-radius: 0px !important; cursor: pointer; border: 1px solid black; background: white;'
+                        },
+                        events: {
+                          'click': (e) {
+                            final uid = getCurrentUserId();
+                            if (uid == null) {
+                              GlobalModalBus.show();
+                              return;
+                            }
+                            component.onFollowToggle();
+                          }
+                        },
+                      )
+                    else
+                      a(
+                        [Component.text('edit info')],
+                        href: editHref,
+                        classes: 'profile-btn',
+                        attributes: const {
+                          'style': 'height: 24px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #ddd; border-radius: 0px !important; background: white; text-decoration: none;'
+                        },
+                      ),
                   ],
                   attributes: const {
-                    'style': 'font-size: 10px; font-weight: 500; color: #555; display: flex;'
+                    'style': 'display: flex; flex-direction: row; align-items: center; gap: 8px; margin-top: 6px; font-size: 10px; font-weight: 500; color: #555; flex-wrap: wrap;'
                   },
                 )
               ],
@@ -141,23 +332,18 @@ class _ProfileCardState extends State<ProfileCard> {
           ],
           attributes: const {'style': 'display: flex; align-items: center; justify-content: center;'},
         ),
-        div([], attributes: const {'style': 'height: 12px;'}),
-        h1(
-          [Component.text(displayName)],
-          attributes: const {
-            'style': 'font-size: 18px; font-weight: 900; margin: 0; color: black; line-height: 1.2;'
-          },
-        ),
-        p(
-          [Component.text('@$username')],
-          attributes: const {'style': 'font-size: 12px; color: #666; margin: 2px 0 0 0;'},
-        ),
+        // Row under profile info: "profile managed by:" banner
+        if (component.profile.isManaged && component.profile.managers.isNotEmpty) ...[
+          div([], attributes: const {'style': 'height: 12px;'}),
+          _buildManagedByBanner(canManage, editHref),
+        ],
+        // Row under banner: Biography
         if (bio.isNotEmpty) ...[
-          div([], attributes: const {'style': 'height: 8px;'}),
+          div([], attributes: const {'style': 'height: 10px;'}),
           p(
             [Component.text(bio)],
             attributes: const {
-              'style': 'font-size: 11px; color: #444; font-style: italic; margin-top: 4px; line-height: 1.4; max-width: 280px; text-align: center;'
+              'style': 'font-size: 11px; color: #444; font-style: italic; margin: 0; line-height: 1.4; max-width: 280px; text-align: center;'
             },
           )
         ]
@@ -308,146 +494,207 @@ class _ProfileCardState extends State<ProfileCard> {
     );
   }
 
+  Component _buildManagedByBanner(bool canManage, String editHref) {
+    return div(
+      classes: 'py-2 bg-gray-100 rounded-md',
+      attributes: const {
+        'style':
+        'width: 100%; max-width: 280px; display: flex; flex-direction: row; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; box-sizing: border-box; border: none;',
+      },
+      [
+        if (canManage) ...[
+          a(
+            [Component.text('edit info')],
+            href: editHref,
+            classes: 'text-xs text-gray hover:text-black',
+            attributes: const {
+              'style': 'font-size: 11px; font-weight: normal; text-decoration: underline;',
+            },
+          ),
+          span(
+            [Component.text('|')],
+            classes: 'text-xs text-gray',
+            attributes: const {'style': 'font-size: 11px; font-weight: normal; margin: 0 2px;'},
+          ),
+        ],
+        span(
+          [Component.text('profile managed by:')],
+          classes: 'text-xs text-gray',
+          attributes: const {
+            'style': 'font-size: 11px; font-weight: normal;',
+          },
+        ),
+        for (int i = 0; i < component.profile.managers.length; i++) ...[
+              () {
+            final uid = component.profile.managers[i];
+            final username = _managerUsernames[uid];
+            final displayText = username != null && username.isNotEmpty
+                ? '@$username'
+                : (uid.length > 8 ? '@${uid.substring(0, 8)}...' : '@$uid');
+            final href = username != null && username.isNotEmpty ? '/@$username' : null;
+
+            if (href != null) {
+              return a(
+                [Component.text(displayText)],
+                href: href,
+                classes: 'text-xs text-gray hover:text-black',
+                attributes: const {
+                  'style': 'font-size: 11px; font-weight: normal; text-decoration: underline;',
+                },
+              );
+            } else {
+              return span(
+                [Component.text(displayText)],
+                classes: 'text-xs text-gray',
+                attributes: const {
+                  'style': 'font-size: 11px; font-weight: normal;',
+                },
+              );
+            }
+          }(),
+          if (i < component.profile.managers.length - 1)
+            span(
+              [Component.text(',')],
+              classes: 'text-xs text-gray',
+              attributes: const {'style': 'font-size: 11px; font-weight: normal; margin-right: 2px;'},
+            ),
+        ],
+      ],
+    );
+  }
+
   @override
   Component build(BuildContext context) {
     return div(
       [
-        // Desktop Layout
+        // Desktop envelope view (squared, no drop shadows)
         div(
+          classes: 'envelope-8-5-desktop',
           [
             div(
+              classes: 'white-sticker-8-5',
               [
                 _buildLeftCardDetailsPart(false),
                 div([], classes: 'profile-desktop-divider'),
-                _buildRightCardSocialsPart(false)
+                _buildRightCardSocialsPart(false),
               ],
-              classes: 'white-sticker-8-5',
-            )
+            ),
           ],
-          classes: 'envelope-8-5-desktop',
         ),
-        // Mobile Layout
+        // Mobile envelope view (stacked, squared, no drop shadows)
         div(
+          classes: 'envelope-8-5-mobile-container',
           [
             div(
-              [
-                div([_buildLeftCardDetailsPart(true)], classes: 'white-sticker-mobile-8-5')
-              ],
               classes: 'envelope-8-5-mobile-item',
+              [
+                div(
+                  classes: 'white-sticker-mobile-8-5',
+                  [
+                    _buildLeftCardDetailsPart(true),
+                  ],
+                ),
+              ],
             ),
             div(
-              [
-                div([_buildRightCardSocialsPart(true)], classes: 'white-sticker-mobile-8-5')
-              ],
               classes: 'envelope-8-5-mobile-item',
-            )
+              [
+                div(
+                  classes: 'white-sticker-mobile-8-5',
+                  [
+                    _buildRightCardSocialsPart(true),
+                  ],
+                ),
+              ],
+            ),
           ],
-          classes: 'envelope-8-5-mobile-container',
         ),
         if (_showModal)
-          FollowListModal(
-            targetUid: component.profile.uid,
+          _FollowersFollowingModal(
             title: _modalTitle,
             collectionName: _modalCollection,
+            targetUid: component.profile.uid,
             onClose: () => setState(() => _showModal = false),
-          )
+          ),
       ],
     );
   }
 }
 
-class FollowListModal extends StatefulComponent {
-  final String targetUid;
+class _FollowersFollowingModal extends StatefulComponent {
   final String title;
   final String collectionName;
+  final String targetUid;
   final VoidCallback onClose;
 
-  const FollowListModal({
-    required this.targetUid,
+  const _FollowersFollowingModal({
     required this.title,
     required this.collectionName,
+    required this.targetUid,
     required this.onClose,
-    super.key,
   });
 
   @override
-  State<FollowListModal> createState() => _FollowListModalState();
+  State<_FollowersFollowingModal> createState() => _FollowersFollowingModalState();
 }
 
-class _FollowListModalState extends State<FollowListModal> {
+class _FollowersFollowingModalState extends State<_FollowersFollowingModal> {
   bool _loading = true;
   List<String> _uids = [];
   Map<String, Map<String, dynamic>> _profiles = {};
   String _searchQuery = '';
-  FirebaseSubscription? _listSub;
 
   @override
   void initState() {
     super.initState();
     if (kIsWeb) {
-      _listenToList();
+      _loadList();
+    } else {
+      _loading = false;
     }
   }
 
-  @override
-  void dispose() {
-    _listSub?.callAsFunction();
-    super.dispose();
-  }
-
-  void _listenToList() {
-    _listSub?.callAsFunction();
-    _listSub = fsListenQuery(
-      'profiles/${component.targetUid}/${component.collectionName}',
-      '',
-      '',
-      '',
-      '',
-      false,
-          (String jsonStr) {
-        try {
-          final List decoded = jsonDecode(jsonStr);
-          final List<String> loadedUids = decoded
-              .map((d) => d['id'].toString())
-              .where((id) => id.isNotEmpty)
-              .toList();
-          if (mounted) {
-            setState(() {
-              _uids = loadedUids;
-            });
-            _fetchProfiles(loadedUids);
-          }
-        } catch (e) {
-          print("Error streaming follow list: $e");
-          if (mounted) setState(() => _loading = false);
-        }
-      },
-    );
-  }
-
-  Future<void> _fetchProfiles(List<String> uids) async {
-    if (uids.isEmpty) {
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
-    final Map<String, Map<String, dynamic>> temp = {};
-    final List<Future<void>> fetches = [];
-    for (var uid in uids) {
-      fetches.add(
-        fsGetDoc('profiles/$uid').then((res) {
-          final doc = jsonDecode(res);
-          if (doc['exists'] == true) {
-            temp[uid] = doc['data'] as Map<String, dynamic>;
-          }
-        }),
+  Future<void> _loadList() async {
+    try {
+      final res = await fsQuery(
+        'profiles/${component.targetUid}/${component.collectionName}',
+        '', '', '', '',
       );
-    }
-    await Future.wait(fetches);
-    if (mounted) {
-      setState(() {
-        _profiles = temp;
-        _loading = false;
-      });
+      final List decoded = jsonDecode(res);
+      final List<String> uids = [];
+      for (var d in decoded) {
+        final String uid = (d['id'] ?? d['data']?['uid'] ?? '').toString();
+        if (uid.isNotEmpty) uids.add(uid);
+      }
+
+      final Map<String, Map<String, dynamic>> profMap = {};
+      final List<Future<void>> fetches = [];
+      for (final u in uids) {
+        fetches.add(
+          fsGetDoc('profiles/$u').then((docRes) {
+            try {
+              final doc = jsonDecode(docRes);
+              if (doc['exists'] == true && doc['data'] is Map) {
+                profMap[u] = Map<String, dynamic>.from(doc['data']);
+              }
+            } catch (_) {}
+          }),
+        );
+      }
+      await Future.wait(fetches);
+
+      if (mounted) {
+        setState(() {
+          _uids = uids;
+          _profiles = profMap;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading follow list: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -471,13 +718,13 @@ class _FollowListModalState extends State<FollowListModal> {
         div(
           classes: 'manila-envelope',
           attributes: const {
-            'style': 'width: 90%; max-width: 400px; max-height: 520px; border-radius: 12px; overflow: hidden; position: relative;'
+            'style': 'width: 90%; max-width: 400px; max-height: 520px; border-radius: 0px; box-shadow: none; overflow: hidden; position: relative;'
           },
           [
             div(
               classes: 'white-sticker p-4 w-full h-full flex flex-col',
               attributes: const {
-                'style': 'padding: 20px; display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: white; border-radius: 12px;'
+                'style': 'padding: 20px; display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: white; border-radius: 0px; box-shadow: none;'
               },
               [
                 // Modal Header
@@ -493,9 +740,9 @@ class _FollowListModalState extends State<FollowListModal> {
                       },
                     ),
                     button(
-                      [Component.text('×')],
+                      [Component.text('close')],
                       attributes: const {
-                        'style': 'border: none; background: transparent; font-size: 18px; font-weight: bold; cursor: pointer; color: #666;'
+                        'style': 'border: none; background: transparent; font-size: 12px; font-weight: bold; cursor: pointer; color: #666;'
                       },
                       events: {'click': (e) => component.onClose()},
                     )
@@ -507,7 +754,7 @@ class _FollowListModalState extends State<FollowListModal> {
                     'type': 'text',
                     'placeholder': 'Search ${component.title.toLowerCase()}...',
                     'value': _searchQuery,
-                    'style': 'width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; margin-bottom: 12px; box-sizing: border-box; outline: none; background: white;'
+                    'style': 'width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 0px; font-size: 13px; margin-bottom: 12px; box-sizing: border-box; outline: none; background: white;'
                   },
                   events: {
                     'input': (e) {

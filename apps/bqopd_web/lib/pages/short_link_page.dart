@@ -8,13 +8,14 @@ import '../utils/server_firestore_client.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 import 'fanzine_reader_page.dart';
 import 'profile_page.dart';
+import 'edit_info_page.dart';
 
 /// Resolved and pre-rendered matching view utilizing server pre-fetched payloads.
 /// Supports clean vanity routing, explicit workspace suffixes (/reader, /curator, /maker),
-/// and deep-link page anchors in both /:code/:page/:mode and /:code/:mode/:page hierarchies.
+/// deep-link page anchors, and vanity profile editing (/@handle/edit-info).
 class ShortLinkPage extends StatefulComponent {
   final String code;
-  final String? param1; // Fanzine pageNumber, workspace mode, OR Profile mainTab
+  final String? param1; // Fanzine pageNumber, workspace mode, OR Profile mainTab / 'edit-info'
   final String? param2; // Fanzine pageNumber (if param1 is workspace) OR Profile subtab
   final AuthState? authState;
   final AuthBloc? authBloc;
@@ -39,6 +40,7 @@ class ShortLinkPage extends StatefulComponent {
 class _ShortLinkPageState extends State<ShortLinkPage>
     with PreloadStateMixin, SyncStateMixin<ShortLinkPage, String> {
   String _preloadedJson = '{}';
+
   Map<String, dynamic> get _preloadedData {
     try {
       return jsonDecode(_preloadedJson) as Map<String, dynamic>;
@@ -193,23 +195,17 @@ class _ShortLinkPageState extends State<ShortLinkPage>
 
   @override
   Component build(BuildContext context) {
-    print('[SHORTLINK RENDER] Render loop called. Mapped Fanzine: "$_targetFanzineId" | Status: "$_status"');
+    print('[SHORTLINK RENDER] Render loop called. Mapped Fanzine: "$_targetFanzineId" | User: "$_targetUserId" | Status: "$_status"');
     if (!_isResolved) {
       return div(
           classes: 'flex-col items-center justify-center w-full',
-          attributes: {'style': 'min-height: 100vh;'},
+          attributes: const {'style': 'min-height: 100vh;'},
           [div(classes: 'text-lg font-bold', [Component.text(_status)])]);
     }
 
     if (_targetFanzineId != null) {
-      // Bi-directional parameter disambiguation:
-      // Pattern 1 (Recommended): /:code/:page/:mode (e.g. /QrNsbYA/8/curator)
-      // Pattern 2 (Legacy):      /:code/:mode/:page (e.g. /QrNsbYA/curator/8)
-      // Pattern 3:               /:code/:page       (e.g. /QrNsbYA/8)
-      // Pattern 4:               /:code/:mode       (e.g. /QrNsbYA/curator)
       final int? param1AsNumber = int.tryParse(component.param1?.trim() ?? '');
       final bool param1IsMode = _isWorkspaceSlug(component.param1);
-
       int? initialPage;
       String? requestedWorkspace;
 
@@ -269,12 +265,9 @@ class _ShortLinkPageState extends State<ShortLinkPage>
         } else if (canEdit || isUnsavedTemp) {
           effectiveMode = requestedWorkspace;
         } else {
-          // Public guests requesting curator/maker fall back to reader view
           effectiveMode = 'reader';
         }
       } else {
-        // Option A: clean vanity without suffix defaults to reader
-        // If an editor/curator views an unpublished draft without a suffix, open their editing workspace
         if (isDraft && (canEdit || isUnsavedTemp)) {
           final String type = _fanzineData?['type'] ?? 'ingested';
           effectiveMode = (type == 'folio' || type == 'calendar') ? 'maker' : 'curator';
@@ -301,6 +294,17 @@ class _ShortLinkPageState extends State<ShortLinkPage>
     }
 
     if (_targetUserId != null && component.authBloc != null) {
+      // CANONICAL VANITY ROUTE: /@handle/edit-info
+      final sub = component.param1?.trim().toLowerCase();
+      if (sub == 'edit-info' || sub == 'edit') {
+        return EditInfoPage(
+          authState: component.authState,
+          authBloc: component.authBloc!,
+          userRepository: component.userRepository,
+          targetUserId: _targetUserId,
+        );
+      }
+
       return ProfilePage(
         authState: component.authState,
         authBloc: component.authBloc!,
@@ -314,7 +318,7 @@ class _ShortLinkPageState extends State<ShortLinkPage>
 
     return div(
         classes: 'flex-col items-center justify-center w-full',
-        attributes: {'style': 'min-height: 100vh;'},
+        attributes: const {'style': 'min-height: 100vh;'},
         [
           p(classes: 'text-lg font-bold', [Component.text(_status)]),
           a(href: '/', [Component.text('Go Home')])

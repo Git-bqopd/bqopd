@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
-import 'package:equatable/equatable.dart'; // Relative imports for purity
+import 'package:equatable/equatable.dart';
+
 import '../models/fanzine.dart';
 import '../models/fanzine_page.dart';
 import '../interfaces/fanzine_repository_interface.dart';
@@ -14,6 +15,7 @@ abstract class FanzineEditorEvent extends Equatable {
 class LoadFanzineRequested extends FanzineEditorEvent {
   final String fanzineId;
   LoadFanzineRequested(this.fanzineId);
+
   @override
   List<Object?> get props => [fanzineId];
 }
@@ -21,6 +23,7 @@ class LoadFanzineRequested extends FanzineEditorEvent {
 class _FanzineUpdated extends FanzineEditorEvent {
   final Fanzine fanzine;
   _FanzineUpdated(this.fanzine);
+
   @override
   List<Object?> get props => [fanzine];
 }
@@ -28,6 +31,7 @@ class _FanzineUpdated extends FanzineEditorEvent {
 class _PagesUpdated extends FanzineEditorEvent {
   final List<FanzinePage> pages;
   _PagesUpdated(this.pages);
+
   @override
   List<Object?> get props => [pages];
 }
@@ -42,10 +46,37 @@ class UpdateFanzineMetadata extends FanzineEditorEvent {
   final String? publishedDate;
   final String? publishedDateMode;
   final bool? publishedDateGuess;
-  UpdateFanzineMetadata(this.title, this.volume, this.issue, this.wholeNumber, {this.gridCoverImage, this.series, this.publishedDate, this.publishedDateMode, this.publishedDateGuess});
+  final List<String>? curators;
+  final List<String>? collections;
+
+  UpdateFanzineMetadata(
+      this.title,
+      this.volume,
+      this.issue,
+      this.wholeNumber, {
+        this.gridCoverImage,
+        this.series,
+        this.publishedDate,
+        this.publishedDateMode,
+        this.publishedDateGuess,
+        this.curators,
+        this.collections,
+      });
 
   @override
-  List<Object?> get props => [title, volume, issue, wholeNumber, gridCoverImage, series, publishedDate, publishedDateMode, publishedDateGuess];
+  List<Object?> get props => [
+    title,
+    volume,
+    issue,
+    wholeNumber,
+    gridCoverImage,
+    series,
+    publishedDate,
+    publishedDateMode,
+    publishedDateGuess,
+    curators,
+    collections,
+  ];
 }
 
 class ToggleTwoPageRequested extends FanzineEditorEvent {
@@ -110,7 +141,9 @@ class ToggleIsLiveRequested extends FanzineEditorEvent {
 }
 
 class SoftPublishRequested extends FanzineEditorEvent {}
+
 class TriggerAiCleanRequested extends FanzineEditorEvent {}
+
 class TriggerGenerateLinksRequested extends FanzineEditorEvent {}
 
 class FanzineEditorState extends Equatable {
@@ -119,17 +152,20 @@ class FanzineEditorState extends Equatable {
 }
 
 class FanzineEditorInitial extends FanzineEditorState {}
+
 class FanzineEditorLoading extends FanzineEditorState {}
 
 class FanzineEditorLoaded extends FanzineEditorState {
   final Fanzine fanzine;
   final List<FanzinePage> pages;
   final bool isProcessing;
+
   FanzineEditorLoaded({
     required this.fanzine,
     required this.pages,
-    this.isProcessing = false
+    this.isProcessing = false,
   });
+
   FanzineEditorLoaded copyWith({
     Fanzine? fanzine,
     List<FanzinePage>? pages,
@@ -141,6 +177,7 @@ class FanzineEditorLoaded extends FanzineEditorState {
       isProcessing: isProcessing ?? this.isProcessing,
     );
   }
+
   @override
   List<Object?> get props => [fanzine, pages, isProcessing];
 }
@@ -148,6 +185,7 @@ class FanzineEditorLoaded extends FanzineEditorState {
 class FanzineEditorFailure extends FanzineEditorState {
   final String message;
   FanzineEditorFailure(this.message);
+
   @override
   List<Object?> get props => [message];
 }
@@ -164,8 +202,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
   FanzineEditorBloc({
     required IFanzineRepository repository,
     required IPipelineRepository pipelineRepository,
-    required this.fanzineId
-  }) : _repository = repository,
+    required this.fanzineId,
+  })  : _repository = repository,
         _pipelineRepository = pipelineRepository,
         super(FanzineEditorInitial()) {
     on<LoadFanzineRequested>(_onLoadRequested);
@@ -187,7 +225,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     on<TriggerGenerateLinksRequested>(_onTriggerGenerateLinks);
   }
 
-  Future<void> _onLoadRequested(LoadFanzineRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onLoadRequested(
+      LoadFanzineRequested event, Emitter<FanzineEditorState> emit) async {
     emit(FanzineEditorLoading());
     await _fanzineSub?.cancel();
     await _pagesSub?.cancel();
@@ -224,7 +263,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onUpdateMetadata(UpdateFanzineMetadata event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onUpdateMetadata(
+      UpdateFanzineMetadata event, Emitter<FanzineEditorState> emit) async {
     if (state is! FanzineEditorLoaded) return;
     try {
       final Map<String, dynamic> data = {
@@ -249,13 +289,20 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
       if (event.publishedDateGuess != null) {
         data['publishedDateGuess'] = event.publishedDateGuess!;
       }
+      if (event.curators != null) {
+        data['curators'] = event.curators!;
+      }
+      if (event.collections != null) {
+        data['collections'] = event.collections!;
+      }
       await _repository.updateFanzine(fanzineId, data);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     }
   }
 
-  Future<void> _onToggleTwoPage(ToggleTwoPageRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onToggleTwoPage(
+      ToggleTwoPageRequested event, Emitter<FanzineEditorState> emit) async {
     if (state is! FanzineEditorLoaded) return;
     try {
       await _repository.updateFanzine(fanzineId, {
@@ -267,7 +314,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onToggleHasCover(ToggleHasCoverRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onToggleHasCover(
+      ToggleHasCoverRequested event, Emitter<FanzineEditorState> emit) async {
     if (state is! FanzineEditorLoaded) return;
     try {
       await _repository.updateFanzine(fanzineId, {
@@ -279,7 +327,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onAddPage(AddPageRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onAddPage(
+      AddPageRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
@@ -294,7 +343,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onAddExistingImage(AddExistingImageRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onAddExistingImage(
+      AddExistingImageRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
@@ -315,12 +365,14 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onUpdatePageLayout(UpdatePageLayoutRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onUpdatePageLayout(
+      UpdatePageLayoutRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
     try {
-      await _repository.updatePageLayout(fanzineId, event.page, event.spreadPosition, event.sidePreference, event.allPages);
+      await _repository.updatePageLayout(fanzineId, event.page,
+          event.spreadPosition, event.sidePreference, event.allPages);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     } finally {
@@ -330,12 +382,14 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onTogglePageOrdering(TogglePageOrderingRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onTogglePageOrdering(
+      TogglePageOrderingRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
     try {
-      await _repository.togglePageOrdering(fanzineId, event.page, event.shouldOrder);
+      await _repository.togglePageOrdering(
+          fanzineId, event.page, event.shouldOrder);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     } finally {
@@ -345,12 +399,14 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onRemovePage(RemovePageRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onRemovePage(
+      RemovePageRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
     try {
-      await _repository.removePageFromFolio(fanzineId, event.page, event.allPages);
+      await _repository.removePageFromFolio(
+          fanzineId, event.page, event.allPages);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     } finally {
@@ -360,12 +416,14 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onDeleteAsset(DeleteAssetRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onDeleteAsset(
+      DeleteAssetRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
     try {
-      await _repository.deleteAssetCompletely(fanzineId, event.imageId, event.isDirectUpload);
+      await _repository.deleteAssetCompletely(
+          fanzineId, event.imageId, event.isDirectUpload);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     } finally {
@@ -375,15 +433,18 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onReorderPage(ReorderPageRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onReorderPage(
+      ReorderPageRequested event, Emitter<FanzineEditorState> emit) async {
     try {
-      await _repository.reorderPageModel(fanzineId, event.page, event.delta, event.allPages);
+      await _repository.reorderPageModel(
+          fanzineId, event.page, event.delta, event.allPages);
     } catch (e) {
       emit(FanzineEditorFailure(e.toString()));
     }
   }
 
-  Future<void> _onToggleIsLive(ToggleIsLiveRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onToggleIsLive(
+      ToggleIsLiveRequested event, Emitter<FanzineEditorState> emit) async {
     try {
       final Map<String, dynamic> data = {
         'isLive': event.isLive,
@@ -398,7 +459,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onSoftPublish(SoftPublishRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onSoftPublish(
+      SoftPublishRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
@@ -413,7 +475,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onTriggerAiClean(TriggerAiCleanRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onTriggerAiClean(
+      TriggerAiCleanRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));
@@ -428,7 +491,8 @@ class FanzineEditorBloc extends Bloc<FanzineEditorEvent, FanzineEditorState> {
     }
   }
 
-  Future<void> _onTriggerGenerateLinks(TriggerGenerateLinksRequested event, Emitter<FanzineEditorState> emit) async {
+  Future<void> _onTriggerGenerateLinks(
+      TriggerGenerateLinksRequested event, Emitter<FanzineEditorState> emit) async {
     final current = state;
     if (current is! FanzineEditorLoaded) return;
     emit(current.copyWith(isProcessing: true));

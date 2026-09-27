@@ -50,6 +50,21 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
   String _publishedDateMode = 'year';
   bool _publishedDateGuess = false;
 
+  // Curators & Collections Multiselect State
+  List<String> _curators = [];
+  List<String> _collections = [];
+
+  // Dropdown & Search Filter States
+  bool _curatorDropdownOpen = false;
+  String _curatorSearchQuery = '';
+
+  bool _collectionDropdownOpen = false;
+  String _collectionSearchQuery = '';
+
+  // Real-time Profiles Stream State
+  List<Map<String, dynamic>> _allProfiles = [];
+  FirebaseSubscription? _profilesUnsub;
+
   // Series List Manager State
   bool _showSeriesManager = false;
   Map<String, String> _seriesOptionsMap = {};
@@ -67,6 +82,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
     _syncLocalFields();
     if (kIsWeb) {
       _listenToSeries();
+      _listenToProfiles();
     } else {
       _seriesOptionsMap = Map.from(_defaultSeriesOptions);
     }
@@ -83,6 +99,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
   @override
   void dispose() {
     _seriesUnsub?.callAsFunction();
+    _profilesUnsub?.callAsFunction();
     super.dispose();
   }
 
@@ -95,6 +112,41 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
     _publishedDate = component.fanzine.publishedDate ?? '';
     _publishedDateMode = component.fanzine.publishedDateMode ?? 'year';
     _publishedDateGuess = component.fanzine.publishedDateGuess;
+    _curators = List<String>.from(component.fanzine.curators);
+    _collections = List<String>.from(component.fanzine.collections);
+  }
+
+  void _listenToProfiles() {
+    _profilesUnsub?.callAsFunction();
+    _profilesUnsub = fsListenQuery('profiles', '', '', '', '', false, (String jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final List<Map<String, dynamic>> list = [];
+        for (var d in decoded) {
+          final rawData = d['data'];
+          final Map<String, dynamic> data =
+          rawData is Map ? Map<String, dynamic>.from(rawData) : {};
+          final String docId = d['id'] ?? data['uid'] ?? '';
+          data['id'] = docId;
+          data['uid'] = docId;
+          list.add(data);
+        }
+        list.sort((a, b) {
+          final String nameA =
+          (a['displayName'] ?? a['username'] ?? '').toString().toLowerCase();
+          final String nameB =
+          (b['displayName'] ?? b['username'] ?? '').toString().toLowerCase();
+          return nameA.compareTo(nameB);
+        });
+        if (mounted) {
+          setState(() {
+            _allProfiles = list;
+          });
+        }
+      } catch (e) {
+        print("Error streaming profiles in CuratorSettingsTab: $e");
+      }
+    });
   }
 
   void _listenToSeries() {
@@ -144,7 +196,6 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
     try {
       if (kIsWeb) {
         if (_isUsingDefaults) {
-          // Seed all default options into Firestore first
           for (var entry in _defaultSeriesOptions.entries) {
             if (entry.key.isNotEmpty) {
               await fsSetDoc(
@@ -155,7 +206,6 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
             }
           }
         }
-        // Add the newly created custom series option
         await fsSetDoc(
           'artifacts/bqopd/public/data/series/$key',
           jsonEncode({'name': name}),
@@ -178,7 +228,6 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
     try {
       if (kIsWeb) {
         if (_isUsingDefaults) {
-          // Seed all default options, substituting the edited key/name inline
           for (var entry in _defaultSeriesOptions.entries) {
             if (entry.key.isNotEmpty) {
               final String finalKey = (entry.key == oldKey) ? cleanNewKey : entry.key;
@@ -191,7 +240,6 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
             }
           }
         } else {
-          // If the key has changed, delete the old Firestore doc and create the new one
           if (oldKey != cleanNewKey) {
             await fsDeleteDoc('artifacts/bqopd/public/data/series/$oldKey');
           }
@@ -201,7 +249,6 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
             true,
           );
         }
-        // Keep active dropdown select references in sync
         if (_series == oldKey) {
           setState(() {
             _series = cleanNewKey;
@@ -232,7 +279,6 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
     try {
       if (kIsWeb) {
         if (_isUsingDefaults) {
-          // Seed all default options EXCEPT the deleted one
           for (var entry in _defaultSeriesOptions.entries) {
             if (entry.key.isNotEmpty && entry.key != key) {
               await fsSetDoc(
@@ -243,7 +289,6 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
             }
           }
         } else {
-          // Delete directly from Firestore
           await fsDeleteDoc('artifacts/bqopd/public/data/series/$key');
         }
         if (_series == key) {
@@ -257,8 +302,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
     }
   }
 
-  void _handleSaveAndNavigate() {
-    // Locate the first page in the fanzine page list to assign its thumbnail to 'gridCoverImage'
+  Future<void> _handleSaveAndNavigate() async {
     String? firstPageImage;
     if (component.pages.isNotEmpty) {
       final sortedPages = List<FanzinePage>.from(component.pages)
@@ -269,7 +313,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
       );
       firstPageImage = firstPage.gridUrl ?? firstPage.imageUrl;
     }
-    // Dispatch save and commit metadata to the BLoC
+
     component.bloc.add(UpdateFanzineMetadata(
       _title,
       _volume,
@@ -280,13 +324,469 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
       publishedDate: _publishedDate.isEmpty ? '' : _publishedDate,
       publishedDateMode: _publishedDateMode,
       publishedDateGuess: _publishedDateGuess,
+      curators: _curators,
+      collections: _collections,
     ));
-    // Route user back to profile
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
+
+    // Resolve current user handle to navigate cleanly to /@handle/curator/curator
+    final uid = getCurrentUserId();
+    String? username;
+    if (uid != null) {
+      final myProfile = _allProfiles.firstWhere(
+            (p) => p['uid'] == uid || p['id'] == uid,
+        orElse: () => {},
+      );
+      if (myProfile['username'] != null && myProfile['username'].toString().isNotEmpty) {
+        username = myProfile['username'].toString();
+      }
+      if (username == null) {
+        try {
+          final res = await fsGetDoc('profiles/$uid');
+          final decoded = jsonDecode(res);
+          if (decoded['exists'] == true) {
+            username = decoded['data']?['username']?.toString();
+          }
+        } catch (_) {}
+      }
+
+      // Ensure sticky preferences remember curator mode
+      try {
+        final prefsData = {
+          'mainTab': 'curator',
+          'settingsSubTab': '',
+        };
+        saveLocalPreference('profile_sticky_prefs_$uid', jsonEncode(prefsData));
+      } catch (_) {}
+    }
+
+    await Future.delayed(const Duration(milliseconds: 150));
+    if (mounted) {
+      if (username != null && username.isNotEmpty) {
+        Router.of(context).push('/@$username/curator/curator');
+      } else {
         Router.of(context).push('/profile');
       }
-    });
+    }
+  }
+
+  Component _buildCuratorsSection() {
+    final List<Map<String, dynamic>> filtered = _allProfiles.where((p) {
+      final q = _curatorSearchQuery.trim().toLowerCase();
+      if (q.isEmpty) return true;
+      final name = (p['displayName'] ?? '').toString().toLowerCase();
+      final user = (p['username'] ?? '').toString().toLowerCase();
+      return name.contains(q) || user.contains(q);
+    }).toList();
+
+    return div(
+      classes: 'flex-col',
+      attributes: const {
+        'style': 'margin-bottom: 14px; position: relative; width: 100%; box-sizing: border-box;'
+      },
+      [
+        div(
+          attributes: const {
+            'style': 'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;'
+          },
+          [
+            span(
+              [Component.text('curators:')],
+              attributes: const {
+                'style': 'font-size: 11px; font-weight: bold; color: #555;'
+              },
+            ),
+            span(
+              [Component.text('${_curators.length} assigned')],
+              attributes: const {
+                'style': 'font-size: 10px; color: #888;'
+              },
+            ),
+          ],
+        ),
+        // Selected Curators Chips Container
+        if (_curators.isNotEmpty)
+          div(
+            attributes: const {
+              'style':
+              'display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; width: 100%; box-sizing: border-box;'
+            },
+            [
+              for (var uid in _curators) _buildCuratorChip(uid),
+            ],
+          ),
+        // Dropdown Search Input Trigger
+        div(
+          attributes: const {
+            'style': 'position: relative; width: 100%; box-sizing: border-box;'
+          },
+          [
+            input(
+              attributes: {
+                'type': 'text',
+                'placeholder': 'search user or @handle to add curator...',
+                'value': _curatorSearchQuery,
+                'style':
+                'width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 12px; background: white; outline: none;',
+              },
+              events: {
+                'focus': (e) => setState(() => _curatorDropdownOpen = true),
+                'input': (e) {
+                  setState(() {
+                    _curatorSearchQuery = getInputValue(e);
+                    _curatorDropdownOpen = true;
+                  });
+                },
+              },
+            ),
+            if (_curatorDropdownOpen)
+              button(
+                [span([Component.text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})],
+                attributes: const {
+                  'type': 'button',
+                  'style':
+                  'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: transparent; cursor: pointer; color: #888; padding: 2px;'
+                },
+                events: {'click': (e) => setState(() => _curatorDropdownOpen = false)},
+              ),
+          ],
+        ),
+        // Transparent Backdrop to Dismiss Dropdown on Click-Outside
+        if (_curatorDropdownOpen)
+          div(
+            attributes: const {
+              'style':
+              'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;'
+            },
+            events: {'click': (e) => setState(() => _curatorDropdownOpen = false)},
+            [],
+          ),
+        // Dropdown Results Menu
+        if (_curatorDropdownOpen)
+          div(
+            attributes: const {
+              'style':
+              'position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow-y: auto; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; box-sizing: border-box;'
+            },
+            [
+              if (filtered.isEmpty)
+                div(
+                  [Component.text('no matching users found.')],
+                  attributes: const {
+                    'style': 'padding: 12px; font-size: 11px; color: #888; font-style: italic; text-align: center;'
+                  },
+                )
+              else
+                for (var profile in filtered) _buildProfileOptionRow(profile, isCurator: true)
+            ],
+          ),
+      ],
+    );
+  }
+
+  Component _buildCollectionSection() {
+    final List<Map<String, dynamic>> filtered = _allProfiles.where((p) {
+      final q = _collectionSearchQuery.trim().toLowerCase();
+      if (q.isEmpty) return true;
+      final name = (p['displayName'] ?? '').toString().toLowerCase();
+      final user = (p['username'] ?? '').toString().toLowerCase();
+      return name.contains(q) || user.contains(q);
+    }).toList();
+
+    return div(
+      classes: 'flex-col',
+      attributes: const {
+        'style': 'margin-bottom: 14px; position: relative; width: 100%; box-sizing: border-box;'
+      },
+      [
+        div(
+          attributes: const {
+            'style': 'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;'
+          },
+          [
+            span(
+              [Component.text('collection / physical copy:')],
+              attributes: const {
+                'style': 'font-size: 11px; font-weight: bold; color: #555;'
+              },
+            ),
+            span(
+              [Component.text('${_collections.length} selected')],
+              attributes: const {
+                'style': 'font-size: 10px; color: #888;'
+              },
+            ),
+          ],
+        ),
+        // Selected Collection Chips Container
+        if (_collections.isNotEmpty)
+          div(
+            attributes: const {
+              'style':
+              'display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; width: 100%; box-sizing: border-box;'
+            },
+            [
+              for (var uid in _collections) _buildCollectionChip(uid),
+            ],
+          ),
+        // Dropdown Search Input Trigger
+        div(
+          attributes: const {
+            'style': 'position: relative; width: 100%; box-sizing: border-box;'
+          },
+          [
+            input(
+              attributes: {
+                'type': 'text',
+                'placeholder': 'search users or managed profiles to add to collection...',
+                'value': _collectionSearchQuery,
+                'style':
+                'width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 12px; background: white; outline: none;',
+              },
+              events: {
+                'focus': (e) => setState(() => _collectionDropdownOpen = true),
+                'input': (e) {
+                  setState(() {
+                    _collectionSearchQuery = getInputValue(e);
+                    _collectionDropdownOpen = true;
+                  });
+                },
+              },
+            ),
+            if (_collectionDropdownOpen)
+              button(
+                [span([Component.text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})],
+                attributes: const {
+                  'type': 'button',
+                  'style':
+                  'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: transparent; cursor: pointer; color: #888; padding: 2px;'
+                },
+                events: {'click': (e) => setState(() => _collectionDropdownOpen = false)},
+              ),
+          ],
+        ),
+        // Transparent Backdrop to Dismiss Dropdown on Click-Outside
+        if (_collectionDropdownOpen)
+          div(
+            attributes: const {
+              'style':
+              'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;'
+            },
+            events: {'click': (e) => setState(() => _collectionDropdownOpen = false)},
+            [],
+          ),
+        // Dropdown Results Menu
+        if (_collectionDropdownOpen)
+          div(
+            attributes: const {
+              'style':
+              'position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow-y: auto; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; box-sizing: border-box;'
+            },
+            [
+              if (filtered.isEmpty)
+                div(
+                  [Component.text('no matching profiles found.')],
+                  attributes: const {
+                    'style': 'padding: 12px; font-size: 11px; color: #888; font-style: italic; text-align: center;'
+                  },
+                )
+              else
+                for (var profile in filtered) _buildProfileOptionRow(profile, isCurator: false)
+            ],
+          ),
+      ],
+    );
+  }
+
+  Component _buildCuratorChip(String uid) {
+    final profile = _allProfiles.firstWhere(
+          (p) => (p['uid'] == uid || p['id'] == uid),
+      orElse: () => {'displayName': uid, 'username': ''},
+    );
+    final String displayName = (profile['displayName'] ?? '').toString().isNotEmpty
+        ? profile['displayName']
+        : (profile['username'] ?? uid);
+    final String? photoUrl = profile['photoUrl'];
+
+    return div(
+      attributes: const {
+        'style':
+        'display: inline-flex; align-items: center; gap: 6px; background: #E8DEF8; color: #1D192B; border: 1px solid #D0BCFF; border-radius: 16px; padding: 2px 8px 2px 4px; font-size: 11px; font-weight: 500;'
+      },
+      [
+        div(
+          attributes: const {
+            'style':
+            'width: 20px; height: 20px; border-radius: 50%; overflow: hidden; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;'
+          },
+          [
+            if (photoUrl != null && photoUrl.isNotEmpty)
+              img(src: photoUrl, attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'})
+            else
+              span([Component.text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')],
+                  attributes: const {'style': 'font-size: 10px; font-weight: bold; color: #6750A4;'}),
+          ],
+        ),
+        span([Component.text(displayName)]),
+        button(
+          [span([Component.text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+          attributes: const {
+            'type': 'button',
+            'style': 'border: none; background: transparent; cursor: pointer; color: #1D192B; padding: 0; display: inline-flex; align-items: center;'
+          },
+          events: {
+            'click': (e) {
+              setState(() {
+                _curators.remove(uid);
+              });
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Component _buildCollectionChip(String uid) {
+    final profile = _allProfiles.firstWhere(
+          (p) => (p['uid'] == uid || p['id'] == uid),
+      orElse: () => {'displayName': uid, 'username': ''},
+    );
+    final String displayName = (profile['displayName'] ?? '').toString().isNotEmpty
+        ? profile['displayName']
+        : (profile['username'] ?? uid);
+    final bool isManaged = profile['isManaged'] == true;
+    final String? photoUrl = profile['photoUrl'];
+
+    return div(
+      attributes: const {
+        'style':
+        'display: inline-flex; align-items: center; gap: 6px; background: #f3f4f6; color: #1f2937; border: 1px solid #d1d5db; border-radius: 16px; padding: 2px 8px 2px 4px; font-size: 11px; font-weight: 500;'
+      },
+      [
+        div(
+          attributes: const {
+            'style':
+            'width: 20px; height: 20px; border-radius: 50%; overflow: hidden; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;'
+          },
+          [
+            if (photoUrl != null && photoUrl.isNotEmpty)
+              img(src: photoUrl, attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'})
+            else
+              span([Component.text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')],
+                  attributes: const {'style': 'font-size: 10px; font-weight: bold; color: #555;'}),
+          ],
+        ),
+        span([Component.text(displayName)]),
+        if (isManaged)
+          span(
+            [Component.text('managed')],
+            attributes: const {
+              'style':
+              'font-size: 8px; font-weight: bold; background: #e0e7ff; color: #3730a3; padding: 1px 4px; border-radius: 4px; text-transform: uppercase;'
+            },
+          ),
+        button(
+          [span([Component.text('close')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px;'})],
+          attributes: const {
+            'type': 'button',
+            'style': 'border: none; background: transparent; cursor: pointer; color: #4b5563; padding: 0; display: inline-flex; align-items: center;'
+          },
+          events: {
+            'click': (e) {
+              setState(() {
+                _collections.remove(uid);
+              });
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Component _buildProfileOptionRow(Map<String, dynamic> profile, {required bool isCurator}) {
+    final String uid = profile['uid'] ?? profile['id'] ?? '';
+    final String displayName = profile['displayName'] ?? profile['username'] ?? 'User';
+    final String username = profile['username'] ?? '';
+    final String? photoUrl = profile['photoUrl'];
+    final bool isManaged = profile['isManaged'] == true;
+    final bool isSelected = isCurator ? _curators.contains(uid) : _collections.contains(uid);
+
+    return div(
+      attributes: {
+        'style':
+        'display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.15s; '
+            'background: ${isSelected ? "rgba(103, 80, 164, 0.08)" : "white"};'
+      },
+      events: {
+        'click': (e) {
+          setState(() {
+            if (isCurator) {
+              if (isSelected) {
+                _curators.remove(uid);
+              } else {
+                _curators.add(uid);
+              }
+            } else {
+              if (isSelected) {
+                _collections.remove(uid);
+              } else {
+                _collections.add(uid);
+              }
+            }
+          });
+        }
+      },
+      [
+        div(
+          attributes: const {'style': 'display: flex; align-items: center; gap: 8px; overflow: hidden;'},
+          [
+            div(
+              attributes: const {
+                'style':
+                'width: 26px; height: 26px; border-radius: 50%; overflow: hidden; background: #eee; display: flex; align-items: center; justify-content: center; flex-shrink: 0;'
+              },
+              [
+                if (photoUrl != null && photoUrl.isNotEmpty)
+                  img(src: photoUrl, attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover;'})
+                else
+                  span([Component.text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')],
+                      attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666;'}),
+              ],
+            ),
+            div(
+              attributes: const {'style': 'display: flex; flex-direction: column; text-align: left; overflow: hidden;'},
+              [
+                span([Component.text(displayName)],
+                    attributes: const {'style': 'font-size: 12px; font-weight: bold; color: black; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
+                if (username.isNotEmpty)
+                  span([Component.text('@$username')],
+                      attributes: const {'style': 'font-size: 10px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'}),
+              ],
+            ),
+          ],
+        ),
+        div(
+          attributes: const {'style': 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;'},
+          [
+            if (isManaged)
+              span(
+                [Component.text('managed')],
+                attributes: const {
+                  'style':
+                  'font-size: 8px; font-weight: bold; background: #e0e7ff; color: #3730a3; padding: 1px 4px; border-radius: 4px; text-transform: uppercase;'
+                },
+              ),
+            span(
+              classes: 'material-symbols-outlined',
+              attributes: {
+                'style':
+                'font-size: 18px; color: ${isSelected ? "#6750A4" : "#ccc"};'
+              },
+              [Component.text(isSelected ? 'check_box' : 'check_box_outline_blank')],
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   @override
@@ -302,6 +802,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
           [Component.text('shortcode: $currentShortcode')],
           classes: 'text-xs text-gray-500 font-semibold mb-1 text-left',
         ),
+
         // Dropdown container for Series selection
         div(
           [
@@ -354,6 +855,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
           classes: 'flex-col',
           attributes: const {'style': 'margin-bottom: 4px;'},
         ),
+
         // Expanded Inline Series Manager UI
         if (_showSeriesManager)
           div(
@@ -551,6 +1053,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
               )
             ],
           ),
+
         // Fanzine Title Input Field
         div(
           [
@@ -572,6 +1075,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
           ],
           classes: 'flex-col mb-1',
         ),
+
         // Volume / Issue / Whole Number Input Row
         div(
           [
@@ -639,7 +1143,8 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
           classes: 'flex-row gap-2 mb-1',
           attributes: const {'style': 'display: flex; gap: 8px; width: 100%; box-sizing: border-box;'},
         ),
-        // Published Date Row
+
+        // Published Date Row (Aligned cleanly with M3 38px specifications)
         div(
           [
             span([Component.text('published date:')], attributes: const {
@@ -654,7 +1159,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
                       attributes: {
                         'type': 'date',
                         'value': _publishedDate,
-                        'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 12px; box-sizing: border-box; font-size: 14px; background-color: white; outline: none; cursor: pointer; height: 36px;'
+                        'style': 'width: 100%; padding: 8px 12px; border: 1px solid var(--m3-outline, #79747E); border-radius: 8px; box-sizing: border-box; font-size: 13px; background-color: white; outline: none; cursor: pointer; height: 38px;'
                       },
                       events: {
                         'change': (e) {
@@ -665,15 +1170,16 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
                       },
                     )
                   ],
-                  attributes: const {'style': 'flex: 1.5; min-width: 150px;'},
+                  attributes: const {'style': 'flex: 1; min-width: 140px;'},
                 ),
-                // Middle element: Date Display Mode Segmented Button (day, month, year)
+                // Middle element: Date Display Mode M3 Segmented Button (day, month, year)
                 div(
                   [
                     SegmentedButton<String>(
                       segments: const ['day', 'month', 'year'],
                       selected: _publishedDateMode,
                       labelBuilder: (val) => val,
+                      showSelectedCheckmark: true,
                       onSelectionChanged: (val) {
                         setState(() {
                           _publishedDateMode = val;
@@ -681,7 +1187,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
                       },
                     )
                   ],
-                  attributes: const {'style': 'flex: 2; min-width: 200px; display: flex; align-items: center;'},
+                  attributes: const {'style': 'display: inline-flex; align-items: center;'},
                 ),
                 // Right element: Guess Checkbox
                 div(
@@ -704,12 +1210,12 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
                     label(
                       attributes: {
                         'for': 'curator-guess-checkbox',
-                        'style': 'font-size: 11px; font-weight: bold; color: #555; cursor: pointer; user-select: none;'
+                        'style': 'font-size: 12px; font-weight: 500; color: #49454F; cursor: pointer; user-select: none;'
                       },
                       [Component.text('guess?')],
                     )
                   ],
-                  attributes: const {'style': 'display: inline-flex; align-items: center; margin-left: auto; white-space: nowrap; height: 36px;'},
+                  attributes: const {'style': 'display: inline-flex; align-items: center; margin-left: auto; white-space: nowrap; height: 38px;'},
                 )
               ],
               attributes: const {
@@ -720,6 +1226,13 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
           classes: 'flex-col',
           attributes: const {'style': 'margin-bottom: 12px;'},
         ),
+
+        // Curators Multiselect Dropdown Section
+        _buildCuratorsSection(),
+
+        // Collection Multiselect Dropdown Section
+        _buildCollectionSection(),
+
         // Two-Page Spread Layout Option Toggle
         div(
           [
@@ -744,6 +1257,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
             }
           },
         ),
+
         // Visibility Option Toggle
         div(
           [
@@ -768,6 +1282,7 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
             }
           },
         ),
+
         // Save Button
         button(
           [Component.text(component.isSaving ? 'saving folio...' : 'save folio')],
@@ -791,12 +1306,14 @@ class _CuratorSettingsTabState extends State<CuratorSettingsTab> {
         div(
           [],
           attributes: {
-            'style': 'width: 18px; height: 18px; border-radius: 50%; background-color: white; position: absolute; top: 3px; left: ${val ? "23px" : "3px"}; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.35);'
+            'style':
+            'width: 18px; height: 18px; border-radius: 50%; background-color: white; position: absolute; top: 3px; left: ${val ? "23px" : "3px"}; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.35);'
           },
         )
       ],
       attributes: {
-        'style': 'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? "#6750A4" : "#ccc"}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
+        'style':
+        'width: 44px; height: 24px; border-radius: 12px; background-color: ${val ? "#6750A4" : "#ccc"}; position: relative; transition: background-color 0.2s; cursor: pointer; display: inline-block;'
       },
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
@@ -53,6 +54,9 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   bool _isCreatingManagedProfile = false;
   String? _managedProfileFeedback;
   bool _isManagedProfileError = false;
+
+  // Active Dropdown Menu State for Managed Profiles
+  String? _openMenuProfileId;
 
   // Deletion Modal State
   String? _pendingDeleteProfileId;
@@ -378,128 +382,237 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
   Component _buildManagedProfilesSettingsView() {
     return div(
-        [
+      [
+        div(
+          [
+            h3([Component.text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin-top: 0;'}),
+            p([Component.text("Initialize dedicated gallery portfolios representing historical creators or archives you manage.")], classes: 'text-xs text-gray italic mb-2', attributes: const {'style': 'margin: 0 0 8px 0;'}),
+            div(
+              [
+                input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
+                span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
+                input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedLastName = getInputValue(e)}),
+              ],
+              attributes: const {'style': 'display: flex; gap: 12px; width: 100%; box-sizing: border-box;'},
+            ),
+            input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedBio = getInputValue(e)}),
+            if (_managedProfileFeedback != null)
+              p([Component.text(_managedProfileFeedback!)], attributes: {
+                'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isManagedProfileError ? "#ef4444" : "#16a34a"}'
+              }),
+            button(
+              [Component.text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
+              classes: 'btn-primary nav-pill',
+              attributes: _isCreatingManagedProfile
+                  ? const {'disabled': 'true', 'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px;'}
+                  : const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px; background-color: #6750A4; color: white; border-radius: 18px; border: none; font-weight: bold; cursor: pointer;'},
+              events: {'click': (e) => _createManagedProfile()},
+            )
+          ],
+          attributes: const {'style': 'border: 1px dashed #ccc; padding: 20px; border-radius: 8px; background-color: #fcfcfc; display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;'},
+        ),
+        if (_managedProfiles.isNotEmpty) ...[
+          div([], attributes: const {'style': 'height: 24px;'}),
+          h3([Component.text("PROFILES CURRENTLY UNDER YOUR MANAGEMENT")], classes: 'font-bold text-xs text-gray mt-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
           div(
             [
-              h3([Component.text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin-top: 0;'}),
-              p([Component.text("Initialize dedicated gallery portfolios representing historical creators or archives you manage.")], classes: 'text-xs text-gray italic mb-2', attributes: const {'style': 'margin: 0 0 8px 0;'}),
-              div(
-                [
-                  input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
-                  span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
-                  input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedLastName = getInputValue(e)}),
-                ],
-                attributes: const {'style': 'display: flex; gap: 12px; width: 100%; box-sizing: border-box;'},
-              ),
-              input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedBio = getInputValue(e)},),
-              if (_managedProfileFeedback != null)
-                p([Component.text(_managedProfileFeedback!)], attributes: {
-                  'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isManagedProfileError ? "#ef4444" : "#16a34a"}'
-                }),
-              button(
-                  [Component.text(_isCreatingManagedProfile ? "initializing..." : "create profile")],
-                  classes: 'btn-primary nav-pill',
-                  attributes: _isCreatingManagedProfile
-                      ? const {'disabled': 'true', 'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px;'}
-                      : const {'style': 'height: 36px; display: inline-flex; align-items: center; justify-content: center; width: 180px; background-color: #6750A4; color: white; border-radius: 18px; border: none; font-weight: bold; cursor: pointer;'},
-                  events: {'click': (e) => _createManagedProfile()}
-              )
+              for (var p in _managedProfiles)
+                _buildManagedProfileCard(p)
             ],
-            attributes: const {'style': 'border: 1px dashed #ccc; padding: 20px; border-radius: 8px; background-color: #fcfcfc; display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;'},
-          ),
-          if (_managedProfiles.isNotEmpty) ...[
-            div([], attributes: const {'style': 'height: 24px;'}),
-            h3([Component.text("PROFILES CURRENTLY UNDER YOUR MANAGEMENT")], classes: 'font-bold text-xs text-gray mt-4', attributes: const {'style': 'margin-top: 0; margin-bottom: 8px;'}),
-            div(
+            attributes: const {'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; width: 100%; box-sizing: border-box;'},
+          )
+        ]
+      ],
+      classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-6',
+      attributes: const {'style': 'display: flex; flex-direction: column; gap: 24px; padding: 24px; background: white; box-sizing: border-box;'},
+    );
+  }
+
+  Component _buildManagedProfileCard(Map<String, dynamic> p) {
+    final String profileDocId = (p['uid'] ?? p['id'] ?? '').toString();
+    final String username = (p['username'] ?? '').toString();
+    final String displayName = (p['displayName'] ?? username).toString();
+    final bool isMenuOpen = _openMenuProfileId == profileDocId;
+
+    final String cleanUsername = username.trim().toLowerCase();
+    // CANONICAL VANITY ROUTE: /@handle/edit-info
+    final String editPath = cleanUsername.isNotEmpty
+        ? '/@$cleanUsername/edit-info'
+        : '/edit-info?userId=$profileDocId';
+
+    return div(
+      attributes: const {
+        'style': 'position: relative; display: flex; flex-direction: column; border: 1px solid #eee; border-radius: 6px; background-color: #f9f9f9; box-sizing: border-box;'
+      },
+      [
+        a(
+          [
+            span([Component.text(displayName)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'}),
+            span([Component.text('@$username')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px; max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'}),
+          ],
+          href: '/@$username',
+          classes: 'hover:bg-gray-100 transition-all flex-1',
+          attributes: const {
+            'style': 'display: flex; flex-direction: column; padding: 14px 12px; text-decoration: none; border-radius: 6px;'
+          },
+        ),
+        // Three-dot Action Trigger Button Container
+        div(
+          attributes: const {
+            'style': 'position: absolute; top: 8px; right: 8px; z-index: 10;'
+          },
+          [
+            button(
+              [
+                span(
+                  classes: 'material-symbols-outlined',
+                  attributes: const {'style': 'font-size: 20px; color: #666;'},
+                  [Component.text('more_vert')],
+                ),
+              ],
+              attributes: const {
+                'type': 'button',
+                'title': 'Options',
+                'style': 'border: none; background: transparent; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #555; transition: background 0.15s; padding: 0;',
+              },
+              events: {
+                'click': (dynamic e) {
+                  try {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  } catch (_) {}
+                  setState(() {
+                    _openMenuProfileId = isMenuOpen ? null : profileDocId;
+                  });
+                }
+              },
+            ),
+            if (isMenuOpen) ...[
+              // Transparent click-outside backdrop to dismiss dropdown
+              div(
+                attributes: const {
+                  'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;',
+                },
+                events: {
+                  'click': (dynamic e) {
+                    try {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    } catch (_) {}
+                    setState(() => _openMenuProfileId = null);
+                  }
+                },
+                [],
+              ),
+              // Dropdown Menu Container
+              div(
+                classes: 'three-dot-dropdown-menu',
+                attributes: const {
+                  'style': 'position: absolute; right: 0; top: calc(100% + 4px); background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 125px; overflow: hidden; display: flex; flex-direction: column;',
+                },
                 [
-                  for (var p in _managedProfiles)
-                    div(
-                        attributes: const {
-                          'style': 'position: relative; display: flex; flex-direction: column; border: 1px solid #eee; border-radius: 6px; background-color: #f9f9f9; box-sizing: border-box; overflow: hidden;'
-                        },
-                        [
-                          a(
-                              [
-                                span([Component.text(p['displayName'] ?? '')], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'}),
-                                span([Component.text('@${p['username']}')], attributes: const {'style': 'font-size: 11px; color: #666; margin-top: 4px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;'})
-                              ],
-                              href: '/@${p['username']}',
-                              classes: 'hover:bg-gray-100 transition-all flex-1',
-                              attributes: const {
-                                'style': 'display: flex; flex-direction: column; padding: 14px 12px; text-decoration: none;'
-                              }
-                          ),
-                          button(
-                              [
-                                span([Component.text('delete')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 16px;'})
-                              ],
-                              attributes: const {
-                                'style': 'position: absolute; top: 12px; right: 12px; border: none; background: rgba(0,0,0,0.04); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ff5252; transition: background 0.15s;'
-                              },
-                              events: {
-                                'click': (dynamic e) {
-                                  try {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                  } catch (_) {}
-                                  setState(() {
-                                    _pendingDeleteProfileId = p['id'] ?? p['uid'];
-                                    _pendingDeleteProfileUsername = p['username'];
-                                    _pendingDeleteProfileDisplayName = p['displayName'] ?? p['username'];
-                                  });
-                                }
-                              }
-                          )
-                        ]
-                    )
+                  // Option: Edit Info (navigates to canonical vanity /@handle/edit-info)
+                  a(
+                    [
+                      span(
+                        classes: 'material-symbols-outlined',
+                        attributes: const {'style': 'font-size: 16px; color: #4b5563; margin-right: 6px;'},
+                        [Component.text('edit_note')],
+                      ),
+                      Component.text('edit info'),
+                    ],
+                    href: editPath,
+                    attributes: const {
+                      'style': 'padding: 8px 12px; font-size: 12px; font-weight: 500; color: #374151; display: flex; align-items: center; text-decoration: none; transition: background 0.15s;',
+                    },
+                    events: {
+                      'click': (dynamic e) {
+                        try {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        } catch (_) {}
+                        setState(() => _openMenuProfileId = null);
+                        Router.of(context).push(editPath);
+                      }
+                    },
+                  ),
+                  div(attributes: const {'style': 'height: 1px; background-color: #f3f4f6; margin: 0;'}, []),
+                  // Option: Delete
+                  button(
+                    [
+                      span(
+                        classes: 'material-symbols-outlined',
+                        attributes: const {'style': 'font-size: 16px; color: #ef4444; margin-right: 6px;'},
+                        [Component.text('delete')],
+                      ),
+                      Component.text('delete'),
+                    ],
+                    attributes: const {
+                      'type': 'button',
+                      'style': 'background: transparent; border: none; cursor: pointer; padding: 8px 12px; display: flex; align-items: center; width: 100%; text-align: left; font-size: 12px; font-weight: bold; color: #ef4444; transition: background 0.15s;',
+                    },
+                    events: {
+                      'click': (dynamic e) {
+                        try {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        } catch (_) {}
+                        setState(() {
+                          _openMenuProfileId = null;
+                          _pendingDeleteProfileId = profileDocId;
+                          _pendingDeleteProfileUsername = username;
+                          _pendingDeleteProfileDisplayName = displayName;
+                        });
+                      }
+                    },
+                  ),
                 ],
-                attributes: const {'style': 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; width: 100%; box-sizing: border-box;'}
-            )
-          ]
-        ],
-        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-6',
-        attributes: const {'style': 'display: flex; flex-direction: column; gap: 24px; padding: 24px; background: white; box-sizing: border-box;'}
+              ),
+            ],
+          ],
+        ),
+      ],
     );
   }
 
   Component _buildShortcodesSettingsView() {
     return div(
-        [
-          h2([Component.text("GLOBAL CONGESTION ROUTING SHORTCODES")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
-          p([Component.text("Configure the default shortcode bindings representing the Global 'Book of the Week' presented to guests on sign in or registration workflows.")], classes: 'text-xs text-gray italic leading-relaxed', attributes: const {'style': 'margin: 0;'}),
-          div([], attributes: const {'style': 'height: 12px;'}),
-          div(
-              [
-                span([Component.text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
-                input(attributes: {'value': _loginZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _loginZineShortcode = getInputValue(e)})
-              ],
-              classes: 'flex-col gap-2',
-              attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'}
-          ),
-          div(
-              [
-                span([Component.text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
-                input(attributes: {'value': _registerZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _registerZineShortcode = getInputValue(e)})
-              ],
-              classes: 'flex-col gap-2',
-              attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'}
-          ),
-          div([], attributes: const {'style': 'height: 12px;'}),
-          if (_settingsFeedback != null)
-            p([Component.text(_settingsFeedback!)], attributes: {
-              'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isSettingsError ? "#ef4444" : "#16a34a"}'
-            }),
-          button(
-              [Component.text(_isSavingSettings ? "saving..." : "save settings")],
-              classes: 'btn-primary nav-pill',
-              attributes: _isSavingSettings
-                  ? const {'disabled': 'true', 'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px;'}
-                  : const {'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px; background-color: #6750A4; color: white; border-radius: 19px; border: none; font-weight: bold; cursor: pointer;'},
-              events: {'click': (e) => _saveGlobalSettings()}
-          )
-        ],
-        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
-        attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'}
+      [
+        h2([Component.text("GLOBAL CONGESTION ROUTING SHORTCODES")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+        p([Component.text("Configure the default shortcode bindings representing the Global 'Book of the Week' presented to guests on sign in or registration workflows.")], classes: 'text-xs text-gray italic leading-relaxed', attributes: const {'style': 'margin: 0;'}),
+        div([], attributes: const {'style': 'height: 12px;'}),
+        div(
+          [
+            span([Component.text("LOGIN STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
+            input(attributes: {'value': _loginZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _loginZineShortcode = getInputValue(e)}),
+          ],
+          classes: 'flex-col gap-2',
+          attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'},
+        ),
+        div(
+          [
+            span([Component.text("REGISTRATION STICKER SHORTCODE")], classes: 'text-xs font-bold text-gray', attributes: const {'style': 'margin-bottom: 6px;'}),
+            input(attributes: {'value': _registerZineShortcode, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _registerZineShortcode = getInputValue(e)}),
+          ],
+          classes: 'flex-col gap-2',
+          attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px;'},
+        ),
+        div([], attributes: const {'style': 'height: 12px;'}),
+        if (_settingsFeedback != null)
+          p([Component.text(_settingsFeedback!)], attributes: {
+            'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isSettingsError ? "#ef4444" : "#16a34a"}'
+          }),
+        button(
+          [Component.text(_isSavingSettings ? "saving..." : "save settings")],
+          classes: 'btn-primary nav-pill',
+          attributes: _isSavingSettings
+              ? const {'disabled': 'true', 'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px;'}
+              : const {'style': 'height: 38px; display: inline-flex; align-items: center; justify-content: center; width: 160px; background-color: #6750A4; color: white; border-radius: 19px; border: none; font-weight: bold; cursor: pointer;'},
+          events: {'click': (e) => _saveGlobalSettings()},
+        )
+      ],
+      classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
+      attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'},
     );
   }
 
@@ -517,17 +630,17 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       );
     }
     return div(
-        [
-          h2([Component.text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
-          if (_permissionFeedback != null)
-            p([Component.text(_permissionFeedback!)], attributes: const {
-              'style': 'font-size: 12px; font-weight: bold; color: #6750A4; margin-bottom: 12px;'
-            }),
-          for (var u in _allSystemUsers)
-            _buildUserPermissionManagerRow(u)
-        ],
-        classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
-        attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'}
+      [
+        h2([Component.text("SYSTEM LEVEL ROLES & ACCESS GRANTS")], classes: 'font-bold text-sm text-gray mb-4', attributes: const {'style': 'margin-top: 0;'}),
+        if (_permissionFeedback != null)
+          p([Component.text(_permissionFeedback!)], attributes: const {
+            'style': 'font-size: 12px; font-weight: bold; color: #6750A4; margin-bottom: 12px;'
+          }),
+        for (var u in _allSystemUsers)
+          _buildUserPermissionManagerRow(u)
+      ],
+      classes: 'bg-white rounded-lg p-6 shadow-sm flex-col gap-4',
+      attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; padding: 24px; background: white; box-sizing: border-box;'},
     );
   }
 
@@ -538,46 +651,46 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     final bool isUserActiveInPerm = _permissionFeedbackUid == uid;
 
     return div(
-        [
-          div(
-              [
-                span([Component.text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-                span([Component.text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'}),
-                if (isUserActiveInPerm && _permissionFeedback != null)
-                  span([Component.text(_permissionFeedback!)], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #6750A4; margin-top: 2px;'})
-              ],
-              classes: 'flex-col gap-1',
-              attributes: const {'style': 'display: flex; flex-direction: column; gap: 4px;'}
-          ),
-          div(
-              [
-                _buildRoleBadgeSelector(uid, "admin", currentRole),
-                span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
-                _buildRoleBadgeSelector(uid, "moderator", currentRole),
-                span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
-                _buildRoleBadgeSelector(uid, "curator", currentRole),
-                span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
-                _buildRoleBadgeSelector(uid, "user", currentRole)
-              ],
-              attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'}
-          )
-        ],
-        classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all',
-        attributes: const {
-          'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; padding: 12px;'
-        }
+      [
+        div(
+          [
+            span([Component.text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
+            span([Component.text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'}),
+            if (isUserActiveInPerm && _permissionFeedback != null)
+              span([Component.text(_permissionFeedback!)], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #6750A4; margin-top: 2px;'}),
+          ],
+          classes: 'flex-col gap-1',
+          attributes: const {'style': 'display: flex; flex-direction: column; gap: 4px;'},
+        ),
+        div(
+          [
+            _buildRoleBadgeSelector(uid, "admin", currentRole),
+            span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
+            _buildRoleBadgeSelector(uid, "moderator", currentRole),
+            span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
+            _buildRoleBadgeSelector(uid, "curator", currentRole),
+            span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
+            _buildRoleBadgeSelector(uid, "user", currentRole),
+          ],
+          attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'},
+        )
+      ],
+      classes: 'hover:bg-gray-50 rounded-lg p-3 transition-all',
+      attributes: const {
+        'style': 'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f5f5f5; padding: 12px;'
+      },
     );
   }
 
   Component _buildRoleBadgeSelector(String uid, String role, String activeRole) {
     final bool isSelected = activeRole == role;
     return button(
-        [Component.text(role)],
-        classes: isSelected ? 'active m3-chip' : 'm3-chip',
-        attributes: const {
-          'style': 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: none; text-transform: uppercase;'
-        },
-        events: {'click': (e) => _updateUserPermission(uid, role)}
+      [Component.text(role)],
+      classes: isSelected ? 'active m3-chip' : 'm3-chip',
+      attributes: const {
+        'style': 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: none; text-transform: uppercase;'
+      },
+      events: {'click': (e) => _updateUserPermission(uid, role)},
     );
   }
 
@@ -589,44 +702,44 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     // 1. Shortcodes segment
     if (isViewerAdmin) {
       subTabs.add(span(
-          [Component.text("shortcodes")],
-          classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-          events: {
-            'click': (e) => _selectSubTab(0)
-          }
+        [Component.text("shortcodes")],
+        classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+        events: {
+          'click': (e) => _selectSubTab(0),
+        },
       ));
     }
 
     // 2. Managed Profiles segment
     if (component.isMe || isViewerAdmin) {
       subTabs.add(span(
-          [Component.text("managed profiles")],
-          classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-          events: {
-            'click': (e) => _selectSubTab(1)
-          }
+        [Component.text("managed profiles")],
+        classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+        events: {
+          'click': (e) => _selectSubTab(1),
+        },
       ));
     }
 
     // 3. Permissions segment
     if (isViewerAdmin) {
       subTabs.add(span(
-          [Component.text("permissions")],
-          classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-          events: {
-            'click': (e) => _selectSubTab(2)
-          }
+        [Component.text("permissions")],
+        classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+        events: {
+          'click': (e) => _selectSubTab(2),
+        },
       ));
     }
 
     // 4. Social Buttons segment
     if (component.isMe) {
       subTabs.add(span(
-          [Component.text("social buttons")],
-          classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
-          events: {
-            'click': (e) => _selectSubTab(3)
-          }
+        [Component.text("social buttons")],
+        classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
+        events: {
+          'click': (e) => _selectSubTab(3),
+        },
       ));
     }
 
@@ -642,9 +755,9 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       [
         if (navItems.isNotEmpty)
           div(
-              navItems,
-              classes: 'bg-white rounded-md p-4 shadow-sm',
-              attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'}
+            navItems,
+            classes: 'bg-white rounded-md p-4 shadow-sm',
+            attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'},
           ),
         if (_activeSubTab == 3)
           SettingsSocialButtonsPage(
@@ -659,7 +772,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               _buildPermissionsSettingsView()
             else
               div([]),
-
         if (_pendingDeleteProfileId != null)
           ConfirmModal(
             title: 'Delete Managed Profile?',
@@ -683,7 +795,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                 _pendingDeleteProfileDisplayName = null;
               });
             },
-          )
+          ),
       ],
     );
   }

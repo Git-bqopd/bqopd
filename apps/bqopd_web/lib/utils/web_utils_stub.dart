@@ -53,3 +53,6 @@ void openWindow(String url, String target) {
 void initAddressAutocomplete(String inputId, void Function(String) callback) {
   // No-op on the server
 }
+
+/// Server VM stub for retrieving the current browser location path.
+String getCurrentPath() => '';

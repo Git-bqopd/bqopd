@@ -134,7 +134,6 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
 /// Uses package:web, dart:js_interop, and dart:js_interop_unsafe to guarantee compatibility.
 String getInputValue(dynamic event) {
   if (event == null) return '';
-
   // 1. Direct package:web Event checking
   try {
     if (event is web.Event) {
@@ -152,7 +151,6 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue web.Event Error] $e');
   }
-
   // 2. dart:js_interop and dart:js_interop_unsafe inspection on JSObjects
   try {
     if (event is JSObject) {
@@ -169,7 +167,6 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue js_interop Error] $e');
   }
-
   // 3. Fallback to dynamic property invocation for legacy wrapped objects
   try {
     final target = (event as dynamic).target;
@@ -182,7 +179,6 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue dynamic Fallback Error] $e');
   }
-
   return '';
 }
 
@@ -218,7 +214,6 @@ void openWindow(String url, String target) {
 void initAddressAutocomplete(String inputId, void Function(String) callback) {
   final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
   if (input == null) return;
-
   // Check if Google Maps Places SDK has finished loading on the global window
   final jsWindow = web.window as JSObject;
   if (!jsWindow.has('google')) {
@@ -227,7 +222,6 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
     }).toJS, 150.toJS);
     return;
   }
-
   final google = jsWindow['google'];
   if (google == null || google is! JSObject || !google.has('maps')) {
     web.window.setTimeout((() {
@@ -235,7 +229,6 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
     }).toJS, 150.toJS);
     return;
   }
-
   final maps = google['maps'];
   if (maps == null || maps is! JSObject || !maps.has('places')) {
     web.window.setTimeout((() {
@@ -243,7 +236,6 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
     }).toJS, 150.toJS);
     return;
   }
-
   try {
     final options = _AutocompleteOptions(
       fields: ['formatted_address'.toJS].toJS,
@@ -260,5 +252,14 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
     }).toJS);
   } catch (e) {
     print('[initAddressAutocomplete Error] $e');
+  }
+}
+
+/// Returns the current pathname from the browser's window location.
+String getCurrentPath() {
+  try {
+    return web.window.location.pathname;
+  } catch (_) {
+    return '';
   }
 }

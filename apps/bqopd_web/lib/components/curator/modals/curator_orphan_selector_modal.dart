@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import '../../../utils/web_utils.dart';
+import '../../fanzine_thumbnail_card.dart';
 
-/// Modal dialog allowing curators to pick orphan images or library assets
+/// Curator-only modal dialog allowing curators to pick orphan images or library assets
 /// and attach them directly to the active fanzine sequence.
+/// Renders library candidates in a 3-column grid of FanzineThumbnailCards,
+/// sorted with the newest uploads at the top and oldest at the bottom.
 class CuratorOrphanSelectorModal extends StatefulComponent {
   final String fanzineId;
   final String userId;
@@ -34,6 +37,39 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
     _loadOrphanImages();
   }
 
+  int _compareTimestamps(Map<String, dynamic> a, Map<String, dynamic> b) {
+    int extractMillis(dynamic val) {
+      if (val == null) return 0;
+      if (val is int) return val;
+      if (val is num) return val.toInt();
+      if (val is DateTime) return val.millisecondsSinceEpoch;
+      if (val is Map) {
+        if (val['iso'] != null) {
+          final dt = DateTime.tryParse(val['iso'].toString());
+          if (dt != null) return dt.millisecondsSinceEpoch;
+        }
+        if (val['seconds'] != null) {
+          return ((val['seconds'] as num) * 1000).toInt();
+        }
+      }
+      if (val is String) {
+        final dt = DateTime.tryParse(val);
+        if (dt != null) return dt.millisecondsSinceEpoch;
+        final asInt = int.tryParse(val);
+        if (asInt != null) return asInt;
+      }
+      return 0;
+    }
+
+    final aTime = extractMillis(a['timestamp'] ?? a['createdAt']);
+    final bTime = extractMillis(b['timestamp'] ?? b['createdAt']);
+    // Descending order: newest at top, oldest at bottom
+    if (aTime != bTime) {
+      return bTime.compareTo(aTime);
+    }
+    return (b['id'] ?? '').toString().compareTo((a['id'] ?? '').toString());
+  }
+
   Future<void> _loadOrphanImages() async {
     setState(() => _isLoading = true);
     try {
@@ -46,13 +82,11 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
       );
       final List decoded = jsonDecode(jsonStr);
       final List<Map<String, dynamic>> candidates = [];
-
       for (var item in decoded) {
         final data = item['data'] as Map<String, dynamic>;
         data['id'] = item['id'];
         final List usedIn = data['usedInFanzines'] ?? [];
         final String? contextId = data['folioContext'];
-
         // Consider as candidate if not currently used in this fanzine
         final bool isAlreadyInFolio = contextId == component.fanzineId || usedIn.contains(component.fanzineId);
         if (!isAlreadyInFolio) {
@@ -60,11 +94,8 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
         }
       }
 
-      candidates.sort((a, b) {
-        final aT = a['timestamp'] ?? a['createdAt'] ?? '';
-        final bT = b['timestamp'] ?? b['createdAt'] ?? '';
-        return bT.toString().compareTo(aT.toString());
-      });
+      // Sort newest at the top, oldest at the bottom
+      candidates.sort((a, b) => _compareTimestamps(a, b));
 
       if (mounted) {
         setState(() {
@@ -92,7 +123,7 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
 
   void _confirmSelection() {
     final selectedDocs = _orphanImages
-        .where((img) => _selectedImageIds.contains(img['id']))
+        .where((imageDoc) => _selectedImageIds.contains(imageDoc['id']))
         .toList();
     component.onAddSelected(selectedDocs);
   }
@@ -100,7 +131,6 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
   @override
   Component build(BuildContext context) {
     final selectedCount = _selectedImageIds.length;
-
     return div(
       classes: 'global-modal-overlay',
       attributes: const {
@@ -109,17 +139,16 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
       },
       [
         div(
-          classes: 'white-sticker shadow-lg',
           attributes: const {
             'style':
-            'width: 90%; max-width: 640px; max-height: 80vh; background: white; border-radius: 12px; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px;'
+            'width: 90%; max-width: 720px; max-height: 85vh; background: white; border-radius: 12px; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; align-items: stretch; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.2);'
           },
           [
             // Header Bar
             div(
               attributes: const {
                 'style':
-                'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px;'
+                'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; width: 100%;'
               },
               [
                 h3(
@@ -131,31 +160,45 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
                 ),
                 span(
                   [Component.text('${_orphanImages.length} available')],
-                  attributes: const {'style': 'font-size: 12px; color: #888;'},
+                  attributes: const {'style': 'font-size: 12px; color: #888; font-weight: 500;'},
                 ),
               ],
             ),
-
-            // Content Area
             if (_isLoading)
               div(
-                [Component.text('Loading candidate images...')],
+                [
+                  span(
+                    [Component.text('progress_activity')],
+                    classes: 'material-symbols-outlined',
+                    attributes: const {
+                      'style':
+                      'font-size: 32px; color: #6750A4; animation: spin 1s linear infinite; margin-bottom: 8px;'
+                    },
+                  ),
+                  p(
+                    [Component.text('Loading library images...')],
+                    attributes: const {
+                      'style':
+                      'margin: 0; color: #888; font-size: 13px; font-style: italic;'
+                    },
+                  )
+                ],
                 attributes: const {
                   'style':
-                  'padding: 40px; text-align: center; color: #888; font-size: 13px; font-style: italic;'
+                  'padding: 60px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; box-sizing: border-box;'
                 },
               )
             else if (_orphanImages.isEmpty)
               div(
                 attributes: const {
                   'style':
-                  'padding: 40px; text-align: center; color: #888; font-size: 13px; font-style: italic;'
+                  'padding: 60px 16px; text-align: center; color: #888; font-size: 13px; font-style: italic; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; box-sizing: border-box;'
                 },
                 [
                   span(
                     [Component.text('photo_library')],
                     classes: 'material-symbols-outlined',
-                    attributes: const {'style': 'font-size: 36px; color: #ccc; margin-bottom: 8px; display: block;'},
+                    attributes: const {'style': 'font-size: 40px; color: #ccc; margin-bottom: 8px; display: block;'},
                   ),
                   Component.text('No available orphan images found in your master library.'),
                 ],
@@ -164,19 +207,17 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
               div(
                 attributes: const {
                   'style':
-                  'display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; overflow-y: auto; max-height: 50vh; padding: 4px;'
+                  'display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; overflow-y: auto; max-height: 60vh; width: 100%; box-sizing: border-box; padding: 4px;'
                 },
                 [
-                  for (var img in _orphanImages)
-                    _buildImageTile(img),
+                  for (var imageDoc in _orphanImages)
+                    _buildCardItem(imageDoc),
                 ],
               ),
-
-            // Footer Action Bar
             div(
               attributes: const {
                 'style':
-                'display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #eee; padding-top: 12px; margin-top: auto;'
+                'display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #eee; padding-top: 14px; margin-top: auto; width: 100%;'
               },
               [
                 button(
@@ -185,7 +226,7 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
                   attributes: const {
                     'type': 'button',
                     'style':
-                    'padding: 8px 16px; font-size: 11px; font-weight: bold; border: 1px solid #ccc; background: white; color: #444; border-radius: 6px; cursor: pointer;'
+                    'padding: 8px 18px; font-size: 11px; font-weight: bold; border: 1px solid #ccc; background: white; color: #444; border-radius: 6px; cursor: pointer;'
                   },
                   events: {
                     'click': (e) => component.onCancel(),
@@ -196,7 +237,7 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
                   attributes: {
                     'type': 'button',
                     'style':
-                    'padding: 8px 18px; font-size: 11px; font-weight: bold; border: none; border-radius: 6px; cursor: ${selectedCount > 0 ? "pointer" : "default"}; color: white; background-color: ${selectedCount > 0 ? "#6750A4" : "#ccc"};',
+                    'padding: 8px 20px; font-size: 11px; font-weight: bold; border: none; border-radius: 6px; cursor: ${selectedCount > 0 ? "pointer" : "default"}; color: white; background-color: ${selectedCount > 0 ? "#6750A4" : "#ccc"}; transition: background-color 0.2s;',
                     if (selectedCount == 0) 'disabled': 'true',
                   },
                   events: {
@@ -215,74 +256,57 @@ class _CuratorOrphanSelectorModalState extends State<CuratorOrphanSelectorModal>
     );
   }
 
-  Component _buildImageTile(Map<String, dynamic> imageDoc) {
+  Component _buildCardItem(Map<String, dynamic> imageDoc) {
     final String id = imageDoc['id'] ?? '';
-    final String? optimalUrl = imageDoc['gridUrl'] ?? imageDoc['fileUrl'];
-    final String title = imageDoc['title'] ?? imageDoc['fileName'] ?? 'untitled';
-    final int width = imageDoc['width'] ?? 0;
-    final int height = imageDoc['height'] ?? 0;
+    final String? optimalUrl =
+        imageDoc['gridUrl'] ?? imageDoc['fileUrl'] ?? imageDoc['imageUrl'];
+    final String rawTitle =
+        imageDoc['title'] ?? imageDoc['fileName'] ?? 'untitled';
     final bool isSelected = _selectedImageIds.contains(id);
 
+    final cardData = Map<String, dynamic>.from(imageDoc);
+    cardData['title'] = rawTitle;
+
     return div(
+      classes: 'transition-all',
       attributes: {
         'style':
-        'aspect-ratio: 5 / 8; background-color: #f5f5f5; border: 2px solid ${isSelected ? "#6750A4" : "rgba(0,0,0,0.1)"}; border-radius: 6px; position: relative; overflow: hidden; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'
+        'position: relative; cursor: pointer; box-sizing: border-box; '
+            'outline: ${isSelected ? "3px solid #6750A4" : "none"}; '
+            'outline-offset: 2px; '
+            'background-color: ${isSelected ? "rgba(103, 80, 164, 0.04)" : "transparent"};',
       },
       events: {
-        'click': (e) => _toggleSelection(id),
+        'click': (dynamic e) {
+          _toggleSelection(id);
+        },
       },
       [
-        if (optimalUrl != null && optimalUrl.isNotEmpty)
-          img(
-            src: optimalUrl,
-            attributes: const {'style': 'width: 100%; height: 100%; object-fit: cover; display: block;'},
-          )
-        else
-          div(
-            [Component.text('no preview')],
-            attributes: const {
-              'style':
-              'display: flex; align-items: center; justify-content: center; height: 100%; color: #aaa; font-size: 10px;'
-            },
-          ),
-        // Selection Checkmark Badge
+        FanzineThumbnailCard(
+          fanzineData: cardData,
+          customCoverUrl: optimalUrl,
+          cardType: 'image',
+          key: ValueKey('curator_orphan_card_$id'),
+          onCardTap: () => _toggleSelection(id),
+          onMenuTap: () => _toggleSelection(id),
+        ),
         if (isSelected)
           div(
             [
               span(
                 [Component.text('check_circle')],
                 classes: 'material-symbols-outlined',
-                attributes: const {'style': 'font-size: 20px; color: #6750A4; background: white; border-radius: 50%;'},
-              )
+                attributes: const {
+                  'style':
+                  'font-size: 26px; color: #6750A4; background: white; border-radius: 50%; display: block;'
+                },
+              ),
             ],
             attributes: const {
-              'style': 'position: absolute; top: 4px; right: 4px;'
+              'style':
+              'position: absolute; top: 6px; right: 6px; z-index: 10; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));'
             },
           ),
-        // Dimension badge
-        div(
-          [Component.text('${width}x$height')],
-          attributes: const {
-            'style':
-            'position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,0.65); color: white; font-size: 8px; font-weight: bold; border-radius: 3px; padding: 2px 4px;'
-          },
-        ),
-        // Bottom Title Label
-        div(
-          [
-            span(
-              [Component.text(title.toLowerCase())],
-              attributes: const {
-                'style':
-                'font-size: 8px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; text-align: center;'
-              },
-            )
-          ],
-          attributes: const {
-            'style':
-            'position: absolute; bottom: 0; left: 0; right: 0; background-color: rgba(0,0,0,0.65); padding: 4px 6px; text-align: center;'
-          },
-        ),
       ],
     );
   }

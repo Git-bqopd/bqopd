@@ -6,7 +6,6 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
-
 import '../components/profile/profile_card.dart';
 import '../components/profile/maker_tab.dart';
 import '../components/profile/index_tab.dart';
@@ -14,7 +13,7 @@ import '../components/profile/settings_tab.dart';
 import '../components/profile/curator_tab.dart';
 
 /// Clean coordinator page tracking target profiles using core's ProfileBloc.
-/// Implements state management, viewer authentication, and tab navigation.
+/// Implements state management, viewer authentication, and tab navigation with no drop shadows.
 class ProfilePage extends StatefulComponent {
   final AuthState? authState;
   final AuthBloc authBloc;
@@ -74,7 +73,6 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     _activeSubTabName = component.initialSubTab;
-
     // SERVER PRE-RENDERING GUARD: Only initialize dynamic streams on the client
     if (kIsWeb) {
       _loadCachedStickyPrefs();
@@ -357,13 +355,16 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     } catch (_) {}
     if (mainTab.isEmpty) return;
+
     final prefsData = {
       'mainTab': mainTab,
       'settingsSubTab': _activeSubTabName ?? '',
     };
+
     try {
       saveLocalPreference('profile_sticky_prefs_$uid', jsonEncode(prefsData));
     } catch (_) {}
+
     fsUpdateDoc('Users/$uid', jsonEncode({
       'preferences.profile': prefsData,
     })).catchError((_) {
@@ -469,7 +470,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   'Archival features are currently being generated on our backend.')
             ], classes: 'text-sm text-gray mt-2')
           ],
-          classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
+          classes: 'bg-white rounded-lg p-16 text-center',
+          attributes: const {'style': 'border: 1px solid #ddd; box-shadow: none;'},
         );
     }
   }
@@ -492,9 +494,9 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
     final userData = state.userData!;
-
     final List<String> originalTabs = state.visibleTabs;
     final List<String> filteredTabs = [];
+
     for (var tab in originalTabs) {
       if (_isMe) {
         // Profile owners see every tab regardless of contents
@@ -541,7 +543,7 @@ class _ProfilePageState extends State<ProfilePage> {
       [
         div(
           [
-            // 1. Profile metadata envelope card
+            // 1. Profile metadata envelope card (Squared edges, zero box shadow)
             ProfileCard(
               profile: userData,
               isMe: _isMe,
@@ -551,7 +553,7 @@ class _ProfilePageState extends State<ProfilePage> {
               },
             ),
             div([], classes: 'profile-spacer'),
-            // 2. Tab selection bar
+            // 2. Tab selection bar without shadows and with squared border
             if (filteredTabs.isNotEmpty)
               div(
                 [
@@ -566,10 +568,10 @@ class _ProfilePageState extends State<ProfilePage> {
                           }),
                   ]
                 ],
-                classes: 'bg-white rounded-md shadow-sm py-4',
+                classes: 'bg-white py-4',
                 attributes: const {
                   'style':
-                  'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%;'
+                  'display: flex; justify-content: center; align-items: center; overflow-x: auto; box-sizing: border-box; width: 100%; border: 1px solid #ddd; box-shadow: none; border-radius: 0px;'
                 },
               ),
             div([], classes: 'profile-spacer'),
