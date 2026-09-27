@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
+import '../../utils/web_firebase_interop.dart';
 
 /// Curator-only isolated Order tab for managing sequence, page spreads, and page orientations.
 class CuratorOrderTab extends StatefulComponent {
@@ -20,15 +22,96 @@ class CuratorOrderTab extends StatefulComponent {
 }
 
 class _CuratorOrderTabState extends State<CuratorOrderTab> {
+  dynamic _imagesSub;
+  Map<String, bool> _imageIs5x8Map = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToImages();
+  }
+
+  @override
+  void didUpdateComponent(CuratorOrderTab oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.fanzine.id != component.fanzine.id) {
+      _listenToImages();
+    }
+  }
+
+  @override
+  void dispose() {
+    try {
+      _imagesSub?.callAsFunction();
+    } catch (_) {}
+    _imagesSub = null;
+    super.dispose();
+  }
+
+  void _listenToImages() {
+    try {
+      _imagesSub?.callAsFunction();
+    } catch (_) {}
+    _imagesSub = null;
+
+    final fzId = component.fanzine.id;
+    if (fzId.isEmpty) return;
+
+    _imagesSub = fsListenQuery(
+      'images',
+      'usedInFanzines',
+      'array-contains',
+      jsonEncode(fzId),
+      '',
+      false,
+          (String jsonStr) {
+        try {
+          final List decoded = jsonDecode(jsonStr) as List;
+          final Map<String, bool> map = {};
+          for (var d in decoded) {
+            final data = d['data'] as Map<String, dynamic>? ?? {};
+            final String id = d['id'] ?? '';
+            if (id.isNotEmpty) {
+              if (data['is5x8'] == false) {
+                map[id] = false;
+              } else if (data['is5x8'] == true || data['type'] == 'template') {
+                map[id] = true;
+              } else {
+                final w = data['width'] as num?;
+                final h = data['height'] as num?;
+                if (w != null && h != null && h > 0) {
+                  final ratio = w / h;
+                  map[id] = (ratio >= 0.58 && ratio <= 0.67);
+                } else {
+                  map[id] = true;
+                }
+              }
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _imageIs5x8Map = map;
+            });
+          }
+        } catch (e) {
+          print("Error listening to images in CuratorOrderTab: $e");
+        }
+      },
+    );
+  }
+
   bool _isPage5x8(FanzinePage page) {
-    if (page.templateId != null) {
-      return true;
+    if (page.is5x8 == false) return false;
+    if (page.is5x8 == true || page.templateId != null) return true;
+    final imgId = page.imageId;
+    if (imgId != null && _imageIs5x8Map.containsKey(imgId)) {
+      return _imageIs5x8Map[imgId]!;
     }
     final w = page.width;
     final h = page.height;
     if (w != null && h != null && h > 0) {
       final ratio = w / h;
-      return ratio >= 0.58 && ratio <= 0.67;
+      if (ratio >= 0.58 && ratio <= 0.67) return true;
     }
     return true;
   }
@@ -42,22 +125,27 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
 
     return div(
       classes: 'flex-col gap-4 text-left p-2',
-      attributes: const {'style': 'display: flex; flex-direction: column; gap: 16px; width: 100%; box-sizing: border-box;'},
+      attributes: const {
+        'style': 'display: flex; flex-direction: column; gap: 16px; width: 100%; box-sizing: border-box;'
+      },
       [
         div(
-          attributes: const {'style': 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px;'},
+          attributes: const {
+            'style': 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px;'
+          },
           [
             span(
               [Component.text('flatplan sequence')],
-              attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
+              attributes: const {
+                'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'
+              },
             ),
             span(
-              [Component.text('${ordered.length} ordered • ${unordered.length} unordered')],
+              [Component.text('${ordered.length} ordered   ${unordered.length} unordered')],
               attributes: const {'style': 'font-size: 11px; color: #999;'},
             ),
           ],
         ),
-
         if (ordered.isEmpty)
           div(
             [
@@ -66,7 +154,9 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
                 attributes: const {'style': 'font-size: 12px; color: #888; font-style: italic;'},
               ),
             ],
-            attributes: const {'style': 'padding: 24px; text-align: center; background-color: #fafafa; border-radius: 8px; border: 1px dashed #e0e0e0;'},
+            attributes: const {
+              'style': 'padding: 24px; text-align: center; background-color: #fafafa; border-radius: 8px; border: 1px dashed #e0e0e0;'
+            },
           )
         else
           div(
@@ -76,14 +166,15 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
                 _buildOrderedPageRow(ordered[i], i, ordered),
             ],
           ),
-
         if (unordered.isNotEmpty) ...[
           div(
             attributes: const {'style': 'margin-top: 16px; border-top: 1px solid #f0f0f0; padding-top: 12px;'},
             [
               span(
                 [Component.text('unordered full pages (${unordered.length})')],
-                attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'},
+                attributes: const {
+                  'style': 'font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; letter-spacing: 0.5px;'
+                },
               ),
             ],
           ),
@@ -112,7 +203,6 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
         'style': 'display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background-color: white; border: 1px solid #eee; border-radius: 8px; box-sizing: border-box; width: 100%; gap: 12px; flex-wrap: wrap;'
       },
       [
-        // Page Number & Thumbnail & Label
         div(
           attributes: const {'style': 'display: flex; align-items: center; gap: 10px; min-width: 140px;'},
           [
@@ -137,12 +227,10 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
             ),
           ],
         ),
-
         if (showLayoutButtons)
           div(
             attributes: const {'style': 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;'},
             [
-              // Spread Position Segment (start / end)
               div(
                 attributes: const {'style': 'display: flex; border: 1px solid #ccc; border-radius: 14px; overflow: hidden; background: white;'},
                 [
@@ -156,7 +244,6 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
                   }),
                 ],
               ),
-              // Side Preference Segment (left / either / right)
               div(
                 attributes: const {'style': 'display: flex; border: 1px solid #ccc; border-radius: 14px; overflow: hidden; background: white;'},
                 [
@@ -173,7 +260,6 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
               ),
             ],
           ),
-
         div(
           attributes: const {'style': 'display: flex; align-items: center; gap: 8px; margin-left: auto;'},
           [
@@ -247,7 +333,6 @@ class _CuratorOrderTabState extends State<CuratorOrderTab> {
 
   Component _buildUnorderedPageTile(FanzinePage page) {
     final String? thumbUrl = page.gridUrl ?? page.imageUrl;
-
     return div(
       attributes: const {
         'style': 'aspect-ratio: 5 / 8; background-color: #f5f5f5; border: 1px dashed #ccc; border-radius: 6px; position: relative; overflow: hidden; cursor: pointer; display: flex; align-items: center; justify-content: center;'

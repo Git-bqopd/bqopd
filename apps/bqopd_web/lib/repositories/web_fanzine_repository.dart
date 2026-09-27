@@ -100,7 +100,7 @@ class WebFanzineRepository implements IFanzineRepository {
           publishedDateMode: data['publishedDateMode'] ?? fz.publishedDateMode,
           publishedDateGuess: data['publishedDateGuess'] ?? fz.publishedDateGuess,
         );
-        // COMMIT ENTIRE CONFIGURATION AND CHANNELS TO CLOUD FIRESTORE FOR FIRST TIME
+
         final fzDataToSave = {
           'title': updatedFz.title,
           'volume': updatedFz.volume,
@@ -124,9 +124,9 @@ class WebFanzineRepository implements IFanzineRepository {
           'publishedDateMode': updatedFz.publishedDateMode,
           'publishedDateGuess': updatedFz.publishedDateGuess,
         };
-        // 1. Create master fanzine doc
+
         await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzDataToSave), true);
-        // 2. Register shortcode master registry doc
+
         if (updatedFz.shortCode != null) {
           final scData = {
             'type': 'fanzine',
@@ -137,7 +137,7 @@ class WebFanzineRepository implements IFanzineRepository {
           await fsSetDoc('shortcodes/${updatedFz.shortCode!.toUpperCase()}',
               jsonEncode(scData), true);
         }
-        // 3. Write nested page structures contiguously to subcollections
+
         final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
         for (var p in pages) {
           final pageData = {
@@ -149,14 +149,14 @@ class WebFanzineRepository implements IFanzineRepository {
             'sidePreference': p.sidePreference,
             'width': p.width,
             'height': p.height,
+            'is5x8': p.is5x8,
             'createdAt': WebFieldValue.serverTimestamp(),
           };
           await fsSetDoc(
               'fanzines/$fanzineId/pages/${p.id}', jsonEncode(pageData), true);
         }
-        // 4. Remove this fanzine from our temporary memory registry
+
         UnsavedFanzineRegistry.remove(fanzineId);
-        // 5. Update local broad controllers to enforce smooth UX state transition
         UnsavedFanzineRegistry.getOrCreateFanzineController(fanzineId).add(updatedFz);
         UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       }
@@ -187,6 +187,7 @@ class WebFanzineRepository implements IFanzineRepository {
           sidePreference: sidePreference,
           width: page.width,
           height: page.height,
+          is5x8: page.is5x8,
         );
         final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
         UnsavedFanzineRegistry.add(fz, updatedPages);
@@ -225,6 +226,7 @@ class WebFanzineRepository implements IFanzineRepository {
         status: 'ready',
         width: width,
         height: height,
+        is5x8: true,
       );
       final List<FanzinePage> updatedPages = List<FanzinePage>.from(pages)..add(newPage);
       final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
@@ -245,6 +247,7 @@ class WebFanzineRepository implements IFanzineRepository {
           'status': 'ready',
           'width': width,
           'height': height,
+          'is5x8': true,
           'createdAt': WebFieldValue.serverTimestamp(),
         }),
         true);
@@ -276,6 +279,7 @@ class WebFanzineRepository implements IFanzineRepository {
             sidePreference: p.sidePreference,
             width: p.width,
             height: p.height,
+            is5x8: p.is5x8,
           ));
         }
       }
@@ -318,6 +322,7 @@ class WebFanzineRepository implements IFanzineRepository {
           sidePreference: p.sidePreference,
           width: p.width,
           height: p.height,
+          is5x8: p.is5x8,
         );
         final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
         UnsavedFanzineRegistry.add(fz, updatedPages);
@@ -357,6 +362,7 @@ class WebFanzineRepository implements IFanzineRepository {
           sidePreference: p.sidePreference,
           width: p.width,
           height: p.height,
+          is5x8: p.is5x8,
         );
       }
       final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
@@ -391,6 +397,7 @@ class WebFanzineRepository implements IFanzineRepository {
     String fileUrl = '';
     String listUrl = '';
     String gridUrl = '';
+
     try {
       final resultJson = await renderPublisherPage(initialText);
       final decoded = jsonDecode(resultJson);
@@ -413,6 +420,7 @@ class WebFanzineRepository implements IFanzineRepository {
     } catch (e) {
       print('[insertPublisherPage WebP Compile Error] $e');
     }
+
     final imageMetadata = {
       'uid': uid,
       'uploaderId': uid,
@@ -434,6 +442,7 @@ class WebFanzineRepository implements IFanzineRepository {
       if (listUrl.isNotEmpty) 'listUrl': listUrl,
       if (gridUrl.isNotEmpty) 'gridUrl': gridUrl,
     };
+
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
       final List<FanzinePage> currentPages =
       List.from(UnsavedFanzineRegistry.pages[fanzineId] ?? []);
@@ -453,6 +462,7 @@ class WebFanzineRepository implements IFanzineRepository {
             sidePreference: p.sidePreference,
             width: p.width,
             height: p.height,
+            is5x8: p.is5x8,
           );
         }
       }
@@ -467,6 +477,7 @@ class WebFanzineRepository implements IFanzineRepository {
         templateId: 'basic_text',
         width: 2000,
         height: 3200,
+        is5x8: true,
       );
       currentPages.insert(afterPageNumber, newPage);
       final fz = UnsavedFanzineRegistry.fanzines[fanzineId]!;
@@ -474,6 +485,7 @@ class WebFanzineRepository implements IFanzineRepository {
       await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
       return imageId;
     }
+
     await fsSetDoc('images/$imageId', jsonEncode(imageMetadata), true);
     final List<Future<void>> updates = [];
     for (final p in allPages) {
@@ -497,6 +509,7 @@ class WebFanzineRepository implements IFanzineRepository {
           'templateId': 'basic_text',
           'width': 2000,
           'height': 3200,
+          'is5x8': true,
           'createdAt': WebFieldValue.serverTimestamp(),
         }),
         true);

@@ -10,10 +10,12 @@ String formatThumbnailDate(String? dateStr, String? mode, bool isGuess) {
     final year = parts[0];
     final monthInt = parts.length > 1 ? int.tryParse(parts[1]) : null;
     final dayInt = parts.length > 2 ? int.tryParse(parts[2]) : null;
+
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
+
     String result = '';
     if (mode == 'day') {
       if (monthInt != null && monthInt >= 1 && monthInt <= 12) {
@@ -33,6 +35,7 @@ String formatThumbnailDate(String? dateStr, String? mode, bool isGuess) {
     } else {
       result = year;
     }
+
     if (isGuess) {
       result += '?';
     }
@@ -46,7 +49,7 @@ String formatThumbnailDate(String? dateStr, String? mode, bool isGuess) {
 /// Row 1: The 5:8 thumbnail container with #F1B255 letterbox/pillarbox margins (squared edges).
 /// Row 2: Left-aligned title and right-aligned three-dot menu (transparent background).
 /// Three-dot menu: Shows the source type ('fanzine' or 'image') with a horizontal divider,
-/// followed by contextual actions (e.g. 'show indicia', 'use as full page', and 'delete').
+/// followed by contextual actions (e.g. 'show indicia', 'use as full page' checkbox, and 'delete').
 /// Row 3: Optional indicia text row when toggled via the three-dot menu (page-wide or local).
 class FanzineThumbnailCard extends StatefulComponent {
   final Map<String, dynamic> fanzineData;
@@ -58,6 +61,8 @@ class FanzineThumbnailCard extends StatefulComponent {
   final ValueChanged<bool>? onToggleShowIndicia;
   final void Function(String id, String title)? onDelete;
   final VoidCallback? onUseAsFullPage;
+  final bool? isFullPage;
+  final ValueChanged<bool>? onToggleFullPage;
   final void Function()? onMenuTap;
   final VoidCallback? onCardTap;
 
@@ -71,6 +76,8 @@ class FanzineThumbnailCard extends StatefulComponent {
     this.onToggleShowIndicia,
     this.onDelete,
     this.onUseAsFullPage,
+    this.isFullPage,
+    this.onToggleFullPage,
     this.onMenuTap,
     this.onCardTap,
     super.key,
@@ -83,8 +90,30 @@ class FanzineThumbnailCard extends StatefulComponent {
 class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
   bool _isMenuOpen = false;
   bool _localShowIndicia = false;
+  bool _localIsFullPage = false;
 
   bool get _effectiveShowIndicia => component.showIndicia ?? _localShowIndicia;
+  bool get _effectiveIsFullPage => component.isFullPage ?? _localIsFullPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _localShowIndicia = component.showIndicia ?? false;
+    _localIsFullPage = component.isFullPage ?? (component.fanzineData['is5x8'] == true);
+  }
+
+  @override
+  void didUpdateComponent(FanzineThumbnailCard oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (component.showIndicia != null && component.showIndicia != oldComponent.showIndicia) {
+      _localShowIndicia = component.showIndicia!;
+    }
+    if (component.isFullPage != null && component.isFullPage != oldComponent.isFullPage) {
+      _localIsFullPage = component.isFullPage!;
+    } else if (component.fanzineData['is5x8'] != oldComponent.fanzineData['is5x8']) {
+      _localIsFullPage = component.fanzineData['is5x8'] == true;
+    }
+  }
 
   @override
   Component build(BuildContext context) {
@@ -93,11 +122,9 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
         component.fanzineData['fileName']?.toString() ??
         (component.cardType == 'image' ? 'untitled image' : 'Untitled Fanzine');
     final String? resolvedHref = component.targetHref;
-
     final String indicia = component.fanzineData['masterIndicia']?.toString() ??
         component.fanzineData['indicia']?.toString() ??
         '';
-
     String coverUrl = component.customCoverUrl ??
         component.fanzineData['gridCoverImage']?.toString() ??
         component.fanzineData['gridUrl']?.toString() ??
@@ -114,7 +141,7 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
         (component.fanzineData['type'] == 'image' ? 'image' : 'fanzine');
 
     final bool hasIndiciaOption = component.onToggleShowIndicia != null;
-    final bool hasFullPageOption = component.onUseAsFullPage != null;
+    final bool hasFullPageOption = component.onToggleFullPage != null || component.onUseAsFullPage != null;
     final bool hasDeleteOption = component.onDelete != null;
 
     final thumbnailBox = div(
@@ -204,10 +231,8 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
         'display: flex; flex-direction: column; width: 100%; box-sizing: border-box; position: relative; background: transparent; border-radius: 0px; box-shadow: none;',
       },
       [
-        // Row 1: 5:8 Image Container with #F1B255 letterbox/pillarbox fill, squared and no shadows
         row1Widget,
 
-        // Row 2: Title aligned left with three-dot menu aligned right (transparent background)
         div(
           attributes: const {
             'style':
@@ -216,7 +241,6 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
           [
             titleWidget,
 
-            // Three-dot Action Trigger
             div(
               attributes: const {
                 'style':
@@ -250,9 +274,7 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
                     ),
                   ],
                 ),
-
                 if (_isMenuOpen) ...[
-                  // Transparent click-outside backdrop
                   div(
                     attributes: const {
                       'style':
@@ -273,10 +295,9 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
                     classes: 'three-dot-dropdown-menu',
                     attributes: const {
                       'style':
-                      'position: absolute; right: 0; bottom: calc(100% + 4px); background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 140px; overflow: hidden;',
+                      'position: absolute; right: 0; bottom: calc(100% + 4px); background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 160px; overflow: hidden;',
                     },
                     [
-                      // Type Header: 'fanzine' or 'image'
                       div(
                         attributes: const {
                           'style':
@@ -292,7 +313,6 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
                         [],
                       ),
 
-                      // Option: Show Indicia Toggle Checkbox (page-wide or local)
                       if (hasIndiciaOption)
                         label(
                           attributes: const {
@@ -332,43 +352,49 @@ class _FanzineThumbnailCardState extends State<FanzineThumbnailCard> {
                           ],
                         ),
 
-                      // Option: Use as Full Page (for inline assets)
                       if (hasFullPageOption)
-                        button(
+                        label(
                           attributes: const {
-                            'type': 'button',
                             'style':
-                            'background: transparent; border: none; cursor: pointer; padding: 8px 12px; display: flex; align-items: center; width: 100%; text-align: left; gap: 6px; transition: background 0.15s;',
+                            'display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; user-select: none; font-size: 12px; color: #374151; font-weight: 500; transition: background 0.15s;',
                           },
                           events: {
                             'click': (dynamic e) {
                               try {
-                                e.preventDefault();
                                 e.stopPropagation();
                               } catch (_) {}
-                              setState(() => _isMenuOpen = false);
-                              component.onUseAsFullPage!();
                             }
                           },
                           [
-                            span(
-                              classes: 'material-symbols-outlined',
-                              attributes: const {
-                                'style': 'font-size: 16px; color: #4b5563;'
-                              },
-                              [Component.text('aspect_ratio')],
-                            ),
-                            span(
-                              attributes: const {
+                            input(
+                              type: InputType.checkbox,
+                              attributes: {
                                 'style':
-                                'font-size: 12px; color: #374151; font-weight: 500;'
+                                'cursor: pointer; width: 14px; height: 14px; margin: 0;',
+                                if (_effectiveIsFullPage) 'checked': 'true',
                               },
-                              [Component.text('use as full page')],
+                              events: {
+                                'change': (dynamic e) {
+                                  try {
+                                    e.stopPropagation();
+                                  } catch (_) {}
+                                  final nextVal = !_effectiveIsFullPage;
+                                  setState(() {
+                                    _localIsFullPage = nextVal;
+                                    _isMenuOpen = false;
+                                  });
+                                  if (component.onToggleFullPage != null) {
+                                    component.onToggleFullPage!(nextVal);
+                                  } else if (component.onUseAsFullPage != null && nextVal) {
+                                    component.onUseAsFullPage!();
+                                  }
+                                }
+                              },
                             ),
+                            span([Component.text('use as full page')]),
                           ],
                         ),
 
-                      // Option: Delete Action
                       if (hasDeleteOption) ...[
                         if (hasIndiciaOption || hasFullPageOption)
                           div(

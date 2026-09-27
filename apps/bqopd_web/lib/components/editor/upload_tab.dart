@@ -71,6 +71,7 @@ class _UploadTabState extends State<UploadTab> {
           data['id'] = d['id'];
           return data;
         }).toList();
+
         if (mounted) {
           setState(() {
             _userImages = images;
@@ -83,6 +84,7 @@ class _UploadTabState extends State<UploadTab> {
   }
 
   bool _isImage5x8(Map<String, dynamic> img) {
+    if (img['is5x8'] == false) return false;
     if (img['is5x8'] == true || img['type'] == 'template') return true;
     final w = img['width'] as num?;
     final h = img['height'] as num?;
@@ -104,10 +106,12 @@ class _UploadTabState extends State<UploadTab> {
         final bool is5x8 = (ratio >= 0.58 && ratio <= 0.67);
         final uid = getCurrentUserId();
         if (uid == null) throw Exception("Session authentication required.");
+
         final String path = 'uploads/$uid/folio_assets/${component.fanzine.id}/${DateTime.now().millisecondsSinceEpoch}_$fileName';
         final bytes = base64Decode(base64);
         final downloadUrl = await stUpload(path, bytes, 'image/jpeg');
         final imageId = 'img_${DateTime.now().millisecondsSinceEpoch}';
+
         final String? email = createAuthRepository().currentUser?.email;
         final bool useVanity = email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
         final shortCode = await WebShortcodeService.assignShortcode(
@@ -115,6 +119,7 @@ class _UploadTabState extends State<UploadTab> {
           contentId: imageId,
           isVanity: useVanity,
         ) ?? imageId.substring(imageId.length - 7).toUpperCase();
+
         final imgData = {
           'uid': uid,
           'uploaderId': uid,
@@ -135,7 +140,9 @@ class _UploadTabState extends State<UploadTab> {
           'aspectRatio': ratio,
           'is5x8': is5x8,
         };
+
         await fsSetDoc('images/$imageId', jsonEncode(imgData), true);
+
         if (is5x8) {
           component.bloc.add(AddExistingImageRequested(imageId, downloadUrl, width: width, height: height));
         } else {
@@ -165,6 +172,7 @@ class _UploadTabState extends State<UploadTab> {
         final String? url = img['fileUrl'] ?? img['gridUrl'];
         final int width = img['width'] ?? 0;
         final int height = img['height'] ?? 0;
+
         if (imageId.isNotEmpty && url != null) {
           if (_isImage5x8(img)) {
             component.bloc.add(AddExistingImageRequested(imageId, url, width: width, height: height));
@@ -190,7 +198,9 @@ class _UploadTabState extends State<UploadTab> {
 # THE PUBLISHER
 ## New Custom Page Created
 Start typing directly inside the text editor panel below to generate columns of printable markdown text.
+
 {{IMAGE}}
+
 * Enter bullet lists with an asterisk
 * Customize headers with # or ##
 """;
@@ -206,6 +216,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     component.bloc.add(AddPageRequested('generating_calendar...'));
     final int nextNum = component.pages.length + 1;
     final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+
     fsSetDoc('fanzines/${component.fanzine.id}/pages/$pageId', jsonEncode({
       'pageNumber': nextNum,
       'status': 'ready',
@@ -219,7 +230,7 @@ Start typing directly inside the text editor panel below to generate columns of 
     });
   }
 
-  Future<void> _useAsFullPage(Map<String, dynamic> doc) async {
+  Future<void> _toggleFullPage(Map<String, dynamic> doc, bool isFullPage) async {
     final String imageId = doc['id'] ?? '';
     if (imageId.isEmpty) return;
     final String? optimalUrl = doc['gridUrl'] ?? doc['fileUrl'] ?? doc['imageUrl'];
@@ -228,26 +239,46 @@ Start typing directly inside the text editor panel below to generate columns of 
 
     // 1. Move to full page locally and in Firestore
     setState(() {
-      doc['is5x8'] = true;
+      doc['is5x8'] = isFullPage;
     });
 
     try {
       if (kIsWeb) {
-        await fsUpdateDoc('images/$imageId', jsonEncode({'is5x8': true}));
+        await fsUpdateDoc('images/$imageId', jsonEncode({'is5x8': isFullPage}));
       }
 
-      // 2. Add as a page in this folio sequence if not already present
-      final bool alreadyPage = component.pages.any((p) => p.imageId == imageId);
-      if (!alreadyPage && optimalUrl != null && optimalUrl.isNotEmpty) {
-        component.bloc.add(AddExistingImageRequested(
-          imageId,
-          optimalUrl,
-          width: width,
-          height: height,
-        ));
+      if (isFullPage) {
+        // Add as a page in this folio sequence if not already present
+        final bool alreadyPage = component.pages.any((p) => p.imageId == imageId);
+        if (!alreadyPage && optimalUrl != null && optimalUrl.isNotEmpty) {
+          component.bloc.add(AddExistingImageRequested(
+            imageId,
+            optimalUrl,
+            width: width,
+            height: height,
+          ));
+        } else if (alreadyPage) {
+          // If already in pages but was unordered (pageNumber == 0), restore to ordered sequence
+          final p = component.pages.firstWhere((p) => p.imageId == imageId);
+          if (p.pageNumber == 0) {
+            component.bloc.add(TogglePageOrderingRequested(p, true));
+          }
+        }
+      } else {
+        // Remove from folio pages sequence if present
+        FanzinePage? pageToRemove;
+        for (final p in component.pages) {
+          if (p.imageId == imageId) {
+            pageToRemove = p;
+            break;
+          }
+        }
+        if (pageToRemove != null) {
+          component.bloc.add(RemovePageRequested(pageToRemove, component.pages));
+        }
       }
     } catch (e) {
-      print("Error setting image as full page: $e");
+      print("Error toggling full page in UploadTab: $e");
     }
   }
 
@@ -259,7 +290,6 @@ Start typing directly inside the text editor panel below to generate columns of 
       return contextId == component.fanzine.id || usedIn.contains(component.fanzine.id);
     }).toList();
 
-    // Stable sort to keep shortname indexing consistent
     folioImages.sort((a, b) {
       final aT = a['timestamp'] ?? a['createdAt'] ?? '';
       final bT = b['timestamp'] ?? b['createdAt'] ?? '';
@@ -280,7 +310,6 @@ Start typing directly inside the text editor panel below to generate columns of 
     return div(
       classes: 'flex-col gap-3 text-left p-2',
       [
-        // Action Buttons Row
         div(
             attributes: const {
               'style':
@@ -409,7 +438,6 @@ Start typing directly inside the text editor panel below to generate columns of 
             },
           )
         else ...[
-          // Full Pages category grid
           if (fiveByEightDocs.isNotEmpty || (_isUploading && fiveByEightDocs.isEmpty && otherDocs.isEmpty)) ...[
             div([
               span(
@@ -428,7 +456,6 @@ Start typing directly inside the text editor panel below to generate columns of 
             ),
             div([], attributes: const {'style': 'height: 16px;'})
           ],
-          // Inline Assets category grid
           if (otherDocs.isNotEmpty && !(_isUploading && fiveByEightDocs.isEmpty && otherDocs.isEmpty)) ...[
             div([
               span(
@@ -507,7 +534,6 @@ Start typing directly inside the text editor panel below to generate columns of 
     final bool isTemplate = doc['isGenerated'] == true || doc['type'] == 'template';
     final String shortName = imageShortNames[imageId] ?? '';
 
-    // Create shallow copy of data with annotated shortcode title if available
     final cardData = Map<String, dynamic>.from(doc);
     final String rawTitle = doc['title'] ?? doc['fileName'] ?? 'untitled';
     cardData['title'] = shortName.isNotEmpty ? '$shortName: $rawTitle' : rawTitle;
@@ -517,7 +543,8 @@ Start typing directly inside the text editor panel below to generate columns of 
       customCoverUrl: optimalUrl,
       cardType: 'image',
       key: ValueKey('asset_${doc['id']}'),
-      onUseAsFullPage: isInlineAsset ? () => _useAsFullPage(doc) : null,
+      isFullPage: !isInlineAsset,
+      onToggleFullPage: (val) => _toggleFullPage(doc, val),
       onDelete: (id, title) {
         setState(() {
           _pendingDeleteId = imageId;

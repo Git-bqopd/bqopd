@@ -11,12 +11,11 @@ class FanzinePage extends Equatable {
   final String? storagePath;
   final String status;
   final String? templateId;
-
   final String? spreadPosition;
   final String sidePreference;
-
   final int? width;
   final int? height;
+  final bool? is5x8;
 
   const FanzinePage({
     required this.id,
@@ -32,6 +31,7 @@ class FanzinePage extends Equatable {
     this.sidePreference = 'either',
     this.width,
     this.height,
+    this.is5x8,
   });
 
   factory FanzinePage.fromMap(String id, Map<String, dynamic> data) {
@@ -49,6 +49,7 @@ class FanzinePage extends Equatable {
       sidePreference: data['sidePreference'] ?? 'either',
       width: data['width'] as int?,
       height: data['height'] as int?,
+      is5x8: data['is5x8'] as bool?,
     );
   }
 
@@ -66,6 +67,7 @@ class FanzinePage extends Equatable {
     spreadPosition,
     sidePreference,
     width,
-    height
+    height,
+    is5x8,
   ];
 }
