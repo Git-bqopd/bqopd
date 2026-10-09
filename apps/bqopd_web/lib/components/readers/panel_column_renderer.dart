@@ -60,9 +60,15 @@ class PanelColumnRenderer extends StatelessComponent {
       );
     }
 
+    // Top Header Widget: Display the unified Issue Place Map above the per-page cards
+    final Component? headerWidget = (activePanel == BonusRowType.entities)
+        ? EntitiesColumnPanelHeader(fanzineId: fanzineId, pages: pages)
+        : null;
+
     return MultiPageColumnLayout(
       title: title,
       pages: pages,
+      headerWidget: headerWidget,
       onClose: onClose,
       pageBuilder: (pageData) => _buildPagePanel(pageData),
     );

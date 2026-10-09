@@ -67,18 +67,20 @@ class SingleWindowColumnLayout extends StatelessComponent {
 
 /// Template layout for per-page panels that iterate through each page in the fanzine
 /// (e.g. Comments, Text Reader, OCR Text, Entities, Credits).
-/// Formats each page entry as a distinct white Card container floating over the grey #e5e5e5 backdrop.
+/// Accepts an optional [headerWidget] placed at the top of the column feed above the page cards.
 class MultiPageColumnLayout extends StatelessComponent {
   final String title;
   final List<Map<String, dynamic>> pages;
   final Component Function(Map<String, dynamic> pageData) pageBuilder;
   final VoidCallback onClose;
+  final Component? headerWidget;
 
   const MultiPageColumnLayout({
     required this.title,
     required this.pages,
     required this.pageBuilder,
     required this.onClose,
+    this.headerWidget,
     super.key,
   });
 
@@ -126,6 +128,8 @@ class MultiPageColumnLayout extends StatelessComponent {
             'flex: 1; overflow-y: auto; padding: 16px; background-color: #e5e5e5;'
           },
           [
+            // Optional Top Column Widget (e.g. EntitiesColumnPanelHeader map)
+            if (headerWidget != null) headerWidget!,
             for (var page in pages) ...[
               // Individual Page Card Container (White card floating on grey background)
               div(

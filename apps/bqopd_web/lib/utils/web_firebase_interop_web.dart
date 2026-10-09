@@ -594,6 +594,17 @@ Future<String?> geocodeAddress(String address) async {
   }
 }
 
+@JS('renderEntityMap')
+external void _renderEntityMap(JSString containerId, JSString markersJson);
+
+void renderEntityMap(String containerId, String markersJson) {
+  try {
+    _renderEntityMap(containerId.toJS, markersJson.toJS);
+  } catch (e) {
+    print('[renderEntityMap Error] $e');
+  }
+}
+
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
   static Map<String, dynamic> increment(num value) =>

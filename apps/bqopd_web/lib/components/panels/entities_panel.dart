@@ -20,6 +20,247 @@ String normalizeEntityHandle(String input) {
   return input.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
 }
 
+/// Standalone header widget rendered at the very top of the bonusColumn
+/// list of entities panels. Aggregates all place entities across every page in the
+/// fanzine, geocodes them into map pins, and renders a single unified Google Map.
+class EntitiesColumnPanelHeader extends StatefulComponent {
+  final String fanzineId;
+  final List<Map<String, dynamic>> pages;
+
+  const EntitiesColumnPanelHeader({
+    required this.fanzineId,
+    required this.pages,
+    super.key,
+  });
+
+  @override
+  State<EntitiesColumnPanelHeader> createState() =>
+      _EntitiesColumnPanelHeaderState();
+}
+
+class _EntitiesColumnPanelHeaderState extends State<EntitiesColumnPanelHeader> {
+  bool _isLoading = true;
+  bool _isGeocoding = false;
+  List<Map<String, dynamic>> _markers = [];
+  final String _mapContainerId = 'entities-issue-header-map';
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      _aggregateAndGeocodeAllPlaces();
+    }
+  }
+
+  @override
+  void didUpdateComponent(EntitiesColumnPanelHeader oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.fanzineId != component.fanzineId ||
+        oldComponent.pages.length != component.pages.length) {
+      if (kIsWeb) {
+        _aggregateAndGeocodeAllPlaces();
+      }
+    }
+  }
+
+  Future<void> _aggregateAndGeocodeAllPlaces() async {
+    if (component.pages.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _markers = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _isGeocoding = true;
+    });
+
+    final Map<String, Map<String, String>> uniquePlaces = {};
+
+    try {
+      final List<Future<void>> fetches = [];
+
+      for (var page in component.pages) {
+        final imageId = page['imageId']?.toString() ?? '';
+        if (imageId.isEmpty) continue;
+
+        fetches.add(
+          fsGetDoc('images/$imageId').then((res) {
+            try {
+              final doc = jsonDecode(res);
+              if (doc['exists'] == true) {
+                final data = doc['data'] as Map<String, dynamic>;
+                final textLinked = data['text_linked']?.toString() ?? '';
+                final textCorrected = data['text_corrected']?.toString() ??
+                    data['text']?.toString() ??
+                    '';
+                final textRaw = data['text_raw']?.toString() ?? '';
+                final fullText = textLinked.isNotEmpty
+                    ? textLinked
+                    : (textCorrected.isNotEmpty ? textCorrected : textRaw);
+
+                final regex = RegExp(r'\[\[(.*?)\]\]');
+                final matches = regex.allMatches(fullText);
+
+                for (final m in matches) {
+                  final content = m.group(1) ?? '';
+                  final parts = content.split('|');
+                  if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+                    final canonical = parts[0].trim();
+                    String? ref;
+                    if (parts.length == 2 && parts[1].contains(':')) {
+                      ref = parts[1].trim();
+                    } else if (parts.length >= 3) {
+                      ref = parts[2].trim();
+                    }
+
+                    if (ref != null && ref.startsWith('address:')) {
+                      final address = ref.substring(8).trim();
+                      final key = address.toLowerCase();
+                      uniquePlaces[key] = {
+                        'label': canonical,
+                        'address': address,
+                      };
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              print('Error reading image $imageId for place entities: $err');
+            }
+          }),
+        );
+      }
+
+      await Future.wait(fetches);
+
+      final List<Map<String, dynamic>> resolvedMarkers = [];
+
+      for (final place in uniquePlaces.values) {
+        final address = place['address']!;
+        final label = place['label']!;
+
+        final String? geocodeJson = await geocodeAddress(address);
+        if (geocodeJson != null) {
+          try {
+            final Map<String, dynamic> coords = jsonDecode(geocodeJson);
+            if (coords.containsKey('lat') && coords.containsKey('lng')) {
+              resolvedMarkers.add({
+                'lat': (coords['lat'] as num).toDouble(),
+                'lng': (coords['lng'] as num).toDouble(),
+                'title': label,
+                'subtitle': address,
+              });
+            }
+          } catch (e) {
+            print('[EntitiesColumnPanelHeader] Failed parsing geocode coords for $address: $e');
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _markers = resolvedMarkers;
+          _isLoading = false;
+          _isGeocoding = false;
+        });
+
+        Future.delayed(const Duration(milliseconds: 120), () {
+          if (_markers.isNotEmpty) {
+            renderEntityMap(_mapContainerId, jsonEncode(_markers));
+          }
+        });
+      }
+    } catch (e) {
+      print('[EntitiesColumnPanelHeader] Aggregate places error: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isGeocoding = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Component build(BuildContext context) {
+    if (!_isLoading && _markers.isEmpty) {
+      return div([]);
+    }
+
+    return div(
+      classes: 'bg-white rounded-lg border border-gray-300 shadow-md p-5 mb-5',
+      attributes: const {
+        'style':
+        'background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);'
+      },
+      [
+        div(
+          classes:
+          'flex-row items-center justify-between border-b border-gray-200 pb-2 mb-4',
+          attributes: const {
+            'style':
+            'display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;'
+          },
+          [
+            span(
+              classes:
+              'text-xs font-bold text-gray-600 uppercase tracking-wider',
+              attributes: const {
+                'style':
+                'font-size: 11px; font-weight: bold; color: #475569; letter-spacing: 0.8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;'
+              },
+              [
+                span(
+                  [Component.text('map')],
+                  classes: 'material-symbols-outlined',
+                  attributes: const {'style': 'font-size: 16px;'},
+                ),
+                Component.text(' IDENTIFIED PLACES (${_markers.length})'),
+              ],
+            ),
+            if (_isGeocoding)
+              span(
+                attributes: const {
+                  'style': 'font-size: 11px; color: #777; font-style: italic;'
+                },
+                [Component.text('Geocoding locations...')],
+              ),
+          ],
+        ),
+        div(
+          classes: 'entities-map-header-wrapper',
+          attributes: const {
+            'style':
+            'width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; background-color: #f8fafc; position: relative;'
+          },
+          [
+            div(
+              id: _mapContainerId,
+              attributes: const {
+                'style': 'width: 100%; height: 260px; background-color: #e5e5e5;'
+              },
+              [
+                if (_isGeocoding)
+                  div(
+                    classes: 'flex items-center justify-center h-full',
+                    attributes: const {
+                      'style':
+                      'height: 100%; display: flex; align-items: center; justify-content: center; color: #888; font-size: 13px;'
+                    },
+                    [Component.text('Loading map & geocoding places...')],
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 /// Dedicated inline drawer (bonusRow) view for wiki-linked entities.
 /// Fast, read-only entity cards with direct navigation links.
 class EntitiesRowPanel extends StatefulComponent {
@@ -77,7 +318,9 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
         final textLinked = data['text_linked'] ?? '';
         final textCorrected = data['text_corrected'] ?? data['text'] ?? '';
         final textRaw = data['text_raw'] ?? '';
-        final rawFullText = textLinked.isNotEmpty ? textLinked : (textCorrected.isNotEmpty ? textCorrected : textRaw);
+        final rawFullText = textLinked.isNotEmpty
+            ? textLinked
+            : (textCorrected.isNotEmpty ? textCorrected : textRaw);
 
         final regex = RegExp(r'\[\[(.*?)\]\]');
         final matches = regex.allMatches(rawFullText);
@@ -99,8 +342,10 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
             }
 
             final key = canonical.toLowerCase();
-            if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
-              uniqueEntities[key] = EntityLink(label: canonical, ref: ref, rawMatch: raw);
+            if (!uniqueEntities.containsKey(key) ||
+                (ref != null && uniqueEntities[key]!.ref == null)) {
+              uniqueEntities[key] =
+                  EntityLink(label: canonical, ref: ref, rawMatch: raw);
             }
           }
         }
@@ -157,7 +402,9 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
       }
     } else if (entity.ref!.startsWith('address:')) {
       final addressVal = entity.ref!.substring(8);
-      openWindow('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(addressVal)}', '_blank');
+      openWindow(
+          'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(addressVal)}',
+          '_blank');
     }
   }
 
@@ -166,11 +413,25 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
     if (_loading) {
       return div(
         [
-          div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}),
-          div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 85%;'}),
+          div(
+            [],
+            classes: 'skeleton-line shimmer-bg',
+            attributes: const {
+              'style': 'height: 12px; border-radius: 4px; width: 100%;'
+            },
+          ),
+          div(
+            [],
+            classes: 'skeleton-line medium shimmer-bg',
+            attributes: const {
+              'style': 'height: 12px; border-radius: 4px; width: 85%;'
+            },
+          ),
         ],
         classes: 'flex-col gap-2 py-4',
-        attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'
+        },
       );
     }
 
@@ -183,23 +444,32 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
 
     return div(
       [
-        for (var entity in _entities)
-          _buildEntityCard(entity),
+        for (var entity in _entities) _buildEntityCard(entity),
       ],
       classes: 'flex-col gap-3',
-      attributes: const {'style': 'display: flex; flex-direction: column; gap: 12px; width: 100%;'},
+      attributes: const {
+        'style': 'display: flex; flex-direction: column; gap: 12px; width: 100%;'
+      },
     );
   }
 
   Component _buildEntityCard(EntityLink entity) {
-    final bool isAddress = entity.ref != null && entity.ref!.startsWith('address:');
-    final String? normalizedAddress = isAddress ? entity.ref!.substring(8) : null;
-    final String? uid = entity.ref != null && entity.ref!.startsWith('user:') ? entity.ref!.substring(5) : null;
-    final Map<String, dynamic>? profile = uid != null ? _loadedProfiles[uid] : null;
+    final bool isAddress =
+        entity.ref != null && entity.ref!.startsWith('address:');
+    final String? normalizedAddress =
+    isAddress ? entity.ref!.substring(8) : null;
+    final String? uid = entity.ref != null && entity.ref!.startsWith('user:')
+        ? entity.ref!.substring(5)
+        : null;
+    final Map<String, dynamic>? profile =
+    uid != null ? _loadedProfiles[uid] : null;
 
     final bool isLinked = profile != null || isAddress;
-    final String labelText = profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
-    final String? subtitleText = isAddress ? normalizedAddress : (profile != null ? '@${profile['username']}' : null);
+    final String labelText =
+    profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
+    final String? subtitleText = isAddress
+        ? normalizedAddress
+        : (profile != null ? '@${profile['username']}' : null);
     final String? photoUrl = profile != null ? profile['photoUrl'] : null;
 
     return div(
@@ -209,38 +479,75 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
             div(
               [
                 if (isAddress)
-                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
+                  span(
+                    [Component.text('pin_drop')],
+                    classes: 'material-symbols-outlined text-indigo-600',
+                    attributes: const {'style': 'font-size: 18px;'},
+                  )
                 else if (photoUrl != null && photoUrl.isNotEmpty)
                   img(classes: 'user-avatar', src: photoUrl)
                 else
-                  div(classes: 'user-avatar-placeholder', [Component.text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
+                  div(
+                    classes: 'user-avatar-placeholder',
+                    [
+                      Component.text(
+                        labelText.isNotEmpty
+                            ? labelText[0].toUpperCase()
+                            : '?',
+                      )
+                    ],
+                  )
               ],
               classes: 'user-avatar-container',
               attributes: const {
-                'style': 'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'
+                'style':
+                'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'
               },
             ),
             div(
               [
-                div([Component.text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
+                div(
+                  [Component.text(labelText)],
+                  classes: 'user-display-name',
+                  attributes: const {
+                    'style':
+                    'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'
+                  },
+                ),
                 if (subtitleText != null)
-                  div([Component.text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
+                  div(
+                    [Component.text(subtitleText)],
+                    classes: 'text-xs text-gray',
+                    attributes: const {
+                      'style':
+                      'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'
+                    },
+                  )
               ],
               classes: 'user-info',
-              attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center;'},
+              attributes: const {
+                'style': 'display: flex; flex-direction: column; justify-content: center;'
+              },
             )
           ],
           classes: 'user-tile',
-          attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'},
+          attributes: const {
+            'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'
+          },
         ),
         if (isLinked)
-          span(classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px; color: #6750A4;'}, [
-            Component.text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
-          ])
+          span(
+            classes: 'material-symbols-outlined text-indigo-600',
+            attributes: const {'style': 'font-size: 18px; color: #6750A4;'},
+            [
+              Component.text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
+            ],
+          )
       ],
       classes: 'hover:shadow-md transition-all',
       attributes: const {
-        'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 8px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
+        'style':
+        'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 8px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
       },
       events: {
         'click': (e) => _onTap(entity),
@@ -249,8 +556,8 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
   }
 }
 
-/// Dedicated desktop 3rd column (bonusColumn) view for managing entity wikilinks.
-/// Hosts inline entity linking and alias administration modals cleanly.
+/// Dedicated desktop 3rd column (bonusColumn) view for managing entity wikilinks on a single page.
+/// Renders purely the page's identified entities list and linking modal (no map header here).
 class EntitiesColumnPanel extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
@@ -318,7 +625,9 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
         final textLinked = data['text_linked'] ?? '';
         final textCorrected = data['text_corrected'] ?? data['text'] ?? '';
         final textRaw = data['text_raw'] ?? '';
-        _rawFullText = textLinked.isNotEmpty ? textLinked : (textCorrected.isNotEmpty ? textCorrected : textRaw);
+        _rawFullText = textLinked.isNotEmpty
+            ? textLinked
+            : (textCorrected.isNotEmpty ? textCorrected : textRaw);
 
         final regex = RegExp(r'\[\[(.*?)\]\]');
         final matches = regex.allMatches(_rawFullText);
@@ -340,8 +649,10 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
             }
 
             final key = canonical.toLowerCase();
-            if (!uniqueEntities.containsKey(key) || (ref != null && uniqueEntities[key]!.ref == null)) {
-              uniqueEntities[key] = EntityLink(label: canonical, ref: ref, rawMatch: raw);
+            if (!uniqueEntities.containsKey(key) ||
+                (ref != null && uniqueEntities[key]!.ref == null)) {
+              uniqueEntities[key] =
+                  EntityLink(label: canonical, ref: ref, rawMatch: raw);
             }
           }
         }
@@ -376,13 +687,13 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
         final uid = link.ref!.substring(5);
         if (!tempProfiles.containsKey(uid)) {
           fetches.add(
-              _userRepo.watchUser(uid).first.then((profile) {
-                if (profile != null) {
-                  tempProfiles[uid] = profile.toMap();
-                }
-              }).catchError((e) {
-                print('Error loading profile $uid: $e');
-              })
+            _userRepo.watchUser(uid).first.then((profile) {
+              if (profile != null) {
+                tempProfiles[uid] = profile.toMap();
+              }
+            }).catchError((e) {
+              print('Error loading profile $uid: $e');
+            }),
           );
         }
       }
@@ -411,7 +722,8 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
       final String userRes = await fsGetDoc('usernames/$handle');
       final Map<String, dynamic> doc = jsonDecode(userRes);
       if (doc['exists'] == true) {
-        final Map<String, dynamic> data = doc['data'] as Map<String, dynamic>? ?? {};
+        final Map<String, dynamic> data =
+            doc['data'] as Map<String, dynamic>? ?? {};
         String targetHandle = handle;
         if (data['isAlias'] == true && data['redirect'] != null) {
           targetHandle = data['redirect'];
@@ -427,14 +739,24 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
 
     if (component.fanzineId != null && component.fanzineId!.isNotEmpty) {
       try {
-        final imagesRes = await fsQuery('images', 'usedInFanzines', 'array-contains', jsonEncode(component.fanzineId), '');
+        final imagesRes = await fsQuery(
+          'images',
+          'usedInFanzines',
+          'array-contains',
+          jsonEncode(component.fanzineId),
+          '',
+        );
         final List decodedImages = jsonDecode(imagesRes);
 
         for (var imgDoc in decodedImages) {
-          final Map<String, dynamic> imgData = imgDoc['data'] as Map<String, dynamic>? ?? {};
+          final Map<String, dynamic> imgData =
+              imgDoc['data'] as Map<String, dynamic>? ?? {};
           final String textLinked = imgData['text_linked'] ?? '';
           if (textLinked.isNotEmpty) {
-            final regex = RegExp(r'\[\[(' + RegExp.escape(label) + r')\|user:(.*?)\]\]', caseSensitive: false);
+            final regex = RegExp(
+              r'\[\[(' + RegExp.escape(label) + r')\|user:(.*?)\]\]',
+              caseSensitive: false,
+            );
             final match = regex.firstMatch(textLinked);
             if (match != null) {
               final String targetUid = match.group(2)?.trim() ?? '';
@@ -442,7 +764,8 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                 final profileRes = await fsGetDoc('profiles/$targetUid');
                 final Map<String, dynamic> pDoc = jsonDecode(profileRes);
                 if (pDoc['exists'] == true) {
-                  final Map<String, dynamic> pData = pDoc['data'] as Map<String, dynamic>? ?? {};
+                  final Map<String, dynamic> pData =
+                      pDoc['data'] as Map<String, dynamic>? ?? {};
                   final String? username = pData['username'];
                   if (username != null && username.isNotEmpty && mounted) {
                     setState(() {
@@ -518,15 +841,20 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
           });
           return;
         }
-        final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
+        final content =
+        entity.rawMatch.substring(2, entity.rawMatch.length - 2);
         final parts = content.split('|');
-        if (parts.length >= 2 && !parts[1].startsWith('address:') && !parts[1].startsWith('user:')) {
-          replacement = "[[${parts[0].trim()}|${parts[1].trim()}|address:$cleanAddress]]";
+        if (parts.length >= 2 &&
+            !parts[1].startsWith('address:') &&
+            !parts[1].startsWith('user:')) {
+          replacement =
+          "[[${parts[0].trim()}|${parts[1].trim()}|address:$cleanAddress]]";
         } else {
           replacement = "[[${entity.label}|address:$cleanAddress]]";
         }
       } else {
-        final cleanHandle = _handleInput.trim().toLowerCase().replaceAll('@', '');
+        final cleanHandle =
+        _handleInput.trim().toLowerCase().replaceAll('@', '');
         if (cleanHandle.isEmpty) {
           setState(() {
             _modalError = 'Please enter a valid username.';
@@ -545,29 +873,39 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
         }
 
         final targetUid = result['uid'];
-        final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
+        final content =
+        entity.rawMatch.substring(2, entity.rawMatch.length - 2);
         final parts = content.split('|');
 
         if (parts.length == 3) {
-          replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
+          replacement =
+          "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
         } else if (parts.length == 2 && !parts[1].contains(':')) {
-          replacement = "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
+          replacement =
+          "[[${parts[0].trim()}|${parts[1].trim()}|user:$targetUid]]";
         } else {
           replacement = "[[${entity.label}|user:$targetUid]]";
         }
 
         if (component.fanzineId != null) {
-          await fsUpdateDoc('fanzines/${component.fanzineId}', jsonEncode({
-            'draftEntities': WebFieldValue.arrayUnion([entity.label])
-          }));
+          await fsUpdateDoc(
+            'fanzines/${component.fanzineId}',
+            jsonEncode({
+              'draftEntities': WebFieldValue.arrayUnion([entity.label])
+            }),
+          );
         }
       }
 
-      final String updatedText = _rawFullText.replaceAll(entity.rawMatch, replacement);
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode({
-        'text_linked': updatedText,
-        'needs_linking': false,
-      }));
+      final String updatedText =
+      _rawFullText.replaceAll(entity.rawMatch, replacement);
+      await fsUpdateDoc(
+        'images/${component.imageId}',
+        jsonEncode({
+          'text_linked': updatedText,
+          'needs_linking': false,
+        }),
+      );
 
       setState(() {
         _editingEntity = null;
@@ -595,7 +933,8 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
     });
 
     try {
-      final content = entity.rawMatch.substring(2, entity.rawMatch.length - 2);
+      final content =
+      entity.rawMatch.substring(2, entity.rawMatch.length - 2);
       final parts = content.split('|');
       String replacement;
 
@@ -605,10 +944,14 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
         replacement = "[[${entity.label}]]";
       }
 
-      final String updatedText = _rawFullText.replaceAll(entity.rawMatch, replacement);
-      await fsUpdateDoc('images/${component.imageId}', jsonEncode({
-        'text_linked': updatedText,
-      }));
+      final String updatedText =
+      _rawFullText.replaceAll(entity.rawMatch, replacement);
+      await fsUpdateDoc(
+        'images/${component.imageId}',
+        jsonEncode({
+          'text_linked': updatedText,
+        }),
+      );
 
       setState(() {
         _editingEntity = null;
@@ -631,11 +974,25 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
     if (_loading) {
       return div(
         [
-          div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 100%;'}),
-          div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'height: 12px; border-radius: 4px; width: 85%;'}),
+          div(
+            [],
+            classes: 'skeleton-line shimmer-bg',
+            attributes: const {
+              'style': 'height: 12px; border-radius: 4px; width: 100%;'
+            },
+          ),
+          div(
+            [],
+            classes: 'skeleton-line medium shimmer-bg',
+            attributes: const {
+              'style': 'height: 12px; border-radius: 4px; width: 85%;'
+            },
+          ),
         ],
         classes: 'flex-col gap-2 py-4',
-        attributes: const {'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'},
+        attributes: const {
+          'style': 'display: flex; flex-direction: column; gap: 8px; width: 100%;'
+        },
       );
     }
 
@@ -648,25 +1005,33 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
 
     return div(
       [
-        for (var entity in _entities)
-          _buildEntityCard(entity),
-        if (_editingEntity != null)
-          _buildEditModal()
+        for (var entity in _entities) _buildEntityCard(entity),
+        if (_editingEntity != null) _buildEditModal()
       ],
       classes: 'flex-col gap-3',
-      attributes: const {'style': 'display: flex; flex-direction: column; gap: 12px; width: 100%;'},
+      attributes: const {
+        'style': 'display: flex; flex-direction: column; gap: 12px; width: 100%;'
+      },
     );
   }
 
   Component _buildEntityCard(EntityLink entity) {
-    final bool isAddress = entity.ref != null && entity.ref!.startsWith('address:');
-    final String? normalizedAddress = isAddress ? entity.ref!.substring(8) : null;
-    final String? uid = entity.ref != null && entity.ref!.startsWith('user:') ? entity.ref!.substring(5) : null;
-    final Map<String, dynamic>? profile = uid != null ? _loadedProfiles[uid] : null;
+    final bool isAddress =
+        entity.ref != null && entity.ref!.startsWith('address:');
+    final String? normalizedAddress =
+    isAddress ? entity.ref!.substring(8) : null;
+    final String? uid = entity.ref != null && entity.ref!.startsWith('user:')
+        ? entity.ref!.substring(5)
+        : null;
+    final Map<String, dynamic>? profile =
+    uid != null ? _loadedProfiles[uid] : null;
 
     final bool isLinked = profile != null || isAddress;
-    final String labelText = profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
-    final String? subtitleText = isAddress ? normalizedAddress : (profile != null ? '@${profile['username']}' : null);
+    final String labelText =
+    profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
+    final String? subtitleText = isAddress
+        ? normalizedAddress
+        : (profile != null ? '@${profile['username']}' : null);
     final String? photoUrl = profile != null ? profile['photoUrl'] : null;
 
     return div(
@@ -676,37 +1041,74 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
             div(
               [
                 if (isAddress)
-                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined text-indigo-600', attributes: const {'style': 'font-size: 18px;'})
+                  span(
+                    [Component.text('pin_drop')],
+                    classes: 'material-symbols-outlined text-indigo-600',
+                    attributes: const {'style': 'font-size: 18px;'},
+                  )
                 else if (photoUrl != null && photoUrl.isNotEmpty)
                   img(classes: 'user-avatar', src: photoUrl)
                 else
-                  div(classes: 'user-avatar-placeholder', [Component.text(labelText.isNotEmpty ? labelText[0].toUpperCase() : '?')])
+                  div(
+                    classes: 'user-avatar-placeholder',
+                    [
+                      Component.text(
+                        labelText.isNotEmpty
+                            ? labelText[0].toUpperCase()
+                            : '?',
+                      )
+                    ],
+                  )
               ],
               classes: 'user-avatar-container',
               attributes: const {
-                'style': 'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'
+                'style':
+                'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'
               },
             ),
             div(
               [
-                div([Component.text(labelText)], classes: 'user-display-name', attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'}),
+                div(
+                  [Component.text(labelText)],
+                  classes: 'user-display-name',
+                  attributes: const {
+                    'style':
+                    'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'
+                  },
+                ),
                 if (subtitleText != null)
-                  div([Component.text(subtitleText)], classes: 'text-xs text-gray', attributes: const {'style': 'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'})
+                  div(
+                    [Component.text(subtitleText)],
+                    classes: 'text-xs text-gray',
+                    attributes: const {
+                      'style':
+                      'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'
+                    },
+                  )
               ],
               classes: 'user-info',
-              attributes: const {'style': 'display: flex; flex-direction: column; justify-content: center;'},
+              attributes: const {
+                'style': 'display: flex; flex-direction: column; justify-content: center;'
+              },
             )
           ],
           classes: 'user-tile',
-          attributes: const {'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'},
+          attributes: const {
+            'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'
+          },
         ),
-        span(classes: 'material-symbols-outlined text-gray', attributes: const {'style': 'font-size: 18px; color: #79747E;'}, [
-          Component.text(isLinked ? 'edit_note' : 'link_off')
-        ])
+        span(
+          classes: 'material-symbols-outlined text-gray',
+          attributes: const {'style': 'font-size: 18px; color: #79747E;'},
+          [
+            Component.text(isLinked ? 'edit_note' : 'link_off')
+          ],
+        )
       ],
       classes: 'hover:shadow-md transition-all',
       attributes: const {
-        'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 8px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
+        'style':
+        'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 8px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
       },
       events: {
         'click': (e) => _onEntityTap(entity),
@@ -725,62 +1127,105 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                   [
                     div(
                       [
-                        h2([Component.text('Link Entity')], attributes: const {'style': 'font-size: 16px; font-weight: bold; margin-bottom: 4px; margin-top: 0;'}),
+                        h2(
+                          [Component.text('Link Entity')],
+                          attributes: const {
+                            'style':
+                            'font-size: 16px; font-weight: bold; margin-bottom: 4px; margin-top: 0;'
+                          },
+                        ),
                         p(
-                            [
-                              Component.text('Link "'),
-                              span([Component.text(_editingEntity!.label)], attributes: const {'style': 'font-weight: bold; color: #6750A4;'}),
-                              Component.text('" to a database profile or places location.')
-                            ],
-                            attributes: const {'style': 'font-size: 12px; color: #555; line-height: 1.4; margin: 0;'}
+                          [
+                            Component.text('Link "'),
+                            span(
+                              [Component.text(_editingEntity!.label)],
+                              attributes: const {
+                                'style': 'font-weight: bold; color: #6750A4;'
+                              },
+                            ),
+                            Component.text(
+                                '" to a database profile or places location.')
+                          ],
+                          attributes: const {
+                            'style':
+                            'font-size: 12px; color: #555; line-height: 1.4; margin: 0;'
+                          },
                         ),
                         div(
                           attributes: const {
-                            'style': 'display: flex; border: 1px solid #ccc; border-radius: 100px; overflow: hidden; margin-top: 14px; background: white;'
+                            'style':
+                            'display: flex; border: 1px solid #ccc; border-radius: 100px; overflow: hidden; margin-top: 14px; background: white;'
                           },
                           [
                             button(
-                                [
-                                  span([Component.text('person')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
-                                  Component.text('Person')
-                                ],
-                                attributes: {
-                                  'type': 'button',
-                                  'style': 'flex: 1; border: none; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer; '
-                                      'background-color: ${_entityType == 'person' ? '#E8DEF8' : 'transparent'}; '
-                                      'color: ${_entityType == 'person' ? '#1D192B' : '#49454F'};'
-                                },
-                                events: {
-                                  'click': (e) => setState(() { _entityType = 'person'; _modalError = null; })
-                                }
+                              [
+                                span(
+                                  [Component.text('person')],
+                                  classes: 'material-symbols-outlined',
+                                  attributes: const {
+                                    'style':
+                                    'font-size: 14px; margin-right: 4px; vertical-align: middle;'
+                                  },
+                                ),
+                                Component.text('Person')
+                              ],
+                              attributes: {
+                                'type': 'button',
+                                'style':
+                                'flex: 1; border: none; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer; '
+                                    'background-color: ${_entityType == 'person' ? '#E8DEF8' : 'transparent'}; '
+                                    'color: ${_entityType == 'person' ? '#1D192B' : '#49454F'};'
+                              },
+                              events: {
+                                'click': (e) => setState(() {
+                                  _entityType = 'person';
+                                  _modalError = null;
+                                })
+                              },
                             ),
-                            div(attributes: const {'style': 'width: 1px; background: #ccc;'}, []),
+                            div(
+                              attributes: const {
+                                'style': 'width: 1px; background: #ccc;'
+                              },
+                              [],
+                            ),
                             button(
-                                [
-                                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 14px; margin-right: 4px; vertical-align: middle;'}),
-                                  Component.text('Place')
-                                ],
-                                attributes: {
-                                  'type': 'button',
-                                  'style': 'flex: 1; border: none; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer; '
-                                      'background-color: ${_entityType == 'place' ? '#E8DEF8' : 'transparent'}; '
-                                      'color: ${_entityType == 'place' ? '#1D192B' : '#49454F'};'
-                                },
-                                events: {
-                                  'click': (e) {
-                                    setState(() {
-                                      _entityType = 'place';
-                                      _modalError = null;
-                                    });
-                                    Timer(const Duration(milliseconds: 120), () {
-                                      initAddressAutocomplete('modal-address-input', (String address) {
+                              [
+                                span(
+                                  [Component.text('pin_drop')],
+                                  classes: 'material-symbols-outlined',
+                                  attributes: const {
+                                    'style':
+                                    'font-size: 14px; margin-right: 4px; vertical-align: middle;'
+                                  },
+                                ),
+                                Component.text('Place')
+                              ],
+                              attributes: {
+                                'type': 'button',
+                                'style':
+                                'flex: 1; border: none; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer; '
+                                    'background-color: ${_entityType == 'place' ? '#E8DEF8' : 'transparent'}; '
+                                    'color: ${_entityType == 'place' ? '#1D192B' : '#49454F'};'
+                              },
+                              events: {
+                                'click': (e) {
+                                  setState(() {
+                                    _entityType = 'place';
+                                    _modalError = null;
+                                  });
+                                  Timer(const Duration(milliseconds: 120), () {
+                                    initAddressAutocomplete(
+                                      'modal-address-input',
+                                          (String address) {
                                         setState(() {
                                           _addressInput = address;
                                         });
-                                      });
-                                    });
-                                  }
+                                      },
+                                    );
+                                  });
                                 }
+                              },
                             ),
                           ],
                         ),
@@ -788,69 +1233,100 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                           div(
                             [
                               input(
-                                  attributes: {
-                                    'type': 'text',
-                                    'placeholder': '@username / handle',
-                                    'value': _handleInput,
-                                    'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; outline: none; background: white;'
-                                  },
-                                  events: {
-                                    'input': (e) => _handleInput = getInputValue(e)
-                                  }
+                                attributes: {
+                                  'type': 'text',
+                                  'placeholder': '@username / handle',
+                                  'value': _handleInput,
+                                  'style':
+                                  'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; outline: none; background: white;'
+                                },
+                                events: {
+                                  'input': (e) =>
+                                  _handleInput = getInputValue(e)
+                                },
                               ),
                               if (_suggestedHandle != null)
                                 div(
                                   [
-                                    span([Component.text('Suggested Link:')], attributes: const {'style': 'font-size: 10px; color: #666; margin-bottom: 4px;'}),
+                                    span(
+                                      [Component.text('Suggested Link:')],
+                                      attributes: const {
+                                        'style':
+                                        'font-size: 10px; color: #666; margin-bottom: 4px;'
+                                      },
+                                    ),
                                     button(
-                                        [Component.text('@$_suggestedHandle')],
-                                        classes: 'profile-btn',
-                                        attributes: const {
-                                          'type': 'button',
-                                          'style': 'padding: 8px 12px; font-size: 12px; border: 1px dashed #6750A4; color: #6750A4; border-radius: 6px; background: rgba(103, 80, 164, 0.05); cursor: pointer; font-weight: bold; width: 100%; text-align: left; display: flex; align-items: center; justify-content: flex-start;'
-                                        },
-                                        events: {
-                                          'click': (e) {
-                                            setState(() {
-                                              _handleInput = '@$_suggestedHandle';
-                                            });
-                                          }
+                                      [Component.text('@$_suggestedHandle')],
+                                      classes: 'profile-btn',
+                                      attributes: const {
+                                        'type': 'button',
+                                        'style':
+                                        'padding: 8px 12px; font-size: 12px; border: 1px dashed #6750A4; color: #6750A4; border-radius: 6px; background: rgba(103, 80, 164, 0.05); cursor: pointer; font-weight: bold; width: 100%; text-align: left; display: flex; align-items: center; justify-content: flex-start;'
+                                      },
+                                      events: {
+                                        'click': (e) {
+                                          setState(() {
+                                            _handleInput =
+                                            '@$_suggestedHandle';
+                                          });
                                         }
+                                      },
                                     )
                                   ],
                                   classes: 'flex-col mt-2',
-                                  attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; align-items: flex-start; margin-top: 8px;'},
+                                  attributes: const {
+                                    'style':
+                                    'display: flex; flex-direction: column; width: 100%; align-items: flex-start; margin-top: 8px;'
+                                  },
                                 ),
                             ],
                             classes: 'flex-col w-full mt-4',
-                            attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'},
+                            attributes: const {
+                              'style':
+                              'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'
+                            },
                           )
                         else
                           div(
                             [
                               input(
-                                  attributes: {
-                                    'type': 'text',
-                                    'id': 'modal-address-input',
-                                    'placeholder': 'Start typing normalized address...',
-                                    'value': _addressInput,
-                                    'style': 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; outline: none; background: white;'
-                                  },
-                                  events: {
-                                    'change': (e) {
-                                      _addressInput = getInputValue(e);
-                                    }
+                                attributes: {
+                                  'type': 'text',
+                                  'id': 'modal-address-input',
+                                  'placeholder':
+                                  'Start typing normalized address...',
+                                  'value': _addressInput,
+                                  'style':
+                                  'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; outline: none; background: white;'
+                                },
+                                events: {
+                                  'change': (e) {
+                                    _addressInput = getInputValue(e);
                                   }
+                                },
                               ),
                             ],
                             classes: 'flex-col w-full mt-4',
-                            attributes: const {'style': 'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'},
+                            attributes: const {
+                              'style':
+                              'display: flex; flex-direction: column; width: 100%; margin-top: 14px;'
+                            },
                           ),
                         if (_modalError != null)
-                          p([Component.text(_modalError!)], classes: 'error-msg mt-2', attributes: const {'style': 'font-size: 11px; margin-top: 4px; color: #ef4444;'})
+                          p(
+                            [Component.text(_modalError!)],
+                            classes: 'error-msg mt-2',
+                            attributes: const {
+                              'style':
+                              'font-size: 11px; margin-top: 4px; color: #ef4444;'
+                            },
+                          )
                       ],
                       classes: 'flex-col w-full text-left',
-                      attributes: const {'style': 'display: flex; flex-direction: column; text-align: left;'},
+                      attributes: const {
+                        'style':
+                        'display: flex; flex-direction: column; text-align: left;'
+                      },
                     ),
                     div(
                       [
@@ -858,15 +1334,19 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                           button(
                             [Component.text('Unlink')],
                             classes: 'profile-btn text-red-500',
-                            attributes: const {'style': 'padding: 8px 16px; font-size: 12px; cursor: pointer; margin-right: auto; border: 1px solid #ff5252; color: #ff5252; border-radius: 4px; background: white;'},
-                            events: {
-                              'click': (e) => _unlinkEntity()
+                            attributes: const {
+                              'style':
+                              'padding: 8px 16px; font-size: 12px; cursor: pointer; margin-right: auto; border: 1px solid #ff5252; color: #ff5252; border-radius: 4px; background: white;'
                             },
+                            events: {'click': (e) => _unlinkEntity()},
                           ),
                         button(
                           [Component.text('Cancel')],
                           classes: 'profile-btn',
-                          attributes: const {'style': 'padding: 8px 16px; font-size: 12px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; color: #374151;'},
+                          attributes: const {
+                            'style':
+                            'padding: 8px 16px; font-size: 12px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; color: #374151;'
+                          },
                           events: {
                             'click': (e) {
                               setState(() {
@@ -879,34 +1359,45 @@ class _EntitiesColumnPanelState extends State<EntitiesColumnPanel> {
                           },
                         ),
                         button(
-                          [Component.text(_modalSaving ? 'Saving...' : 'Save Link')],
+                          [
+                            Component.text(
+                                _modalSaving ? 'Saving...' : 'Save Link')
+                          ],
                           classes: 'btn-primary nav-pill mb-0',
                           attributes: {
-                            'style': 'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',
+                            'style':
+                            'padding: 8px 16px; font-size: 12px; height: 32px; display: inline-flex; align-items: center; width: auto; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer;',
                             if (_modalSaving) 'disabled': 'true'
                           },
-                          events: {
-                            'click': (e) => _saveEntityLink()
-                          },
+                          events: {'click': (e) => _saveEntityLink()},
                         )
                       ],
                       classes: 'flex-row gap-2 mt-4 justify-end w-full',
-                      attributes: const {'style': 'display: flex; flex-direction: row; gap: 8px; width: 100%; align-items: center; justify-content: flex-end; margin-top: 16px;'},
+                      attributes: const {
+                        'style':
+                        'display: flex; flex-direction: row; gap: 8px; width: 100%; align-items: center; justify-content: flex-end; margin-top: 16px;'
+                      },
                     )
                   ],
-                  classes: 'white-sticker p-6 w-full h-full flex flex-col justify-between items-center',
-                  attributes: const {'style': 'display: flex; flex-direction: column; justify-content: space-between; align-items: center; width: 100%; height: 100%; box-sizing: border-box;'},
+                  classes:
+                  'white-sticker p-6 w-full h-full flex flex-col justify-between items-center',
+                  attributes: const {
+                    'style':
+                    'display: flex; flex-direction: column; justify-content: space-between; align-items: center; width: 100%; height: 100%; box-sizing: border-box;'
+                  },
                 )
               ],
               classes: 'manila-envelope',
               attributes: const {
-                'style': 'max-width: 400px; max-height: 520px; border-radius: 12px; overflow: hidden; position: relative; width: 100%;'
+                'style':
+                'max-width: 400px; max-height: 520px; border-radius: 12px; overflow: hidden; position: relative; width: 100%;'
               },
             )
           ],
           classes: 'global-modal-overlay',
           attributes: const {
-            'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
+            'style':
+            'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);'
           },
         )
       ],

@@ -584,3 +584,50 @@ window.geocodeAddress = async (address) => {
 
     return null;
 };
+
+window.renderEntityMap = (containerId, markersJson) => {
+    if (typeof google === 'undefined' || !google.maps) return;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    let markersData = [];
+    try {
+        markersData = JSON.parse(markersJson);
+    } catch (e) {
+        console.error('[renderEntityMap] Error parsing JSON:', e);
+        return;
+    }
+
+    const map = new google.maps.Map(container, {
+        zoom: 3,
+        center: { lat: 39.8283, lng: -98.5795 },
+        disableDefaultUI: true,
+        zoomControl: true,
+    });
+
+    if (!markersData || markersData.length === 0) return;
+    const bounds = new google.maps.LatLngBounds();
+
+    markersData.forEach((m) => {
+        const pos = { lat: m.lat, lng: m.lng };
+        const marker = new google.maps.Marker({
+            position: pos,
+            map: map,
+            title: m.title,
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+            content: `<div style="padding:4px; font-family: sans-serif; font-size: 13px;"><b>${m.title}</b>${m.subtitle ? `<br/><small>${m.subtitle}</small>` : ''}</div>`
+        });
+
+        marker.addListener('click', () => {
+            infoWindow.open(map, marker);
+        });
+        bounds.extend(pos);
+    });
+
+    map.fitBounds(bounds);
+    if (markersData.length === 1) {
+        map.setZoom(12);
+    }
+};

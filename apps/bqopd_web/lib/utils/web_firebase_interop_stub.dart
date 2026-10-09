@@ -82,6 +82,9 @@ Future<String> getPlacePredictions(String input) async => '[]';
 /// Server VM stub for geocoding an address via Google Maps Geocoder.
 Future<String?> geocodeAddress(String address) async => null;
 
+/// Server VM stub for rendering place entity map pins.
+void renderEntityMap(String containerId, String markersJson) {}
+
 /// Mock representation of WebFieldValue for the server environment.
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {};
