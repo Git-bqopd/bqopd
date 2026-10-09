@@ -75,7 +75,6 @@
             firebase.auth().onAuthStateChanged(user => callback(user ? user.uid : null, user ? user.email : null));
         };
 
-        // --- Data Serialization ---
         function serializeFirebaseData(data) {
             if (data === null || data === undefined) return data;
             if (data.toDate && typeof data.toDate === 'function') return { __type: 'timestamp', iso: data.toDate().toISOString() };
@@ -101,7 +100,6 @@
             return res;
         }
 
-        // --- Database & Storage Bridge ---
         window.fsGetDoc = (path) => {
             return db.doc(path).get()
                 .then(d => JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null}))
@@ -145,7 +143,6 @@
         window.fnCall = (name, dataStr) => functions.httpsCallable(name)(JSON.parse(dataStr)).then(r => JSON.stringify(r.data)).catch(err => { console.error("fnCall error:", err); throw err; });
         window.stUpload = (path, bytes, contentType) => storage.ref(path).put(bytes, {contentType: contentType}).then(s => s.ref.getDownloadURL()).catch(err => { console.error("stUpload error:", err); throw err; });
 
-        // --- Bulletproof Image Picker and Reader ---
         window.pickAndReadFile = (inputElementId, callback) => {
             let input = document.getElementById(inputElementId);
             if (!input) {
@@ -171,7 +168,6 @@
             input.click();
         };
 
-        // --- Read selected file from an existing input ---
         window.readInputFile = (inputElementId, callback) => {
             let input = document.getElementById(inputElementId);
             if (!input) return;
@@ -187,7 +183,6 @@
             reader.readAsDataURL(file);
         };
 
-        // --- Google Places Autocomplete Interop Promise ---
         window.getPlacePredictions = (input) => {
             return new Promise((resolve) => {
                 if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
@@ -209,12 +204,10 @@
             });
         };
 
-        // --- Google Places Autocomplete Native Element Binder ---
         window.initAddressAutocomplete = (inputId, callback) => {
             const input = document.getElementById(inputId);
             if (!input) return;
             if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-                // Retry in 150ms if Places API has not loaded or initialized yet
                 setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
                 return;
             }
@@ -228,8 +221,58 @@
                 }
             });
         };
+
+        window.geocodeAddress = async (address) => {
+            if (!address || typeof address !== 'string' || !address.trim()) {
+                return null;
+            }
+            const cleanAddress = address.trim();
+
+            if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
+                try {
+                    const googleResult = await new Promise((resolve) => {
+                        const geocoder = new google.maps.Geocoder();
+                        geocoder.geocode({ address: cleanAddress }, (results, status) => {
+                            if (status === 'OK' && results && results.length > 0) {
+                                const loc = results[0].geometry.location;
+                                resolve(JSON.stringify({ lat: loc.lat(), lng: loc.lng() }));
+                            } else {
+                                console.warn('[geocodeAddress] Google Geocoder status:', status, 'for address:', cleanAddress);
+                                resolve(null);
+                            }
+                        });
+                    });
+                    if (googleResult) return googleResult;
+                } catch (e) {
+                    console.warn('[geocodeAddress] Google Geocoder threw:', e);
+                }
+            }
+
+            try {
+                console.log('[geocodeAddress] Attempting OpenStreetMap Nominatim fallback for:', cleanAddress);
+                const encoded = encodeURIComponent(cleanAddress);
+                const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (Array.isArray(data) && data.length > 0) {
+                        const lat = parseFloat(data[0].lat);
+                        const lng = parseFloat(data[0].lon);
+                        console.log('[geocodeAddress] Nominatim resolved:', cleanAddress, '->', lat, lng);
+                        return JSON.stringify({ lat: lat, lng: lng });
+                    }
+                }
+            } catch (err) {
+                console.error('[geocodeAddress] Nominatim fallback failed:', err);
+            }
+
+            return null;
+        };
     </script>
 
+    <!-- Import our central JavaScript initialize script containing multi-page canvas compilation -->
+    <script src="firebase_init.js"></script>
     <script src="main.dart.js" defer></script>
 </head>
 <body>

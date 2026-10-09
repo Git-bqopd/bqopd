@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
+import '../../utils/web_utils.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
+import '../../utils/publisher_compiler.dart';
+import '../historical_letter_card.dart';
 import '../fanzine_thumbnail_card.dart';
 import './maker_upload_form.dart';
 
@@ -39,7 +43,8 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   bool _showDrafts = false;
   bool _showMakerModal = false;
   bool _showIndicia = false;
-  String _makerModalMode = 'options'; // 'options', 'upload'
+  String _makerModalMode = 'options'; // 'options', 'upload', 'radius_letters'
+
   List<Map<String, dynamic>> _userWorks = [];
   StreamSubscription? _worksSub;
   bool _loading = true;
@@ -47,6 +52,13 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   // Holds the ID and shortcode of the folio currently queued for deletion
   String? _pendingDeleteId;
   String? _pendingDeleteShortcode;
+
+  // Radius Letters configuration state
+  String _radiusAddress = '';
+  int _radiusMiles = 50;
+  bool _radiusLoading = false;
+  String? _radiusError;
+  String? _radiusProgressStatus;
 
   @override
   void initState() {
@@ -56,7 +68,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     } else if (component.initialSubTab == 'published') {
       _showDrafts = false;
     }
-    // SERVER PRE-RENDERING GUARD: Defer listener setup to client only
+
     if (kIsWeb) {
       Future.microtask(() {
         if (mounted) {
@@ -97,6 +109,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   void _listenToWorks() {
     _worksSub?.cancel();
     setState(() => _loading = true);
+
     _worksSub = component.userRepository
         .watchUserWorks(component.targetUserId)
         .listen((works) {
@@ -139,7 +152,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
       if (aTime == null && bTime == null) return 0;
       if (aTime == null) return 1;
       if (bTime == null) return -1;
-      return bTime.compareTo(aTime); // Descending (most recent first)
+      return bTime.compareTo(aTime);
     });
     return list;
   }
@@ -154,7 +167,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
       if (aTime == null && bTime == null) return 0;
       if (aTime == null) return 1;
       if (bTime == null) return -1;
-      return bTime.compareTo(aTime); // Descending (most recent first)
+      return bTime.compareTo(aTime);
     });
     return list;
   }
@@ -163,23 +176,29 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     final String? email = component.authState?.user?.email;
     final bool useVanity =
         email != null && email.trim().toLowerCase() == 'kevin@712liberty.com';
+
     bool isUnique = false;
     String code = "";
     int retries = 0;
+
     while (!isUnique && retries < 15) {
       final String candidate = useVanity
           ? ShortcodeGenerator.generateVanityCode()
           : ShortcodeGenerator.generateStandardCode();
+
       final String codeUpper = candidate.toUpperCase();
       final docRes = await fsGetDoc('shortcodes/$codeUpper');
       final Map<String, dynamic> doc = jsonDecode(docRes);
+
       final isLocalCollision = UnsavedFanzineRegistry.hasCode(candidate);
+
       if (doc['exists'] != true && !isLocalCollision) {
         isUnique = true;
         code = candidate;
       }
       retries++;
     }
+
     if (code.isEmpty) {
       code =
       'TEMP_${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
@@ -191,6 +210,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     try {
       final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = await _generateUniqueTempShortcode();
+
       final newFanzine = Fanzine(
         id: fanzineId,
         title: 'new folio name',
@@ -204,6 +224,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         twoPage: true,
         hasCover: true,
       );
+
       UnsavedFanzineRegistry.add(newFanzine, []);
       setState(() => _showMakerModal = false);
       Router.of(context).replace('/$shortCode/maker');
@@ -216,6 +237,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     try {
       final fanzineId = 'calendar_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = await _generateUniqueTempShortcode();
+
       final newFanzine = Fanzine(
         id: fanzineId,
         title: 'Convention Calendar 2026',
@@ -229,8 +251,10 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         twoPage: true,
         hasCover: true,
       );
+
       final page1Id = 'page1_${DateTime.now().millisecondsSinceEpoch}';
       final page2Id = 'page2_${DateTime.now().millisecondsSinceEpoch}';
+
       final List<FanzinePage> pages = [
         FanzinePage(
             id: page1Id,
@@ -243,11 +267,285 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             templateId: 'calendar_right',
             status: 'ready'),
       ];
+
       UnsavedFanzineRegistry.add(newFanzine, pages);
       setState(() => _showMakerModal = false);
       Router.of(context).replace('/$shortCode/maker');
     } catch (e) {
       print("Error creating calendar: $e");
+    }
+  }
+
+  double _calculateDistanceMiles(
+      double lat1, double lon1, double lat2, double lon2) {
+    const double p = 0.017453292519943295; // Math.PI / 180
+    final a = 0.5 -
+        math.cos((lat2 - lat1) * p) / 2 +
+        math.cos(lat1 * p) *
+            math.cos(lat2 * p) *
+            (1 - math.cos((lon2 - lon1) * p)) /
+            2;
+    return 12742 * math.asin(math.sqrt(a)) * 0.621371; // km to miles
+  }
+
+  String _cleanHistoricalLocation(String raw) {
+    var loc = raw.trim();
+    loc = loc.replaceAll(RegExp(r'\bWis\b\.?', caseSensitive: false), 'WI');
+    loc = loc.replaceAll(RegExp(r'\bIll\b\.?', caseSensitive: false), 'IL');
+    loc = loc.replaceAll(RegExp(r'\bMich\b\.?', caseSensitive: false), 'MI');
+    loc = loc.replaceAll(RegExp(r'\bMinn\b\.?', caseSensitive: false), 'MN');
+    loc = loc.replaceAll(RegExp(r'\bPenn\b\.?', caseSensitive: false), 'PA');
+    loc = loc.replaceAll(RegExp(r'\bN\.\s*D\b\.?', caseSensitive: false), 'ND');
+    loc = loc.replaceAll(RegExp(r'\bS\.\s*D\b\.?', caseSensitive: false), 'SD');
+    loc = loc.replaceAll(RegExp(r'\bCal\b\.?', caseSensitive: false), 'CA');
+    loc = loc.replaceAll(RegExp(r'\bCalif\b\.?', caseSensitive: false), 'CA');
+    loc = loc.replaceAll(RegExp(r'\bInd\b\.?', caseSensitive: false), 'IN');
+    loc = loc.replaceAll(RegExp(r'\bMo\b\.?', caseSensitive: false), 'MO');
+    loc = loc.replaceAll(RegExp(r'\bMass\b\.?', caseSensitive: false), 'MA');
+    loc = loc.replaceAll(RegExp(r'\bConn\b\.?', caseSensitive: false), 'CT');
+    loc = loc.replaceAll(RegExp(r'\bWash\b\.?', caseSensitive: false), 'WA');
+
+    if (loc.contains(',')) {
+      final parts = loc.split(',');
+      if (parts.length >= 2) {
+        final last = parts[parts.length - 1].trim();
+        final secondLast = parts[parts.length - 2].trim();
+        loc = '$secondLast, $last';
+      }
+    }
+    return loc;
+  }
+
+  Future<void> _createRadiusLettersFolio() async {
+    final targetAddr = _radiusAddress.trim();
+    if (targetAddr.isEmpty) {
+      setState(() => _radiusError = 'Please enter an address or city.');
+      return;
+    }
+
+    setState(() {
+      _radiusLoading = true;
+      _radiusError = null;
+      _radiusProgressStatus = 'Geocoding center address...';
+    });
+
+    try {
+      // 1. Geocode target address
+      Map<String, double>? targetCoords;
+      final targetGeoJson = await geocodeAddress(targetAddr);
+      if (targetGeoJson != null && targetGeoJson.isNotEmpty) {
+        final decoded = jsonDecode(targetGeoJson);
+        if (decoded != null && decoded['lat'] != null && decoded['lng'] != null) {
+          targetCoords = {
+            'lat': (decoded['lat'] as num).toDouble(),
+            'lng': (decoded['lng'] as num).toDouble(),
+          };
+        }
+      }
+
+      print('[RadiusLetters] Center address "$targetAddr" coords: $targetCoords');
+
+      setState(() {
+        _radiusProgressStatus = 'Scanning historical letters database...';
+      });
+
+      // 2. Fetch all comments to find historical transcribed letters
+      final commentsRes =
+      await fsQuery('artifacts/bqopd/public/data/comments', '', '', '', '');
+      final List decodedComments = jsonDecode(commentsRes) as List;
+
+      final List<Map<String, dynamic>> letterComments = [];
+      for (final item in decodedComments) {
+        final data = Map<String, dynamic>.from(item['data'] as Map);
+        data['_id'] = item['id'];
+        final isLetter = data['sourceType'] == 'letter_column' ||
+            (data['location'] != null &&
+                data['location'].toString().trim().isNotEmpty);
+        if (isLetter) {
+          letterComments.add(data);
+        }
+      }
+
+      if (letterComments.isEmpty) {
+        setState(() {
+          _radiusLoading = false;
+          _radiusError = 'No transcribed letters found in database.';
+        });
+        return;
+      }
+
+      // 3. Geocode and filter letters within the given distance
+      setState(() {
+        _radiusProgressStatus = 'Calculating distances for ${letterComments.length} letters...';
+      });
+
+      final Map<String, Map<String, double>?> locationCache = {};
+      final List<Map<String, dynamic>> matchingLetters = [];
+
+      for (final letter in letterComments) {
+        String loc = (letter['location'] ?? '').toString().trim();
+
+        if (loc.isEmpty && letter['userId'] != null) {
+          final uid = letter['userId'].toString();
+          if (!uid.startsWith('archival_')) {
+            try {
+              final pRes = await fsGetDoc('profiles/$uid');
+              final pDoc = jsonDecode(pRes);
+              if (pDoc['exists'] == true) {
+                final pData = pDoc['data'] as Map<String, dynamic>? ?? {};
+                loc = (pData['location'] ?? pData['city'] ?? '').toString().trim();
+                if (pData['state'] != null &&
+                    pData['state'].toString().isNotEmpty) {
+                  loc +=
+                      (loc.isNotEmpty ? ', ' : '') + pData['state'].toString().trim();
+                }
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (loc.isEmpty) continue;
+
+        bool isWithin = false;
+        final cleanLoc = _cleanHistoricalLocation(loc);
+
+        if (targetCoords != null) {
+          if (!locationCache.containsKey(cleanLoc)) {
+            final geoJson = await geocodeAddress(cleanLoc);
+            if (geoJson != null && geoJson.isNotEmpty) {
+              final decoded = jsonDecode(geoJson);
+              if (decoded != null &&
+                  decoded['lat'] != null &&
+                  decoded['lng'] != null) {
+                locationCache[cleanLoc] = {
+                  'lat': (decoded['lat'] as num).toDouble(),
+                  'lng': (decoded['lng'] as num).toDouble(),
+                };
+              } else {
+                locationCache[cleanLoc] = null;
+              }
+            } else {
+              locationCache[cleanLoc] = null;
+            }
+          }
+
+          final letterCoords = locationCache[cleanLoc];
+          if (letterCoords != null) {
+            final distance = _calculateDistanceMiles(
+              targetCoords['lat']!,
+              targetCoords['lng']!,
+              letterCoords['lat']!,
+              letterCoords['lng']!,
+            );
+            if (distance <= _radiusMiles) {
+              isWithin = true;
+              letter['_calculatedDistanceMiles'] = distance;
+            }
+          }
+        }
+
+        if (!isWithin && targetCoords == null) {
+          final cleanTarget = targetAddr.toLowerCase();
+          final locLower = loc.toLowerCase();
+          if (locLower.contains(cleanTarget) || cleanTarget.contains(locLower)) {
+            isWithin = true;
+          }
+        }
+
+        if (isWithin) {
+          matchingLetters.add(letter);
+        }
+      }
+
+      if (matchingLetters.isEmpty) {
+        setState(() {
+          _radiusLoading = false;
+          _radiusProgressStatus = null;
+          _radiusError =
+          'No letters found within $_radiusMiles miles of "$targetAddr". Try increasing the distance.';
+        });
+        return;
+      }
+
+      setState(() {
+        _radiusProgressStatus = 'Resolving publications and page scans...';
+      });
+
+      // Sort matching letters by ascending distance
+      matchingLetters.sort((a, b) {
+        final double distA = (a['_calculatedDistanceMiles'] as double?) ?? 0;
+        final double distB = (b['_calculatedDistanceMiles'] as double?) ?? 0;
+        return distA.compareTo(distB);
+      });
+
+      final List<HistoricalLetterEntry> resolvedEntries = [];
+      for (final letter in matchingLetters) {
+        final entry = await HistoricalLetterEntry.resolveComplete(
+          rawComment: letter,
+          distanceMiles: letter['_calculatedDistanceMiles'] as double?,
+        );
+        resolvedEntries.add(entry);
+      }
+
+      final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
+      final shortCode = await _generateUniqueTempShortcode();
+      final String folioTitle = 'Letters near $targetAddr';
+
+      setState(() {
+        _radiusProgressStatus = 'Compiling connected publisher pages...';
+      });
+
+      // Construct ONE continuous markdown text flow containing all resolved letters
+      final fullMarkdownBuffer = StringBuffer();
+      for (final entry in resolvedEntries) {
+        fullMarkdownBuffer.write(entry.toPublisherMarkdown());
+        fullMarkdownBuffer.writeln();
+      }
+      final fullText = fullMarkdownBuffer.toString().trim();
+
+      // Compile multi-page continuous layout where overflow lines continue seamlessly
+      final List<FanzinePage> pages = await PublisherCompiler.compileAndPublishMultiPage(
+        fanzineId: fanzineId,
+        fullText: fullText,
+        onProgress: (current, total) {
+          if (mounted) {
+            setState(() {
+              _radiusProgressStatus = 'Compiling publisher text page $current of $total...';
+            });
+          }
+        },
+      );
+
+      final newFanzine = Fanzine(
+        id: fanzineId,
+        title: folioTitle,
+        ownerId: component.targetUserId,
+        curators: [component.targetUserId],
+        collections: [component.targetUserId],
+        type: FanzineType.folio,
+        isLive: false,
+        processingStatus: 'complete',
+        shortCode: shortCode,
+        twoPage: true,
+        hasCover: false,
+      );
+
+      UnsavedFanzineRegistry.add(newFanzine, pages);
+      setState(() {
+        _showMakerModal = false;
+        _radiusLoading = false;
+        _radiusProgressStatus = null;
+      });
+      Router.of(context).replace('/$shortCode/maker');
+    } catch (e) {
+      print("Error creating radius letters folio: $e");
+      if (mounted) {
+        setState(() {
+          _radiusLoading = false;
+          _radiusProgressStatus = null;
+          _radiusError = 'Failed to generate folio: $e';
+        });
+      }
     }
   }
 
@@ -281,6 +579,28 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
               'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px; text-transform: none;'
             },
             events: {'click': (e) => _createCalendar()}),
+        button(
+            [Component.text("radius letters")],
+            classes: 'profile-btn mb-4',
+            attributes: const {
+              'style':
+              'width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 1px solid #ddd; border-radius: 0px !important; cursor: pointer; background: white; margin-bottom: 16px; text-transform: none;'
+            },
+            events: {'click': (e) {
+              setState(() {
+                _makerModalMode = 'radius_letters';
+                _radiusAddress = '';
+                _radiusError = null;
+                _radiusLoading = false;
+                _radiusProgressStatus = null;
+              });
+              Timer(const Duration(milliseconds: 120), () {
+                initAddressAutocomplete(
+                    'radius-letters-address-input', (String address) {
+                  setState(() => _radiusAddress = address);
+                });
+              });
+            }}),
       ],
       classes:
       'white-sticker p-6 w-full h-full flex flex-col justify-center items-center',
@@ -291,8 +611,163 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     );
   }
 
+  Component _buildRadiusLettersForm() {
+    return div(
+      [
+        div(
+          [
+            button(
+              [
+                span([Component.text('arrow_back')],
+                    classes: 'material-symbols-outlined',
+                    attributes: const {'style': 'font-size: 16px; margin-right: 4px;'}),
+                Component.text('options')
+              ],
+              classes: 'profile-btn',
+              attributes: const {
+                'type': 'button',
+                'style':
+                'display: inline-flex; align-items: center; padding: 4px 10px; font-size: 11px; font-weight: bold; border: 1px solid #ddd; background: white; cursor: pointer;'
+              },
+              events: {'click': (e) => setState(() => _makerModalMode = 'options')},
+            ),
+            h2([Component.text("radius letters")],
+                classes: 'font-bold text-sm text-black',
+                attributes: const {'style': 'margin: 0; margin-left: auto; text-transform: lowercase;'}),
+          ],
+          attributes: const {
+            'style':
+            'display: flex; align-items: center; width: 100%; margin-bottom: 16px;'
+          },
+        ),
+        p([
+          Component.text(
+              "Enter an address or city to compile historical letters sent from within a given distance into a continuous publisher folio.")
+        ],
+            attributes: const {
+              'style':
+              'font-size: 12px; color: #555; line-height: 1.4; margin: 0 0 16px 0; text-align: left; width: 100%;'
+            }),
+        div(
+          [
+            span([Component.text("ADDRESS OR CITY")],
+                classes: 'text-xs font-bold text-gray-600',
+                attributes: const {'style': 'margin-bottom: 4px; display: block; text-align: left;'}),
+            input(
+              attributes: {
+                'type': 'text',
+                'id': 'radius-letters-address-input',
+                'placeholder': 'e.g. Milwaukee, WI or 123 Main St...',
+                'value': _radiusAddress,
+                'style':
+                'width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 13px; background: white; outline: none; margin-bottom: 0;',
+                if (_radiusLoading) 'disabled': 'true'
+              },
+              events: {'input': (e) => setState(() => _radiusAddress = getInputValue(e))},
+            ),
+          ],
+          attributes: const {'style': 'width: 100%; margin-bottom: 14px;'},
+        ),
+        div(
+          [
+            span([Component.text("SEARCH RADIUS")],
+                classes: 'text-xs font-bold text-gray-600',
+                attributes: const {'style': 'margin-bottom: 6px; display: block; text-align: left;'}),
+            div(
+              [
+                for (final mi in [10, 25, 50, 100, 250])
+                  button(
+                    [Component.text('$mi mi')],
+                    attributes: {
+                      'type': 'button',
+                      'style':
+                      'padding: 6px 12px; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 4px; border: 1px solid ${_radiusMiles == mi ? "#6750A4" : "#ccc"}; background: ${_radiusMiles == mi ? "#E8DEF8" : "white"}; color: ${_radiusMiles == mi ? "#1D192B" : "#555"}; transition: all 0.15s;'
+                    },
+                    events: {'click': (e) => setState(() => _radiusMiles = mi)},
+                  )
+              ],
+              attributes: const {
+                'style':
+                'display: flex; gap: 6px; width: 100%; flex-wrap: wrap;'
+              },
+            ),
+          ],
+          attributes: const {'style': 'width: 100%; margin-bottom: 16px;'},
+        ),
+        if (_radiusProgressStatus != null)
+          p([
+            span([Component.text('progress_activity')],
+                classes: 'material-symbols-outlined',
+                attributes: const {
+                  'style':
+                  'font-size: 14px; margin-right: 6px; vertical-align: middle; animation: spin 1s linear infinite;'
+                }),
+            Component.text(_radiusProgressStatus!)
+          ],
+              attributes: const {
+                'style':
+                'font-size: 11px; color: #6750A4; font-weight: bold; margin: 0 0 12px 0; text-align: left; width: 100%;'
+              }),
+        if (_radiusError != null)
+          p([Component.text(_radiusError!)],
+              attributes: const {
+                'style':
+                'font-size: 11px; font-weight: bold; color: #ef4444; margin: 0 0 12px 0; text-align: left; width: 100%; line-height: 1.4;'
+              }),
+        div(
+          [
+            button(
+              [Component.text("cancel")],
+              classes: 'profile-btn',
+              attributes: const {
+                'type': 'button',
+                'style':
+                'padding: 8px 16px; font-size: 11px; font-weight: bold; border: 1px solid #ccc; background: white; cursor: pointer; height: 36px;'
+              },
+              events: {'click': (e) => setState(() => _makerModalMode = 'options')},
+            ),
+            button(
+              [
+                if (_radiusLoading)
+                  span([Component.text('progress_activity')],
+                      classes: 'material-symbols-outlined',
+                      attributes: const {
+                        'style':
+                        'font-size: 16px; margin-right: 6px; animation: spin 1s linear infinite;'
+                      })
+                else
+                  span([Component.text('menu_book')],
+                      classes: 'material-symbols-outlined',
+                      attributes: const {'style': 'font-size: 16px; margin-right: 6px;'}),
+                Component.text(_radiusLoading ? "compiling folio..." : "create folio")
+              ],
+              classes: 'btn-primary nav-pill mb-0',
+              attributes: {
+                'type': 'button',
+                'style':
+                'padding: 8px 18px; font-size: 11px; font-weight: bold; background-color: #6750A4; border: none; border-radius: 50px; color: white; cursor: pointer; display: inline-flex; align-items: center; height: 36px;',
+                if (_radiusLoading) 'disabled': 'true'
+              },
+              events: {'click': (e) => _createRadiusLettersFolio()},
+            ),
+          ],
+          attributes: const {
+            'style':
+            'display: flex; gap: 8px; justify-content: flex-end; width: 100%; margin-top: auto;'
+          },
+        )
+      ],
+      classes: 'white-sticker p-6 w-full h-full flex flex-col justify-start items-center',
+      attributes: const {
+        'style':
+        'display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding: 24px; box-sizing: border-box; width: 100%; height: 100%;'
+      },
+    );
+  }
+
   Component _buildMakerModalOverlay() {
     final bool isUploadMode = _makerModalMode == 'upload';
+    final bool isRadiusLettersMode = _makerModalMode == 'radius_letters';
     return div(
       [
         if (!isUploadMode)
@@ -307,7 +782,10 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
                 },
                 events: {'click': (e) => setState(() => _showMakerModal = false)},
               ),
-              _buildMakerOptionsContent(),
+              if (isRadiusLettersMode)
+                _buildRadiusLettersForm()
+              else
+                _buildMakerOptionsContent(),
             ],
             classes: 'manila-envelope',
             attributes: const {
@@ -439,6 +917,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     if (works.isEmpty) {
       return div(
         [
@@ -452,6 +931,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'bg-white rounded-lg p-16 shadow-sm text-center',
       );
     }
+
     return div(
       [
         for (var w in works) _buildWorkGridTile(w),
@@ -480,11 +960,11 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         (w['sourceFile'] != null
             ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
             : 'https://placehold.co/450x720/png?text=Folio');
+
     final String codeKey = shortCode.isNotEmpty ? shortCode : fanzineId;
 
-    // Published works open as unmodified vanity URL (Reader view).
-    // Draft works open in the editing workspace (maker by default, or curator if ingested).
-    final String draftWorkspace = (w['type'] == 'ingested') ? 'curator' : 'maker';
+    final String draftWorkspace =
+    (w['type'] == 'ingested') ? 'curator' : 'maker';
     final String targetHref =
     _showDrafts ? '/$codeKey/$draftWorkspace' : '/$codeKey';
 
@@ -520,9 +1000,9 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         classes: 'p-16 text-center text-gray italic text-sm',
       );
     }
+
     return div(
       [
-        // Toolbar switch published / drafts
         div(
           [
             div(

@@ -30,21 +30,18 @@ class PublisherCompiler {
       }).toList();
     } catch (_) {}
 
-    // 2. Filter images belonging to this fanzine or folio context
     final folioImages = userImages.where((img) {
       final List usedIn = img['usedInFanzines'] ?? [];
       final String? contextId = img['folioContext'];
       return contextId == fanzineId || usedIn.contains(fanzineId);
     }).toList();
 
-    // Sort by timestamp sequentially to align with reader indexes
     folioImages.sort((a, b) {
       final aT = a['timestamp'] ?? a['createdAt'] ?? '';
       final bT = b['timestamp'] ?? b['createdAt'] ?? '';
       return aT.toString().compareTo(bT.toString());
     });
 
-    // 3. Create a map of shortcodes (img01, img02, etc.) to absolute URLs
     final Map<String, String> shortNameMap = {};
     for (int i = 0; i < folioImages.length; i++) {
       final img = folioImages[i];
@@ -55,19 +52,15 @@ class PublisherCompiler {
       }
     }
 
-    // 4. Intercept and replace template shortcodes: {{1|img01|rowOffset|caption text}}
-    // Supports both double brackets [[ ]] and double curly braces {{ }}
     String processedText = text;
     final templateRegex = RegExp(r'(?:\{\{|\[\[)(\d+)\|([^|]+)\|(.*?)(?:\}\}|\]\])');
     processedText = processedText.replaceAllMapped(templateRegex, (match) {
       final templateNum = match.group(1);
       final imgShortCode = match.group(2)?.trim() ?? '';
       final rest = match.group(3)?.trim() ?? '';
-
       var captionText = rest;
       String? rowOffset;
 
-      // Check if the parameter starts with a row specifier, e.g. "20|text"
       final rowRegex = RegExp(r'^(\d+)\|(.*)$');
       final rowMatch = rowRegex.firstMatch(rest);
       if (rowMatch != null) {
@@ -75,7 +68,6 @@ class PublisherCompiler {
         captionText = rowMatch.group(2)!.trim();
       }
 
-      // Strip potential wrapping single or double quotes entered by user
       if ((captionText.startsWith("'") && captionText.endsWith("'")) ||
           (captionText.startsWith('"') && captionText.endsWith('"'))) {
         if (captionText.length >= 2) {
@@ -91,47 +83,38 @@ class PublisherCompiler {
           return '{{TEMPLATE_$templateNum: $absoluteUrl | $captionText}}';
         }
       }
-      return match.group(0)!; // Fallback to original text if missing
+      return match.group(0)!;
     });
 
-    // 5. Resolve and replace any remaining standard image shortcodes (e.g. {{img01}})
     final String compiledText = await resolveAndReplaceShortcodes(
       fanzineId,
       processedText,
     );
 
-    // 6. Run the Web-based Canvas compiler for absolute layout accuracy
     final resultJson = await renderPublisherPage(compiledText);
     final decoded = jsonDecode(resultJson);
-
     final String origBase64 = decoded['original'];
     final String listBase64 = decoded['list'];
     final String gridBase64 = decoded['grid'];
-
     final origBytes = base64Decode(origBase64);
     final listBytes = base64Decode(listBase64);
     final gridBytes = base64Decode(gridBase64);
-
     final String baseDir = 'uploads/$uid/folio_assets/$fanzineId/$imageId';
 
-    // 7. Upload three standard WebP sizes concurrently to Google Cloud Storage
     final urls = await Future.wait([
       stUpload('$baseDir/original.webp', origBytes, 'image/webp'),
       stUpload('$baseDir/list.webp', listBytes, 'image/webp'),
       stUpload('$baseDir/grid.webp', gridBytes, 'image/webp'),
     ]);
 
-    // Force fresh URLs by appending a query timestamp to bypass browser caching
     final cb = DateTime.now().millisecondsSinceEpoch;
     final fileUrl = '${urls[0]}&cb=$cb';
     final listUrl = '${urls[1]}&cb=$cb';
     final gridUrl = '${urls[2]}&cb=$cb';
-
     updates['fileUrl'] = fileUrl;
     updates['listUrl'] = listUrl;
     updates['gridUrl'] = gridUrl;
 
-    // 8. Synchronize parent fanzine page document models reactively
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
       final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
       final idx = pages.indexWhere((p) => p.imageId == imageId);
@@ -175,7 +158,102 @@ class PublisherCompiler {
         await Future.wait(pageUpdates);
       }
     }
-
     return updates;
+  }
+
+  /// Compiles a long markdown document into multiple connected 2000x3200 pages.
+  /// Content flows seamlessly across columns and pages without arbitrary truncations.
+  static Future<List<FanzinePage>> compileAndPublishMultiPage({
+    required String fanzineId,
+    required String fullText,
+    void Function(int pageIndex, int totalPages)? onProgress,
+  }) async {
+    final uid = getCurrentUserId() ?? 'system_web';
+
+    final String compiledText = await resolveAndReplaceShortcodes(
+      fanzineId,
+      fullText,
+    );
+
+    final resultJson = await renderPublisherPages(compiledText);
+    final List decodedPages = jsonDecode(resultJson) as List;
+
+    if (decodedPages.isEmpty) {
+      return [];
+    }
+
+    final List<FanzinePage> generatedPages = [];
+    int pageNum = 1;
+
+    for (int i = 0; i < decodedPages.length; i++) {
+      if (onProgress != null) {
+        onProgress(i + 1, decodedPages.length);
+      }
+
+      final pageData = decodedPages[i] as Map<String, dynamic>;
+      final String origBase64 = pageData['original'];
+      final String listBase64 = pageData['list'];
+      final String gridBase64 = pageData['grid'];
+      final String pageText = pageData['text'] ?? '';
+
+      final origBytes = base64Decode(origBase64);
+      final listBytes = base64Decode(listBase64);
+      final gridBytes = base64Decode(gridBase64);
+
+      final pageImageId = 'folio_text_page_${DateTime.now().millisecondsSinceEpoch}_$pageNum';
+      final pageShortCode = ShortcodeGenerator.generateStandardCode();
+      final String baseDir = 'uploads/$uid/folio_assets/$fanzineId/$pageImageId';
+
+      final urls = await Future.wait([
+        stUpload('$baseDir/original.webp', origBytes, 'image/webp'),
+        stUpload('$baseDir/list.webp', listBytes, 'image/webp'),
+        stUpload('$baseDir/grid.webp', gridBytes, 'image/webp'),
+      ]);
+
+      final cb = DateTime.now().millisecondsSinceEpoch;
+      final fileUrl = '${urls[0]}&cb=$cb';
+      final listUrl = '${urls[1]}&cb=$cb';
+      final gridUrl = '${urls[2]}&cb=$cb';
+
+      final imageMetadata = {
+        'uid': uid,
+        'uploaderId': uid,
+        'type': 'template',
+        'templateId': 'basic_text',
+        'text': pageText,
+        'text_corrected': pageText,
+        'text_linked': pageText,
+        'title': 'Letters Page $pageNum',
+        'isGenerated': true,
+        'width': 2000,
+        'height': 3200,
+        'aspectRatio': 0.625,
+        'is5x8': true,
+        'shortCode': pageShortCode,
+        'folioContext': fanzineId,
+        'usedInFanzines': [fanzineId],
+        'fileUrl': fileUrl,
+        'listUrl': listUrl,
+        'gridUrl': gridUrl,
+      };
+      await fsSetDoc('images/$pageImageId', jsonEncode(imageMetadata), true);
+
+      generatedPages.add(FanzinePage(
+        id: 'page_${DateTime.now().millisecondsSinceEpoch}_$pageNum',
+        pageNumber: pageNum,
+        imageId: pageImageId,
+        imageUrl: fileUrl,
+        gridUrl: gridUrl,
+        listUrl: listUrl,
+        status: 'ready',
+        templateId: 'basic_text',
+        width: 2000,
+        height: 3200,
+        is5x8: true,
+      ));
+      pageNum++;
+    }
+
+    return generatedPages;
   }
 }

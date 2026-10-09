@@ -14,10 +14,19 @@ String? getCurrentUserId() => null;
 Future<String> fsGetDoc(String path) async => '{}';
 
 /// Server VM stub for document snapshot listeners.
-FirebaseSubscription fsListenDoc(String path, void Function(String) callback) => StubSubscription();
+FirebaseSubscription fsListenDoc(String path, void Function(String) callback) =>
+    StubSubscription();
 
 /// Server VM stub for query listeners.
-FirebaseSubscription fsListenQuery(String path, String field, String op, String valueJson, String orderBy, bool desc, void Function(String) callback) => StubSubscription();
+FirebaseSubscription fsListenQuery(
+    String path,
+    String field,
+    String op,
+    String valueJson,
+    String orderBy,
+    bool desc,
+    void Function(String) callback) =>
+    StubSubscription();
 
 /// Server VM stub for doc updates.
 Future<void> fsUpdateDoc(String path, String dataJson) async {}
@@ -32,36 +41,46 @@ Future<void> fsDeleteDoc(String path) async {}
 Future<String> fsAddDoc(String path, String dataJson) async => '';
 
 /// Server VM stub for database queries.
-Future<String> fsQuery(String path, String field, String op, String valueJson, String orderBy) async => '[]';
+Future<String> fsQuery(String path, String field, String op,
+    String valueJson, String orderBy) async =>
+    '[]';
 
 /// Server VM stub for function calls.
 Future<String> fnCall(String name, String dataJson) async => '{}';
 
 /// Server VM stub for media uploads.
-Future<String> stUpload(String path, Uint8List bytes, String contentType) async => '';
+Future<String> stUpload(
+    String path, Uint8List bytes, String contentType) async =>
+    '';
 
 /// Server VM stub for global authentication listener.
 void onAuthStateChangedListener(void Function(String?, String?) callback) {}
 
 /// Server VM stubs for Firebase top-level authentication functions.
 Future<void> loginWithFirebase(String email, String password) async {}
-Future<void> registerWithFirebase(String email, String password, String username) async {}
+Future<void> registerWithFirebase(
+    String email, String password, String username) async {}
 Future<void> logoutFromFirebase() async {}
 
 /// Server VM stub for triggering the web file picker
-void pickAndReadFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {}
+void pickAndReadFile(String inputId,
+    void Function(String base64, String fileName, String objectUrl) callback) {}
 
 /// Server VM stub for reading a selected file from input
-void readInputFile(String inputId, void Function(String base64, String fileName, String objectUrl) callback) {}
+void readInputFile(String inputId,
+    void Function(String base64, String fileName, String objectUrl) callback) {}
 
 /// Server VM stub for high-performance canvas page rendering
 Future<String> renderPublisherPage(String text) async => '{}';
 
+/// Server VM stub for multi-page continuous canvas rendering
+Future<String> renderPublisherPages(String text) async => '[]';
+
 /// Server VM stub for Google Places API autocomplete predictions
 Future<String> getPlacePredictions(String input) async => '[]';
 
-/// Server VM stub for initializing Google Address Autocomplete on an element
-void initAddressAutocomplete(String inputId, void Function(String) callback) {}
+/// Server VM stub for geocoding an address via Google Maps Geocoder.
+Future<String?> geocodeAddress(String address) async => null;
 
 /// Mock representation of WebFieldValue for the server environment.
 class WebFieldValue {

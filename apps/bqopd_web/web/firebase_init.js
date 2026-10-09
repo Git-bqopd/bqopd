@@ -132,39 +132,40 @@ window.fsQuery = function(path, field, op, valueJson, orderBy) {
 window.fnCall = function(name, dataStr) { return functions.httpsCallable(name)(JSON.parse(dataStr)).then(function(r) { return JSON.stringify(r.data); }).catch(function(err) { console.error("fnCall error:", err); throw err; }); };
 window.stUpload = function(path, bytes, contentType) { return storage.ref(path).put(bytes, {contentType: contentType}).then(function(s) { return s.ref.getDownloadURL(); }).catch(function(err) { console.error("stUpload error:", err); throw err; }); };
 
-// --- HIGH-PERFORMANCE OFFSCREEN CANVAS COMPILER ---
-// Generates three WebP sizes on click: original, list, and grid.
-window.renderPublisherPage = async (text) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 2000;
-    canvas.height = 3200;
-    const ctx = canvas.getContext('2d');
+window.renderPublisherPages = async (text) => {
+    const pagesResults = [];
 
-    // Fill with pure white background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 2000, 3200);
+    function initPageCanvas() {
+        const c = document.createElement('canvas');
+        c.width = 2000;
+        c.height = 3200;
+        const context = c.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, 2000, 3200);
+        context.lineWidth = 11;
+        context.strokeStyle = '#000000';
+        context.strokeRect(5.5, 5.5, 2000 - 11, 3200 - 11);
+        context.fillStyle = '#000000';
+        context.fillRect(663, 99, 11, 3200 - 198);
+        context.fillRect(1326, 99, 11, 3200 - 198);
+        return { canvas: c, ctx: context };
+    }
 
-    // Draw outer black border (11px)
-    ctx.lineWidth = 11;
-    ctx.strokeStyle = '#000000';
-    ctx.strokeRect(5.5, 5.5, 2000 - 11, 3200 - 11);
-
-    // Draw vertical dividers (Starts 99px from top, ends 99px from bottom)
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(663, 99, 11, 3200 - 198);
-    ctx.fillRect(1326, 99, 11, 3200 - 198);
+    let active = initPageCanvas();
+    let canvas = active.canvas;
+    let ctx = active.ctx;
 
     const columnsX = [33, 696, 1359];
     const colWidth = 608;
-    const maxY = 3150;
+    const maxY = 3120;
 
     let colIndex = 0;
     let currentY = 33;
+    let currentPageTextParts = [];
 
-    // Text wrapping utility (declared inside render block to safely capture ctx & colWidth)
-    function wrapText(text, fontSize, fontName, bold) {
+    function wrapText(textToWrap, fontSize, fontName, bold) {
         ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
-        const words = text.split(' ');
+        const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
 
@@ -181,7 +182,6 @@ window.renderPublisherPage = async (text) => {
         return lines;
     }
 
-    // Image loading utility with CORS guard (declared inside render block)
     function loadImage(url) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -194,7 +194,45 @@ window.renderPublisherPage = async (text) => {
         });
     }
 
-    // Parse markdown text blocks
+    function finalizeCurrentPage() {
+        function getScaledBase64(targetWidth, targetHeight) {
+            const scaledCanvas = document.createElement('canvas');
+            scaledCanvas.width = targetWidth;
+            scaledCanvas.height = targetHeight;
+            const sCtx = scaledCanvas.getContext('2d');
+            sCtx.drawImage(canvas, 0, 0, 2000, 3200, 0, 0, targetWidth, targetHeight);
+            return scaledCanvas.toDataURL('image/webp', 0.8).split(',')[1];
+        }
+
+        const originalBase64 = canvas.toDataURL('image/webp', 0.9).split(',')[1];
+        const listBase64 = getScaledBase64(800, 1280);
+        const gridBase64 = getScaledBase64(450, 720);
+        const pageText = currentPageTextParts.join('\n\n').trim();
+
+        pagesResults.push({
+            original: originalBase64,
+            list: listBase64,
+            grid: gridBase64,
+            text: pageText
+        });
+
+        // Start fresh page canvas
+        active = initPageCanvas();
+        canvas = active.canvas;
+        ctx = active.ctx;
+        colIndex = 0;
+        currentY = 33;
+        currentPageTextParts = [];
+    }
+
+    function advanceToNextColumn() {
+        colIndex++;
+        currentY = 33;
+        if (colIndex >= 3) {
+            finalizeCurrentPage();
+        }
+    }
+
     const lines = text.split('\n');
     const blocks = [];
     let currentParagraph = "";
@@ -214,7 +252,6 @@ window.renderPublisherPage = async (text) => {
         if (match) {
             blocks.push({ type: 'image', url: match[1] ? match[1].trim() : '' });
         } else if (tMatch) {
-            // Decouple contents to check if a row specifies a specific start index line
             let targetRow = null;
             let captionText = tMatch[3].trim();
             const rowMatch = /^row=(\d+)\s*\|\s*(.*)$/i.exec(captionText);
@@ -223,7 +260,6 @@ window.renderPublisherPage = async (text) => {
                 captionText = rowMatch[2].trim();
             }
 
-            // Always enforce a column break before and after the template block
             blocks.push({ type: 'column_break' });
             blocks.push({
                 type: 'template_block',
@@ -236,15 +272,15 @@ window.renderPublisherPage = async (text) => {
         } else if (cbMatch || pText.toLowerCase() === 'column-break' || pText.toLowerCase() === 'column_break') {
             blocks.push({ type: 'column_break' });
         } else if (pText.startsWith('###')) {
-            blocks.push({ type: 'h3', content: pText.substring(3).trim() });
+            blocks.push({ type: 'h3', content: pText.substring(3).trim(), raw: pText });
         } else if (pText.startsWith('##')) {
-            blocks.push({ type: 'h2', content: pText.substring(2).trim() });
+            blocks.push({ type: 'h2', content: pText.substring(2).trim(), raw: pText });
         } else if (pText.startsWith('#')) {
-            blocks.push({ type: 'h1', content: pText.substring(1).trim() });
+            blocks.push({ type: 'h1', content: pText.substring(1).trim(), raw: pText });
         } else if (pText.startsWith('* ') || pText.startsWith('- ')) {
-            blocks.push({ type: 'bullet', content: pText.substring(2).trim() });
+            blocks.push({ type: 'bullet', content: pText.substring(2).trim(), raw: pText });
         } else {
-            blocks.push({ type: 'text', content: pText });
+            blocks.push({ type: 'text', content: pText, raw: pText });
         }
         currentParagraph = "";
     }
@@ -263,15 +299,10 @@ window.renderPublisherPage = async (text) => {
     }
     commitParagraph();
 
-    // Render blocks onto canvas
     for (let block of blocks) {
-        if (colIndex >= 3) break;
-
         if (block.type === 'column_break') {
-            // Advance to the top of the next column if we've written anything in this one
             if (currentY > 33) {
-                colIndex++;
-                currentY = 33;
+                advanceToNextColumn();
             }
             continue;
         }
@@ -283,48 +314,40 @@ window.renderPublisherPage = async (text) => {
                 img = await loadImage(targetUrl);
             }
 
-            const drawHeight = 400; // Standardized local placeholder height
+            let drawHeight = 400;
+            if (img && img.width > 0 && img.height > 0) {
+                drawHeight = colWidth * (img.height / img.width);
+            }
 
             if (currentY + drawHeight > maxY) {
-                colIndex++;
-                currentY = 33;
+                advanceToNextColumn();
             }
 
-            if (colIndex < 3) {
-                if (img) {
-                    const drawRatioHeight = colWidth * (img.height / img.width);
-                    ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawRatioHeight);
-                    currentY += drawRatioHeight + 20;
-                } else {
-                    // Draw a beautiful local vector wireframe placeholder to prevent CORS canvas tainting entirely!
-                    ctx.fillStyle = '#f3f4f6';
-                    ctx.fillRect(columnsX[colIndex], currentY, colWidth, drawHeight);
-
-                    ctx.lineWidth = 4;
-                    ctx.strokeStyle = '#d1d5db';
-                    ctx.strokeRect(columnsX[colIndex] + 10, currentY + 10, colWidth - 20, drawHeight - 20);
-
-                    // Draw soft elegant wireframe diagonal lines
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(columnsX[colIndex] + 10, currentY + 10);
-                    ctx.lineTo(columnsX[colIndex] + colWidth - 10, currentY + drawHeight - 10);
-                    ctx.moveTo(columnsX[colIndex] + colWidth - 10, currentY + 10);
-                    ctx.lineTo(columnsX[colIndex] + 10, currentY + drawHeight - 10);
-                    ctx.stroke();
-
-                    // Text inside placeholder
-                    ctx.font = 'bold 24px Arial';
-                    ctx.fillStyle = '#9ca3af';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
-
-                    // Reset alignment back to default
-                    ctx.textAlign = 'left';
-
-                    currentY += drawHeight + 20;
-                }
+            if (img) {
+                ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawHeight);
+            } else {
+                ctx.fillStyle = '#f3f4f6';
+                ctx.fillRect(columnsX[colIndex], currentY, colWidth, drawHeight);
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#d1d5db';
+                ctx.strokeRect(columnsX[colIndex] + 10, currentY + 10, colWidth - 20, drawHeight - 20);
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(columnsX[colIndex] + 10, currentY + 10);
+                ctx.lineTo(columnsX[colIndex] + colWidth - 10, currentY + drawHeight - 10);
+                ctx.moveTo(columnsX[colIndex] + colWidth - 10, currentY + 10);
+                ctx.lineTo(columnsX[colIndex] + 10, currentY + drawHeight - 10);
+                ctx.stroke();
+                ctx.font = 'bold 24px Arial';
+                ctx.fillStyle = '#9ca3af';
+                ctx.textAlign = 'center';
+                ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
+                ctx.textAlign = 'left';
             }
+
+            currentY += drawHeight + 20;
+            currentPageTextParts.push(`{{IMAGE: ${targetUrl}}}`);
+
         } else if (block.type === 'template_block' && block.templateNum === 1) {
             const targetUrl = block.url;
             let img = null;
@@ -332,79 +355,66 @@ window.renderPublisherPage = async (text) => {
                 img = await loadImage(targetUrl);
             }
 
-            // Estimate metrics dynamically to handle column split bounds safely
-            let imgHeight = 400; // Standard fallback height
-            if (img) {
+            let imgHeight = 400;
+            if (img && img.width > 0 && img.height > 0) {
                 imgHeight = colWidth * (img.height / img.width);
             }
 
-            const fontSize = 24; // Subtle elegant paragraph font sizing
+            const fontSize = 24;
             const fontName = 'Arial';
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
             const textLeadingStep = fontSize * 1.4;
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
 
             if (block.targetRow !== null && block.targetRow !== undefined) {
-                // Bottom of the image sits at targetRow * 42 pixels down from top
                 let targetYBottom = 33 + block.targetRow * 42;
                 let targetYTop = targetYBottom - imgHeight;
 
-                // Check for column overflow or overlapping existing content
                 if (currentY > targetYTop || targetYBottom + totalTextHeight > maxY) {
-                    colIndex++;
-                    currentY = 33;
-                    // Recalculate based on next column's top
+                    advanceToNextColumn();
                     targetYBottom = 33 + block.targetRow * 42;
                     targetYTop = targetYBottom - imgHeight;
                 }
 
-                if (colIndex < 3) {
-                    // Draw image at targetYTop (sitting on targetYBottom)
-                    if (img) {
-                        ctx.drawImage(img, columnsX[colIndex], targetYTop, colWidth, imgHeight);
-                    } else {
-                        ctx.fillStyle = '#f3f4f6';
-                        ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
-                    }
-                    currentY = targetYTop + imgHeight + 16; // Update currentY to point to the bottom of the image + spacing!
-
-                    // Print text payload sequences neatly underneath
-                    ctx.font = `${fontSize}px ${fontName}`;
-                    ctx.fillStyle = '#1a1a1a';
-                    for (let line of linesToDraw) {
-                        ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
-                        currentY += textLeadingStep;
-                    }
-                    currentY += 24; // Extra paragraph padding block spacing
+                if (img) {
+                    ctx.drawImage(img, columnsX[colIndex], targetYTop, colWidth, imgHeight);
+                } else {
+                    ctx.fillStyle = '#f3f4f6';
+                    ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 }
+                currentY = targetYTop + imgHeight + 16;
+
+                ctx.font = `${fontSize}px ${fontName}`;
+                ctx.fillStyle = '#1a1a1a';
+                for (let line of linesToDraw) {
+                    ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
+                    currentY += textLeadingStep;
+                }
+                currentY += 24;
             } else {
-                // Handle multi-column overflow protection (standard layout fallback)
                 const compositeBlockHeight = imgHeight + totalTextHeight + 20;
                 if (currentY + compositeBlockHeight > maxY) {
-                    colIndex++;
-                    currentY = 33;
+                    advanceToNextColumn();
                 }
 
-                if (colIndex < 3) {
-                    // Draw the image container box edge-to-edge
-                    if (img) {
-                        ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, imgHeight);
-                    } else {
-                        ctx.fillStyle = '#f3f4f6';
-                        ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
-                    }
-                    currentY += imgHeight + 16; // Spacing block directly under image bounds
-
-                    // Print text payload sequences neatly underneath
-                    ctx.font = `${fontSize}px ${fontName}`;
-                    ctx.fillStyle = '#1a1a1a';
-                    for (let line of linesToDraw) {
-                        ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
-                        currentY += textLeadingStep;
-                    }
-                    currentY += 24; // Extra paragraph padding block spacing
+                if (img) {
+                    ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, imgHeight);
+                } else {
+                    ctx.fillStyle = '#f3f4f6';
+                    ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
+                currentY += imgHeight + 16;
+
+                ctx.font = `${fontSize}px ${fontName}`;
+                ctx.fillStyle = '#1a1a1a';
+                for (let line of linesToDraw) {
+                    ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
+                    currentY += textLeadingStep;
+                }
+                currentY += 24;
             }
+            currentPageTextParts.push(`{{TEMPLATE_1: ${targetUrl} | ${block.content}}}`);
+
         } else {
             let fontSize, fontName, bold = false, heightMultiplier = 1.5, spaceBelow = 12;
             if (block.type === 'h1') {
@@ -425,17 +435,21 @@ window.renderPublisherPage = async (text) => {
             ctx.fillStyle = '#1a1a1a';
 
             const step = fontSize * heightMultiplier;
+            let currentParagraphRenderedLines = [];
 
-            for (let line of linesToDraw) {
+            for (let i = 0; i < linesToDraw.length; i++) {
+                const line = linesToDraw[i];
                 if (currentY + fontSize > maxY) {
-                    colIndex++;
-                    currentY = 33;
+                    if (currentParagraphRenderedLines.length > 0) {
+                        currentPageTextParts.push(currentParagraphRenderedLines.join(' '));
+                        currentParagraphRenderedLines = [];
+                    }
+                    advanceToNextColumn();
+                    ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+                    ctx.fillStyle = '#1a1a1a';
                 }
 
-                if (colIndex >= 3) break;
-
-                // Justify body paragraphs
-                const isLastLine = line === linesToDraw[linesToDraw.length - 1];
+                const isLastLine = i === linesToDraw.length - 1;
                 if (!isLastLine && block.type === 'text' && linesToDraw.length > 1) {
                     const words = line.split(' ');
                     if (words.length > 1) {
@@ -455,33 +469,35 @@ window.renderPublisherPage = async (text) => {
                     ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
                 }
                 currentY += step;
+                currentParagraphRenderedLines.push(line);
             }
             currentY += spaceBelow;
+            if (currentParagraphRenderedLines.length > 0) {
+                if (block.type === 'h1') currentPageTextParts.push('# ' + currentParagraphRenderedLines.join(' '));
+                else if (block.type === 'h2') currentPageTextParts.push('## ' + currentParagraphRenderedLines.join(' '));
+                else if (block.type === 'h3') currentPageTextParts.push('### ' + currentParagraphRenderedLines.join(' '));
+                else if (block.type === 'bullet') currentPageTextParts.push('* ' + currentParagraphRenderedLines.join(' '));
+                else currentPageTextParts.push(currentParagraphRenderedLines.join(' '));
+            }
         }
     }
 
-    // Expose scaled canvas exporters
-    function getScaledBase64(targetWidth, targetHeight) {
-        const scaledCanvas = document.createElement('canvas');
-        scaledCanvas.width = targetWidth;
-        scaledCanvas.height = targetHeight;
-        const sCtx = scaledCanvas.getContext('2d');
-        sCtx.drawImage(canvas, 0, 0, 2000, 3200, 0, 0, targetWidth, targetHeight);
-        return scaledCanvas.toDataURL('image/webp', 0.8).split(',')[1];
+    if (currentY > 33 || colIndex > 0) {
+        finalizeCurrentPage();
     }
 
-    const originalBase64 = canvas.toDataURL('image/webp', 0.9).split(',')[1];
-    const listBase64 = getScaledBase64(800, 1280);
-    const gridBase64 = getScaledBase64(450, 720);
-
-    return JSON.stringify({
-        original: originalBase64,
-        list: listBase64,
-        grid: gridBase64
-    });
+    return JSON.stringify(pagesResults);
 };
 
-// --- Google Places Autocomplete Interop Promise ---
+window.renderPublisherPage = async (text) => {
+    const multiJson = await window.renderPublisherPages(text);
+    const pages = JSON.parse(multiJson);
+    if (pages && pages.length > 0) {
+        return JSON.stringify(pages[0]);
+    }
+    return JSON.stringify({ original: '', list: '', grid: '' });
+};
+
 window.getPlacePredictions = (input) => {
     return new Promise((resolve) => {
         if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
@@ -503,12 +519,10 @@ window.getPlacePredictions = (input) => {
     });
 };
 
-// --- Google Places Autocomplete Native Element Binder ---
 window.initAddressAutocomplete = (inputId, callback) => {
     const input = document.getElementById(inputId);
     if (!input) return;
     if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-        // Retry in 150ms if Places API has not loaded or initialized yet
         setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
         return;
     }
@@ -521,4 +535,52 @@ window.initAddressAutocomplete = (inputId, callback) => {
             callback(place.formatted_address);
         }
     });
+};
+
+window.geocodeAddress = async (address) => {
+    if (!address || typeof address !== 'string' || !address.trim()) {
+        return null;
+    }
+    const cleanAddress = address.trim();
+
+    if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
+        try {
+            const googleResult = await new Promise((resolve) => {
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ address: cleanAddress }, (results, status) => {
+                    if (status === 'OK' && results && results.length > 0) {
+                        const loc = results[0].geometry.location;
+                        resolve(JSON.stringify({ lat: loc.lat(), lng: loc.lng() }));
+                    } else {
+                        console.warn('[geocodeAddress] Google Geocoder status:', status, 'for address:', cleanAddress);
+                        resolve(null);
+                    }
+                });
+            });
+            if (googleResult) return googleResult;
+        } catch (e) {
+            console.warn('[geocodeAddress] Google Geocoder threw:', e);
+        }
+    }
+
+    try {
+        console.log('[geocodeAddress] Attempting OpenStreetMap Nominatim fallback for:', cleanAddress);
+        const encoded = encodeURIComponent(cleanAddress);
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (Array.isArray(data) && data.length > 0) {
+                const lat = parseFloat(data[0].lat);
+                const lng = parseFloat(data[0].lon);
+                console.log('[geocodeAddress] Nominatim resolved:', cleanAddress, '->', lat, lng);
+                return JSON.stringify({ lat: lat, lng: lng });
+            }
+        }
+    } catch (err) {
+        console.error('[geocodeAddress] Nominatim fallback failed:', err);
+    }
+
+    return null;
 };
