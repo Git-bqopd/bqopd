@@ -1,16 +1,20 @@
-const firebaseConfig = {
-  apiKey: "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g",
-  authDomain: "bqopd-9ce06.firebaseapp.com",
-  projectId: "bqopd-9ce06",
-  storageBucket: "bqopd-9ce06.appspot.com",
-  messagingSenderId: "17060476719",
-  appId: "1:17060476719:web:9c7e201c50938561e2d3da"
-};
-firebase.initializeApp(firebaseConfig);
+if (typeof window.firebaseConfig === 'undefined') {
+  window.firebaseConfig = {
+    apiKey: "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g",
+    authDomain: "bqopd-9ce06.firebaseapp.com",
+    projectId: "bqopd-9ce06",
+    storageBucket: "bqopd-9ce06.appspot.com",
+    messagingSenderId: "17060476719",
+    appId: "1:17060476719:web:9c7e201c50938561e2d3da"
+  };
+}
 
-const db = firebase.firestore();
-const storage = firebase.storage();
-const functions = firebase.functions();
+if (!firebase.apps.length) {
+  firebase.initializeApp(window.firebaseConfig);
+}
+var db = firebase.firestore();
+var storage = firebase.storage();
+var functions = firebase.functions();
 
 window.loginWithFirebase = function(email, password) {
     return firebase.auth().signInWithEmailAndPassword(email, password);
@@ -80,10 +84,12 @@ window.fsGetDoc = function(path) {
 };
 
 window.fsListenDoc = function(path, dartCallback) {
-    return db.doc(path).onSnapshot(
+    var unsub = db.doc(path).onSnapshot(
         function(d) { dartCallback(JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null})); },
         function(err) { console.error("fsListenDoc error on path " + path + ":", err); }
     );
+    unsub.callAsFunction = unsub;
+    return unsub;
 };
 
 window.fsListenQuery = function(path, field, op, valueJson, orderBy, desc, dartCallback) {
@@ -100,13 +106,15 @@ window.fsListenQuery = function(path, field, op, valueJson, orderBy, desc, dartC
         if (desc) dir = 'desc';
         q = q.orderBy(orderBy, dir);
     }
-    return q.onSnapshot(
+    var unsub = q.onSnapshot(
         function(s) {
             let docs = s.docs.map(function(d) { return {id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}; });
             dartCallback(JSON.stringify(docs));
         },
         function(err) { console.error("fsListenQuery error on path " + path + ":", err); }
     );
+    unsub.callAsFunction = unsub;
+    return unsub;
 };
 
 window.fsUpdateDoc = function(path, dataStr) { return db.doc(path).update(parseFirebaseOps(JSON.parse(dataStr))).catch(function(err) { console.error("fsUpdateDoc error:", err); throw err; }); };
@@ -154,11 +162,9 @@ window.renderPublisherPages = async (text) => {
     let active = initPageCanvas();
     let canvas = active.canvas;
     let ctx = active.ctx;
-
     const columnsX = [33, 696, 1359];
     const colWidth = 608;
     const maxY = 3120;
-
     let colIndex = 0;
     let currentY = 33;
     let currentPageTextParts = [];
@@ -168,7 +174,6 @@ window.renderPublisherPages = async (text) => {
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
-
         for (let word of words) {
             const testLine = currentLine ? currentLine + " " + word : word;
             if (ctx.measureText(testLine).width > colWidth) {
@@ -184,12 +189,34 @@ window.renderPublisherPages = async (text) => {
 
     function loadImage(url) {
         return new Promise((resolve) => {
+            if (!url || typeof url !== 'string' || !url.trim()) {
+                resolve(null);
+                return;
+            }
             const img = new Image();
+            let timer = null;
+            let settled = false;
+
+            function finish(result) {
+                if (settled) return;
+                settled = true;
+                if (timer) clearTimeout(timer);
+                resolve(result);
+            }
+
+            timer = setTimeout(() => {
+                console.warn('[loadImage Timeout] Bypassing stalled image:', url);
+                finish(null);
+            }, 3500);
+
             if (url.startsWith('http://') || url.startsWith('https://')) {
                 img.crossOrigin = "anonymous";
             }
-            img.onload = () => resolve(img);
-            img.onerror = () => resolve(null);
+            img.onload = () => finish(img);
+            img.onerror = (err) => {
+                console.warn('[loadImage Error] Could not load:', url, err);
+                finish(null);
+            };
             img.src = url;
         });
     }
@@ -216,7 +243,6 @@ window.renderPublisherPages = async (text) => {
             text: pageText
         });
 
-        // Start fresh page canvas
         active = initPageCanvas();
         canvas = active.canvas;
         ctx = active.ctx;
@@ -259,7 +285,6 @@ window.renderPublisherPages = async (text) => {
                 targetRow = parseInt(rowMatch[1]);
                 captionText = rowMatch[2].trim();
             }
-
             blocks.push({ type: 'column_break' });
             blocks.push({
                 type: 'template_block',
@@ -347,7 +372,6 @@ window.renderPublisherPages = async (text) => {
 
             currentY += drawHeight + 20;
             currentPageTextParts.push(`{{IMAGE: ${targetUrl}}}`);
-
         } else if (block.type === 'template_block' && block.templateNum === 1) {
             const targetUrl = block.url;
             let img = null;
@@ -369,13 +393,11 @@ window.renderPublisherPages = async (text) => {
             if (block.targetRow !== null && block.targetRow !== undefined) {
                 let targetYBottom = 33 + block.targetRow * 42;
                 let targetYTop = targetYBottom - imgHeight;
-
                 if (currentY > targetYTop || targetYBottom + totalTextHeight > maxY) {
                     advanceToNextColumn();
                     targetYBottom = 33 + block.targetRow * 42;
                     targetYTop = targetYBottom - imgHeight;
                 }
-
                 if (img) {
                     ctx.drawImage(img, columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 } else {
@@ -383,7 +405,6 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 }
                 currentY = targetYTop + imgHeight + 16;
-
                 ctx.font = `${fontSize}px ${fontName}`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
@@ -396,7 +417,6 @@ window.renderPublisherPages = async (text) => {
                 if (currentY + compositeBlockHeight > maxY) {
                     advanceToNextColumn();
                 }
-
                 if (img) {
                     ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, imgHeight);
                 } else {
@@ -404,7 +424,6 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
                 currentY += imgHeight + 16;
-
                 ctx.font = `${fontSize}px ${fontName}`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
@@ -414,7 +433,6 @@ window.renderPublisherPages = async (text) => {
                 currentY += 24;
             }
             currentPageTextParts.push(`{{TEMPLATE_1: ${targetUrl} | ${block.content}}}`);
-
         } else {
             let fontSize, fontName, bold = false, heightMultiplier = 1.5, spaceBelow = 12;
             if (block.type === 'h1') {
@@ -428,12 +446,11 @@ window.renderPublisherPages = async (text) => {
             }
 
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "•  " + block.content : block.content;
+            const textToWrap = isBullet ? "   " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
 
             ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
             ctx.fillStyle = '#1a1a1a';
-
             const step = fontSize * heightMultiplier;
             let currentParagraphRenderedLines = [];
 
@@ -456,7 +473,6 @@ window.renderPublisherPages = async (text) => {
                         let wordsWidth = 0;
                         for (let word of words) wordsWidth += ctx.measureText(word).width;
                         const wordSpacing = (colWidth - wordsWidth) / (words.length - 1);
-
                         let currentX = columnsX[colIndex];
                         for (let word of words) {
                             ctx.fillText(word, currentX, currentY + fontSize);
@@ -472,6 +488,7 @@ window.renderPublisherPages = async (text) => {
                 currentParagraphRenderedLines.push(line);
             }
             currentY += spaceBelow;
+
             if (currentParagraphRenderedLines.length > 0) {
                 if (block.type === 'h1') currentPageTextParts.push('# ' + currentParagraphRenderedLines.join(' '));
                 else if (block.type === 'h2') currentPageTextParts.push('## ' + currentParagraphRenderedLines.join(' '));
@@ -489,6 +506,9 @@ window.renderPublisherPages = async (text) => {
     return JSON.stringify(pagesResults);
 };
 
+// Guarantee globalThis and window exposure for Dart web interop
+globalThis.renderPublisherPages = window.renderPublisherPages;
+
 window.renderPublisherPage = async (text) => {
     const multiJson = await window.renderPublisherPages(text);
     const pages = JSON.parse(multiJson);
@@ -497,6 +517,181 @@ window.renderPublisherPage = async (text) => {
     }
     return JSON.stringify({ original: '', list: '', grid: '' });
 };
+
+globalThis.renderPublisherPage = window.renderPublisherPage;
+
+// ---------------------------------------------------------------------------
+// 2000x3200 Full-Page Google Map Cover using Official Google Maps Static API
+// ---------------------------------------------------------------------------
+window.renderMapCoverPage = async (configJson) => {
+    console.log('[renderMapCoverPage] Starting Google Maps Static cover generation...');
+    const config = typeof configJson === 'string' ? JSON.parse(configJson) : configJson;
+    const center = config.center || { lat: 39.8283, lng: -98.5795, address: "United States" };
+    const letters = Array.isArray(config.letters) ? config.letters : [];
+    const folioTitle = config.title || `Letters near ${center.address}`;
+    const apiKey = (window.firebaseConfig && window.firebaseConfig.apiKey) || "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g";
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 2000;
+    canvas.height = 3200;
+    const ctx = canvas.getContext('2d');
+
+    // Default neutral roadmap background
+    ctx.fillStyle = '#e5e3df';
+    ctx.fillRect(0, 0, 2000, 3200);
+
+    // 1. Gather all points
+    const points = [];
+    if (center.lat != null && center.lng != null) {
+        points.push({ lat: center.lat, lng: center.lng, isCenter: true });
+    }
+    letters.forEach(l => {
+        if (l.lat != null && l.lng != null) {
+            points.push({ lat: l.lat, lng: l.lng, isCenter: false });
+        }
+    });
+
+    if (points.length === 0) {
+        points.push({ lat: 43.8396, lng: -91.2436, isCenter: true });
+    }
+
+    // 2. Obtain official Google Maps Static image
+    let mapDataUrl = null;
+
+    // Primary route: fetch via Cloud Function (returns data:image/png;base64,... which never taints canvas)
+    try {
+        console.log('[renderMapCoverPage] Calling Cloud Function fetch_static_map with points:', points.length);
+        const fnResult = await functions.httpsCallable('fetch_static_map')({
+            markers: points,
+            width: 400,
+            height: 640,
+            scale: 2,
+            api_key: apiKey
+        });
+        if (fnResult && fnResult.data && fnResult.data.status === 'success' && fnResult.data.data_url) {
+            mapDataUrl = fnResult.data.data_url;
+            console.log('[renderMapCoverPage] Successfully obtained map data URL from Cloud Function.');
+        } else {
+            console.warn('[renderMapCoverPage] Cloud Function returned non-success:', fnResult && fnResult.data);
+        }
+    } catch (fnErr) {
+        console.warn('[renderMapCoverPage] Cloud Function fetch_static_map threw:', fnErr);
+    }
+
+    // Fallback route: direct Google Static Maps URL
+    if (!mapDataUrl) {
+        console.log('[renderMapCoverPage] Using direct Static Map URL fallback.');
+        const queryParts = [
+            'size=400x640',
+            'scale=2',
+            'maptype=roadmap',
+            `key=${apiKey}`
+        ];
+        points.forEach(p => {
+            const color = p.isCenter ? '0xd32f2f' : '0xea4335';
+            const size = p.isCenter ? 'mid' : 'small';
+            queryParts.append ? queryParts.push(`markers=color:${color}%7Csize:${size}%7C${p.lat},${p.lng}`) : null;
+        });
+        mapDataUrl = `https://maps.googleapis.com/maps/api/staticmap?${queryParts.join('&')}`;
+    }
+
+    // 3. Draw the official Google Map image across the full 2000x3200 canvas
+    await new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            console.log('[renderMapCoverPage] Static map image loaded into image element. Drawing to canvas...');
+            ctx.drawImage(img, 0, 0, 2000, 3200);
+            resolve();
+        };
+        img.onerror = (e) => {
+            console.warn('[renderMapCoverPage] Static map image failed to render:', e);
+            resolve();
+        };
+        img.src = mapDataUrl;
+    });
+
+    // 4. Overlay authentic Google Maps UI chrome
+    // Zoom Controls (+ / -) in bottom-right
+    ctx.save();
+    const zoomBox = { x: 1840, y: 2920, width: 84, height: 168, r: 10 };
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.18)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 4;
+
+    ctx.beginPath();
+    ctx.roundRect(zoomBox.x, zoomBox.y, zoomBox.width, zoomBox.height, zoomBox.r);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = '#dadce0';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(zoomBox.x + 12, zoomBox.y + 84);
+    ctx.lineTo(zoomBox.x + zoomBox.width - 12, zoomBox.y + 84);
+    ctx.stroke();
+
+    // "+" symbol
+    ctx.strokeStyle = '#5f6368';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(zoomBox.x + 42, zoomBox.y + 26);
+    ctx.lineTo(zoomBox.x + 42, zoomBox.y + 58);
+    ctx.moveTo(zoomBox.x + 26, zoomBox.y + 42);
+    ctx.lineTo(zoomBox.x + 58, zoomBox.y + 42);
+    ctx.stroke();
+
+    // "−" symbol
+    ctx.beginPath();
+    ctx.moveTo(zoomBox.x + 26, zoomBox.y + 126);
+    ctx.lineTo(zoomBox.x + 58, zoomBox.y + 126);
+    ctx.stroke();
+
+    // Google Logo in bottom-left
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 36px Product Sans, Arial, sans-serif';
+    const gX = 80;
+    const gY = 3120;
+    const gLetters = [
+        { char: 'G', color: '#4285F4' },
+        { char: 'o', color: '#EA4335' },
+        { char: 'p', color: '#FBBC05' },
+        { char: 'g', color: '#4285F4' },
+        { char: 'l', color: '#34A853' },
+        { char: 'e', color: '#EA4335' },
+    ];
+    let curGX = gX;
+    gLetters.forEach(item => {
+        ctx.fillStyle = item.color;
+        ctx.fillText(item.char, curGX, gY);
+        curGX += ctx.measureText(item.char).width;
+    });
+
+    // 5. Export high-res WebP images (original, list, and grid)
+    function getScaledBase64(targetWidth, targetHeight) {
+        const scaled = document.createElement('canvas');
+        scaled.width = targetWidth;
+        scaled.height = targetHeight;
+        const sCtx = scaled.getContext('2d');
+        sCtx.drawImage(canvas, 0, 0, 2000, 3200, 0, 0, targetWidth, targetHeight);
+        return scaled.toDataURL('image/webp', 0.8).split(',')[1];
+    }
+
+    const originalBase64 = canvas.toDataURL('image/webp', 0.9).split(',')[1];
+    const listBase64 = getScaledBase64(800, 1280);
+    const gridBase64 = getScaledBase64(450, 720);
+
+    console.log('[renderMapCoverPage] Successfully finalized 2000x3200 Google Map cover.');
+    return JSON.stringify({
+        original: originalBase64,
+        list: listBase64,
+        grid: gridBase64,
+        text: `Map Cover: ${folioTitle}\nCenter: ${center.address}\nLetters: ${letters.length}`
+    });
+};
+
+globalThis.renderMapCoverPage = window.renderMapCoverPage;
 
 window.getPlacePredictions = (input) => {
     return new Promise((resolve) => {
@@ -522,13 +717,16 @@ window.getPlacePredictions = (input) => {
 window.initAddressAutocomplete = (inputId, callback) => {
     const input = document.getElementById(inputId);
     if (!input) return;
+
     if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
         setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
         return;
     }
+
     const autocomplete = new google.maps.places.Autocomplete(input, {
         fields: ['formatted_address']
     });
+
     autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace();
         if (place && place.formatted_address) {
@@ -581,7 +779,6 @@ window.geocodeAddress = async (address) => {
     } catch (err) {
         console.error('[geocodeAddress] Nominatim fallback failed:', err);
     }
-
     return null;
 };
 
@@ -606,8 +803,8 @@ window.renderEntityMap = (containerId, markersJson) => {
     });
 
     if (!markersData || markersData.length === 0) return;
-    const bounds = new google.maps.LatLngBounds();
 
+    const bounds = new google.maps.LatLngBounds();
     markersData.forEach((m) => {
         const pos = { lat: m.lat, lng: m.lng };
         const marker = new google.maps.Marker({
@@ -623,6 +820,7 @@ window.renderEntityMap = (containerId, markersJson) => {
         marker.addListener('click', () => {
             infoWindow.open(map, marker);
         });
+
         bounds.extend(pos);
     });
 

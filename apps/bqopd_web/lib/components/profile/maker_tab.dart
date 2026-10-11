@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
@@ -8,12 +7,11 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/web_utils.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
-import '../../utils/publisher_compiler.dart';
-import '../historical_letter_card.dart';
+import '../../services/address_radius_letters.dart';
 import '../fanzine_thumbnail_card.dart';
 import './maker_upload_form.dart';
 
-/// Maker Tab content displaying publications and folios.
+/// Maker Tab content displaying publications, folios, and creative tooling.
 /// Streams live works and renders both published and draft lists using FanzineThumbnailCard.
 class ProfileMakerTab extends StatefulComponent {
   final String targetUserId;
@@ -55,7 +53,8 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
 
   // Radius Letters configuration state
   String _radiusAddress = '';
-  int _radiusMiles = 50;
+  int _pageCount = 4;
+  bool _hasMapCover = false;
   bool _radiusLoading = false;
   String? _radiusError;
   String? _radiusProgressStatus;
@@ -276,46 +275,6 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     }
   }
 
-  double _calculateDistanceMiles(
-      double lat1, double lon1, double lat2, double lon2) {
-    const double p = 0.017453292519943295; // Math.PI / 180
-    final a = 0.5 -
-        math.cos((lat2 - lat1) * p) / 2 +
-        math.cos(lat1 * p) *
-            math.cos(lat2 * p) *
-            (1 - math.cos((lon2 - lon1) * p)) /
-            2;
-    return 12742 * math.asin(math.sqrt(a)) * 0.621371; // km to miles
-  }
-
-  String _cleanHistoricalLocation(String raw) {
-    var loc = raw.trim();
-    loc = loc.replaceAll(RegExp(r'\bWis\b\.?', caseSensitive: false), 'WI');
-    loc = loc.replaceAll(RegExp(r'\bIll\b\.?', caseSensitive: false), 'IL');
-    loc = loc.replaceAll(RegExp(r'\bMich\b\.?', caseSensitive: false), 'MI');
-    loc = loc.replaceAll(RegExp(r'\bMinn\b\.?', caseSensitive: false), 'MN');
-    loc = loc.replaceAll(RegExp(r'\bPenn\b\.?', caseSensitive: false), 'PA');
-    loc = loc.replaceAll(RegExp(r'\bN\.\s*D\b\.?', caseSensitive: false), 'ND');
-    loc = loc.replaceAll(RegExp(r'\bS\.\s*D\b\.?', caseSensitive: false), 'SD');
-    loc = loc.replaceAll(RegExp(r'\bCal\b\.?', caseSensitive: false), 'CA');
-    loc = loc.replaceAll(RegExp(r'\bCalif\b\.?', caseSensitive: false), 'CA');
-    loc = loc.replaceAll(RegExp(r'\bInd\b\.?', caseSensitive: false), 'IN');
-    loc = loc.replaceAll(RegExp(r'\bMo\b\.?', caseSensitive: false), 'MO');
-    loc = loc.replaceAll(RegExp(r'\bMass\b\.?', caseSensitive: false), 'MA');
-    loc = loc.replaceAll(RegExp(r'\bConn\b\.?', caseSensitive: false), 'CT');
-    loc = loc.replaceAll(RegExp(r'\bWash\b\.?', caseSensitive: false), 'WA');
-
-    if (loc.contains(',')) {
-      final parts = loc.split(',');
-      if (parts.length >= 2) {
-        final last = parts[parts.length - 1].trim();
-        final secondLast = parts[parts.length - 2].trim();
-        loc = '$secondLast, $last';
-      }
-    }
-    return loc;
-  }
-
   Future<void> _createRadiusLettersFolio() async {
     final targetAddr = _radiusAddress.trim();
     if (targetAddr.isEmpty) {
@@ -330,212 +289,29 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     });
 
     try {
-      // 1. Geocode target address
-      Map<String, double>? targetCoords;
-      final targetGeoJson = await geocodeAddress(targetAddr);
-      if (targetGeoJson != null && targetGeoJson.isNotEmpty) {
-        final decoded = jsonDecode(targetGeoJson);
-        if (decoded != null && decoded['lat'] != null && decoded['lng'] != null) {
-          targetCoords = {
-            'lat': (decoded['lat'] as num).toDouble(),
-            'lng': (decoded['lng'] as num).toDouble(),
-          };
-        }
-      }
-
-      print('[RadiusLetters] Center address "$targetAddr" coords: $targetCoords');
-
-      setState(() {
-        _radiusProgressStatus = 'Scanning historical letters database...';
-      });
-
-      // 2. Fetch all comments to find historical transcribed letters
-      final commentsRes =
-      await fsQuery('artifacts/bqopd/public/data/comments', '', '', '', '');
-      final List decodedComments = jsonDecode(commentsRes) as List;
-
-      final List<Map<String, dynamic>> letterComments = [];
-      for (final item in decodedComments) {
-        final data = Map<String, dynamic>.from(item['data'] as Map);
-        data['_id'] = item['id'];
-        final isLetter = data['sourceType'] == 'letter_column' ||
-            (data['location'] != null &&
-                data['location'].toString().trim().isNotEmpty);
-        if (isLetter) {
-          letterComments.add(data);
-        }
-      }
-
-      if (letterComments.isEmpty) {
-        setState(() {
-          _radiusLoading = false;
-          _radiusError = 'No transcribed letters found in database.';
-        });
-        return;
-      }
-
-      // 3. Geocode and filter letters within the given distance
-      setState(() {
-        _radiusProgressStatus = 'Calculating distances for ${letterComments.length} letters...';
-      });
-
-      final Map<String, Map<String, double>?> locationCache = {};
-      final List<Map<String, dynamic>> matchingLetters = [];
-
-      for (final letter in letterComments) {
-        String loc = (letter['location'] ?? '').toString().trim();
-
-        if (loc.isEmpty && letter['userId'] != null) {
-          final uid = letter['userId'].toString();
-          if (!uid.startsWith('archival_')) {
-            try {
-              final pRes = await fsGetDoc('profiles/$uid');
-              final pDoc = jsonDecode(pRes);
-              if (pDoc['exists'] == true) {
-                final pData = pDoc['data'] as Map<String, dynamic>? ?? {};
-                loc = (pData['location'] ?? pData['city'] ?? '').toString().trim();
-                if (pData['state'] != null &&
-                    pData['state'].toString().isNotEmpty) {
-                  loc +=
-                      (loc.isNotEmpty ? ', ' : '') + pData['state'].toString().trim();
-                }
-              }
-            } catch (_) {}
-          }
-        }
-
-        if (loc.isEmpty) continue;
-
-        bool isWithin = false;
-        final cleanLoc = _cleanHistoricalLocation(loc);
-
-        if (targetCoords != null) {
-          if (!locationCache.containsKey(cleanLoc)) {
-            final geoJson = await geocodeAddress(cleanLoc);
-            if (geoJson != null && geoJson.isNotEmpty) {
-              final decoded = jsonDecode(geoJson);
-              if (decoded != null &&
-                  decoded['lat'] != null &&
-                  decoded['lng'] != null) {
-                locationCache[cleanLoc] = {
-                  'lat': (decoded['lat'] as num).toDouble(),
-                  'lng': (decoded['lng'] as num).toDouble(),
-                };
-              } else {
-                locationCache[cleanLoc] = null;
-              }
-            } else {
-              locationCache[cleanLoc] = null;
-            }
-          }
-
-          final letterCoords = locationCache[cleanLoc];
-          if (letterCoords != null) {
-            final distance = _calculateDistanceMiles(
-              targetCoords['lat']!,
-              targetCoords['lng']!,
-              letterCoords['lat']!,
-              letterCoords['lng']!,
-            );
-            if (distance <= _radiusMiles) {
-              isWithin = true;
-              letter['_calculatedDistanceMiles'] = distance;
-            }
-          }
-        }
-
-        if (!isWithin && targetCoords == null) {
-          final cleanTarget = targetAddr.toLowerCase();
-          final locLower = loc.toLowerCase();
-          if (locLower.contains(cleanTarget) || cleanTarget.contains(locLower)) {
-            isWithin = true;
-          }
-        }
-
-        if (isWithin) {
-          matchingLetters.add(letter);
-        }
-      }
-
-      if (matchingLetters.isEmpty) {
-        setState(() {
-          _radiusLoading = false;
-          _radiusProgressStatus = null;
-          _radiusError =
-          'No letters found within $_radiusMiles miles of "$targetAddr". Try increasing the distance.';
-        });
-        return;
-      }
-
-      setState(() {
-        _radiusProgressStatus = 'Resolving publications and page scans...';
-      });
-
-      // Sort matching letters by ascending distance
-      matchingLetters.sort((a, b) {
-        final double distA = (a['_calculatedDistanceMiles'] as double?) ?? 0;
-        final double distB = (b['_calculatedDistanceMiles'] as double?) ?? 0;
-        return distA.compareTo(distB);
-      });
-
-      final List<HistoricalLetterEntry> resolvedEntries = [];
-      for (final letter in matchingLetters) {
-        final entry = await HistoricalLetterEntry.resolveComplete(
-          rawComment: letter,
-          distanceMiles: letter['_calculatedDistanceMiles'] as double?,
-        );
-        resolvedEntries.add(entry);
-      }
-
-      final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
       final shortCode = await _generateUniqueTempShortcode();
-      final String folioTitle = 'Letters near $targetAddr';
 
-      setState(() {
-        _radiusProgressStatus = 'Compiling connected publisher pages...';
-      });
-
-      // Construct ONE continuous markdown text flow containing all resolved letters
-      final fullMarkdownBuffer = StringBuffer();
-      for (final entry in resolvedEntries) {
-        fullMarkdownBuffer.write(entry.toPublisherMarkdown());
-        fullMarkdownBuffer.writeln();
-      }
-      final fullText = fullMarkdownBuffer.toString().trim();
-
-      // Compile multi-page continuous layout where overflow lines continue seamlessly
-      final List<FanzinePage> pages = await PublisherCompiler.compileAndPublishMultiPage(
-        fanzineId: fanzineId,
-        fullText: fullText,
-        onProgress: (current, total) {
+      final result = await AddressRadiusLetters.buildFolio(
+        targetAddress: targetAddr,
+        targetPages: _pageCount,
+        hasMapCover: _hasMapCover,
+        ownerUserId: component.targetUserId,
+        shortCode: shortCode,
+        onProgress: (status) {
           if (mounted) {
-            setState(() {
-              _radiusProgressStatus = 'Compiling publisher text page $current of $total...';
-            });
+            setState(() => _radiusProgressStatus = status);
           }
         },
       );
 
-      final newFanzine = Fanzine(
-        id: fanzineId,
-        title: folioTitle,
-        ownerId: component.targetUserId,
-        curators: [component.targetUserId],
-        collections: [component.targetUserId],
-        type: FanzineType.folio,
-        isLive: false,
-        processingStatus: 'complete',
-        shortCode: shortCode,
-        twoPage: true,
-        hasCover: false,
-      );
+      UnsavedFanzineRegistry.add(result.fanzine, result.pages);
 
-      UnsavedFanzineRegistry.add(newFanzine, pages);
       setState(() {
         _showMakerModal = false;
         _radiusLoading = false;
         _radiusProgressStatus = null;
       });
+
       Router.of(context).replace('/$shortCode/maker');
     } catch (e) {
       print("Error creating radius letters folio: $e");
@@ -543,7 +319,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         setState(() {
           _radiusLoading = false;
           _radiusProgressStatus = null;
-          _radiusError = 'Failed to generate folio: $e';
+          _radiusError = e.toString().replaceAll('Exception: ', '').trim();
         });
       }
     }
@@ -590,6 +366,8 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
               setState(() {
                 _makerModalMode = 'radius_letters';
                 _radiusAddress = '';
+                _pageCount = 4;
+                _hasMapCover = false;
                 _radiusError = null;
                 _radiusLoading = false;
                 _radiusProgressStatus = null;
@@ -642,7 +420,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
         ),
         p([
           Component.text(
-              "Enter an address or city to compile historical letters sent from within a given distance into a continuous publisher folio.")
+              "Enter an address or city and select the desired page count. Historical letters radiating outward from the location will be compiled into a continuous publisher folio.")
         ],
             attributes: const {
               'style':
@@ -663,33 +441,100 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
                 'width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 13px; background: white; outline: none; margin-bottom: 0;',
                 if (_radiusLoading) 'disabled': 'true'
               },
-              events: {'input': (e) => setState(() => _radiusAddress = getInputValue(e))},
+              events: {
+                'input': (e) => setState(() => _radiusAddress = getInputValue(e)),
+                'keypress': (e) {
+                  if ((e as dynamic).key == 'Enter' && !_radiusLoading) {
+                    _createRadiusLettersFolio();
+                  }
+                },
+              },
             ),
           ],
           attributes: const {'style': 'width: 100%; margin-bottom: 14px;'},
         ),
         div(
           [
-            span([Component.text("SEARCH RADIUS")],
+            label(
+              [
+                input(
+                  attributes: {
+                    'type': 'checkbox',
+                    'id': 'radius-letters-map-cover',
+                    if (_hasMapCover) 'checked': 'true',
+                    'style': 'width: 18px; height: 18px; cursor: pointer; accent-color: #6750A4; margin: 0;',
+                    if (_radiusLoading) 'disabled': 'true',
+                  },
+                  events: {
+                    'change': (e) {
+                      final checked = (e.target as dynamic).checked == true;
+                      setState(() {
+                        _hasMapCover = checked;
+                        if (_hasMapCover && _pageCount < 2) {
+                          _pageCount = 2;
+                        }
+                      });
+                    }
+                  },
+                ),
+                span(
+                  [Component.text('MAP COVER (COUNTS AS PAGE 1)')],
+                  classes: 'text-xs font-bold text-gray-700',
+                  attributes: const {'style': 'cursor: pointer; user-select: none;'},
+                ),
+              ],
+              attributes: const {'style': 'display: flex; align-items: center; gap: 8px; cursor: pointer;'},
+            ),
+            p([
+              Component.text(
+                _hasMapCover
+                    ? 'Page 1 will be an illustrated map cover with radial distance rings, numbered pins, and an index register, followed by ${_pageCount - 1} letter ${_pageCount - 1 == 1 ? "page" : "pages"}.'
+                    : 'Generates continuous letter pages without a cover image.',
+              ),
+            ],
+                attributes: const {'style': 'font-size: 11px; color: #666; margin: 4px 0 0 26px; line-height: 1.3;'}),
+          ],
+          attributes: const {
+            'style':
+            'width: 100%; margin-bottom: 14px; background: #f8fafc; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; box-sizing: border-box;'
+          },
+        ),
+        div(
+          [
+            span([Component.text("NUMBER OF PAGES")],
                 classes: 'text-xs font-bold text-gray-600',
                 attributes: const {'style': 'margin-bottom: 6px; display: block; text-align: left;'}),
-            div(
-              [
-                for (final mi in [10, 25, 50, 100, 250])
-                  button(
-                    [Component.text('$mi mi')],
-                    attributes: {
-                      'type': 'button',
-                      'style':
-                      'padding: 6px 12px; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 4px; border: 1px solid ${_radiusMiles == mi ? "#6750A4" : "#ccc"}; background: ${_radiusMiles == mi ? "#E8DEF8" : "white"}; color: ${_radiusMiles == mi ? "#1D192B" : "#555"}; transition: all 0.15s;'
-                    },
-                    events: {'click': (e) => setState(() => _radiusMiles = mi)},
-                  )
-              ],
-              attributes: const {
+            select(
+              attributes: {
+                'id': 'radius-letters-page-count',
                 'style':
-                'display: flex; gap: 6px; width: 100%; flex-wrap: wrap;'
+                'width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 13px; background: white; outline: none; cursor: pointer;',
+                if (_radiusLoading) 'disabled': 'true',
               },
+              events: {
+                'change': (e) {
+                  final val = int.tryParse(getInputValue(e));
+                  if (val != null) {
+                    setState(() => _pageCount = val);
+                  }
+                },
+              },
+              [
+                for (int i = (_hasMapCover ? 2 : 1); i <= 24; i++)
+                  option(
+                    attributes: {
+                      'value': '$i',
+                      if (_pageCount == i) 'selected': 'true',
+                    },
+                    [
+                      Component.text(
+                        i == 24
+                            ? (_hasMapCover ? '24 pages (Map Cover + 23 letter pages)' : '24 pages (full fanzine)')
+                            : (_hasMapCover ? '$i pages (Map Cover + ${i - 1} letter ${i - 1 == 1 ? "page" : "pages"})' : '$i ${i == 1 ? "page" : "pages"}'),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ],
           attributes: const {'style': 'width: 100%; margin-bottom: 16px;'},

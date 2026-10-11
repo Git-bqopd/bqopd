@@ -10,6 +10,73 @@ import '../../repositories/repositories.dart';
 import '../segmented_button.dart';
 import '../fanzine_thumbnail_card.dart';
 
+const String _base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+
+/// Encodes (lat, lng) coordinates into a standard Base32 geohash string.
+String encodeGeohash(double lat, double lng, [int precision = 6]) {
+  List<double> latInterval = [-90.0, 90.0];
+  List<double> lngInterval = [-180.0, 180.0];
+  final buffer = StringBuffer();
+  const bits = [16, 8, 4, 2, 1];
+  int bit = 0;
+  int ch = 0;
+  bool even = true;
+
+  while (buffer.length < precision) {
+    if (even) {
+      final mid = (lngInterval[0] + lngInterval[1]) / 2.0;
+      if (lng > mid) {
+        ch |= bits[bit];
+        lngInterval[0] = mid;
+      } else {
+        lngInterval[1] = mid;
+      }
+    } else {
+      final mid = (latInterval[0] + latInterval[1]) / 2.0;
+      if (lat > mid) {
+        ch |= bits[bit];
+        latInterval[0] = mid;
+      } else {
+        latInterval[1] = mid;
+      }
+    }
+    even = !even;
+    if (bit < 4) {
+      bit++;
+    } else {
+      buffer.write(_base32[ch]);
+      bit = 0;
+      ch = 0;
+    }
+  }
+  return buffer.toString();
+}
+
+/// Geocodes a location string and resolves coordinates with pre-calculated geohashes.
+Future<Map<String, dynamic>?> resolveGeoForLocation(String locationStr) async {
+  final cleanLoc = locationStr.trim();
+  if (cleanLoc.isEmpty) return null;
+  try {
+    final geoJson = await geocodeAddress(cleanLoc);
+    if (geoJson != null && geoJson.isNotEmpty) {
+      final decoded = jsonDecode(geoJson);
+      if (decoded != null && decoded['lat'] != null && decoded['lng'] != null) {
+        final double lat = (decoded['lat'] as num).toDouble();
+        final double lng = (decoded['lng'] as num).toDouble();
+        final gh = encodeGeohash(lat, lng, 6);
+        return {
+          'lat': lat,
+          'lng': lng,
+          'geohash': gh,
+          'geohash_3': gh.length >= 3 ? gh.substring(0, 3) : gh,
+          'geohash_2': gh.length >= 2 ? gh.substring(0, 2) : gh,
+        };
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 String normalizeHandle(String input) {
   return input
       .trim()
@@ -493,12 +560,18 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
     });
 
     try {
+      Map<String, dynamic>? geoData;
+      if (_authorLocation.trim().isNotEmpty) {
+        geoData = await resolveGeoForLocation(_authorLocation.trim());
+      }
+
       final commentDoc = {
         'contentId': component.imageId,
         'userId': authorUid,
         'displayName': authorName,
         'username': handle,
         'location': _authorLocation.trim(),
+        if (geoData != null) 'geo': geoData,
         'historicalDate': _letterDate.trim(),
         'text': text,
         'sourceType': 'letter_column',
@@ -1323,12 +1396,18 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
     });
 
     try {
+      Map<String, dynamic>? geoData;
+      if (_authorLocation.trim().isNotEmpty) {
+        geoData = await resolveGeoForLocation(_authorLocation.trim());
+      }
+
       final commentDoc = {
         'contentId': component.imageId,
         'userId': authorUid,
         'displayName': authorName,
         'username': handle,
         'location': _authorLocation.trim(),
+        if (geoData != null) 'geo': geoData,
         'historicalDate': _letterDate.trim(),
         'text': text,
         'sourceType': 'letter_column',
@@ -1873,8 +1952,6 @@ class _CommentItemState extends State<CommentItem> {
     _editLocation = component.data['location'] ?? '';
     _locationRefreshedMessage = null;
 
-    // The location is a one-time pull of information.
-    // If it was not filled out, pull from the profile.
     if (_editLocation.trim().isEmpty) {
       _refreshingLocation = true;
       setState(() => _isEditing = true);
@@ -1923,9 +2000,15 @@ class _CommentItemState extends State<CommentItem> {
     if (commentId == null || _isSaving) return;
     setState(() => _isSaving = true);
     try {
+      Map<String, dynamic>? geoData;
+      if (_editLocation.trim().isNotEmpty) {
+        geoData = await resolveGeoForLocation(_editLocation.trim());
+      }
+
       final updates = <String, dynamic>{
         'text': _editText.trim(),
         'location': _editLocation.trim(),
+        if (geoData != null) 'geo': geoData,
         'historicalDate': _editHistoricalDate.trim(),
         'displayName': _editAuthorName.trim(),
         'username': normalizeHandle(_editAuthorHandle),
@@ -1936,6 +2019,7 @@ class _CommentItemState extends State<CommentItem> {
       // Synchronize in-memory record so UI reflects changes instantly
       component.data['text'] = _editText.trim();
       component.data['location'] = _editLocation.trim();
+      if (geoData != null) component.data['geo'] = geoData;
       component.data['historicalDate'] = _editHistoricalDate.trim();
       component.data['displayName'] = _editAuthorName.trim();
       component.data['username'] = normalizeHandle(_editAuthorHandle);

@@ -1,95 +1,80 @@
-import 'dart:typed_data';
-import 'web_firebase_interop.dart';
+import 'dart:async';
 
-/// Server VM stub implementation of the static unsubscription handler.
-class StubSubscription implements FirebaseSubscription {
-  @override
-  void callAsFunction() {}
+/// Stub implementation for non-web environments (Server SSR / AOT VM).
+/// Pure Dart signatures with zero browser/JS dependencies.
+
+Future<String> renderMapCoverPage(String configJson) async {
+  return '{}';
 }
 
-/// Server VM stub for getting active auth IDs.
+Future<String> renderPublisherPages(String text) async {
+  return '[]';
+}
+
+Future<String> renderPublisherPage(String text) async {
+  return '{}';
+}
+
+Future<String?> geocodeAddress(String address) async {
+  return null;
+}
+
+Future<String> fnCall(String name, String dataStr) async {
+  return '{}';
+}
+
+Future<void> loginWithFirebase(String email, String password) async {}
+
+Future<void> registerWithFirebase(String email, String password, String username) async {}
+
+Future<void> logoutFromFirebase() async {}
+
 String? getCurrentUserId() => null;
 
-/// Server VM stub for retrieving documents synchronously.
-Future<String> fsGetDoc(String path) async => '{}';
+String? getCurrentUserEmail() => null;
 
-/// Server VM stub for document snapshot listeners.
-FirebaseSubscription fsListenDoc(String path, void Function(String) callback) =>
-    StubSubscription();
+void onAuthStateChangedListener(void Function(String?, String?) callback) {}
 
-/// Server VM stub for query listeners.
-FirebaseSubscription fsListenQuery(
+Future<String> fsGetDoc(String path) async => '{"exists": false}';
+
+dynamic fsListenDoc(String path, void Function(String) dartCallback) => null;
+
+dynamic fsListenQuery(
+    String path,
+    String? field,
+    String? op,
+    String? valueJson,
+    String? orderBy,
+    bool? desc,
+    void Function(String) dartCallback,
+    ) => null;
+
+Future<String> fsQuery(
     String path,
     String field,
     String op,
     String valueJson,
     String orderBy,
-    bool desc,
-    void Function(String) callback) =>
-    StubSubscription();
+    ) async => '[]';
 
-/// Server VM stub for doc updates.
-Future<void> fsUpdateDoc(String path, String dataJson) async {}
+Future<void> fsUpdateDoc(String path, String dataStr) async {}
 
-/// Server VM stub for doc sets.
-Future<void> fsSetDoc(String path, String dataJson, bool merge) async {}
+Future<void> fsSetDoc(String path, String dataStr, bool merge) async {}
 
-/// Server VM stub for doc deletions.
 Future<void> fsDeleteDoc(String path) async {}
 
-/// Server VM stub for adding documents.
-Future<String> fsAddDoc(String path, String dataJson) async => '';
+Future<String> fsAddDoc(String path, String dataStr) async => '';
 
-/// Server VM stub for database queries.
-Future<String> fsQuery(String path, String field, String op,
-    String valueJson, String orderBy) async =>
-    '[]';
+Future<String> stUpload(String path, List<int> bytes, String contentType) async => '';
 
-/// Server VM stub for function calls.
-Future<String> fnCall(String name, String dataJson) async => '{}';
-
-/// Server VM stub for media uploads.
-Future<String> stUpload(
-    String path, Uint8List bytes, String contentType) async =>
-    '';
-
-/// Server VM stub for global authentication listener.
-void onAuthStateChangedListener(void Function(String?, String?) callback) {}
-
-/// Server VM stubs for Firebase top-level authentication functions.
-Future<void> loginWithFirebase(String email, String password) async {}
-Future<void> registerWithFirebase(
-    String email, String password, String username) async {}
-Future<void> logoutFromFirebase() async {}
-
-/// Server VM stub for triggering the web file picker
-void pickAndReadFile(String inputId,
-    void Function(String base64, String fileName, String objectUrl) callback) {}
-
-/// Server VM stub for reading a selected file from input
-void readInputFile(String inputId,
-    void Function(String base64, String fileName, String objectUrl) callback) {}
-
-/// Server VM stub for high-performance canvas page rendering
-Future<String> renderPublisherPage(String text) async => '{}';
-
-/// Server VM stub for multi-page continuous canvas rendering
-Future<String> renderPublisherPages(String text) async => '[]';
-
-/// Server VM stub for Google Places API autocomplete predictions
 Future<String> getPlacePredictions(String input) async => '[]';
 
-/// Server VM stub for geocoding an address via Google Maps Geocoder.
-Future<String?> geocodeAddress(String address) async => null;
-
-/// Server VM stub for rendering place entity map pins.
 void renderEntityMap(String containerId, String markersJson) {}
 
-/// Mock representation of WebFieldValue for the server environment.
 class WebFieldValue {
-  static Map<String, dynamic> serverTimestamp() => {};
-  static Map<String, dynamic> increment(num value) => {};
-  static Map<String, dynamic> arrayUnion(List values) => {};
-  static Map<String, dynamic> arrayRemove(List values) => {};
-  static Map<String, dynamic> delete() => {};
+  static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
+  static Map<String, dynamic> increment(num val) => {'__op': 'increment', 'value': val};
+  static Map<String, dynamic> arrayUnion(List<dynamic> elements) => {'__op': 'arrayUnion', 'values': elements};
+  static Map<String, dynamic> arrayRemove(List<dynamic> elements) => {'__op': 'arrayRemove', 'values': elements};
+  static Map<String, dynamic> delete() => {'__op': 'delete'};
 }

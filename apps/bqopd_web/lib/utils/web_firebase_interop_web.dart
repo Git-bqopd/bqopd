@@ -19,159 +19,14 @@ class WebSubscription implements FirebaseSubscription {
   }
 }
 
-@JS('getCurrentUserId')
-external JSString? _getCurrentUserId();
-String? getCurrentUserId() => _getCurrentUserId()?.toDart;
+@JS('renderMapCoverPage')
+external JSPromise<JSString> _renderMapCoverPage(JSString configJson);
 
-@JS('fsGetDoc')
-external JSPromise _fsGetDoc(JSString path);
-Future<String> fsGetDoc(String path) async {
-  final jsRes = await _fsGetDoc(path.toJS).toDart;
-  return (jsRes as JSString).toDart;
-}
-
-@JS('fsListenDoc')
-external JSFunction _fsListenDoc(JSString path, JSFunction callback);
-FirebaseSubscription fsListenDoc(String path, void Function(String) callback) {
-  final jsFunc = _fsListenDoc(path.toJS, ((JSString str) => callback(str.toDart)).toJS);
-  return WebSubscription(jsFunc);
-}
-
-@JS('fsListenQuery')
-external JSFunction _fsListenQuery(
-    JSString path,
-    JSString field,
-    JSString op,
-    JSString valueJson,
-    JSString orderBy,
-    JSBoolean desc,
-    JSFunction callback);
-FirebaseSubscription fsListenQuery(
-    String path,
-    String field,
-    String op,
-    String valueJson,
-    String orderBy,
-    bool desc,
-    void Function(String) callback) {
-  final jsFunc = _fsListenQuery(
-      path.toJS,
-      field.toJS,
-      op.toJS,
-      valueJson.toJS,
-      orderBy.toJS,
-      desc.toJS,
-      ((JSString str) => callback(str.toDart)).toJS);
-  return WebSubscription(jsFunc);
-}
-
-@JS('fsUpdateDoc')
-external JSPromise _fsUpdateDoc(JSString path, JSString dataJson);
-Future<void> fsUpdateDoc(String path, String dataJson) async {
-  await _fsUpdateDoc(path.toJS, dataJson.toJS).toDart;
-}
-
-@JS('fsSetDoc')
-external JSPromise _fsSetDoc(JSString path, JSString dataJson, JSBoolean merge);
-Future<void> fsSetDoc(String path, String dataJson, bool merge) async {
-  await _fsSetDoc(path.toJS, dataJson.toJS, merge.toJS).toDart;
-}
-
-@JS('fsDeleteDoc')
-external JSPromise _fsDeleteDoc(JSString path);
-Future<void> fsDeleteDoc(String path) async {
-  await _fsDeleteDoc(path.toJS).toDart;
-}
-
-@JS('fsAddDoc')
-external JSPromise _fsAddDoc(JSString path, JSString dataJson);
-Future<String> fsAddDoc(String path, String dataJson) async {
-  final jsRes = await _fsAddDoc(path.toJS, dataJson.toJS).toDart;
-  return (jsRes as JSString).toDart;
-}
-
-@JS('fsQuery')
-external JSPromise _fsQuery(
-    JSString path, JSString field, JSString op, JSString valueJson, JSString orderBy);
-Future<String> fsQuery(
-    String path, String field, String op, String valueJson, String orderBy) async {
-  final jsRes = await _fsQuery(
-      path.toJS, field.toJS, op.toJS, valueJson.toJS, orderBy.toJS).toDart;
-  return (jsRes as JSString).toDart;
-}
-
-@JS('fnCall')
-external JSPromise _fnCall(JSString name, JSString dataJson);
-Future<String> fnCall(String name, String dataJson) async {
-  final jsRes = await _fnCall(name.toJS, dataJson.toJS).toDart;
-  return (jsRes as JSString).toDart;
-}
-
-@JS('stUpload')
-external JSPromise _stUpload(JSString path, JSUint8Array bytes, JSString contentType);
-Future<String> stUpload(String path, Uint8List bytes, String contentType) async {
-  final jsRes = await _stUpload(path.toJS, bytes.toJS, contentType.toJS).toDart;
-  return (jsRes as JSString).toDart;
-}
-
-@JS('onAuthStateChangedListener')
-external void _onAuthStateChangedListener(JSFunction callback);
-void onAuthStateChangedListener(void Function(String?, String?) callback) {
-  _onAuthStateChangedListener(((JSString? uid, JSString? email) {
-    callback(uid?.toDart, email?.toDart);
-  }).toJS);
-}
-
-@JS('loginWithFirebase')
-external JSPromise _loginWithFirebase(JSString email, JSString password);
-Future<void> loginWithFirebase(String email, String password) async {
-  await _loginWithFirebase(email.toJS, password.toJS).toDart;
-}
-
-@JS('registerWithFirebase')
-external JSPromise _registerWithFirebase(
-    JSString email, JSString password, JSString username);
-Future<void> registerWithFirebase(
-    String email, String password, String username) async {
-  await _registerWithFirebase(email.toJS, password.toJS, username.toJS).toDart;
-}
-
-@JS('logoutFromFirebase')
-external JSPromise _logoutFromFirebase();
-Future<void> logoutFromFirebase() async {
-  await _logoutFromFirebase().toDart;
-}
-
-@JS('pickAndReadFile')
-external void _pickAndReadFile(JSString inputId, JSFunction callback);
-void pickAndReadFile(
-    String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
-  _pickAndReadFile(inputId.toJS,
-      ((JSString base64, JSString fileName, JSString objectUrl) {
-        callback(base64.toDart, fileName.toDart, objectUrl.toDart);
-      }).toJS);
-}
-
-@JS('readInputFile')
-external void _readInputFile(JSString inputId, JSFunction callback);
-void readInputFile(
-    String inputId, void Function(String base64, String fileName, String objectUrl) callback) {
-  _readInputFile(inputId.toJS,
-      ((JSString base64, JSString fileName, JSString objectUrl) {
-        callback(base64.toDart, fileName.toDart, objectUrl.toDart);
-      }).toJS);
-}
-
-@JS('renderPublisherPage')
-external JSPromise _renderPublisherPage(JSString text);
-Future<String> renderPublisherPage(String text) async {
-  try {
-    final jsRes = await _renderPublisherPage(text.toJS).toDart;
-    return (jsRes as JSString).toDart;
-  } catch (e) {
-    print('[renderPublisherPage Error] $e');
-    rethrow;
-  }
+/// Generates a 2000x3200 illustrated map cover page with coordinate pins.
+Future<String> renderMapCoverPage(String configJson) async {
+  final promise = _renderMapCoverPage(configJson.toJS);
+  final jsResult = await promise.toDart;
+  return jsResult.toDart;
 }
 
 /// Dynamically injects and polyfills [window.renderPublisherPages] directly into
@@ -541,6 +396,8 @@ window.renderPublisherPages = async (text) => {
 
     return JSON.stringify(pagesResults);
 };
+window.renderPublisherPages = window.renderPublisherPages;
+globalThis.renderPublisherPages = window.renderPublisherPages;
 ''';
   web.document.head?.append(script);
 }
@@ -556,10 +413,9 @@ Future<String> renderPublisherPages(String text) async {
       return (jsRes as JSString).toDart;
     }
   } catch (e) {
-    print('[renderPublisherPages Polyfill Call] $e. Falling back to singular renderPublisherPage.');
+    print('[renderPublisherPages Call] $e. Falling back to singular renderPublisherPage.');
   }
 
-  // Graceful fallback to singular page compiler if the polyfill was delayed
   try {
     final single = await renderPublisherPage(text);
     return '[$single]';
@@ -567,6 +423,216 @@ Future<String> renderPublisherPages(String text) async {
     print('[renderPublisherPages Fallback Error] $e');
     return '[]';
   }
+}
+
+@JS('renderPublisherPage')
+external JSPromise _renderPublisherPage(JSString text);
+
+Future<String> renderPublisherPage(String text) async {
+  try {
+    final jsRes = await _renderPublisherPage(text.toJS).toDart;
+    return (jsRes as JSString).toDart;
+  } catch (e) {
+    print('[renderPublisherPage Error] $e');
+    rethrow;
+  }
+}
+
+@JS('getCurrentUserId')
+external JSString? _getCurrentUserId();
+String? getCurrentUserId() => _getCurrentUserId()?.toDart;
+
+@JS('getCurrentUserEmail')
+external JSString? _getCurrentUserEmail();
+String? getCurrentUserEmail() => _getCurrentUserEmail()?.toDart;
+
+@JS('onAuthStateChangedListener')
+external void _onAuthStateChangedListener(JSFunction callback);
+void onAuthStateChangedListener(void Function(String?, String?) callback) {
+  _onAuthStateChangedListener(((JSString? uid, JSString? email) {
+    callback(uid?.toDart, email?.toDart);
+  }).toJS);
+}
+
+@JS('loginWithFirebase')
+external JSPromise _loginWithFirebase(JSString email, JSString password);
+Future<void> loginWithFirebase(String email, String password) async {
+  await _loginWithFirebase(email.toJS, password.toJS).toDart;
+}
+
+@JS('registerWithFirebase')
+external JSPromise _registerWithFirebase(
+    JSString email,
+    JSString password,
+    JSString username,
+    );
+Future<void> registerWithFirebase(
+    String email,
+    String password,
+    String username,
+    ) async {
+  await _registerWithFirebase(email.toJS, password.toJS, username.toJS).toDart;
+}
+
+@JS('logoutFromFirebase')
+external JSPromise _logoutFromFirebase();
+Future<void> logoutFromFirebase() async {
+  await _logoutFromFirebase().toDart;
+}
+
+@JS('fnCall')
+external JSPromise _fnCall(JSString name, JSString dataStr);
+Future<String> fnCall(String name, String dataStr) async {
+  final jsRes = await _fnCall(name.toJS, dataStr.toJS).toDart;
+  return (jsRes as JSString).toDart;
+}
+
+@JS('fsGetDoc')
+external JSPromise _fsGetDoc(JSString path);
+Future<String> fsGetDoc(String path) async {
+  final jsRes = await _fsGetDoc(path.toJS).toDart;
+  return (jsRes as JSString).toDart;
+}
+
+@JS('fsListenDoc')
+external JSFunction _fsListenDoc(JSString path, JSFunction callback);
+FirebaseSubscription fsListenDoc(String path, void Function(String) callback) {
+  final jsFunc = _fsListenDoc(
+    path.toJS,
+    ((JSString str) => callback(str.toDart)).toJS,
+  );
+  return WebSubscription(jsFunc);
+}
+
+@JS('fsListenQuery')
+external JSFunction _fsListenQuery(
+    JSString path,
+    JSString? field,
+    JSString? op,
+    JSString? valueJson,
+    JSString? orderBy,
+    JSBoolean? desc,
+    JSFunction callback,
+    );
+FirebaseSubscription fsListenQuery(
+    String path,
+    String? field,
+    String? op,
+    String? valueJson,
+    String? orderBy,
+    bool? desc,
+    void Function(String) callback,
+    ) {
+  final jsFunc = _fsListenQuery(
+    path.toJS,
+    field?.toJS,
+    op?.toJS,
+    valueJson?.toJS,
+    orderBy?.toJS,
+    desc?.toJS,
+    ((JSString str) => callback(str.toDart)).toJS,
+  );
+  return WebSubscription(jsFunc);
+}
+
+@JS('fsQuery')
+external JSPromise _fsQuery(
+    JSString path,
+    JSString field,
+    JSString op,
+    JSString valueJson,
+    JSString orderBy,
+    );
+Future<String> fsQuery(
+    String path,
+    String field,
+    String op,
+    String valueJson,
+    String orderBy,
+    ) async {
+  final jsRes = await _fsQuery(
+    path.toJS,
+    field.toJS,
+    op.toJS,
+    valueJson.toJS,
+    orderBy.toJS,
+  ).toDart;
+  return (jsRes as JSString).toDart;
+}
+
+@JS('fsUpdateDoc')
+external JSPromise _fsUpdateDoc(JSString path, JSString dataStr);
+Future<void> fsUpdateDoc(String path, String dataStr) async {
+  await _fsUpdateDoc(path.toJS, dataStr.toJS).toDart;
+}
+
+@JS('fsSetDoc')
+external JSPromise _fsSetDoc(
+    JSString path,
+    JSString dataStr,
+    JSBoolean merge,
+    );
+Future<void> fsSetDoc(String path, String dataStr, bool merge) async {
+  await _fsSetDoc(path.toJS, dataStr.toJS, merge.toJS).toDart;
+}
+
+@JS('fsDeleteDoc')
+external JSPromise _fsDeleteDoc(JSString path);
+Future<void> fsDeleteDoc(String path) async {
+  await _fsDeleteDoc(path.toJS).toDart;
+}
+
+@JS('fsAddDoc')
+external JSPromise _fsAddDoc(JSString path, JSString dataStr);
+Future<String> fsAddDoc(String path, String dataStr) async {
+  final jsRes = await _fsAddDoc(path.toJS, dataStr.toJS).toDart;
+  return (jsRes as JSString).toDart;
+}
+
+@JS('stUpload')
+external JSPromise _stUpload(
+    JSString path,
+    JSUint8Array bytes,
+    JSString contentType,
+    );
+Future<String> stUpload(
+    String path,
+    List<int> bytes,
+    String contentType,
+    ) async {
+  final Uint8List uint8List =
+  bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+  final jsArray = uint8List.toJS;
+  final jsRes = await _stUpload(path.toJS, jsArray, contentType.toJS).toDart;
+  return (jsRes as JSString).toDart;
+}
+
+@JS('pickAndReadFile')
+external void _pickAndReadFile(JSString inputId, JSFunction callback);
+void pickAndReadFile(
+    String inputId,
+    void Function(String base64, String fileName, String objectUrl) callback,
+    ) {
+  _pickAndReadFile(
+    inputId.toJS,
+    ((JSString base64, JSString fileName, JSString objectUrl) {
+      callback(base64.toDart, fileName.toDart, objectUrl.toDart);
+    }).toJS,
+  );
+}
+
+@JS('readInputFile')
+external void _readInputFile(JSString inputId, JSFunction callback);
+void readInputFile(
+    String inputId,
+    void Function(String base64, String fileName, String objectUrl) callback,
+    ) {
+  _readInputFile(
+    inputId.toJS,
+    ((JSString base64, JSString fileName, JSString objectUrl) {
+      callback(base64.toDart, fileName.toDart, objectUrl.toDart);
+    }).toJS,
+  );
 }
 
 @JS('getPlacePredictions')
@@ -596,7 +662,6 @@ Future<String?> geocodeAddress(String address) async {
 
 @JS('renderEntityMap')
 external void _renderEntityMap(JSString containerId, JSString markersJson);
-
 void renderEntityMap(String containerId, String markersJson) {
   try {
     _renderEntityMap(containerId.toJS, markersJson.toJS);
@@ -607,11 +672,17 @@ void renderEntityMap(String containerId, String markersJson) {
 
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
-  static Map<String, dynamic> increment(num value) =>
-      {'__op': 'increment', 'value': value};
-  static Map<String, dynamic> arrayUnion(List values) =>
-      {'__op': 'arrayUnion', 'values': values};
-  static Map<String, dynamic> arrayRemove(List values) =>
-      {'__op': 'arrayRemove', 'values': values};
+  static Map<String, dynamic> increment(num val) => {
+    '__op': 'increment',
+    'value': val,
+  };
+  static Map<String, dynamic> arrayUnion(List<dynamic> elements) => {
+    '__op': 'arrayUnion',
+    'values': elements,
+  };
+  static Map<String, dynamic> arrayRemove(List<dynamic> elements) => {
+    '__op': 'arrayRemove',
+    'values': elements,
+  };
   static Map<String, dynamic> delete() => {'__op': 'delete'};
 }
