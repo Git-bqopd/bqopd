@@ -8,6 +8,8 @@ import '../widgets/page_wrapper.dart';
 import '../widgets/templates/basic_text_template.dart';
 import '../widgets/templates/calendar_template.dart';
 
+/// Interactive Publisher Workbench for drafting and previewing registered page templates.
+/// Dynamically queries [PageTemplateRegistry] for all available layout options.
 class PublisherPage extends StatefulWidget {
   const PublisherPage({super.key});
 
@@ -20,8 +22,8 @@ class _PublisherPageState extends State<PublisherPage> {
   bool _isTextDrawerOpen = true;
   bool _isSaving = false;
 
-  // Template Selection State
-  String _selectedTemplate = 'calendar';
+  // Template Selection State sourced dynamically from PageTemplateRegistry
+  String _selectedTemplate = 'basic_text';
 
   final String _initialText = """
 # THE COMET
@@ -33,9 +35,12 @@ Welcome to the first issue of The Comet. This is a generated page proving that w
 
 ### CAST OF CHARACTERS
 
-* **Kevin:** The Curator
-* **Gemini:** The Ghost in the Machine
-* **You:** The Reader
+- **Kevin:** The Curator
+
+- **Gemini:** The Ghost in the Machine
+
+- **You:** The Reader
+
 
 This system uses a 2000x3200 pixel canvas to match the physical dimensions of the printed zine. 
 
@@ -76,20 +81,32 @@ If you can read this, the system is working.
     setState(() => _isSaving = true);
 
     try {
+      final templateDef = PageTemplateRegistry.getTemplate(_selectedTemplate);
+      final int templateWidth = templateDef?.width ?? 2000;
+      final int templateHeight = templateDef?.height ?? 3200;
+      final double templateAspectRatio = templateDef?.aspectRatio ?? 0.625;
+      final String templateTitle = templateDef?.name ?? 'Generated Page';
+
       await FirebaseFirestore.instance.collection('images').add({
         'uploaderId': user.uid,
         'type': 'template',
         'templateId': _selectedTemplate,
-        'text': _selectedTemplate == 'basic_text' ? _textController.text : 'Calendar Data',
-        'title': 'Generated Page',
+        'text': _selectedTemplate == 'basic_text'
+            ? _textController.text
+            : '$templateTitle Data',
+        'title': templateTitle,
         'timestamp': FieldValue.serverTimestamp(),
         'fileUrl': 'https://placehold.co/400x600/png?text=Generated+Page',
         'isGenerated': true,
+        'width': templateWidth,
+        'height': templateHeight,
+        'aspectRatio': templateAspectRatio,
+        'is5x8': true,
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Page saved to your profile!")),
+          SnackBar(content: Text("$templateTitle saved to your profile!")),
         );
       }
     } catch (e) {
@@ -105,6 +122,8 @@ If you can read this, the system is working.
 
   @override
   Widget build(BuildContext context) {
+    final allTemplates = PageTemplateRegistry.getAllTemplates();
+
     return Scaffold(
       backgroundColor: Colors.grey[800],
       appBar: AppBar(
@@ -112,35 +131,61 @@ If you can read this, the system is working.
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
-          // Template Selector
+          // Dynamic Template Selector populated from PageTemplateRegistry
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: DropdownButton<String>(
               value: _selectedTemplate,
               dropdownColor: Colors.grey[900],
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
               underline: const SizedBox(),
               icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-              items: const [
-                DropdownMenuItem(value: 'basic_text', child: Text("Basic Text Template")),
-                DropdownMenuItem(value: 'calendar', child: Text("Calendar Spread")),
-              ],
+              items: allTemplates.map((tmpl) {
+                return DropdownMenuItem<String>(
+                  value: tmpl.id,
+                  child: Text(tmpl.name),
+                );
+              }).toList(),
               onChanged: (val) {
                 if (val != null) setState(() => _selectedTemplate = val);
               },
             ),
           ),
-          const VerticalDivider(color: Colors.white24, width: 1, indent: 12, endIndent: 12),
+          const VerticalDivider(
+            color: Colors.white24,
+            width: 1,
+            indent: 12,
+            endIndent: 12,
+          ),
           if (_isSaving)
-            const Center(child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
-            ))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                ),
+              ),
+            )
           else
             TextButton.icon(
               onPressed: _savePage,
               icon: const Icon(Icons.save, color: Colors.green),
-              label: const Text("SAVE PAGE", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              label: const Text(
+                "SAVE PAGE",
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
         ],
       ),
@@ -159,9 +204,9 @@ If you can read this, the system is working.
                         Padding(
                           padding: const EdgeInsets.only(bottom: 16.0),
                           child: Text(
-                            _selectedTemplate == 'calendar'
+                            _selectedTemplate.startsWith('calendar')
                                 ? "Live Preview (4000 x 3200 Spread)"
-                                : "Live Preview (2000 x 3200)",
+                                : "Live Preview (2000 x 3200 - ${PageTemplateRegistry.getTemplate(_selectedTemplate)?.name ?? _selectedTemplate})",
                             style: const TextStyle(color: Colors.white70),
                           ),
                         ),
@@ -174,20 +219,24 @@ If you can read this, the system is working.
                 ),
                 Container(
                   color: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: DynamicSocialToolbar(
-                      imageId: 'publisher_preview',
-                      pageId: null,
-                      fanzineId: null,
-                      fanzineType: 'folio',
-                      pageNumber: null,
-                      isEditingMode: true,
-                      activeBonusRow: _isTextDrawerOpen ? BonusRowType.textReader : null,
-                      onToggleBonusRow: (type) {
-                        if (type == BonusRowType.textReader) {
-                          _toggleTextDrawer();
-                        }
+                    imageId: 'publisher_preview',
+                    pageId: null,
+                    fanzineId: null,
+                    fanzineType: 'folio',
+                    pageNumber: null,
+                    isEditingMode: true,
+                    activeBonusRow:
+                    _isTextDrawerOpen ? BonusRowType.textReader : null,
+                    onToggleBonusRow: (type) {
+                      if (type == BonusRowType.textReader) {
+                        _toggleTextDrawer();
                       }
+                    },
                   ),
                 ),
               ],
@@ -208,7 +257,10 @@ If you can read this, the system is working.
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("TEXT EDITOR", style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text(
+                          "TEXT EDITOR",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed: _toggleTextDrawer,
@@ -224,10 +276,14 @@ If you can read this, the system is working.
                         maxLines: null,
                         expands: true,
                         decoration: const InputDecoration(
-                          hintText: "Enter your text here. Use {{IMAGE}} to insert.",
+                          hintText:
+                          "Enter your text here. Use {{IMAGE}} to insert.",
                           border: InputBorder.none,
                         ),
-                        style: const TextStyle(fontFamily: 'Courier', fontSize: 14),
+                        style: const TextStyle(
+                          fontFamily: 'Courier',
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ),
@@ -240,7 +296,7 @@ If you can read this, the system is working.
   }
 
   Widget _buildPreviewArea() {
-    if (_selectedTemplate == 'calendar') {
+    if (_selectedTemplate.startsWith('calendar')) {
       return InteractiveViewer(
         constrained: false,
         minScale: 0.1,
@@ -253,11 +309,47 @@ If you can read this, the system is working.
       );
     }
 
-    // Default: Basic Text
+    if (_selectedTemplate == 'map_cover') {
+      return Center(
+        child: AspectRatio(
+          aspectRatio: 2000 / 3200,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFE5E3DF),
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.map, size: 64, color: Colors.black54),
+                SizedBox(height: 16),
+                Text(
+                  "Geospatial Map Cover",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  "Rendered dynamically from static Google Map coords & pins",
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Default: Basic 3-Column Text Template
     return ListenableBuilder(
       listenable: _textController,
       builder: (context, _) {
-        final pagesOfBlocks = BasicTextTemplate.paginateContent(_textController.text);
+        final pagesOfBlocks =
+        BasicTextTemplate.paginateContent(_textController.text);
 
         return ListView.separated(
           itemCount: pagesOfBlocks.length,

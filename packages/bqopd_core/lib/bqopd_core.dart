@@ -3,6 +3,7 @@ library bqopd_core;
 
 // Config
 export 'src/config/reader_tools_config.dart';
+export 'src/config/page_template_registry.dart';
 
 // Models
 export 'src/models/article.dart';
@@ -10,6 +11,7 @@ export 'src/models/auth_user.dart';
 export 'src/models/fanzine.dart';
 export 'src/models/fanzine_page.dart';
 export 'src/models/page_event.dart';
+export 'src/models/page_template_models.dart';
 export 'src/models/reader_tool.dart';
 export 'src/models/panel_context.dart';
 export 'src/models/game_models.dart';

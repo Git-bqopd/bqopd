@@ -12,6 +12,7 @@ if (typeof window.firebaseConfig === 'undefined') {
 if (!firebase.apps.length) {
   firebase.initializeApp(window.firebaseConfig);
 }
+
 var db = firebase.firestore();
 var storage = firebase.storage();
 var functions = firebase.functions();
@@ -39,7 +40,6 @@ window.registerWithFirebase = function(email, password, username) {
 window.logoutFromFirebase = function() { return firebase.auth().signOut(); };
 window.getCurrentUserId = function() { return firebase.auth().currentUser ? firebase.auth().currentUser.uid : null; };
 window.getCurrentUserEmail = function() { return firebase.auth().currentUser ? firebase.auth().currentUser.email : null; };
-
 window.onAuthStateChangedListener = function(callback) {
     firebase.auth().onAuthStateChanged(function(user) {
         callback(user ? user.uid : null, user ? user.email : null);
@@ -121,7 +121,6 @@ window.fsUpdateDoc = function(path, dataStr) { return db.doc(path).update(parseF
 window.fsSetDoc = function(path, dataStr, merge) { return db.doc(path).set(parseFirebaseOps(JSON.parse(dataStr)), {merge: merge}).catch(function(err) { console.error("fsSetDoc error:", err); throw err; }); };
 window.fsDeleteDoc = function(path) { return db.doc(path).delete().catch(function(err) { console.error("fsDeleteDoc error:", err); throw err; }); };
 window.fsAddDoc = function(path, dataStr) { return db.collection(path).add(parseFirebaseOps(JSON.parse(dataStr))).then(function(r) { return r.id; }).catch(function(err) { console.error("fsAddDoc error:", err); throw err; }); };
-
 window.fsQuery = function(path, field, op, valueJson, orderBy) {
     let q = db.collection(path);
     if (field) {
@@ -136,13 +135,11 @@ window.fsQuery = function(path, field, op, valueJson, orderBy) {
         .then(function(s) { return JSON.stringify(s.docs.map(function(d) { return {id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}; })); })
         .catch(function(err) { console.error("fsQuery error:", err); return JSON.stringify([]); });
 };
-
 window.fnCall = function(name, dataStr) { return functions.httpsCallable(name)(JSON.parse(dataStr)).then(function(r) { return JSON.stringify(r.data); }).catch(function(err) { console.error("fnCall error:", err); throw err; }); };
 window.stUpload = function(path, bytes, contentType) { return storage.ref(path).put(bytes, {contentType: contentType}).then(function(s) { return s.ref.getDownloadURL(); }).catch(function(err) { console.error("stUpload error:", err); throw err; }); };
 
 window.renderPublisherPages = async (text) => {
     const pagesResults = [];
-
     function initPageCanvas() {
         const c = document.createElement('canvas');
         c.width = 2000;
@@ -196,19 +193,16 @@ window.renderPublisherPages = async (text) => {
             const img = new Image();
             let timer = null;
             let settled = false;
-
             function finish(result) {
                 if (settled) return;
                 settled = true;
                 if (timer) clearTimeout(timer);
                 resolve(result);
             }
-
             timer = setTimeout(() => {
                 console.warn('[loadImage Timeout] Bypassing stalled image:', url);
                 finish(null);
             }, 3500);
-
             if (url.startsWith('http://') || url.startsWith('https://')) {
                 img.crossOrigin = "anonymous";
             }
@@ -338,16 +332,13 @@ window.renderPublisherPages = async (text) => {
             if (targetUrl && targetUrl.trim().length > 0) {
                 img = await loadImage(targetUrl);
             }
-
             let drawHeight = 400;
             if (img && img.width > 0 && img.height > 0) {
                 drawHeight = colWidth * (img.height / img.width);
             }
-
             if (currentY + drawHeight > maxY) {
                 advanceToNextColumn();
             }
-
             if (img) {
                 ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawHeight);
             } else {
@@ -369,7 +360,6 @@ window.renderPublisherPages = async (text) => {
                 ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
                 ctx.textAlign = 'left';
             }
-
             currentY += drawHeight + 20;
             currentPageTextParts.push(`{{IMAGE: ${targetUrl}}}`);
         } else if (block.type === 'template_block' && block.templateNum === 1) {
@@ -378,12 +368,10 @@ window.renderPublisherPages = async (text) => {
             if (targetUrl && targetUrl.trim().length > 0) {
                 img = await loadImage(targetUrl);
             }
-
             let imgHeight = 400;
             if (img && img.width > 0 && img.height > 0) {
                 imgHeight = colWidth * (img.height / img.width);
             }
-
             const fontSize = 24;
             const fontName = 'Arial';
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
@@ -444,16 +432,13 @@ window.renderPublisherPages = async (text) => {
             } else {
                 fontSize = 28; fontName = 'Arial'; heightMultiplier = 1.5; spaceBelow = 12;
             }
-
             const isBullet = block.type === 'bullet';
             const textToWrap = isBullet ? "   " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
-
             ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
             ctx.fillStyle = '#1a1a1a';
             const step = fontSize * heightMultiplier;
             let currentParagraphRenderedLines = [];
-
             for (let i = 0; i < linesToDraw.length; i++) {
                 const line = linesToDraw[i];
                 if (currentY + fontSize > maxY) {
@@ -465,7 +450,6 @@ window.renderPublisherPages = async (text) => {
                     ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
                     ctx.fillStyle = '#1a1a1a';
                 }
-
                 const isLastLine = i === linesToDraw.length - 1;
                 if (!isLastLine && block.type === 'text' && linesToDraw.length > 1) {
                     const words = line.split(' ');
@@ -488,7 +472,6 @@ window.renderPublisherPages = async (text) => {
                 currentParagraphRenderedLines.push(line);
             }
             currentY += spaceBelow;
-
             if (currentParagraphRenderedLines.length > 0) {
                 if (block.type === 'h1') currentPageTextParts.push('# ' + currentParagraphRenderedLines.join(' '));
                 else if (block.type === 'h2') currentPageTextParts.push('## ' + currentParagraphRenderedLines.join(' '));
@@ -498,17 +481,13 @@ window.renderPublisherPages = async (text) => {
             }
         }
     }
-
     if (currentY > 33 || colIndex > 0) {
         finalizeCurrentPage();
     }
-
     return JSON.stringify(pagesResults);
 };
 
-// Guarantee globalThis and window exposure for Dart web interop
 globalThis.renderPublisherPages = window.renderPublisherPages;
-
 window.renderPublisherPage = async (text) => {
     const multiJson = await window.renderPublisherPages(text);
     const pages = JSON.parse(multiJson);
@@ -517,16 +496,12 @@ window.renderPublisherPage = async (text) => {
     }
     return JSON.stringify({ original: '', list: '', grid: '' });
 };
-
 globalThis.renderPublisherPage = window.renderPublisherPage;
 
-// ---------------------------------------------------------------------------
-// 2000x3200 Full-Page Google Map Cover using Official Google Maps Static API
-// ---------------------------------------------------------------------------
 window.renderMapCoverPage = async (configJson) => {
-    console.log('[renderMapCoverPage] Starting Google Maps Static cover generation...');
+    console.log('[renderMapCoverPage] Generating clean Google Maps cover with standard pins...');
     const config = typeof configJson === 'string' ? JSON.parse(configJson) : configJson;
-    const center = config.center || { lat: 39.8283, lng: -98.5795, address: "United States" };
+    const center = config.center || { lat: 43.8396, lng: -91.2436, address: "La Crosse, WI" };
     const letters = Array.isArray(config.letters) ? config.letters : [];
     const folioTitle = config.title || `Letters near ${center.address}`;
     const apiKey = (window.firebaseConfig && window.firebaseConfig.apiKey) || "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g";
@@ -536,139 +511,197 @@ window.renderMapCoverPage = async (configJson) => {
     canvas.height = 3200;
     const ctx = canvas.getContext('2d');
 
-    // Default neutral roadmap background
+    // Default roadmap neutral background
     ctx.fillStyle = '#e5e3df';
     ctx.fillRect(0, 0, 2000, 3200);
 
-    // 1. Gather all points
-    const points = [];
+    // 1. Gather all coordinates
+    const allCoords = [];
     if (center.lat != null && center.lng != null) {
-        points.push({ lat: center.lat, lng: center.lng, isCenter: true });
+        allCoords.push({ lat: Number(center.lat), lng: Number(center.lng), isCenter: true });
     }
-    letters.forEach(l => {
-        if (l.lat != null && l.lng != null) {
-            points.push({ lat: l.lat, lng: l.lng, isCenter: false });
+    letters.forEach((l) => {
+        const lat = parseFloat(l.lat);
+        const lng = parseFloat(l.lng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            allCoords.push({
+                lat: lat,
+                lng: lng,
+                isCenter: false
+            });
         }
     });
 
-    if (points.length === 0) {
-        points.push({ lat: 43.8396, lng: -91.2436, isCenter: true });
+    if (allCoords.length === 0) {
+        allCoords.push({ lat: 43.8396, lng: -91.2436, isCenter: true });
     }
 
-    // 2. Obtain official Google Maps Static image
-    let mapDataUrl = null;
+    // 2. Compute geographic bounding box
+    let minLat = allCoords[0].lat, maxLat = allCoords[0].lat;
+    let minLng = allCoords[0].lng, maxLng = allCoords[0].lng;
+    allCoords.forEach(c => {
+        if (c.lat < minLat) minLat = c.lat;
+        if (c.lat > maxLat) maxLat = c.lat;
+        if (c.lng < minLng) minLng = c.lng;
+        if (c.lng > maxLng) maxLng = c.lng;
+    });
 
-    // Primary route: fetch via Cloud Function (returns data:image/png;base64,... which never taints canvas)
+    // Add padding so pins don't clip the edges
+    const latSpan = Math.max(0.02, maxLat - minLat);
+    const lngSpan = Math.max(0.02, maxLng - minLng);
+    minLat -= latSpan * 0.20;
+    maxLat += latSpan * 0.20;
+    minLng -= lngSpan * 0.20;
+    maxLng += lngSpan * 0.20;
+
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+
+    // 3. Mercator projection math
+    function latToRad(lat) {
+        const sin = Math.sin(lat * Math.PI / 180);
+        return Math.log((1 + sin) / (1 - sin)) / 2;
+    }
+
+    function calculateZoom() {
+        const latFraction = (latToRad(maxLat) - latToRad(minLat)) / Math.PI;
+        const lngFraction = (maxLng - minLng) / 360;
+        const latZoom = Math.floor(Math.log(3200 / 256 / Math.max(0.0001, latFraction)) / Math.LN2);
+        const lngZoom = Math.floor(Math.log(2000 / 256 / Math.max(0.0001, lngFraction)) / Math.LN2);
+        return Math.max(4, Math.min(14, Math.min(latZoom, lngZoom)));
+    }
+
+    const zoom = calculateZoom();
+
+    function projectToWorld(lat, lng, z) {
+        const scale = 256 * Math.pow(2, z);
+        const x = (lng + 180) / 360 * scale;
+        const sin = Math.sin(lat * Math.PI / 180);
+        const y = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale;
+        return { x: x, y: y };
+    }
+
+    const centerWorld = projectToWorld(centerLat, centerLng, zoom);
+    const originX = centerWorld.x - 1000;
+    const originY = centerWorld.y - 1600;
+
+    let mapLoaded = false;
     try {
-        console.log('[renderMapCoverPage] Calling Cloud Function fetch_static_map with points:', points.length);
         const fnResult = await functions.httpsCallable('fetch_static_map')({
-            markers: points,
+            markers: allCoords.map(c => ({ lat: c.lat, lng: c.lng, isCenter: c.isCenter })),
+            center: `${centerLat},${centerLng}`,
+            zoom: zoom,
             width: 400,
             height: 640,
             scale: 2,
             api_key: apiKey
         });
         if (fnResult && fnResult.data && fnResult.data.status === 'success' && fnResult.data.data_url) {
-            mapDataUrl = fnResult.data.data_url;
-            console.log('[renderMapCoverPage] Successfully obtained map data URL from Cloud Function.');
-        } else {
-            console.warn('[renderMapCoverPage] Cloud Function returned non-success:', fnResult && fnResult.data);
+            await new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, 2000, 3200);
+                    mapLoaded = true;
+                    resolve();
+                };
+                img.onerror = () => resolve();
+                img.src = fnResult.data.data_url;
+            });
         }
-    } catch (fnErr) {
-        console.warn('[renderMapCoverPage] Cloud Function fetch_static_map threw:', fnErr);
+    } catch (_) {}
+
+    // Fallback: Seamless CORS-friendly roadmap tiles (CartoDB Voyager @2x)
+    if (!mapLoaded) {
+        const tileSize = 512;
+        const minTileX = Math.floor(originX / tileSize);
+        const maxTileX = Math.floor((originX + 2000) / tileSize);
+        const minTileY = Math.floor(originY / tileSize);
+        const maxTileY = Math.floor((originY + 3200) / tileSize);
+
+        const subdomains = ['a', 'b', 'c', 'd'];
+        const tilePromises = [];
+
+        for (let tx = minTileX; tx <= maxTileX; tx++) {
+            for (let ty = minTileY; ty <= maxTileY; ty++) {
+                const sub = subdomains[Math.abs(tx + ty) % subdomains.length];
+                const tileUrl = `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${ty}@2x.png`;
+                const destX = tx * tileSize - originX;
+                const destY = ty * tileSize - originY;
+
+                tilePromises.push(new Promise((resolve) => {
+                    const tImg = new Image();
+                    tImg.crossOrigin = "anonymous";
+                    tImg.onload = () => {
+                        ctx.drawImage(tImg, destX, destY, tileSize, tileSize);
+                        resolve();
+                    };
+                    tImg.onerror = () => resolve();
+                    tImg.src = tileUrl;
+                }));
+            }
+        }
+        await Promise.all(tilePromises);
     }
 
-    // Fallback route: direct Google Static Maps URL
-    if (!mapDataUrl) {
-        console.log('[renderMapCoverPage] Using direct Static Map URL fallback.');
-        const queryParts = [
-            'size=400x640',
-            'scale=2',
-            'maptype=roadmap',
-            `key=${apiKey}`
-        ];
-        points.forEach(p => {
-            const color = p.isCenter ? '0xd32f2f' : '0xea4335';
-            const size = p.isCenter ? 'mid' : 'small';
-            queryParts.append ? queryParts.push(`markers=color:${color}%7Csize:${size}%7C${p.lat},${p.lng}`) : null;
-        });
-        mapDataUrl = `https://maps.googleapis.com/maps/api/staticmap?${queryParts.join('&')}`;
+    function drawPin(x, y, isCenter) {
+        ctx.save();
+        const scale = isCenter ? 1.25 : 1.0;
+        const radius = 28 * scale;
+        const pinHeight = 58 * scale;
+        const headY = y - pinHeight;
+
+        // Drop shadow under tip
+        ctx.beginPath();
+        ctx.ellipse(x + 4 * scale, y + 2 * scale, 15 * scale, 6.5 * scale, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fill();
+
+        // Pin teardrop body (tip at x, y; center of head at x, headY)
+        ctx.beginPath();
+        ctx.arc(x, headY, radius, Math.PI * 0.18, Math.PI * 0.82, true);
+        ctx.lineTo(x, y);
+        ctx.closePath();
+
+        ctx.fillStyle = isCenter ? '#b71c1c' : '#ea4335';
+        ctx.fill();
+        ctx.lineWidth = 3.5 * scale;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        if (isCenter) {
+            // Home address pin: distinctive bullseye design, slightly larger
+            ctx.beginPath();
+            ctx.arc(x, headY, radius * 0.52, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffebee';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x, headY, radius * 0.24, 0, Math.PI * 2);
+            ctx.fillStyle = '#b71c1c';
+            ctx.fill();
+        } else {
+            // Standard red map pin: iconic dark crimson center dot, no numbers
+            ctx.beginPath();
+            ctx.arc(x, headY, radius * 0.34, 0, Math.PI * 2);
+            ctx.fillStyle = '#761214';
+            ctx.fill();
+        }
+
+        ctx.restore();
     }
 
-    // 3. Draw the official Google Map image across the full 2000x3200 canvas
-    await new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => {
-            console.log('[renderMapCoverPage] Static map image loaded into image element. Drawing to canvas...');
-            ctx.drawImage(img, 0, 0, 2000, 3200);
-            resolve();
-        };
-        img.onerror = (e) => {
-            console.warn('[renderMapCoverPage] Static map image failed to render:', e);
-            resolve();
-        };
-        img.src = mapDataUrl;
+    // Draw letter pins first, then home address pin on top
+    allCoords.filter(c => !c.isCenter).forEach(c => {
+        const pt = projectToWorld(c.lat, c.lng, zoom);
+        drawPin(pt.x - originX, pt.y - originY, false);
     });
 
-    // 4. Overlay authentic Google Maps UI chrome
-    // Zoom Controls (+ / -) in bottom-right
-    ctx.save();
-    const zoomBox = { x: 1840, y: 2920, width: 84, height: 168, r: 10 };
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.18)';
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 4;
+    const centerCoord = allCoords.find(c => c.isCenter);
+    if (centerCoord) {
+        const pt = projectToWorld(centerCoord.lat, centerCoord.lng, zoom);
+        drawPin(pt.x - originX, pt.y - originY, true);
+    }
 
-    ctx.beginPath();
-    ctx.roundRect(zoomBox.x, zoomBox.y, zoomBox.width, zoomBox.height, zoomBox.r);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
-    ctx.restore();
-
-    ctx.strokeStyle = '#dadce0';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(zoomBox.x + 12, zoomBox.y + 84);
-    ctx.lineTo(zoomBox.x + zoomBox.width - 12, zoomBox.y + 84);
-    ctx.stroke();
-
-    // "+" symbol
-    ctx.strokeStyle = '#5f6368';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(zoomBox.x + 42, zoomBox.y + 26);
-    ctx.lineTo(zoomBox.x + 42, zoomBox.y + 58);
-    ctx.moveTo(zoomBox.x + 26, zoomBox.y + 42);
-    ctx.lineTo(zoomBox.x + 58, zoomBox.y + 42);
-    ctx.stroke();
-
-    // "−" symbol
-    ctx.beginPath();
-    ctx.moveTo(zoomBox.x + 26, zoomBox.y + 126);
-    ctx.lineTo(zoomBox.x + 58, zoomBox.y + 126);
-    ctx.stroke();
-
-    // Google Logo in bottom-left
-    ctx.textAlign = 'left';
-    ctx.font = 'bold 36px Product Sans, Arial, sans-serif';
-    const gX = 80;
-    const gY = 3120;
-    const gLetters = [
-        { char: 'G', color: '#4285F4' },
-        { char: 'o', color: '#EA4335' },
-        { char: 'p', color: '#FBBC05' },
-        { char: 'g', color: '#4285F4' },
-        { char: 'l', color: '#34A853' },
-        { char: 'e', color: '#EA4335' },
-    ];
-    let curGX = gX;
-    gLetters.forEach(item => {
-        ctx.fillStyle = item.color;
-        ctx.fillText(item.char, curGX, gY);
-        curGX += ctx.measureText(item.char).width;
-    });
-
-    // 5. Export high-res WebP images (original, list, and grid)
     function getScaledBase64(targetWidth, targetHeight) {
         const scaled = document.createElement('canvas');
         scaled.width = targetWidth;
@@ -682,7 +715,7 @@ window.renderMapCoverPage = async (configJson) => {
     const listBase64 = getScaledBase64(800, 1280);
     const gridBase64 = getScaledBase64(450, 720);
 
-    console.log('[renderMapCoverPage] Successfully finalized 2000x3200 Google Map cover.');
+    console.log('[renderMapCoverPage] Successfully finalized clean 2000x3200 map cover with pins.');
     return JSON.stringify({
         original: originalBase64,
         list: listBase64,
@@ -717,16 +750,13 @@ window.getPlacePredictions = (input) => {
 window.initAddressAutocomplete = (inputId, callback) => {
     const input = document.getElementById(inputId);
     if (!input) return;
-
     if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
         setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
         return;
     }
-
     const autocomplete = new google.maps.places.Autocomplete(input, {
         fields: ['formatted_address']
     });
-
     autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace();
         if (place && place.formatted_address) {
@@ -740,7 +770,6 @@ window.geocodeAddress = async (address) => {
         return null;
     }
     const cleanAddress = address.trim();
-
     if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
         try {
             const googleResult = await new Promise((resolve) => {
@@ -786,7 +815,6 @@ window.renderEntityMap = (containerId, markersJson) => {
     if (typeof google === 'undefined' || !google.maps) return;
     const container = document.getElementById(containerId);
     if (!container) return;
-
     let markersData = [];
     try {
         markersData = JSON.parse(markersJson);
@@ -794,16 +822,13 @@ window.renderEntityMap = (containerId, markersJson) => {
         console.error('[renderEntityMap] Error parsing JSON:', e);
         return;
     }
-
     const map = new google.maps.Map(container, {
         zoom: 3,
         center: { lat: 39.8283, lng: -98.5795 },
         disableDefaultUI: true,
         zoomControl: true,
     });
-
     if (!markersData || markersData.length === 0) return;
-
     const bounds = new google.maps.LatLngBounds();
     markersData.forEach((m) => {
         const pos = { lat: m.lat, lng: m.lng };
@@ -812,18 +837,14 @@ window.renderEntityMap = (containerId, markersJson) => {
             map: map,
             title: m.title,
         });
-
         const infoWindow = new google.maps.InfoWindow({
             content: `<div style="padding:4px; font-family: sans-serif; font-size: 13px;"><b>${m.title}</b>${m.subtitle ? `<br/><small>${m.subtitle}</small>` : ''}</div>`
         });
-
         marker.addListener('click', () => {
             infoWindow.open(map, marker);
         });
-
         bounds.extend(pos);
     });
-
     map.fitBounds(bounds);
     if (markersData.length === 1) {
         map.setZoom(12);

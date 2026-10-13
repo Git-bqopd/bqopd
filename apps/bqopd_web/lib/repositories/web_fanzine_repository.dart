@@ -101,6 +101,20 @@ class WebFanzineRepository implements IFanzineRepository {
           publishedDateGuess: data['publishedDateGuess'] ?? fz.publishedDateGuess,
         );
 
+        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+
+        // Resolve cover thumbnail from Page 1 (e.g. map_cover)
+        FanzinePage? coverPg;
+        for (var p in pages) {
+          if (p.pageNumber == 1) {
+            coverPg = p;
+            break;
+          }
+        }
+        coverPg ??= pages.isNotEmpty ? pages.first : null;
+        final String? coverGridUrl = data['gridCoverImage'] ?? coverPg?.gridUrl ?? coverPg?.imageUrl;
+        final String? coverFullUrl = data['coverImage'] ?? coverPg?.imageUrl ?? coverPg?.gridUrl;
+
         final fzDataToSave = {
           'title': updatedFz.title,
           'volume': updatedFz.volume,
@@ -123,6 +137,8 @@ class WebFanzineRepository implements IFanzineRepository {
           'publishedDate': updatedFz.publishedDate,
           'publishedDateMode': updatedFz.publishedDateMode,
           'publishedDateGuess': updatedFz.publishedDateGuess,
+          if (coverGridUrl != null && coverGridUrl.isNotEmpty) 'gridCoverImage': coverGridUrl,
+          if (coverFullUrl != null && coverFullUrl.isNotEmpty) 'coverImage': coverFullUrl,
         };
 
         await fsSetDoc('fanzines/$fanzineId', jsonEncode(fzDataToSave), true);
@@ -138,15 +154,17 @@ class WebFanzineRepository implements IFanzineRepository {
               jsonEncode(scData), true);
         }
 
-        final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
         for (var p in pages) {
           final pageData = {
             'imageId': p.imageId,
             'imageUrl': p.imageUrl,
+            'gridUrl': p.gridUrl,
+            'listUrl': p.listUrl,
             'pageNumber': p.pageNumber,
             'status': p.status,
             'spreadPosition': p.spreadPosition,
             'sidePreference': p.sidePreference,
+            'templateId': p.templateId,
             'width': p.width,
             'height': p.height,
             'is5x8': p.is5x8,
@@ -389,8 +407,14 @@ class WebFanzineRepository implements IFanzineRepository {
 
   @override
   Future<String> insertPublisherPage(String fanzineId, int afterPageNumber,
-      String initialText, List<FanzinePage> allPages) async {
+      String initialText, List<FanzinePage> allPages,
+      [String templateId = 'basic_text']) async {
     final uid = getCurrentUserId() ?? 'system_web';
+    final templateDef = PageTemplateRegistry.getTemplate(templateId);
+    final int templateWidth = templateDef?.width ?? 2000;
+    final int templateHeight = templateDef?.height ?? 3200;
+    final double templateAspectRatio = templateDef?.aspectRatio ?? 0.625;
+
     final imageId = 'temp_pub_page_${DateTime.now().millisecondsSinceEpoch}';
     final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
     final shortCode = ShortcodeGenerator.generateStandardCode();
@@ -425,15 +449,15 @@ class WebFanzineRepository implements IFanzineRepository {
       'uid': uid,
       'uploaderId': uid,
       'type': 'template',
-      'templateId': 'basic_text',
+      'templateId': templateId,
       'text': initialText,
       'text_corrected': initialText,
       'text_linked': initialText,
       'title': 'Generated Page',
       'isGenerated': true,
-      'width': 2000,
-      'height': 3200,
-      'aspectRatio': 0.625,
+      'width': templateWidth,
+      'height': templateHeight,
+      'aspectRatio': templateAspectRatio,
       'is5x8': true,
       'shortCode': shortCode,
       'folioContext': fanzineId,
@@ -474,9 +498,9 @@ class WebFanzineRepository implements IFanzineRepository {
         gridUrl: gridUrl,
         listUrl: listUrl,
         status: 'ready',
-        templateId: 'basic_text',
-        width: 2000,
-        height: 3200,
+        templateId: templateId,
+        width: templateWidth,
+        height: templateHeight,
         is5x8: true,
       );
       currentPages.insert(afterPageNumber, newPage);
@@ -506,9 +530,9 @@ class WebFanzineRepository implements IFanzineRepository {
           'listUrl': listUrl,
           'pageNumber': afterPageNumber + 1,
           'status': 'ready',
-          'templateId': 'basic_text',
-          'width': 2000,
-          'height': 3200,
+          'templateId': templateId,
+          'width': templateWidth,
+          'height': templateHeight,
           'is5x8': true,
           'createdAt': WebFieldValue.serverTimestamp(),
         }),

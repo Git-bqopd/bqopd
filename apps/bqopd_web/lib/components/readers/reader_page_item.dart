@@ -61,6 +61,7 @@ class ReaderPageItem extends StatefulComponent {
 
 class _ReaderPageItemState extends State<ReaderPageItem> {
   dynamic _imgDataUnsub;
+  String? _liveImageUrl;
 
   @override
   void initState() {
@@ -72,6 +73,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   void didUpdateComponent(ReaderPageItem oldComponent) {
     super.didUpdateComponent(oldComponent);
     if (oldComponent.pageData['imageId'] != component.pageData['imageId']) {
+      _liveImageUrl = null;
       _listenToTemplateImageContents();
     }
   }
@@ -85,15 +87,20 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   void _listenToTemplateImageContents() {
     _imgDataUnsub?.cancel();
     _imgDataUnsub = null;
-    final imageId = component.pageData['imageId'];
-    final templateId = component.pageData['templateId'];
-    if (imageId == null || imageId.isEmpty || templateId != 'basic_text') return;
+    final imageId = component.pageData['imageId'] as String?;
+    final templateId = component.pageData['templateId'] as String?;
+
+    // Verify template definition against the unified PageTemplateRegistry
+    final templateDef = PageTemplateRegistry.getTemplate(templateId);
+    if (imageId == null || imageId.isEmpty || templateDef == null) return;
 
     _imgDataUnsub = fsListenDoc('images/$imageId', (String jsonStr) {
       try {
         final doc = jsonDecode(jsonStr);
         if (doc['exists'] == true && mounted) {
+          final data = doc['data'] as Map<String, dynamic>?;
           setState(() {
+            _liveImageUrl = data?['listUrl'] ?? data?['fileUrl'];
           });
         }
       } catch (_) {}
@@ -109,19 +116,26 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
   @override
   Component build(BuildContext context) {
     final String imageId = component.pageData['imageId'] ?? '';
-    final String? url = component.pageData['listUrl'] ?? component.pageData['imageUrl'];
-    final int resolvedPageNumber = component.pageData['pageNumber'] ?? (component.pageIndex + 1);
+    final String? url = _liveImageUrl ??
+        component.pageData['listUrl'] ??
+        component.pageData['imageUrl'];
+    final int resolvedPageNumber =
+        component.pageData['pageNumber'] ?? (component.pageIndex + 1);
 
     return div(
-      classes: 'reader-list-item-card bg-white rounded-lg border border-gray-300 shadow-md mb-6 w-full flex-col overflow-hidden',
+      classes:
+      'reader-list-item-card bg-white rounded-lg border border-gray-300 shadow-md mb-6 w-full flex-col overflow-hidden',
       attributes: const {
-        'style': 'background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); overflow: hidden; margin-bottom: 24px; width: 100%; box-sizing: border-box;'
+        'style':
+        'background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); overflow: hidden; margin-bottom: 24px; width: 100%; box-sizing: border-box;'
       },
       [
         div(
-          classes: 'aspect-5-8 bg-gray-100 flex-col items-center justify-center border-b border-gray-200 w-full',
+          classes:
+          'aspect-5-8 bg-gray-100 flex-col items-center justify-center border-b border-gray-200 w-full',
           attributes: const {
-            'style': 'aspect-ratio: 5 / 8; background-color: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #e2e8f0; width: 100%;'
+            'style':
+            'aspect-ratio: 5 / 8; background-color: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #e2e8f0; width: 100%;'
           },
           [
             if (url != null && url.isNotEmpty)
@@ -129,24 +143,46 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
                 src: url,
                 classes: 'w-full h-full',
                 attributes: const {
-                  'style': 'width: 100%; height: 100%; object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
+                  'style':
+                  'width: 100%; height: 100%; object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
                   'draggable': 'false',
                   'loading': 'lazy',
                 },
               )
             else
-              div(classes: 'flex-col gap-2 py-4 w-full h-full justify-center items-center p-8', [
-                div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 80%; height: 16px; margin-bottom: 12px;'}),
-                div([], classes: 'skeleton-line medium shimmer-bg', attributes: const {'style': 'width: 90%; height: 16px; margin-bottom: 12px;'}),
-                div([], classes: 'skeleton-line shimmer-bg', attributes: const {'style': 'width: 70%; height: 16px; margin-bottom: 12px;'}),
-                div([], classes: 'skeleton-line short shimmer-bg', attributes: const {'style': 'width: 50%; height: 16px; margin-bottom: 12px;'}),
-              ])
+              div(
+                classes:
+                'flex-col gap-2 py-4 w-full h-full justify-center items-center p-8',
+                [
+                  div([],
+                      classes: 'skeleton-line shimmer-bg',
+                      attributes: const {
+                        'style': 'width: 80%; height: 16px; margin-bottom: 12px;'
+                      }),
+                  div([],
+                      classes: 'skeleton-line medium shimmer-bg',
+                      attributes: const {
+                        'style': 'width: 90%; height: 16px; margin-bottom: 12px;'
+                      }),
+                  div([],
+                      classes: 'skeleton-line shimmer-bg',
+                      attributes: const {
+                        'style': 'width: 70%; height: 16px; margin-bottom: 12px;'
+                      }),
+                  div([],
+                      classes: 'skeleton-line short shimmer-bg',
+                      attributes: const {
+                        'style': 'width: 50%; height: 16px; margin-bottom: 12px;'
+                      }),
+                ],
+              )
           ],
         ),
         div(
           classes: 'bg-white p-3 flex-col w-full',
           attributes: const {
-            'style': 'background-color: #ffffff; padding: 12px; display: flex; flex-direction: column; width: 100%; box-sizing: border-box;'
+            'style':
+            'background-color: #ffffff; padding: 12px; display: flex; flex-direction: column; width: 100%; box-sizing: border-box;'
           },
           [
             SocialToolbar(
@@ -165,7 +201,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
               authBloc: component.authBloc,
               isEditingMode: component.isEditingMode,
             ),
-            if (component.activeGlobalPanel != null && component.activeGlobalPanel != BonusRowType.settings)
+            if (component.activeGlobalPanel != null &&
+                component.activeGlobalPanel != BonusRowType.settings)
               _buildPanelContent(imageId, component.activeGlobalPanel!),
           ],
         )
@@ -179,11 +216,13 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     switch (activePanel) {
       case BonusRowType.textReader:
         title = "";
-        inner = TextReaderRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner =
+            TextReaderRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.comments:
         title = "Comments";
-        inner = CommentsRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner =
+            CommentsRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.tags:
         title = "Hashtags & Voting";
@@ -196,11 +235,13 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.editText:
       case BonusRowType.linkedText:
         title = "";
-        inner = EditTextRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner =
+            EditTextRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.entities:
         title = "";
-        inner = EntitiesRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner =
+            EntitiesRowPanel(imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
@@ -220,7 +261,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         break;
       case BonusRowType.newPage:
         title = "New Page Text Editor";
-        inner = PublisherTextRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = PublisherTextRowPanel(
+            imageId: imageId, fanzineId: component.fanzineId);
         break;
       case BonusRowType.terminal:
         title = "Combat Terminal";

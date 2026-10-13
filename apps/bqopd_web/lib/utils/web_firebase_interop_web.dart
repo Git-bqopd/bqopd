@@ -20,17 +20,226 @@ class WebSubscription implements FirebaseSubscription {
 }
 
 @JS('renderMapCoverPage')
-external JSPromise<JSString> _renderMapCoverPage(JSString configJson);
+external JSPromise<JSString>? _renderMapCoverPage(JSString configJson);
 
-/// Generates a 2000x3200 illustrated map cover page with coordinate pins.
-Future<String> renderMapCoverPage(String configJson) async {
-  final promise = _renderMapCoverPage(configJson.toJS);
-  final jsResult = await promise.toDart;
-  return jsResult.toDart;
+void _ensureRenderMapCoverPageScript() {
+  final jsWin = web.window as JSObject;
+  if (jsWin.has('renderMapCoverPage')) {
+    final fn = jsWin['renderMapCoverPage'];
+    if (fn != null) return;
+  }
+
+  final script = web.document.createElement('script') as web.HTMLScriptElement;
+  script.id = 'dynamic-render-map-cover-polyfill';
+  script.text = r'''
+window.renderMapCoverPage = async (configJson) => {
+    const config = typeof configJson === 'string' ? JSON.parse(configJson) : configJson;
+    const center = config.center || { lat: 43.8396, lng: -91.2436, address: "La Crosse, WI" };
+    const letters = Array.isArray(config.letters) ? config.letters : [];
+    const folioTitle = config.title || `Letters near ${center.address}`;
+    const apiKey = (window.firebaseConfig && window.firebaseConfig.apiKey) || "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g";
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 2000;
+    canvas.height = 3200;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#e5e3df';
+    ctx.fillRect(0, 0, 2000, 3200);
+
+    const allCoords = [];
+    if (center.lat != null && center.lng != null) {
+        allCoords.push({ lat: Number(center.lat), lng: Number(center.lng), isCenter: true });
+    }
+    letters.forEach((l) => {
+        const lat = parseFloat(l.lat);
+        const lng = parseFloat(l.lng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            allCoords.push({ lat: lat, lng: lng, isCenter: false });
+        }
+    });
+    if (allCoords.length === 0) {
+        allCoords.push({ lat: 43.8396, lng: -91.2436, isCenter: true });
+    }
+
+    let minLat = allCoords[0].lat, maxLat = allCoords[0].lat;
+    let minLng = allCoords[0].lng, maxLng = allCoords[0].lng;
+    allCoords.forEach(c => {
+        if (c.lat < minLat) minLat = c.lat;
+        if (c.lat > maxLat) maxLat = c.lat;
+        if (c.lng < minLng) minLng = c.lng;
+        if (c.lng > maxLng) maxLng = c.lng;
+    });
+
+    const latSpan = Math.max(0.02, maxLat - minLat);
+    const lngSpan = Math.max(0.02, maxLng - minLng);
+    minLat -= latSpan * 0.20;
+    maxLat += latSpan * 0.20;
+    minLng -= lngSpan * 0.20;
+    maxLng += lngSpan * 0.20;
+
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+
+    function latToRad(lat) {
+        const sin = Math.sin(lat * Math.PI / 180);
+        return Math.log((1 + sin) / (1 - sin)) / 2;
+    }
+
+    function calculateZoom() {
+        const latFraction = (latToRad(maxLat) - latToRad(minLat)) / Math.PI;
+        const lngFraction = (maxLng - minLng) / 360;
+        const latZoom = Math.floor(Math.log(3200 / 256 / Math.max(0.0001, latFraction)) / Math.LN2);
+        const lngZoom = Math.floor(Math.log(2000 / 256 / Math.max(0.0001, lngFraction)) / Math.LN2);
+        return Math.max(4, Math.min(14, Math.min(latZoom, lngZoom)));
+    }
+    const zoom = calculateZoom();
+
+    function projectToWorld(lat, lng, z) {
+        const scale = 256 * Math.pow(2, z);
+        const x = (lng + 180) / 360 * scale;
+        const sin = Math.sin(lat * Math.PI / 180);
+        const y = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale;
+        return { x: x, y: y };
+    }
+
+    const centerWorld = projectToWorld(centerLat, centerLng, zoom);
+    const originX = centerWorld.x - 1000;
+    const originY = centerWorld.y - 1600;
+
+    let mapLoaded = false;
+    try {
+        const fnResult = await functions.httpsCallable('fetch_static_map')({
+            markers: allCoords.map(c => ({ lat: c.lat, lng: c.lng, isCenter: c.isCenter })),
+            center: `${centerLat},${centerLng}`,
+            zoom: zoom,
+            width: 400,
+            height: 640,
+            scale: 2,
+            api_key: apiKey
+        });
+        if (fnResult && fnResult.data && fnResult.data.status === 'success' && fnResult.data.data_url) {
+            await new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => { ctx.drawImage(img, 0, 0, 2000, 3200); mapLoaded = true; resolve(); };
+                img.onerror = () => resolve();
+                img.src = fnResult.data.data_url;
+            });
+        }
+    } catch (_) {}
+
+    if (!mapLoaded) {
+        const tileSize = 512;
+        const minTileX = Math.floor(originX / tileSize);
+        const maxTileX = Math.floor((originX + 2000) / tileSize);
+        const minTileY = Math.floor(originY / tileSize);
+        const maxTileY = Math.floor((originY + 3200) / tileSize);
+        const subdomains = ['a', 'b', 'c', 'd'];
+        const tilePromises = [];
+
+        for (let tx = minTileX; tx <= maxTileX; tx++) {
+            for (let ty = minTileY; ty <= maxTileY; ty++) {
+                const sub = subdomains[Math.abs(tx + ty) % subdomains.length];
+                const tileUrl = `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${ty}@2x.png`;
+                const destX = tx * tileSize - originX;
+                const destY = ty * tileSize - originY;
+                tilePromises.push(new Promise((resolve) => {
+                    const tImg = new Image();
+                    tImg.crossOrigin = "anonymous";
+                    tImg.onload = () => { ctx.drawImage(tImg, destX, destY, tileSize, tileSize); resolve(); };
+                    tImg.onerror = () => resolve();
+                    tImg.src = tileUrl;
+                }));
+            }
+        }
+        await Promise.all(tilePromises);
+    }
+
+    function drawPin(x, y, isCenter) {
+        ctx.save();
+        const scale = isCenter ? 1.25 : 1.0;
+        const radius = 28 * scale;
+        const pinHeight = 58 * scale;
+        const headY = y - pinHeight;
+
+        ctx.beginPath();
+        ctx.ellipse(x + 4 * scale, y + 2 * scale, 15 * scale, 6.5 * scale, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, headY, radius, Math.PI * 0.18, Math.PI * 0.82, true);
+        ctx.lineTo(x, y);
+        ctx.closePath();
+
+        ctx.fillStyle = isCenter ? '#b71c1c' : '#ea4335';
+        ctx.fill();
+        ctx.lineWidth = 3.5 * scale;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        if (isCenter) {
+            ctx.beginPath();
+            ctx.arc(x, headY, radius * 0.52, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffebee';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x, headY, radius * 0.24, 0, Math.PI * 2);
+            ctx.fillStyle = '#b71c1c';
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.arc(x, headY, radius * 0.34, 0, Math.PI * 2);
+            ctx.fillStyle = '#761214';
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    allCoords.filter(c => !c.isCenter).forEach(c => {
+        const pt = projectToWorld(c.lat, c.lng, zoom);
+        drawPin(pt.x - originX, pt.y - originY, false);
+    });
+
+    const centerCoord = allCoords.find(c => c.isCenter);
+    if (centerCoord) {
+        const pt = projectToWorld(centerCoord.lat, centerCoord.lng, zoom);
+        drawPin(pt.x - originX, pt.y - originY, true);
+    }
+
+    function getScaled(targetW, targetH) {
+        const c = document.createElement('canvas');
+        c.width = targetW; c.height = targetH;
+        c.getContext('2d').drawImage(canvas, 0, 0, 2000, 3200, 0, 0, targetW, targetH);
+        return c.toDataURL('image/webp', 0.8).split(',')[1];
+    }
+
+    return JSON.stringify({
+        original: canvas.toDataURL('image/webp', 0.9).split(',')[1],
+        list: getScaled(800, 1280),
+        grid: getScaled(450, 720),
+        text: `Map Cover: ${folioTitle}\nCenter: ${center.address}\nLetters: ${letters.length}`
+    });
+};
+globalThis.renderMapCoverPage = window.renderMapCoverPage;
+''';
+  web.document.head?.append(script);
 }
 
-/// Dynamically injects and polyfills [window.renderPublisherPages] directly into
-/// the browser document if missing, preventing NoSuchMethodError caused by cached JS.
+Future<String> renderMapCoverPage(String configJson) async {
+  try {
+    _ensureRenderMapCoverPageScript();
+    final promise = _renderMapCoverPage(configJson.toJS);
+    if (promise != null) {
+      final jsResult = await promise.toDart;
+      return jsResult.toDart;
+    }
+  } catch (e) {
+    print('[renderMapCoverPage Error] $e');
+  }
+  return '{}';
+}
+
 void _ensureRenderPublisherPagesScript() {
   final jsWin = web.window as JSObject;
   if (jsWin.has('renderPublisherPages')) {
@@ -43,7 +252,6 @@ void _ensureRenderPublisherPagesScript() {
   script.text = r'''
 window.renderPublisherPages = async (text) => {
     const pagesResults = [];
-
     function initPageCanvas() {
         const c = document.createElement('canvas');
         c.width = 2000;
@@ -59,25 +267,20 @@ window.renderPublisherPages = async (text) => {
         context.fillRect(1326, 99, 11, 3200 - 198);
         return { canvas: c, ctx: context };
     }
-
     let active = initPageCanvas();
     let canvas = active.canvas;
     let ctx = active.ctx;
-
     const columnsX = [33, 696, 1359];
     const colWidth = 608;
     const maxY = 3120;
-
     let colIndex = 0;
     let currentY = 33;
     let currentPageTextParts = [];
-
     function wrapText(textToWrap, fontSize, fontName, bold) {
         ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
-
         for (let word of words) {
             const testLine = currentLine ? currentLine + " " + word : word;
             if (ctx.measureText(testLine).width > colWidth) {
@@ -90,9 +293,12 @@ window.renderPublisherPages = async (text) => {
         if (currentLine) lines.push(currentLine);
         return lines;
     }
-
     function loadImage(url) {
         return new Promise((resolve) => {
+            if (!url || typeof url !== 'string' || !url.trim()) {
+                resolve(null);
+                return;
+            }
             const img = new Image();
             if (url.startsWith('http://') || url.startsWith('https://')) {
                 img.crossOrigin = "anonymous";
@@ -102,7 +308,6 @@ window.renderPublisherPages = async (text) => {
             img.src = url;
         });
     }
-
     function finalizeCurrentPage() {
         function getScaledBase64(targetWidth, targetHeight) {
             const scaledCanvas = document.createElement('canvas');
@@ -112,19 +317,16 @@ window.renderPublisherPages = async (text) => {
             sCtx.drawImage(canvas, 0, 0, 2000, 3200, 0, 0, targetWidth, targetHeight);
             return scaledCanvas.toDataURL('image/webp', 0.8).split(',')[1];
         }
-
         const originalBase64 = canvas.toDataURL('image/webp', 0.9).split(',')[1];
         const listBase64 = getScaledBase64(800, 1280);
         const gridBase64 = getScaledBase64(450, 720);
         const pageText = currentPageTextParts.join('\n\n').trim();
-
         pagesResults.push({
             original: originalBase64,
             list: listBase64,
             grid: gridBase64,
             text: pageText
         });
-
         active = initPageCanvas();
         canvas = active.canvas;
         ctx = active.ctx;
@@ -132,7 +334,6 @@ window.renderPublisherPages = async (text) => {
         currentY = 33;
         currentPageTextParts = [];
     }
-
     function advanceToNextColumn() {
         colIndex++;
         currentY = 33;
@@ -140,23 +341,18 @@ window.renderPublisherPages = async (text) => {
             finalizeCurrentPage();
         }
     }
-
     const lines = text.split('\n');
     const blocks = [];
     let currentParagraph = "";
-
     function commitParagraph() {
         const pText = currentParagraph.trim();
         if (!pText) return;
-
         const imageRegex = /^\{\{IMAGE(?::\s*(.*?))?\}\}$/i;
         const templateRegex = /^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$/i;
         const colBreakRegex = /^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$/i;
-
         const match = imageRegex.exec(pText);
         const tMatch = templateRegex.exec(pText);
         const cbMatch = colBreakRegex.exec(pText);
-
         if (match) {
             blocks.push({ type: 'image', url: match[1] ? match[1].trim() : '' });
         } else if (tMatch) {
@@ -167,7 +363,6 @@ window.renderPublisherPages = async (text) => {
                 targetRow = parseInt(rowMatch[1]);
                 captionText = rowMatch[2].trim();
             }
-
             blocks.push({ type: 'column_break' });
             blocks.push({
                 type: 'template_block',
@@ -192,7 +387,6 @@ window.renderPublisherPages = async (text) => {
         }
         currentParagraph = "";
     }
-
     for (let line of lines) {
         const cleanLine = line.trim();
         if (cleanLine === "") {
@@ -206,7 +400,6 @@ window.renderPublisherPages = async (text) => {
         }
     }
     commitParagraph();
-
     for (let block of blocks) {
         if (block.type === 'column_break') {
             if (currentY > 33) {
@@ -214,23 +407,19 @@ window.renderPublisherPages = async (text) => {
             }
             continue;
         }
-
         if (block.type === 'image') {
             const targetUrl = block.url;
             let img = null;
             if (targetUrl && targetUrl.trim().length > 0) {
                 img = await loadImage(targetUrl);
             }
-
             let drawHeight = 400;
             if (img && img.width > 0 && img.height > 0) {
                 drawHeight = colWidth * (img.height / img.width);
             }
-
             if (currentY + drawHeight > maxY) {
                 advanceToNextColumn();
             }
-
             if (img) {
                 ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, drawHeight);
             } else {
@@ -252,38 +441,31 @@ window.renderPublisherPages = async (text) => {
                 ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
                 ctx.textAlign = 'left';
             }
-
             currentY += drawHeight + 20;
             currentPageTextParts.push(`{{IMAGE: ${targetUrl}}}`);
-
         } else if (block.type === 'template_block' && block.templateNum === 1) {
             const targetUrl = block.url;
             let img = null;
             if (targetUrl && targetUrl.trim().length > 0) {
                 img = await loadImage(targetUrl);
             }
-
             let imgHeight = 400;
             if (img && img.width > 0 && img.height > 0) {
                 imgHeight = colWidth * (img.height / img.width);
             }
-
             const fontSize = 24;
             const fontName = 'Arial';
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
             const textLeadingStep = fontSize * 1.4;
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
-
             if (block.targetRow !== null && block.targetRow !== undefined) {
                 let targetYBottom = 33 + block.targetRow * 42;
                 let targetYTop = targetYBottom - imgHeight;
-
                 if (currentY > targetYTop || targetYBottom + totalTextHeight > maxY) {
                     advanceToNextColumn();
                     targetYBottom = 33 + block.targetRow * 42;
                     targetYTop = targetYBottom - imgHeight;
                 }
-
                 if (img) {
                     ctx.drawImage(img, columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 } else {
@@ -291,7 +473,6 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 }
                 currentY = targetYTop + imgHeight + 16;
-
                 ctx.font = `${fontSize}px ${fontName}`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
@@ -304,7 +485,6 @@ window.renderPublisherPages = async (text) => {
                 if (currentY + compositeBlockHeight > maxY) {
                     advanceToNextColumn();
                 }
-
                 if (img) {
                     ctx.drawImage(img, columnsX[colIndex], currentY, colWidth, imgHeight);
                 } else {
@@ -312,7 +492,6 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
                 currentY += imgHeight + 16;
-
                 ctx.font = `${fontSize}px ${fontName}`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
@@ -322,7 +501,6 @@ window.renderPublisherPages = async (text) => {
                 currentY += 24;
             }
             currentPageTextParts.push(`{{TEMPLATE_1: ${targetUrl} | ${block.content}}}`);
-
         } else {
             let fontSize, fontName, bold = false, heightMultiplier = 1.5, spaceBelow = 12;
             if (block.type === 'h1') {
@@ -334,17 +512,13 @@ window.renderPublisherPages = async (text) => {
             } else {
                 fontSize = 28; fontName = 'Arial'; heightMultiplier = 1.5; spaceBelow = 12;
             }
-
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "•  " + block.content : block.content;
+            const textToWrap = isBullet ? "   " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
-
             ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
             ctx.fillStyle = '#1a1a1a';
-
             const step = fontSize * heightMultiplier;
             let currentParagraphRenderedLines = [];
-
             for (let i = 0; i < linesToDraw.length; i++) {
                 const line = linesToDraw[i];
                 if (currentY + fontSize > maxY) {
@@ -356,7 +530,6 @@ window.renderPublisherPages = async (text) => {
                     ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
                     ctx.fillStyle = '#1a1a1a';
                 }
-
                 const isLastLine = i === linesToDraw.length - 1;
                 if (!isLastLine && block.type === 'text' && linesToDraw.length > 1) {
                     const words = line.split(' ');
@@ -364,7 +537,6 @@ window.renderPublisherPages = async (text) => {
                         let wordsWidth = 0;
                         for (let word of words) wordsWidth += ctx.measureText(word).width;
                         const wordSpacing = (colWidth - wordsWidth) / (words.length - 1);
-
                         let currentX = columnsX[colIndex];
                         for (let word of words) {
                             ctx.fillText(word, currentX, currentY + fontSize);
@@ -389,11 +561,9 @@ window.renderPublisherPages = async (text) => {
             }
         }
     }
-
     if (currentY > 33 || colIndex > 0) {
         finalizeCurrentPage();
     }
-
     return JSON.stringify(pagesResults);
 };
 window.renderPublisherPages = window.renderPublisherPages;
@@ -415,7 +585,6 @@ Future<String> renderPublisherPages(String text) async {
   } catch (e) {
     print('[renderPublisherPages Call] $e. Falling back to singular renderPublisherPage.');
   }
-
   try {
     final single = await renderPublisherPage(text);
     return '[$single]';

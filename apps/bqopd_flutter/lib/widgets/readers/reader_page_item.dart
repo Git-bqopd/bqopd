@@ -12,6 +12,8 @@ import '../reader_panels/panel_container.dart';
 import '../reader_panels/panel_factory.dart';
 import '../templates/calendar_template.dart';
 
+/// Renders an individual fanzine page container inside the list reading view in Flutter.
+/// Slices and binds page templates dynamically using [PageTemplateRegistry].
 class ReaderPageItem extends StatefulWidget {
   final String fanzineId;
   final String fanzineTitle;
@@ -96,13 +98,53 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
     if (!widget.isDesktopLayout) FocusScope.of(context).unfocus();
 
     await _engagementService.addComment(
-        imageId: imageId,
-        fanzineId: widget.fanzineId,
-        fanzineTitle: widget.fanzineTitle,
-        text: text,
-        displayName: userProvider.userProfile?.displayName,
-        username: userProvider.userProfile?.username
+      imageId: imageId,
+      fanzineId: widget.fanzineId,
+      fanzineTitle: widget.fanzineTitle,
+      text: text,
+      displayName: userProvider.userProfile?.displayName,
+      username: userProvider.userProfile?.username,
     );
+  }
+
+  Widget _buildPageContent(String? templateId, String? url) {
+    if (templateId == 'calendar_left') {
+      return CalendarPageRenderer(isLeft: true, folioId: widget.fanzineId);
+    }
+    if (templateId == 'calendar_right') {
+      return CalendarPageRenderer(isLeft: false, folioId: widget.fanzineId);
+    }
+    if (url != null && url.isNotEmpty) {
+      return _PageImageLoader(url: url);
+    }
+    if (templateId == 'map_cover') {
+      return Container(
+        color: const Color(0xFFE5E3DF),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.map, size: 48, color: Colors.black45),
+              SizedBox(height: 8),
+              Text(
+                "Geospatial Map Cover",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                "Rendering map canvas...",
+                style: TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return _PageImageLoader(url: url);
   }
 
   @override
@@ -113,118 +155,118 @@ class _ReaderPageItemState extends State<ReaderPageItem> with AutomaticKeepAlive
     final String imageId = widget.pageData['imageId'] ?? '';
     final String? templateId = widget.pageData['templateId'];
 
+    // Resolve aspect ratio dynamically from PageTemplateRegistry
+    final templateDef = PageTemplateRegistry.getTemplate(templateId);
+    final double aspectRatio = templateDef?.aspectRatio ?? 0.625;
+
     final String? optimalDisplayUrl = widget.pageData['listUrl'] ?? widget.pageData['imageUrl'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AspectRatio(
-          aspectRatio: 0.625,
+          aspectRatio: aspectRatio,
           child: Container(
             color: Colors.grey[100],
-            child: templateId == 'calendar_left'
-                ? CalendarPageRenderer(isLeft: true, folioId: widget.fanzineId)
-                : templateId == 'calendar_right'
-                ? CalendarPageRenderer(isLeft: false, folioId: widget.fanzineId)
-                : _PageImageLoader(url: optimalDisplayUrl),
+            child: _buildPageContent(templateId, optimalDisplayUrl),
           ),
         ),
 
         const SizedBox(height: 16),
 
         StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).snapshots(),
-            builder: (context, fzSnapshot) {
-              final fzData = fzSnapshot.data?.data() as Map<String, dynamic>?;
-              final indiciaPageId = fzData?['indiciaPageId'];
-              final isIndiciaPage = pageId == indiciaPageId;
+          stream: FirebaseFirestore.instance.collection('fanzines').doc(widget.fanzineId).snapshots(),
+          builder: (context, fzSnapshot) {
+            final fzData = fzSnapshot.data?.data() as Map<String, dynamic>?;
+            final indiciaPageId = fzData?['indiciaPageId'];
+            final isIndiciaPage = pageId == indiciaPageId;
 
-              return StreamBuilder<DocumentSnapshot>(
-                stream: imageId.isNotEmpty
-                    ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots()
-                    : null,
-                builder: (context, snapshot) {
-                  bool isGame = false;
-                  String? youtubeId;
+            return StreamBuilder<DocumentSnapshot>(
+              stream: imageId.isNotEmpty
+                  ? FirebaseFirestore.instance.collection('images').doc(imageId).snapshots()
+                  : null,
+              builder: (context, snapshot) {
+                bool isGame = false;
+                String? youtubeId;
 
-                  String tLinked = "";
-                  String tCorrected = "";
-                  String tRaw = "";
-                  String tLinkedAi = "";
-                  String tCorrectedAi = "";
+                String tLinked = "";
+                String tCorrected = "";
+                String tRaw = "";
+                String tLinkedAi = "";
+                String tCorrectedAi = "";
 
-                  if (snapshot.hasData && snapshot.data?.data() != null) {
-                    final data = snapshot.data!.data() as Map<String, dynamic>;
-                    isGame = data['isGame'] == true;
-                    youtubeId = data['youtubeId'] as String?;
+                if (snapshot.hasData && snapshot.data?.data() != null) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  isGame = data['isGame'] == true;
+                  youtubeId = data['youtubeId'] as String?;
 
-                    tLinked = data['text_linked'] ?? '';
-                    tCorrected = data['text_corrected'] ?? data['text'] ?? '';
-                    tRaw = data['text_raw'] ?? '';
+                  tLinked = data['text_linked'] ?? '';
+                  tCorrected = data['text_corrected'] ?? data['text'] ?? '';
+                  tRaw = data['text_raw'] ?? '';
 
-                    // Added Extraction for Scoring Math
-                    tLinkedAi = data['text_linked_ai'] ?? '';
-                    tCorrectedAi = data['text_corrected_ai'] ?? '';
-                  }
+                  tLinkedAi = data['text_linked_ai'] ?? '';
+                  tCorrectedAi = data['text_corrected_ai'] ?? '';
+                }
 
-                  String actualText = tLinked.trim().isNotEmpty ? tLinked
-                      : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
+                String actualText = tLinked.trim().isNotEmpty
+                    ? tLinked
+                    : (tCorrected.trim().isNotEmpty ? tCorrected : tRaw);
 
-                  return Column(
-                    children: [
-                      Container(
-                        color: Colors.white,
-                        child: DynamicSocialToolbar(
-                          imageId: imageId,
-                          pageId: pageId,
-                          fanzineId: widget.fanzineId,
-                          fanzineType: widget.fanzineType,
-                          pageNumber: widget.pageIndex + 1,
-                          isGame: isGame,
-                          youtubeId: youtubeId,
-                          isEditingMode: widget.isEditingMode,
-                          isIndiciaPage: isIndiciaPage,
-                          onOpenGrid: widget.onOpenGrid,
-                          activeBonusRow: widget.activeGlobalPanel,
-                          onToggleBonusRow: widget.onTogglePanel,
-                        ),
+                return Column(
+                  children: [
+                    Container(
+                      color: Colors.white,
+                      child: DynamicSocialToolbar(
+                        imageId: imageId,
+                        pageId: pageId,
+                        fanzineId: widget.fanzineId,
+                        fanzineType: widget.fanzineType,
+                        pageNumber: widget.pageIndex + 1,
+                        isGame: isGame,
+                        youtubeId: youtubeId,
+                        isEditingMode: widget.isEditingMode,
+                        isIndiciaPage: isIndiciaPage,
+                        onOpenGrid: widget.onOpenGrid,
+                        activeBonusRow: widget.activeGlobalPanel,
+                        onToggleBonusRow: widget.onTogglePanel,
                       ),
+                    ),
 
-                      if (!widget.isDesktopLayout && widget.activeGlobalPanel != null) ...[
-                        const SizedBox(height: 16),
-                        PanelContainer(
-                          title: '',
-                          isInline: true,
-                          inlineColor: PanelFactory.getInlineColor(widget.activeGlobalPanel!),
-                          child: PanelFactory.buildPanelContent(
-                              PanelContext(
-                                type: widget.activeGlobalPanel!,
-                                imageId: imageId,
-                                fanzineId: widget.fanzineId,
-                                pageId: pageId,
-                                templateId: templateId,
-                                isEditingMode: widget.isEditingMode,
-                                actualText: actualText,
-                                textRaw: tRaw,
-                                textCorrected: tCorrected,
-                                textLinked: tLinked,
-                                textCorrectedAi: tCorrectedAi, // Added
-                                textLinkedAi: tLinkedAi,       // Added
-                                viewService: _viewService,
-                                engagementService: _engagementService,
-                                commentController: _commentController,
-                                onSubmitComment: () => _submitComment(imageId),
-                                fontSizeNotifier: _fontSizeNotifier,
-                                isInline: true,
-                              )
+                    if (!widget.isDesktopLayout && widget.activeGlobalPanel != null) ...[
+                      const SizedBox(height: 16),
+                      PanelContainer(
+                        title: '',
+                        isInline: true,
+                        inlineColor: PanelFactory.getInlineColor(widget.activeGlobalPanel!),
+                        child: PanelFactory.buildPanelContent(
+                          PanelContext(
+                            type: widget.activeGlobalPanel!,
+                            imageId: imageId,
+                            fanzineId: widget.fanzineId,
+                            pageId: pageId,
+                            templateId: templateId,
+                            isEditingMode: widget.isEditingMode,
+                            actualText: actualText,
+                            textRaw: tRaw,
+                            textCorrected: tCorrected,
+                            textLinked: tLinked,
+                            textCorrectedAi: tCorrectedAi,
+                            textLinkedAi: tLinkedAi,
+                            viewService: _viewService,
+                            engagementService: _engagementService,
+                            commentController: _commentController,
+                            onSubmitComment: () => _submitComment(imageId),
+                            fontSizeNotifier: _fontSizeNotifier,
+                            isInline: true,
                           ),
                         ),
-                      ],
+                      ),
                     ],
-                  );
-                },
-              );
-            }
+                  ],
+                );
+              },
+            );
+          },
         ),
       ],
     );
@@ -242,10 +284,12 @@ class _PageImageLoader extends StatelessWidget {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     return Image.network(
-        url!,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-        errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image, color: Colors.grey))
+      url!,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+      errorBuilder: (c, e, s) => const Center(
+        child: Icon(Icons.broken_image, color: Colors.grey),
+      ),
     );
   }
 }

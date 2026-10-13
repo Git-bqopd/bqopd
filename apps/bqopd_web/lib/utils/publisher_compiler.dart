@@ -14,9 +14,13 @@ class PublisherCompiler {
     required String fanzineId,
     required String imageId,
     required String text,
+    String templateId = 'basic_text',
   }) async {
     final uid = getCurrentUserId() ?? 'system_web';
     final updates = <String, dynamic>{};
+    final templateDef = PageTemplateRegistry.getTemplate(templateId);
+    final int templateWidth = templateDef?.width ?? 2000;
+    final int templateHeight = templateDef?.height ?? 3200;
 
     // 1. Fetch user images first to map template shortcodes to absolute URLs
     List<Map<String, dynamic>> userImages = [];
@@ -129,11 +133,11 @@ class PublisherCompiler {
           listUrl: listUrl,
           storagePath: p.storagePath,
           status: 'ready',
-          templateId: p.templateId,
+          templateId: p.templateId ?? templateId,
           spreadPosition: p.spreadPosition,
           sidePreference: p.sidePreference,
-          width: p.width,
-          height: p.height,
+          width: p.width ?? templateWidth,
+          height: p.height ?? templateHeight,
         );
         UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       }
@@ -166,9 +170,14 @@ class PublisherCompiler {
   static Future<List<FanzinePage>> compileAndPublishMultiPage({
     required String fanzineId,
     required String fullText,
+    String templateId = 'basic_text',
     void Function(int pageIndex, int totalPages)? onProgress,
   }) async {
     final uid = getCurrentUserId() ?? 'system_web';
+    final templateDef = PageTemplateRegistry.getTemplate(templateId);
+    final int templateWidth = templateDef?.width ?? 2000;
+    final int templateHeight = templateDef?.height ?? 3200;
+    final double templateAspectRatio = templateDef?.aspectRatio ?? 0.625;
 
     final String compiledText = await resolveAndReplaceShortcodes(
       fanzineId,
@@ -219,15 +228,15 @@ class PublisherCompiler {
         'uid': uid,
         'uploaderId': uid,
         'type': 'template',
-        'templateId': 'basic_text',
+        'templateId': templateId,
         'text': pageText,
         'text_corrected': pageText,
         'text_linked': pageText,
         'title': 'Letters Page $pageNum',
         'isGenerated': true,
-        'width': 2000,
-        'height': 3200,
-        'aspectRatio': 0.625,
+        'width': templateWidth,
+        'height': templateHeight,
+        'aspectRatio': templateAspectRatio,
         'is5x8': true,
         'shortCode': pageShortCode,
         'folioContext': fanzineId,
@@ -246,9 +255,9 @@ class PublisherCompiler {
         gridUrl: gridUrl,
         listUrl: listUrl,
         status: 'ready',
-        templateId: 'basic_text',
-        width: 2000,
-        height: 3200,
+        templateId: templateId,
+        width: templateWidth,
+        height: templateHeight,
         is5x8: true,
       ));
       pageNum++;

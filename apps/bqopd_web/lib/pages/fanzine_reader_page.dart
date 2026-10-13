@@ -198,10 +198,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               'listUrl': p.listUrl,
               'pageNumber': p.pageNumber,
               'status': p.status,
+              'templateId': p.templateId,
               'spreadPosition': p.spreadPosition,
               'sidePreference': p.sidePreference,
               'width': p.width,
               'height': p.height,
+              'is5x8': p.is5x8 ?? true,
             }).toList();
           });
         }
@@ -273,10 +275,12 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           'gridUrl': p.gridUrl,
           'listUrl': p.listUrl,
           'status': p.status,
+          'templateId': p.templateId,
           'spreadPosition': p.spreadPosition,
           'sidePreference': p.sidePreference,
           'width': p.width,
           'height': p.height,
+          'is5x8': p.is5x8 ?? true,
         }).toList();
         _creatorProfiles = {};
         _imageStats = {};
@@ -368,6 +372,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
             ? ToolScope.editor
             : ToolScope.curator)
             : ToolScope.reader);
+
     final Component listHeader;
     if (effectiveScope == ToolScope.curator) {
       listHeader = FanzineCurator(
@@ -415,6 +420,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         authBloc: component.authBloc,
       );
     }
+
     final Component gridHeader = FanzineHeader(
       fanzineId: component.fanzineId,
       shortCode: shortCode,
@@ -426,6 +432,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       authState: component.authState,
       authBloc: component.authBloc,
     );
+
     return div(
       [
         FanzineLayout(

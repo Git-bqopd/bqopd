@@ -85,6 +85,10 @@ class _CuratorUploadTabState extends State<CuratorUploadTab> {
 
   bool _isImage5x8(Map<String, dynamic> img) {
     if (img['is5x8'] == false) return false;
+    final templateId = img['templateId'] as String?;
+    if (templateId != null && PageTemplateRegistry.getTemplate(templateId) != null) {
+      return true;
+    }
     if (img['is5x8'] == true || img['type'] == 'template') return true;
     final w = img['width'] as num?;
     final h = img['height'] as num?;
@@ -216,11 +220,17 @@ Start typing directly inside the text editor panel below to generate columns of 
     component.bloc.add(AddPageRequested('generating_calendar...'));
     final int nextNum = component.pages.length + 1;
     final String pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
+    final templateDef = PageTemplateRegistry.getTemplate('calendar_left');
+    final int templateWidth = templateDef?.width ?? 2000;
+    final int templateHeight = templateDef?.height ?? 3200;
 
     fsSetDoc('fanzines/${component.fanzine.id}/pages/$pageId', jsonEncode({
       'pageNumber': nextNum,
       'status': 'ready',
       'templateId': 'calendar_left',
+      'width': templateWidth,
+      'height': templateHeight,
+      'is5x8': true,
       'createdAt': WebFieldValue.serverTimestamp(),
     }), true).then((_) {
       component.bloc.add(LoadFanzineRequested(component.fanzine.id));

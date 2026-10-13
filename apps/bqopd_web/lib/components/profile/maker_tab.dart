@@ -117,8 +117,61 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
           _userWorks = works;
           _loading = false;
         });
+        _resolveMissingCovers(works);
       }
     });
+  }
+
+  /// Automatically resolves missing covers for folios (checking in-memory registry or Page 1)
+  /// and heals the Firestore fanzine document so future views load the cover immediately.
+  void _resolveMissingCovers(List<Map<String, dynamic>> works) {
+    for (var w in works) {
+      final String fanzineId = w['id'] ?? '';
+      if (fanzineId.isEmpty) continue;
+      final existingCover = w['gridCoverImage'] ?? w['coverImage'] ?? w['coverUrl'];
+      if (existingCover != null && existingCover.toString().isNotEmpty) continue;
+
+      // 1. Check in-memory registry first
+      if (UnsavedFanzineRegistry.pages.containsKey(fanzineId)) {
+        final pgs = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
+        FanzinePage? p1;
+        for (var p in pgs) {
+          if (p.pageNumber == 1) {
+            p1 = p;
+            break;
+          }
+        }
+        p1 ??= pgs.isNotEmpty ? pgs.first : null;
+        final thumb = p1?.gridUrl ?? p1?.imageUrl;
+        if (thumb != null && thumb.isNotEmpty) {
+          w['gridCoverImage'] = thumb;
+          if (mounted) setState(() {});
+          continue;
+        }
+      }
+
+      // 2. Query Page 1 from Firestore subcollection fanzines/$fanzineId/pages
+      fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber').then((resStr) {
+        try {
+          final List pgs = jsonDecode(resStr) as List;
+          if (pgs.isNotEmpty) {
+            final pData = pgs.first['data'] as Map<String, dynamic>? ?? {};
+            final String? thumb = pData['gridUrl'] ?? pData['imageUrl'];
+            final String? full = pData['imageUrl'] ?? pData['gridUrl'];
+            if (thumb != null && thumb.isNotEmpty && mounted) {
+              setState(() {
+                w['gridCoverImage'] = thumb;
+              });
+              // Self-heal the parent fanzine document in Firestore
+              fsUpdateDoc('fanzines/$fanzineId', jsonEncode({
+                'gridCoverImage': thumb,
+                if (full != null) 'coverImage': full,
+              })).catchError((_) {});
+            }
+          }
+        } catch (_) {}
+      }).catchError((_) {});
+    }
   }
 
   DateTime? _parseDateValue(dynamic value) {
@@ -254,17 +307,28 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
       final page1Id = 'page1_${DateTime.now().millisecondsSinceEpoch}';
       final page2Id = 'page2_${DateTime.now().millisecondsSinceEpoch}';
 
+      final leftTemplate = PageTemplateRegistry.getTemplate('calendar_left');
+      final rightTemplate = PageTemplateRegistry.getTemplate('calendar_right');
+
       final List<FanzinePage> pages = [
         FanzinePage(
-            id: page1Id,
-            pageNumber: 1,
-            templateId: 'calendar_left',
-            status: 'ready'),
+          id: page1Id,
+          pageNumber: 1,
+          templateId: 'calendar_left',
+          width: leftTemplate?.width ?? 2000,
+          height: leftTemplate?.height ?? 3200,
+          is5x8: true,
+          status: 'ready',
+        ),
         FanzinePage(
-            id: page2Id,
-            pageNumber: 2,
-            templateId: 'calendar_right',
-            status: 'ready'),
+          id: page2Id,
+          pageNumber: 2,
+          templateId: 'calendar_right',
+          width: rightTemplate?.width ?? 2000,
+          height: rightTemplate?.height ?? 3200,
+          is5x8: true,
+          status: 'ready',
+        ),
       ];
 
       UnsavedFanzineRegistry.add(newFanzine, pages);
@@ -488,7 +552,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             p([
               Component.text(
                 _hasMapCover
-                    ? 'Page 1 will be an illustrated map cover with radial distance rings, numbered pins, and an index register, followed by ${_pageCount - 1} letter ${_pageCount - 1 == 1 ? "page" : "pages"}.'
+                    ? 'Page 1 will be a clean Google Map cover with pins, followed by ${_pageCount - 1} letter ${_pageCount - 1 == 1 ? "page" : "pages"}.'
                     : 'Generates continuous letter pages without a cover image.',
               ),
             ],
@@ -802,6 +866,8 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     if (wholeNumber.isNotEmpty) displaySuffix += " ($wholeNumber)";
 
     final String coverUrl = w['gridCoverImage'] ??
+        w['coverImage'] ??
+        w['coverUrl'] ??
         (w['sourceFile'] != null
             ? 'https://placehold.co/450x720/png?text=Archival+Ingest'
             : 'https://placehold.co/450x720/png?text=Folio');
@@ -815,13 +881,14 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
 
     final cardData = Map<String, dynamic>.from(w);
     cardData['title'] = displaySuffix.isNotEmpty ? '$title$displaySuffix' : title;
+    cardData['gridCoverImage'] = coverUrl;
 
     return FanzineThumbnailCard(
       fanzineData: cardData,
       targetHref: targetHref,
       customCoverUrl: coverUrl,
       cardType: 'fanzine',
-      key: ValueKey('maker_card_${fanzineId}_${_showDrafts ? "draft" : "pub"}'),
+      key: ValueKey('maker_card_${fanzineId}_${coverUrl}_${_showDrafts ? "draft" : "pub"}'),
       showIndicia: _showIndicia,
       onToggleShowIndicia: (val) {
         setState(() => _showIndicia = val);

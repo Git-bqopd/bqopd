@@ -11,7 +11,6 @@ import 'unsaved_fanzine_registry.dart';
 class ServerFirestoreClient {
   static const String projectId = 'bqopd-9ce06';
   static const String apiKey = 'AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g';
-
   static const String baseUrl =
       'https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents';
 
@@ -20,7 +19,6 @@ class ServerFirestoreClient {
     return '?key=$apiKey';
   }
 
-  // Robust safe Firestore parsing utilities to prevent TypeErrors in UI components
   static String? parseDateString(dynamic val) {
     if (val == null) return null;
     if (val is String) {
@@ -32,16 +30,12 @@ class ServerFirestoreClient {
     if (val is DateTime) {
       return "${val.year}-${val.month.toString().padLeft(2, '0')}-${val.day.toString().padLeft(2, '0')}";
     }
-
-    // Handle JS Timestamp or objects with toDate()
     try {
       final date = val.toDate();
       if (date is DateTime) {
         return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
       }
     } catch (_) {}
-
-    // Handle JS/Dart objects with seconds property
     try {
       final secs = val.seconds;
       if (secs != null) {
@@ -49,7 +43,6 @@ class ServerFirestoreClient {
         return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
       }
     } catch (_) {}
-
     if (val is Map) {
       final seconds = val['seconds'] ?? val['_seconds'];
       if (seconds != null) {
@@ -61,7 +54,6 @@ class ServerFirestoreClient {
       final formatted = val['formatted'] ?? val['date'] ?? val['iso'];
       if (formatted != null) return formatted.toString();
     }
-
     final str = val.toString();
     if (str.startsWith('Timestamp(')) {
       try {
@@ -102,7 +94,6 @@ class ServerFirestoreClient {
     return val.toString();
   }
 
-  /// Sanitizes raw Firestore map payloads to format complex types into clean strings.
   static Map<String, dynamic> sanitizeFanzineData(Map<String, dynamic> data) {
     final copy = Map<String, dynamic>.from(data);
     if (copy.containsKey('publishedDate')) {
@@ -114,7 +105,6 @@ class ServerFirestoreClient {
     return copy;
   }
 
-  /// Decodes Firestore's strongly typed REST JSON format into clean Dart types.
   static dynamic _decodeValue(Map<String, dynamic> val) {
     if (val.containsKey('stringValue')) return val['stringValue'];
     if (val.containsKey('booleanValue')) return val['booleanValue'];
@@ -137,12 +127,10 @@ class ServerFirestoreClient {
     return null;
   }
 
-  /// Iterates and parses the structured field map of a REST document.
   static Map<String, dynamic> decodeFields(Map<String, dynamic> fields) {
     return fields.map((key, value) => MapEntry(key, _decodeValue(value as Map<String, dynamic>)));
   }
 
-  /// Fetches a document from the Firestore REST API using the Web API Key.
   static Future<Map<String, dynamic>?> getDocument(String path) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -150,7 +138,6 @@ class ServerFirestoreClient {
       final response = await http.get(url);
       stopwatch.stop();
       print('[REST CLIENT] GET /$path - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final fields = data['fields'] as Map<String, dynamic>? ?? {};
@@ -166,7 +153,6 @@ class ServerFirestoreClient {
     return null;
   }
 
-  /// Fetches an entire subcollection path using the Web API Key.
   static Future<List<Map<String, dynamic>>> getCollection(String path) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -174,7 +160,6 @@ class ServerFirestoreClient {
       final response = await http.get(url);
       stopwatch.stop();
       print('[REST CLIENT] GET COLLECTION /$path - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
-
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
         final docs = body['documents'] as List? ?? [];
@@ -194,7 +179,6 @@ class ServerFirestoreClient {
     return [];
   }
 
-  /// Runs a structured EQUAL query on the specified collection path using Web API Key parameterization.
   static Future<List<Map<String, dynamic>>> runQuery({
     required String collectionId,
     required String fieldPath,
@@ -225,7 +209,6 @@ class ServerFirestoreClient {
       );
       stopwatch.stop();
       print('[REST CLIENT] runQuery on $collectionId ($fieldPath == $value) - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
-
       if (response.statusCode == 200) {
         final results = jsonDecode(response.body) as List? ?? [];
         final List<Map<String, dynamic>> decodedDocs = [];
@@ -248,7 +231,6 @@ class ServerFirestoreClient {
     return [];
   }
 
-  /// Master routing logic to use the correct infrastructure
   static Future<Map<String, dynamic>> resolveFullPayload(String code) async {
     print('[PAYLOAD RESOLVER] Beginning payload resolution for path code: "$code"');
     if (kIsWeb) {
@@ -260,8 +242,6 @@ class ServerFirestoreClient {
     }
   }
 
-  /// CLIENT-SIDE OPTIMIZATION:
-  /// Uses the Firebase JS SDK via interop to fire targeted, fast-path queries.
   static Future<Map<String, dynamic>> _resolveViaJsSdk(String code) async {
     final payload = <String, dynamic>{};
     try {
@@ -311,20 +291,19 @@ class ServerFirestoreClient {
           'gridUrl': p.gridUrl,
           'listUrl': p.listUrl,
           'status': p.status,
+          'templateId': p.templateId,
           'spreadPosition': p.spreadPosition,
           'sidePreference': p.sidePreference,
           'width': p.width,
           'height': p.height,
+          'is5x8': p.is5x8 ?? true,
         }).toList();
-
         payload['creatorProfiles'] = <String, Map<String, dynamic>>{};
         payload['imageStats'] = <String, Map<String, dynamic>>{};
-
         return payload;
       }
 
       if (isUserRoute) {
-        // FAST-PATH USER LOOKUP: Direct lookup on usernames doc
         final unRes = await fsGetDoc('usernames/$codeLower');
         final Map<String, dynamic> unDoc = jsonDecode(unRes);
         if (unDoc['exists'] == true) {
@@ -332,7 +311,6 @@ class ServerFirestoreClient {
           payload['targetUserId'] = data['uid'];
           payload['status'] = 'user';
         } else {
-          // Fallback query for profiles collection
           final prRes = await fsQuery('profiles', 'username', '==', jsonEncode(codeLower), '');
           final List prDocs = jsonDecode(prRes);
           if (prDocs.isNotEmpty) {
@@ -340,7 +318,6 @@ class ServerFirestoreClient {
             payload['targetUserId'] = firstDoc['id'];
             payload['status'] = 'user';
           } else {
-            // Check shortcodes for legacy user shortcodes
             final scRes = await fsGetDoc('shortcodes/$codeUpper');
             final Map<String, dynamic> scDoc = jsonDecode(scRes);
             if (scDoc['exists'] == true) {
@@ -353,7 +330,6 @@ class ServerFirestoreClient {
           }
         }
       } else {
-        // FAST-PATH FANZINE LOOKUP: Direct lookup on shortcodes doc
         final scRes = await fsGetDoc('shortcodes/$codeUpper');
         final Map<String, dynamic> scDoc = jsonDecode(scRes);
         if (scDoc['exists'] == true) {
@@ -366,7 +342,6 @@ class ServerFirestoreClient {
             payload['status'] = 'user';
           }
         }
-
         if (payload.isEmpty) {
           final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(cleanCode), '');
           final List fzDocs = jsonDecode(fzRes);
@@ -380,28 +355,22 @@ class ServerFirestoreClient {
 
       if (payload['targetFanzineId'] != null) {
         final String fanzineId = payload['targetFanzineId'];
-
         final fzResults = await Future.wait([
           fsGetDoc('fanzines/$fanzineId'),
           fsQuery('fanzines/$fanzineId/pages', '', '', '', 'pageNumber')
         ]);
-
         final Map<String, dynamic> fzDoc = jsonDecode(fzResults[0]);
         final List pagesListRaw = jsonDecode(fzResults[1]);
-
         if (fzDoc['exists'] == true) {
           final Map<String, dynamic> fzData = fzDoc['data'] ?? {};
           payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(restoreTimestamps(fzData));
-
           final pagesList = pagesListRaw.map((p) {
             final Map<String, dynamic> mapItem = p;
             final d = restoreTimestamps(mapItem['data']);
             d['id'] = mapItem['id'];
             return d;
           }).toList();
-
           payload['pages'] = pagesList;
-
           final creators = fzData['masterCreators'] as List? ?? [];
           final uidsToFetch = creators
               .whereType<Map>()
@@ -410,12 +379,9 @@ class ServerFirestoreClient {
               .where((uid) => uid.isNotEmpty)
               .toSet()
               .toList();
-
           final Map<String, dynamic> creatorProfiles = {};
           final Map<String, dynamic> imageStats = {};
-
           final List<Future<void>> parallelFetches = [];
-
           for (final uid in uidsToFetch) {
             parallelFetches.add(
               fsGetDoc('profiles/$uid').then((pRes) {
@@ -426,7 +392,6 @@ class ServerFirestoreClient {
               }),
             );
           }
-
           for (final page in pagesList) {
             final imageId = page['imageId'];
             if (imageId != null && imageId.isNotEmpty) {
@@ -448,9 +413,7 @@ class ServerFirestoreClient {
               );
             }
           }
-
           await Future.wait(parallelFetches);
-
           payload['creatorProfiles'] = creatorProfiles;
           payload['imageStats'] = imageStats;
         }
@@ -459,15 +422,12 @@ class ServerFirestoreClient {
       print('Error resolving client-side payload: $e');
       payload['status'] = 'Error: $e';
     }
-
     if (payload.isEmpty && !payload.containsKey('status')) {
       payload['status'] = "Link '$code' not found.";
     }
     return payload;
   }
 
-  /// SERVER-SIDE STATIC PRE-RENDERING:
-  /// Uses targeted REST calls based on `@` route detection.
   static Future<Map<String, dynamic>> _resolveViaRest(String code) async {
     final payload = <String, dynamic>{};
     try {
@@ -478,7 +438,6 @@ class ServerFirestoreClient {
       final String codeLower = handle.toLowerCase();
 
       if (isUserRoute) {
-        // FAST-PATH USER LOOKUP (REST)
         final usernameDoc = await getDocument('usernames/$codeLower');
         if (usernameDoc != null) {
           payload['targetUserId'] = usernameDoc['uid'];
@@ -499,7 +458,6 @@ class ServerFirestoreClient {
           }
         }
       } else {
-        // FAST-PATH FANZINE LOOKUP (REST)
         final scDoc = await getDocument('shortcodes/$codeUpper');
         if (scDoc != null) {
           final type = scDoc['type'] ?? 'fanzine';
@@ -521,41 +479,33 @@ class ServerFirestoreClient {
         }
       }
 
-      // Pre-fetch fanzine pages if target was resolved
       if (payload['targetFanzineId'] != null) {
         final String fanzineId = payload['targetFanzineId'];
         print('[RESOLVE REST] Gathering fanzine data and page matrices for ID: "$fanzineId"');
-
         final fzDataResults = await Future.wait([
           getDocument('fanzines/$fanzineId'),
           getCollection('fanzines/$fanzineId/pages'),
         ]);
-
         final Map<String, dynamic>? fanzineData = fzDataResults[0] as Map<String, dynamic>?;
         final List<Map<String, dynamic>> pagesList = (fzDataResults[1] as List).cast<Map<String, dynamic>>();
 
         if (fanzineData != null) {
           payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(fanzineData);
-
           pagesList.sort((a, b) {
             final int pA = a['pageNumber'] ?? 0;
             final int pB = b['pageNumber'] ?? 0;
             return pA.compareTo(pB);
           });
           payload['pages'] = pagesList;
-
           final creators = fanzineData['masterCreators'] as List? ?? [];
           final Set<String> uidsToFetch = creators
               .whereType<Map>()
               .map((c) => c['uid'] as String?)
               .whereType<String>()
               .toSet();
-
           final Map<String, dynamic> creatorProfiles = {};
           final Map<String, dynamic> imageStats = {};
-
           final List<Future<void>> parallelFetches = [];
-
           for (final uid in uidsToFetch) {
             parallelFetches.add(
               getDocument('profiles/$uid').then((pDoc) {
@@ -566,7 +516,6 @@ class ServerFirestoreClient {
             );
           }
 
-          // Preload Individual Image Stats
           for (final page in pagesList) {
             final imageId = page['imageId'];
             if (imageId != null && imageId.isNotEmpty) {
@@ -586,9 +535,7 @@ class ServerFirestoreClient {
               );
             }
           }
-
           await Future.wait(parallelFetches);
-
           payload['creatorProfiles'] = creatorProfiles;
           payload['imageStats'] = imageStats;
           print('[RESOLVE REST] Preloaded Creator and Image Stats payload successfully built!');
@@ -600,7 +547,6 @@ class ServerFirestoreClient {
       print('[RESOLVE REST EXCEPTION] Master Exception occurred: $e\n$stack');
       payload['status'] = 'Error: $e';
     }
-
     if (payload.isEmpty) {
       payload['status'] = "Link '$code' not found.";
       print('[RESOLVE REST WARNING] No target entity mapped. Resolving with empty lookup payload.');
