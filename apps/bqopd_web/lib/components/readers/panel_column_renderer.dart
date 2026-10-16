@@ -17,13 +17,19 @@ import '../panels/hashtag_panel.dart';
 import '../panels/settings_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
-/// Directly maps each active tool to its dedicated ColumnPanel implementation.
+/// Directly maps each active tool to its dedicated ColumnPanel implementation,
+/// forwarding active target highlights and scroll events for synchronized reading.
 class PanelColumnRenderer extends StatelessComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
   final BonusRowType activePanel;
   final bool isEditingMode;
   final VoidCallback onClose;
+  final int targetIndex;
+  final Function(int pageIndex)? onPageCardTap;
+  final Function(int pageIndex)? onTargetChanged;
+  final VoidCallback? onScroll;
+  final VoidCallback? onUserScrollStart;
 
   const PanelColumnRenderer({
     required this.fanzineId,
@@ -31,6 +37,12 @@ class PanelColumnRenderer extends StatelessComponent {
     required this.activePanel,
     this.isEditingMode = false,
     required this.onClose,
+    this.targetIndex = 0,
+    this.onPageCardTap,
+    this.onTargetChanged,
+    this.onScroll,
+    this.onUserScrollStart,
+    super.key,
   });
 
   @override
@@ -65,11 +77,20 @@ class PanelColumnRenderer extends StatelessComponent {
         ? EntitiesColumnPanelHeader(fanzineId: fanzineId, pages: pages)
         : null;
 
+    final int? targetPageIndex = (targetIndex > 0 && targetIndex <= pages.length)
+        ? targetIndex - 1
+        : null;
+
     return MultiPageColumnLayout(
       title: title,
       pages: pages,
       headerWidget: headerWidget,
       onClose: onClose,
+      targetPageIndex: targetPageIndex,
+      onPageCardTap: onPageCardTap,
+      onTargetChanged: onTargetChanged,
+      onScroll: onScroll,
+      onUserScrollStart: onUserScrollStart,
       pageBuilder: (pageData) => _buildPagePanel(pageData),
     );
   }

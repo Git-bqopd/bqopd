@@ -14,7 +14,7 @@ class FanzineListRenderer extends StatefulComponent {
   final Component headerWidget;
   final VoidCallback? onOpenGrid;
   final BonusRowType? activeGlobalPanel;
-  final ValueChanged<BonusRowType>? onTogglePanel;
+  final void Function(BonusRowType type, int pageIndex)? onTogglePanel;
   final int initialIndex;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
   final Set<String> likedImageIds;
@@ -50,25 +50,18 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
   @override
   void initState() {
     super.initState();
+    // Only anchor scroll on initial component mount if an initial target was requested
     if (component.initialIndex > 0 && kIsWeb) {
-      _anchorScroll();
+      _anchorInitialScroll();
     }
   }
 
-  @override
-  void didUpdateComponent(FanzineListRenderer oldComponent) {
-    super.didUpdateComponent(oldComponent);
-    if (oldComponent.initialIndex != component.initialIndex && kIsWeb) {
-      _anchorScroll();
-    }
-  }
-
-  void _anchorScroll() {
+  void _anchorInitialScroll() {
     Future.microtask(() {
       final String targetId = component.initialIndex == 0
           ? 'fanzine-header'
           : 'reader-page-${component.initialIndex - 1}';
-      scrollToElement(targetId);
+      scrollToElement(targetId, block: 'center', smooth: false);
     });
   }
 

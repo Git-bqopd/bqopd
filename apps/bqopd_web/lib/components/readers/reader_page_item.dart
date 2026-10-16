@@ -35,7 +35,7 @@ class ReaderPageItem extends StatefulComponent {
   final bool isEditingMode;
   final ToolScope? activeScope;
   final BonusRowType? activeGlobalPanel;
-  final ValueChanged<BonusRowType>? onTogglePanel;
+  final void Function(BonusRowType type, int pageIndex)? onTogglePanel;
 
   const ReaderPageItem({
     required this.fanzineId,
@@ -109,7 +109,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
 
   void _handleTogglePanel(BonusRowType type) {
     if (component.onTogglePanel != null) {
-      component.onTogglePanel!(type);
+      component.onTogglePanel!(type, component.pageIndex);
     }
   }
 
@@ -203,7 +203,12 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
             ),
             if (component.activeGlobalPanel != null &&
                 component.activeGlobalPanel != BonusRowType.settings)
-              _buildPanelContent(imageId, component.activeGlobalPanel!),
+              div(
+                classes: 'hidden-on-desktop w-full',
+                [
+                  _buildPanelContent(imageId, component.activeGlobalPanel!),
+                ],
+              ),
           ],
         )
       ],
@@ -271,6 +276,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       default:
         return div([]);
     }
+
     return PanelContainer(
       title: title,
       type: activePanel,

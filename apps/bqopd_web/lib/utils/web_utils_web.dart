@@ -29,15 +29,102 @@ extension type _GoogleAutocomplete._(JSObject _) implements JSObject {
   external _PlaceResult? getPlace();
 }
 
-/// Browser-specific implementation using package:web to scroll element into view.
-void scrollToElement(String id) {
+/// Scrolls an element into view within its scrollable container.
+/// Defaults to vertically centering the element within the viewport (`block: 'center'`).
+void scrollToElement(String id, {String block = 'center', bool smooth = true}) {
   final el = web.document.getElementById(id);
   if (el != null) {
     el.scrollIntoView(web.ScrollIntoViewOptions(
-      behavior: 'auto',
-      block: 'start',
+      behavior: smooth ? 'smooth' : 'auto',
+      block: block,
     ));
   }
+}
+
+/// Scrolls a specific scrollable container element all the way to the top.
+void scrollContainerToTop(String containerId, {bool smooth = true}) {
+  final container = web.document.getElementById(containerId);
+  if (container != null) {
+    container.scrollTo(web.ScrollToOptions(
+      top: 0,
+      behavior: smooth ? 'smooth' : 'auto',
+    ));
+  }
+}
+
+/// Scrolls a specific scrollable container element all the way to the bottom.
+void scrollContainerToBottom(String containerId, {bool smooth = true}) {
+  final container = web.document.getElementById(containerId);
+  if (container != null) {
+    container.scrollTo(web.ScrollToOptions(
+      top: container.scrollHeight.toDouble(),
+      behavior: smooth ? 'smooth' : 'auto',
+    ));
+  }
+}
+
+/// Centers a target element vertically within its parent scroll container.
+/// Uses absolute destination calculation with `scrollTo` to eliminate animation drift.
+void centerElementInContainer(String containerId, String targetId, {bool smooth = true}) {
+  bool attempt(int remainingTries) {
+    final container = web.document.getElementById(containerId);
+    final target = web.document.getElementById(targetId);
+    if (container != null && target != null) {
+      final containerRect = container.getBoundingClientRect();
+      final targetRect = target.getBoundingClientRect();
+      final currentScrollTop = container.scrollTop.toDouble();
+      final targetCenter = targetRect.top + (targetRect.height / 2.0);
+      final containerCenter = containerRect.top + (containerRect.height / 2.0);
+      final diff = targetCenter - containerCenter;
+      container.scrollTo(web.ScrollToOptions(
+        top: currentScrollTop + diff,
+        behavior: smooth ? 'smooth' : 'auto',
+      ));
+      return true;
+    }
+    if (remainingTries > 0) {
+      web.window.setTimeout((() {
+        attempt(remainingTries - 1);
+      }).toJS, 40.toJS);
+    }
+    return false;
+  }
+
+  attempt(5);
+}
+
+/// Scrolls a target element to the top of its parent scroll container.
+/// The [offset] parameter accounts for container padding (default 16px).
+/// Uses absolute destination calculation with `scrollTo` for reliable single-frame alignment.
+void scrollElementToTopOfContainer(
+    String containerId,
+    String targetId, {
+      bool smooth = true,
+      double offset = 16.0,
+    }) {
+  bool attempt(int remainingTries) {
+    final container = web.document.getElementById(containerId);
+    final target = web.document.getElementById(targetId);
+    if (container != null && target != null) {
+      final containerRect = container.getBoundingClientRect();
+      final targetRect = target.getBoundingClientRect();
+      final currentScrollTop = container.scrollTop.toDouble();
+      final desiredScrollTop = currentScrollTop + (targetRect.top - containerRect.top) - offset;
+      container.scrollTo(web.ScrollToOptions(
+        top: desiredScrollTop,
+        behavior: smooth ? 'smooth' : 'auto',
+      ));
+      return true;
+    }
+    if (remainingTries > 0) {
+      web.window.setTimeout((() {
+        attempt(remainingTries - 1);
+      }).toJS, 40.toJS);
+    }
+    return false;
+  }
+
+  attempt(5);
 }
 
 /// Copies text to the system clipboard in web environments using Navigator.
@@ -74,7 +161,6 @@ void readSelectedFile(String inputId, void Function(String base64, String fileNa
       print('[DART FILE READER] FileReader result is null.');
       return;
     }
-    // Result is a JSString when reading as DataURL
     final dataUrl = (result as JSString).toDart;
     final splitIndex = dataUrl.indexOf(',');
     if (splitIndex == -1) {
@@ -110,7 +196,6 @@ void triggerFilePicker(String inputId, void Function(String base64, String fileN
 }
 
 /// Asynchronously loads an image object to extract its native width and height metrics on client.
-/// Registers event listeners before assigning the source to eliminate race conditions.
 Future<Map<String, int>> getImageDimensions(String objectUrl) {
   final completer = Completer<Map<String, int>>();
   final img = web.document.createElement('img') as web.HTMLImageElement;
@@ -131,9 +216,9 @@ Future<Map<String, int>> getImageDimensions(String objectUrl) {
 }
 
 /// Client-side implementation of retrieving an input element value with type-safe inspection.
-/// Uses package:web, dart:js_interop, and dart:js_interop_unsafe to guarantee compatibility.
 String getInputValue(dynamic event) {
   if (event == null) return '';
+
   // 1. Direct package:web Event checking
   try {
     if (event is web.Event) {
@@ -151,6 +236,7 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue web.Event Error] $e');
   }
+
   // 2. dart:js_interop and dart:js_interop_unsafe inspection on JSObjects
   try {
     if (event is JSObject) {
@@ -167,6 +253,7 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue js_interop Error] $e');
   }
+
   // 3. Fallback to dynamic property invocation for legacy wrapped objects
   try {
     final target = (event as dynamic).target;
@@ -179,6 +266,7 @@ String getInputValue(dynamic event) {
   } catch (e) {
     print('[getInputValue dynamic Fallback Error] $e');
   }
+
   return '';
 }
 
@@ -210,11 +298,11 @@ void openWindow(String url, String target) {
   web.window.open(url, target);
 }
 
-/// Dynamically binds Google Places Autocomplete to an input element using dart:js_interop and dart:js_interop_unsafe.
+/// Dynamically binds Google Places Autocomplete to an input element.
 void initAddressAutocomplete(String inputId, void Function(String) callback) {
   final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
   if (input == null) return;
-  // Check if Google Maps Places SDK has finished loading on the global window
+
   final jsWindow = web.window as JSObject;
   if (!jsWindow.has('google')) {
     web.window.setTimeout((() {
@@ -236,6 +324,7 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
     }).toJS, 150.toJS);
     return;
   }
+
   try {
     final options = _AutocompleteOptions(
       fields: ['formatted_address'.toJS].toJS,

@@ -3,6 +3,7 @@ import 'package:jaspr/dom.dart';
 
 /// Renders a two-page spread row tile in the fanzine grid view.
 class FanzineSpreadTile extends StatelessComponent {
+  final String? id;
   final Component? leftWidget;
   final Map<String, dynamic>? leftPageData;
   final Map<String, dynamic>? rightPageData;
@@ -11,17 +12,20 @@ class FanzineSpreadTile extends StatelessComponent {
   final Function(int) onPageTap;
 
   const FanzineSpreadTile({
+    this.id,
     this.leftWidget,
     this.leftPageData,
     this.rightPageData,
     this.leftIndex,
     this.rightIndex,
     required this.onPageTap,
+    super.key,
   });
 
   @override
   Component build(BuildContext context) {
     final bool isHeaderRow = leftWidget != null;
+
     final baseSpread = div(
       classes: 'spread-paper',
       [
@@ -41,6 +45,7 @@ class FanzineSpreadTile extends StatelessComponent {
     );
 
     return div(
+      id: id,
       classes: 'spread-wrapper',
       [
         baseSpread,
@@ -61,6 +66,7 @@ class FanzineSpreadTile extends StatelessComponent {
   Component _buildPageItem(Map<String, dynamic> pageData, int index) {
     final String? url = pageData['gridUrl'] ?? pageData['thumbnailUrl'] ?? pageData['imageUrl'];
     final pageNum = pageData['pageNumber'] ?? index;
+
     return div(
       classes: 'page-wrapper-border cursor-pointer',
       events: {'click': (e) => onPageTap(index)},

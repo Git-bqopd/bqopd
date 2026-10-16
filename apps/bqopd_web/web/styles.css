@@ -1,4 +1,4 @@
-/* --- MATERIAL DESIGN 3 TOKENS --- */
+/* STREAMING_CHUNK:Defining Material Design 3 tokens and root theme variables... */
 :root {
 --m3-surface: #ffffff;
 --m3-outline: #79747E;
@@ -17,7 +17,7 @@ padding: 0;
 min-height: 100vh;
 }
 
-/* Force Google Autocomplete dropdown layer on top of premium manila modals */
+/* STREAMING_CHUNK:Configuring Google Maps autocomplete dropdown layer... */
 .pac-container {
 z-index: 20000 !important;
 border-radius: 8px !important;
@@ -26,7 +26,7 @@ border: 1px solid #eee !important;
 font-family: inherit !important;
 }
 
-/* Material Icons Setup */
+/* STREAMING_CHUNK:Configuring Material Symbols icon typography... */
 .material-symbols-outlined {
 font-family: 'Material Symbols Outlined' !important;
 font-weight: normal;
@@ -44,7 +44,7 @@ direction: ltr;
 font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* --- M3 SEGMENTED BUTTON (Exact Material 3 Spec) --- */
+/* STREAMING_CHUNK:Styling Material 3 segmented button components... */
 .m3-segmented-button-container {
 display: inline-flex;
 align-items: stretch;
@@ -96,7 +96,7 @@ height: 100%;
 flex-shrink: 0;
 }
 
-/* --- M3 FILTER CHIP (Identical to Flutter) --- */
+/* STREAMING_CHUNK:Styling Material 3 filter chips... */
 .m3-chip {
 display: inline-flex;
 align-items: center;
@@ -139,7 +139,7 @@ font-size: 18px !important;
 margin-right: 4px;
 }
 
-/* --- M3 SPLIT BUTTON (Submission UI) --- */
+/* STREAMING_CHUNK:Styling Material 3 split button components... */
 .m3-split-button {
 display: inline-flex;
 align-items: center;
@@ -183,8 +183,7 @@ background-color: var(--m3-outline);
 opacity: 0.12;
 }
 
-/* --- STRUCTURAL LAYOUT --- /
-/ Manila Envelope Aesthetic - Locked to 5x8 Ratio */
+/* STREAMING_CHUNK:Styling manila envelopes and sticker cards... */
 .manila-envelope, .manila-envelope-cover {
 background-color: var(--envelope-yellow, #F1B255);
 padding: 20px;
@@ -199,7 +198,6 @@ box-shadow: 4px 8px 15px rgba(0, 0, 0, 0.26);
 box-sizing: border-box;
 }
 
-/* Flexible Manila Envelope - For dynamic content editors */
 .manila-envelope-flexible {
 background-color: var(--envelope-yellow, #F1B255);
 padding: 20px;
@@ -213,7 +211,6 @@ box-shadow: 4px 8px 15px rgba(0, 0, 0, 0.26);
 box-sizing: border-box;
 }
 
-/* White Sticker Aesthetic */
 .white-sticker {
 background-color: white;
 border-radius: 12px;
@@ -232,7 +229,6 @@ padding: 32px;
 position: relative;
 }
 
-/* White Sticker-Compact */
 .white-sticker-compact {
 background-color: white;
 border-radius: 12px;
@@ -247,7 +243,6 @@ overflow: hidden;
 box-sizing: border-box;
 }
 
-/* Flexible White Sticker */
 .white-sticker-flexible {
 background-color: white;
 border-radius: 12px;
@@ -260,7 +255,7 @@ overflow: hidden;
 box-sizing: border-box;
 }
 
-/* User Tile & Avatar Components */
+/* STREAMING_CHUNK:Styling user avatars and identity badge elements... */
 .user-tile {
 display: flex;
 flex-direction: row;
@@ -327,10 +322,10 @@ padding-top: 8px;
 padding-bottom: 8px;
 }
 
-/* Utility Classes */
+/* STREAMING_CHUNK:Defining CSS layout and typography utility helpers... */
 .flex { display: flex; }
 .flex-col { display: flex; flex-direction: column; }
-.flex-row { display: flex; flex-direction: row; }
+.flex-row { display: flex; flex-row: row; }
 .flex-wrap { flex-wrap: wrap; }
 .items-center { align-items: center; }
 .justify-center { justify-content: center; }
@@ -367,7 +362,7 @@ padding-bottom: 8px;
 .positioned-fill { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .positioned-left { position: absolute; top: 0; bottom: 0; left: 0; }
 
-/* Form Elements */
+/* STREAMING_CHUNK:Styling forms and core button inputs... */
 input {
 width: 100%;
 padding: 12px;
@@ -422,7 +417,7 @@ margin-top: 8px;
 text-align: center;
 }
 
-/* Fanzine Reader & Navigation */
+/* STREAMING_CHUNK:Configuring reader pills and page image frames... */
 .nav-pill {
 background: white;
 border: 1px solid rgba(0,0,0,0.05);
@@ -437,7 +432,9 @@ margin-bottom: 10px;
 color: black;
 }
 
-.nav-pill:hover { background: #f9f9f9; }
+.nav-pill:hover {
+background: #f9f9f9;
+}
 
 .fanzine-page-img {
 max-width: 100%;
@@ -448,7 +445,7 @@ display: block;
 object-fit: contain;
 }
 
-/* --- Grid View Layout --- */
+/* STREAMING_CHUNK:Styling grid view spread wrapper and two-page spreads... */
 .spread-wrapper {
 position: relative;
 width: 100%;
@@ -501,7 +498,6 @@ height: 100%;
 object-fit: contain;
 }
 
-/* Header Overlay */
 .header-envelope-overlay {
 position: absolute;
 top: 0;
@@ -528,7 +524,7 @@ width: 100%;
 box-sizing: border-box;
 }
 
-/* --- OPTIMIZED COMPACT TOOLBAR & BUTTONS --- */
+/* STREAMING_CHUNK:Styling compact action toolbars and badge indicators... */
 .toolbar-container {
 padding: 8px 4px;
 display: flex;
@@ -612,7 +608,7 @@ color: black;
 font-weight: bold;
 }
 
-/* Stats Table Classes */
+/* STREAMING_CHUNK:Configuring analytics tables and layout splitter styles... */
 .stats-table-wrapper {
 width: 100%;
 overflow-x: auto;
@@ -647,7 +643,6 @@ font-weight: bold;
 color: #3f51b5;
 }
 
-/* Layout Splitter */
 .reader-split-layout {
 display: flex;
 flex-direction: row;
@@ -684,16 +679,20 @@ flex-direction: column;
 align-items: center;
 }
 
+/* STREAMING_CHUNK:Configuring desktop and mobile responsive media queries... */
 @media (min-width: 901px) {
+.hidden-on-desktop {
+display: none !important;
+}
 .list-area.reader-mode {
-flex: 0 0 calc((100vh - 120px) * 0.625);
-min-width: calc((100vh - 120px) * 0.625);
-max-width: calc((100vh - 120px) * 0.625);
+flex: 0 0 calc((100vh - 180px) * 0.625 + 32px);
+min-width: calc((100vh - 180px) * 0.625 + 32px);
+max-width: calc((100vh - 180px) * 0.625 + 32px);
 }
 .list-area.editor-mode {
-flex: 0 0 650px;
-min-width: 650px;
-max-width: 650px;
+flex: 0 0 calc((100vh - 180px) * 0.625 + 32px);
+min-width: calc((100vh - 180px) * 0.625 + 32px);
+max-width: calc((100vh - 180px) * 0.625 + 32px);
 }
 }
 
@@ -717,6 +716,60 @@ max-width: none !important;
 }
 }
 
+/* STREAMING_CHUNK:Configuring Column 3 target and non-target widget styling tokens... */
+.panel-page-card {
+transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+filter 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+border-color 0.25s ease,
+box-shadow 0.25s ease;
+cursor: pointer;
+}
+
+.panel-page-card.non-target {
+opacity: 0.55;
+filter: grayscale(25%);
+}
+
+.panel-page-card.non-target:hover {
+opacity: 0.8;
+filter: grayscale(0%);
+}
+
+.panel-page-card.target {
+opacity: 1.0;
+filter: none;
+border-color: #6750A4 !important;
+box-shadow: 0 4px 16px rgba(103, 80, 164, 0.12) !important;
+}
+
+/* STREAMING_CHUNK:Configuring Column 3 horizontal target indicator line styling... */
+.panel-target-indicator-line {
+position: absolute;
+left: 0;
+right: 0;
+height: 2px;
+background-color: var(--m3-primary, #6750A4);
+box-shadow: 0 0 8px rgba(103, 80, 164, 0.4), 0 1px 3px rgba(103, 80, 164, 0.25);
+pointer-events: none;
+z-index: 60;
+box-sizing: border-box;
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 0 8px;
+}
+
+.panel-target-indicator-line::before,
+.panel-target-indicator-line::after {
+content: '';
+width: 6px;
+height: 6px;
+border-radius: 50%;
+background-color: var(--m3-primary, #6750A4);
+box-shadow: 0 0 6px rgba(103, 80, 164, 0.6);
+}
+
+/* STREAMING_CHUNK:Configuring header and container widths... */
 .stats-table th {
 font-size: 11px;
 text-transform: uppercase;
@@ -780,7 +833,7 @@ width: 100%;
 max-width: 100%;
 }
 .editor-mode .fanzine-page-wrapper {
-width: calc((100vh - 220px) * 0.625 + 32px);
+width: 100%;
 max-width: 100%;
 box-sizing: border-box;
 }
@@ -788,19 +841,13 @@ box-sizing: border-box;
 
 .fh-sticker-view { display: none; }
 .fh-full-view { display: flex; }
-
 .reader-split-layout:has(.list-area) .grid-area .fh-full-view { display: none !important; }
 .reader-split-layout:has(.list-area) .grid-area .fh-sticker-view { display: flex !important; }
 
+/* STREAMING_CHUNK:Configuring animations and profile cards without drop shadows... */
 @keyframes slideDownFadeIn {
-from {
-max-height: 0;
-opacity: 0;
-}
-to {
-max-height: 20000px;
-opacity: 1;
-}
+from { max-height: 0; opacity: 0; }
+to { max-height: 20000px; opacity: 1; }
 }
 
 .panel-container-animate {
@@ -826,15 +873,9 @@ border-radius: 4px;
 width: 100%;
 }
 
-.skeleton-line.short {
-width: 60%;
-}
+.skeleton-line.short { width: 60%; }
+.skeleton-line.medium { width: 85%; }
 
-.skeleton-line.medium {
-width: 85%;
-}
-
-/* --- SQUARED PROFILE CARD TOKENS WITHOUT DROP SHADOWS --- */
 .envelope-8-5-desktop {
 display: flex;
 width: 100%;

@@ -1,11 +1,30 @@
-/// No-op fallback implementation for the Dart VM (server-side context).
-/// This prevents package:web from being compiled during server pre-rendering.
 import 'dart:async';
 
 // EXPORT the stub relatively to align import resolution paths between compiler environments
 export 'web_firebase_interop_stub.dart';
 
-void scrollToElement(String id) {
+void scrollToElement(String id, {String block = 'center', bool smooth = true}) {
+  // No-op on the server
+}
+
+void scrollContainerToTop(String containerId, {bool smooth = true}) {
+  // No-op on the server
+}
+
+void scrollContainerToBottom(String containerId, {bool smooth = true}) {
+  // No-op on the server
+}
+
+void centerElementInContainer(String containerId, String targetId, {bool smooth = true}) {
+  // No-op on the server
+}
+
+void scrollElementToTopOfContainer(
+    String containerId,
+    String targetId, {
+      bool smooth = true,
+      double offset = 16.0,
+    }) {
   // No-op on the server
 }
 

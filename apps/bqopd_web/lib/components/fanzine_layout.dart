@@ -1,14 +1,21 @@
+import 'dart:async';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:web/web.dart' as web;
 import 'readers/fanzine_grid_renderer.dart';
 import 'readers/fanzine_list_renderer.dart';
 import 'readers/panel_column_renderer.dart';
+import '../utils/web_utils.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 
 enum FanzineViewMode { grid, single }
 
 /// Multi-column responsive layout coordinator managing grid spreads,
 /// vertical list views, and collapsible desktop bonus panels.
+/// Enforces directional scroll relationships:
+/// 1. Scrolling in Column 1 never changes Column 2 or Column 3.
+/// 2. Scrolling in Column 2 keeps Column 1 centered vertically, but never touches Column 3.
+/// 3. Scrolling in Column 3 auto-centers both Column 1 and Column 2 to their matching widgets.
 class FanzineLayout extends StatefulComponent {
   final String frefFanzineId;
   final String? shortCode;
@@ -51,8 +58,18 @@ class FanzineLayout extends StatefulComponent {
 
 class _FanzineLayoutState extends State<FanzineLayout> {
   FanzineViewMode _viewMode = FanzineViewMode.grid;
-  int _targetIndex = 0;
+
+  // Distinct target index tracking:
+  // _listTargetIndex drives Column 2's current active card.
+  // _panelTargetIndex drives Column 3's target card.
+  int _listTargetIndex = 0;
+  int _panelTargetIndex = 0;
+
   BonusRowType? _activeGlobalPanel;
+  int? _lastFullyInFrameIndex;
+  bool _isProgrammaticScrolling = false;
+  Timer? _programmaticScrollTimer;
+  int _activeScrollSource = 0; // 1: Col 1, 2: Col 2, 3: Col 3
 
   @override
   void initState() {
@@ -61,7 +78,8 @@ class _FanzineLayoutState extends State<FanzineLayout> {
       _viewMode = FanzineViewMode.single;
     }
     if (component.initialPageNumber != null && component.initialPageNumber! > 0) {
-      _targetIndex = component.initialPageNumber!;
+      _listTargetIndex = component.initialPageNumber!;
+      _panelTargetIndex = component.initialPageNumber!;
       _viewMode = FanzineViewMode.single;
     }
   }
@@ -80,11 +98,54 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     }
   }
 
+  @override
+  void dispose() {
+    _programmaticScrollTimer?.cancel();
+    super.dispose();
+  }
+
   void _switchToSingle(int index) {
-    setState(() {
-      _targetIndex = index;
-      _viewMode = FanzineViewMode.single;
+    _lastFullyInFrameIndex = index;
+    final totalItems = component.pages.length + 1;
+
+    // Lock programmatic scrolling so intermediate scroll events do not jerk the columns
+    _isProgrammaticScrolling = true;
+    _activeScrollSource = 1;
+    _programmaticScrollTimer?.cancel();
+    _programmaticScrollTimer = Timer(const Duration(milliseconds: 650), () {
+      _isProgrammaticScrolling = false;
+      _activeScrollSource = 0;
     });
+
+    // Immediately center Column 1 on the clicked item's spread and hold it there
+    Future.microtask(() {
+      _syncColumn1(index, totalItems);
+    });
+
+    // If Column 3 is open and a page item was selected, center the matching card in Column 3
+    if (_activeGlobalPanel != null && index > 0) {
+      Future.microtask(() {
+        centerElementInContainer(
+          'panel-column-scroll-area',
+          'panel-page-${index - 1}',
+          smooth: true,
+        );
+      });
+    }
+
+    // Direct Column 2 to scroll to the chosen page card
+    final String targetId = index == 0
+        ? 'fanzine-header'
+        : 'reader-page-${index - 1}';
+    scrollToElement(targetId, block: 'center', smooth: true);
+
+    if (_viewMode != FanzineViewMode.single || _listTargetIndex != index) {
+      setState(() {
+        _listTargetIndex = index;
+        _panelTargetIndex = index;
+        _viewMode = FanzineViewMode.single;
+      });
+    }
   }
 
   void _switchToGrid() {
@@ -93,10 +154,223 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     });
   }
 
-  void _handleTogglePanel(BonusRowType type) {
-    setState(() {
-      _activeGlobalPanel = (_activeGlobalPanel == type) ? null : type;
+  void _handleTogglePanel(BonusRowType type, int pageIndex) {
+    final int listIndex = pageIndex + 1;
+    final bool isSamePanelAndTarget =
+    (_activeGlobalPanel == type && _panelTargetIndex == listIndex);
+
+    // If clicking the active button on the already-targeted page, close the panel
+    if (isSamePanelAndTarget) {
+      setState(() {
+        _activeGlobalPanel = null;
+      });
+      return;
+    }
+
+    _lastFullyInFrameIndex = listIndex;
+    final totalItems = component.pages.length + 1;
+
+    // Lock programmatic scrolling so intermediate scroll events do not jerk the columns
+    _isProgrammaticScrolling = true;
+    _activeScrollSource = 2; // Col 2 interaction
+    _programmaticScrollTimer?.cancel();
+    _programmaticScrollTimer = Timer(const Duration(milliseconds: 650), () {
+      _isProgrammaticScrolling = false;
+      _activeScrollSource = 0;
     });
+
+    setState(() {
+      _activeGlobalPanel = type;
+      _listTargetIndex = listIndex;
+      _panelTargetIndex = listIndex;
+    });
+
+    // 1. Center the clicked page's spread in Column 1
+    Future.microtask(() {
+      _syncColumn1(listIndex, totalItems);
+    });
+
+    // 2. Center Column 2 on the corresponding page card
+    final String targetId = 'reader-page-$pageIndex';
+    scrollToElement(targetId, block: 'center', smooth: true);
+
+    // 3. Align the target widget in Column 3 to the top of the column
+    Future.microtask(() {
+      scrollElementToTopOfContainer(
+        'panel-column-scroll-area',
+        'panel-page-$pageIndex',
+        smooth: true,
+        offset: 16.0,
+      );
+    });
+  }
+
+  void _cancelProgrammaticScroll() {
+    if (_isProgrammaticScrolling) {
+      _programmaticScrollTimer?.cancel();
+      _isProgrammaticScrolling = false;
+      _activeScrollSource = 0;
+    }
+  }
+
+  void _handleListScroll() {
+    if (!kIsWeb) return;
+
+    // Only synchronize when in split desktop view (Column 1 and Column 2 are both active)
+    final bool enableTwoPage = component.twoPage;
+    final isGrid = enableTwoPage ? (_viewMode == FanzineViewMode.grid) : false;
+    if (isGrid) return;
+
+    // If a programmatic smooth-scroll is active from another column (like Col 3), ignore
+    if (_isProgrammaticScrolling && _activeScrollSource != 2) {
+      return;
+    }
+
+    final listArea = web.document.getElementById('fanzine-list-area');
+    final gridArea = web.document.getElementById('fanzine-grid-area');
+    if (listArea == null || gridArea == null) return;
+
+    final containerRect = listArea.getBoundingClientRect();
+    final totalItems = component.pages.length + 1; // 0 is header, 1..N are pages
+
+    // 1. Top boundary check: when scrolled to the very top, snap Column 1 to the top
+    if (listArea.scrollTop <= 15) {
+      if (_lastFullyInFrameIndex != 0) {
+        _lastFullyInFrameIndex = 0;
+        _listTargetIndex = 0;
+        scrollContainerToTop('fanzine-grid-area', smooth: true);
+      }
+      return;
+    }
+
+    // 2. Bottom boundary check: when scrolled to the very bottom, snap Column 1 to the bottom
+    if (listArea.scrollTop + listArea.clientHeight >= listArea.scrollHeight - 15) {
+      final lastIdx = totalItems - 1;
+      if (_lastFullyInFrameIndex != lastIdx) {
+        _lastFullyInFrameIndex = lastIdx;
+        _listTargetIndex = lastIdx;
+        scrollContainerToBottom('fanzine-grid-area', smooth: true);
+      }
+      return;
+    }
+
+    int? currentFullyInFrame;
+    for (int i = 0; i < totalItems; i++) {
+      final String itemId = i == 0 ? 'fanzine-header' : 'reader-page-${i - 1}';
+      final itemEl = web.document.getElementById(itemId);
+      if (itemEl != null) {
+        final itemRect = itemEl.getBoundingClientRect();
+        // Fully in frame when its top and bottom both sit comfortably inside the scroll viewport
+        if (itemRect.top >= containerRect.top - 16 &&
+            itemRect.bottom <= containerRect.bottom + 16) {
+          currentFullyInFrame = i;
+          break;
+        }
+      }
+    }
+
+    // 3. Synchronize ONLY Column 1 when a new widget comes fully into frame
+    // RULE: Column 3 is completely untouched when Column 2 is scrolled!
+    // CRITICAL: We deliberately avoid calling setState() here so Column 2 maintains
+    // uninterrupted native scroll momentum with zero sticking, jittering, or jumps.
+    if (currentFullyInFrame != null && currentFullyInFrame != _lastFullyInFrameIndex) {
+      final int frameIndex = currentFullyInFrame;
+      _lastFullyInFrameIndex = frameIndex;
+      _listTargetIndex = frameIndex;
+      _syncColumn1(frameIndex, totalItems);
+    }
+  }
+
+  void _updateTargetFromColumn3(int pageIndex) {
+    final listIndex = pageIndex + 1;
+    if (_lastFullyInFrameIndex == listIndex && _activeScrollSource == 3) {
+      return;
+    }
+    _lastFullyInFrameIndex = listIndex;
+
+    setState(() {
+      _listTargetIndex = listIndex;
+      _panelTargetIndex = listIndex;
+    });
+
+    // Lock programmatic scrolling for Column 2 so its onscroll doesn't fight
+    _isProgrammaticScrolling = true;
+    _activeScrollSource = 3;
+    _programmaticScrollTimer?.cancel();
+    _programmaticScrollTimer = Timer(const Duration(milliseconds: 650), () {
+      _isProgrammaticScrolling = false;
+      _activeScrollSource = 0;
+    });
+
+    // RULE: Scrolling in Column 3 keeps BOTH Column 1 and Column 2 auto centered to their matching widgets
+    // 1. Center Column 2 on the corresponding page card
+    final String targetId = 'reader-page-$pageIndex';
+    scrollToElement(targetId, block: 'center', smooth: true);
+
+    // 2. Center Column 1 on the corresponding spread
+    final totalItems = component.pages.length + 1;
+    _syncColumn1(listIndex, totalItems);
+  }
+
+  void _handlePanelCardTap(int pageIndex) {
+    final listIndex = pageIndex + 1;
+    _lastFullyInFrameIndex = listIndex;
+
+    _isProgrammaticScrolling = true;
+    _activeScrollSource = 3;
+    _programmaticScrollTimer?.cancel();
+    _programmaticScrollTimer = Timer(const Duration(milliseconds: 650), () {
+      _isProgrammaticScrolling = false;
+      _activeScrollSource = 0;
+    });
+
+    setState(() {
+      _listTargetIndex = listIndex;
+      _panelTargetIndex = listIndex;
+    });
+
+    // Center the tapped card in Column 3
+    centerElementInContainer(
+      'panel-column-scroll-area',
+      'panel-page-$pageIndex',
+      smooth: true,
+    );
+
+    // Center the page card in Column 2
+    final String targetId = 'reader-page-$pageIndex';
+    scrollToElement(targetId, block: 'center', smooth: true);
+
+    // Center the spread in Column 1
+    final totalItems = component.pages.length + 1;
+    _syncColumn1(listIndex, totalItems);
+  }
+
+  void _syncColumn1(int itemIndex, int totalItems) {
+    final bool hasCover = component.hasCover;
+
+    // First image or header envelope: scroll Column 1 all the way to top
+    if (itemIndex == 0 || (hasCover && itemIndex == 1)) {
+      scrollContainerToTop('fanzine-grid-area', smooth: true);
+      return;
+    }
+
+    // Last image: scroll Column 1 all the way to bottom
+    if (itemIndex == totalItems - 1) {
+      scrollContainerToBottom('fanzine-grid-area', smooth: true);
+      return;
+    }
+
+    // Intermediate pages: center the corresponding spread vertically in Column 1
+    final spreadIndex = getSpreadIndexForListIndex(
+      listIndex: itemIndex,
+      pages: component.pages,
+      hasCover: hasCover,
+    );
+    centerElementInContainer(
+      'fanzine-grid-area',
+      'grid-spread-$spreadIndex',
+      smooth: true,
+    );
   }
 
   @override
@@ -106,11 +380,27 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     final showThirdColumn = !isGrid && _activeGlobalPanel != null;
 
     return div(classes: 'reader-split-layout', [
+      // Column 1 (Left): Independent scroll with zero side-effects on Column 2 or 3
       if (enableTwoPage)
         div(
+          id: 'fanzine-grid-area',
           classes: 'grid-area ${!isGrid ? 'hidden-on-mobile' : ''}',
           attributes: {
             'style': isGrid ? 'flex: 1;' : 'flex: 0 0 450px;'
+          },
+          events: {
+            'wheel': (e) {
+              _cancelProgrammaticScroll();
+              _activeScrollSource = 1;
+            },
+            'touchstart': (e) {
+              _cancelProgrammaticScroll();
+              _activeScrollSource = 1;
+            },
+            'pointerdown': (e) {
+              _cancelProgrammaticScroll();
+              _activeScrollSource = 1;
+            },
           },
           [
             FanzineGridRenderer(
@@ -121,9 +411,26 @@ class _FanzineLayoutState extends State<FanzineLayout> {
             )
           ],
         ),
+      // Column 2 (Center): Scrolling keeps Column 1 centered, leaves Column 3 untouched
       if (!isGrid)
         div(
+          id: 'fanzine-list-area',
           classes: 'list-area ${component.isEditingMode ? 'editor-mode' : 'reader-mode'} flex-col items-center',
+          events: {
+            'scroll': (e) => _handleListScroll(),
+            'wheel': (e) {
+              _cancelProgrammaticScroll();
+              _activeScrollSource = 2;
+            },
+            'touchstart': (e) {
+              _cancelProgrammaticScroll();
+              _activeScrollSource = 2;
+            },
+            'pointerdown': (e) {
+              _cancelProgrammaticScroll();
+              _activeScrollSource = 2;
+            },
+          },
           [
             FanzineListRenderer(
               fanzineId: component.frefFanzineId,
@@ -134,7 +441,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
               activeGlobalPanel: _activeGlobalPanel,
               onTogglePanel: _handleTogglePanel,
               onOpenGrid: enableTwoPage ? _switchToGrid : null,
-              initialIndex: _targetIndex,
+              initialIndex: _listTargetIndex,
               preloadedImageStats: component.preloadedImageStats,
               likedImageIds: component.likedImageIds,
               authState: component.authState,
@@ -144,9 +451,11 @@ class _FanzineLayoutState extends State<FanzineLayout> {
             )
           ],
         ),
+      // Column 3 (Right): Scrolling auto-centers both Column 1 and Column 2 to their matching widgets
       if (showThirdColumn)
         div(
-          classes: 'flex-1 h-full overflow-y-auto hidden-on-mobile',
+          id: 'fanzine-panel-area',
+          classes: 'flex-1 h-full overflow-hidden hidden-on-mobile',
           attributes: const {
             'style': 'border-left: 1px solid #d1d5db; background-color: #e5e5e5;'
           },
@@ -156,6 +465,14 @@ class _FanzineLayoutState extends State<FanzineLayout> {
               pages: component.pages,
               activePanel: _activeGlobalPanel!,
               isEditingMode: component.isEditingMode,
+              targetIndex: _panelTargetIndex,
+              onPageCardTap: _handlePanelCardTap,
+              onTargetChanged: _updateTargetFromColumn3,
+              onScroll: () {},
+              onUserScrollStart: () {
+                _cancelProgrammaticScroll();
+                _activeScrollSource = 3;
+              },
               onClose: () => setState(() => _activeGlobalPanel = null),
             )
           ],

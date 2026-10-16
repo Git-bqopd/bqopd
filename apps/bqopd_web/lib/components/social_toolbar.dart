@@ -239,6 +239,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
       _isLiked = newStatus;
       _likeCount += newStatus ? 1 : -1;
     });
+
     if (newStatus) {
       await fsUpdateDoc('images/${component.imageId}', jsonEncode({'likeCount': WebFieldValue.increment(1)}));
       await fsSetDoc('Users/$uid/activity/likes/images/${component.imageId}', jsonEncode({
@@ -272,10 +273,10 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final String fullUrl = '$origin$canonicalPath';
 
     copyToClipboard(fullUrl);
-
     setState(() {
       _justCopiedShare = true;
     });
+
     _copyToastTimer?.cancel();
     _copyToastTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
@@ -327,11 +328,16 @@ class _SocialToolbarState extends State<SocialToolbar> {
           _buildToolbarButton(tool)
       ]),
       if (component.activeBonusRow == BonusRowType.settings)
-        _buildSettingsToggleRow(
-          hasYoutube: hasYoutube,
-          isGame: isGame,
-          isIndiciaPage: isIndiciaPage,
-          canOpenGrid: canOpenGrid,
+        div(
+          classes: 'hidden-on-desktop w-full',
+          [
+            _buildSettingsToggleRow(
+              hasYoutube: hasYoutube,
+              isGame: isGame,
+              isIndiciaPage: isIndiciaPage,
+              canOpenGrid: canOpenGrid,
+            ),
+          ],
         ),
     ]);
   }
@@ -383,7 +389,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
 
     final btnClasses = 'toolbar-btn ${isActive ? 'active' : ''} ${tool.id == 'Like' ? 'like-btn' : ''}';
     final iconPath = isActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
-
     final String displayLabel = (tool.id == 'Share' && _justCopiedShare) ? 'copied!' : tool.label;
 
     return button(
@@ -456,7 +461,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     final bool isToolActive = tool.bonusRow != null && component.activeBonusRow == tool.bonusRow;
     final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
     final iconPath = isToolActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
-
     String extraStyle = '';
     if (!hasContent) {
       extraStyle = 'opacity: 0.25; filter: grayscale(100%); cursor: not-allowed;';
