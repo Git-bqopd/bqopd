@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import '../utils/web_firebase_interop.dart';
-import '../utils/firebase_mocks.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 
 /// Data model holding all publication and transcription metadata for a historical letter.

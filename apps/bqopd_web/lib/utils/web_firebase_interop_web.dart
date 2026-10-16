@@ -43,6 +43,7 @@ window.renderMapCoverPage = async (configJson) => {
     canvas.width = 2000;
     canvas.height = 3200;
     const ctx = canvas.getContext('2d');
+
     ctx.fillStyle = '#e5e3df';
     ctx.fillRect(0, 0, 2000, 3200);
 
@@ -54,9 +55,14 @@ window.renderMapCoverPage = async (configJson) => {
         const lat = parseFloat(l.lat);
         const lng = parseFloat(l.lng);
         if (!isNaN(lat) && !isNaN(lng)) {
-            allCoords.push({ lat: lat, lng: lng, isCenter: false });
+            allCoords.push({
+                lat: lat,
+                lng: lng,
+                isCenter: false
+            });
         }
     });
+
     if (allCoords.length === 0) {
         allCoords.push({ lat: 43.8396, lng: -91.2436, isCenter: true });
     }
@@ -92,6 +98,7 @@ window.renderMapCoverPage = async (configJson) => {
         const lngZoom = Math.floor(Math.log(2000 / 256 / Math.max(0.0001, lngFraction)) / Math.LN2);
         return Math.max(4, Math.min(14, Math.min(latZoom, lngZoom)));
     }
+
     const zoom = calculateZoom();
 
     function projectToWorld(lat, lng, z) {
@@ -133,6 +140,7 @@ window.renderMapCoverPage = async (configJson) => {
         const maxTileX = Math.floor((originX + 2000) / tileSize);
         const minTileY = Math.floor(originY / tileSize);
         const maxTileY = Math.floor((originY + 3200) / tileSize);
+
         const subdomains = ['a', 'b', 'c', 'd'];
         const tilePromises = [];
 
@@ -142,6 +150,7 @@ window.renderMapCoverPage = async (configJson) => {
                 const tileUrl = `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${ty}@2x.png`;
                 const destX = tx * tileSize - originX;
                 const destY = ty * tileSize - originY;
+
                 tilePromises.push(new Promise((resolve) => {
                     const tImg = new Image();
                     tImg.crossOrigin = "anonymous";
@@ -193,6 +202,7 @@ window.renderMapCoverPage = async (configJson) => {
             ctx.fillStyle = '#761214';
             ctx.fill();
         }
+
         ctx.restore();
     }
 
@@ -252,6 +262,18 @@ void _ensureRenderPublisherPagesScript() {
   script.text = r'''
 window.renderPublisherPages = async (text) => {
     const pagesResults = [];
+    const GRID_TOP = 33;
+    const ROW_HEIGHT = 42;
+    const columnsX = [33, 696, 1359];
+    const colWidth = 608;
+    const maxY = 3120;
+
+    function snapToGrid(y) {
+        if (y <= GRID_TOP) return GRID_TOP;
+        const rows = Math.ceil((y - GRID_TOP) / ROW_HEIGHT);
+        return GRID_TOP + (rows * ROW_HEIGHT);
+    }
+
     function initPageCanvas() {
         const c = document.createElement('canvas');
         c.width = 2000;
@@ -267,15 +289,14 @@ window.renderPublisherPages = async (text) => {
         context.fillRect(1326, 99, 11, 3200 - 198);
         return { canvas: c, ctx: context };
     }
+
     let active = initPageCanvas();
     let canvas = active.canvas;
     let ctx = active.ctx;
-    const columnsX = [33, 696, 1359];
-    const colWidth = 608;
-    const maxY = 3120;
     let colIndex = 0;
-    let currentY = 33;
+    let currentY = GRID_TOP;
     let currentPageTextParts = [];
+
     function wrapText(textToWrap, fontSize, fontName, bold) {
         ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
         const words = textToWrap.split(' ');
@@ -293,6 +314,7 @@ window.renderPublisherPages = async (text) => {
         if (currentLine) lines.push(currentLine);
         return lines;
     }
+
     function loadImage(url) {
         return new Promise((resolve) => {
             if (!url || typeof url !== 'string' || !url.trim()) {
@@ -308,6 +330,7 @@ window.renderPublisherPages = async (text) => {
             img.src = url;
         });
     }
+
     function finalizeCurrentPage() {
         function getScaledBase64(targetWidth, targetHeight) {
             const scaledCanvas = document.createElement('canvas');
@@ -317,42 +340,51 @@ window.renderPublisherPages = async (text) => {
             sCtx.drawImage(canvas, 0, 0, 2000, 3200, 0, 0, targetWidth, targetHeight);
             return scaledCanvas.toDataURL('image/webp', 0.8).split(',')[1];
         }
+
         const originalBase64 = canvas.toDataURL('image/webp', 0.9).split(',')[1];
         const listBase64 = getScaledBase64(800, 1280);
         const gridBase64 = getScaledBase64(450, 720);
         const pageText = currentPageTextParts.join('\n\n').trim();
+
         pagesResults.push({
             original: originalBase64,
             list: listBase64,
             grid: gridBase64,
             text: pageText
         });
+
         active = initPageCanvas();
         canvas = active.canvas;
         ctx = active.ctx;
         colIndex = 0;
-        currentY = 33;
+        currentY = GRID_TOP;
         currentPageTextParts = [];
     }
+
     function advanceToNextColumn() {
         colIndex++;
-        currentY = 33;
+        currentY = GRID_TOP;
         if (colIndex >= 3) {
             finalizeCurrentPage();
         }
     }
+
     const lines = text.split('\n');
     const blocks = [];
     let currentParagraph = "";
+
     function commitParagraph() {
         const pText = currentParagraph.trim();
         if (!pText) return;
+
         const imageRegex = /^\{\{IMAGE(?::\s*(.*?))?\}\}$/i;
         const templateRegex = /^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$/i;
         const colBreakRegex = /^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$/i;
+
         const match = imageRegex.exec(pText);
         const tMatch = templateRegex.exec(pText);
         const cbMatch = colBreakRegex.exec(pText);
+
         if (match) {
             blocks.push({ type: 'image', url: match[1] ? match[1].trim() : '' });
         } else if (tMatch) {
@@ -374,12 +406,12 @@ window.renderPublisherPages = async (text) => {
             blocks.push({ type: 'column_break' });
         } else if (cbMatch || pText.toLowerCase() === 'column-break' || pText.toLowerCase() === 'column_break') {
             blocks.push({ type: 'column_break' });
-        } else if (pText.startsWith('###')) {
-            blocks.push({ type: 'h3', content: pText.substring(3).trim(), raw: pText });
-        } else if (pText.startsWith('##')) {
-            blocks.push({ type: 'h2', content: pText.substring(2).trim(), raw: pText });
-        } else if (pText.startsWith('#')) {
-            blocks.push({ type: 'h1', content: pText.substring(1).trim(), raw: pText });
+        } else if (pText.startsWith('### ')) {
+            blocks.push({ type: 'h3', content: pText.substring(4).trim(), raw: pText });
+        } else if (pText.startsWith('## ')) {
+            blocks.push({ type: 'h2', content: pText.substring(3).trim(), raw: pText });
+        } else if (pText.startsWith('# ')) {
+            blocks.push({ type: 'h1', content: pText.substring(2).trim(), raw: pText });
         } else if (pText.startsWith('* ') || pText.startsWith('- ')) {
             blocks.push({ type: 'bullet', content: pText.substring(2).trim(), raw: pText });
         } else {
@@ -387,11 +419,12 @@ window.renderPublisherPages = async (text) => {
         }
         currentParagraph = "";
     }
+
     for (let line of lines) {
         const cleanLine = line.trim();
         if (cleanLine === "") {
             commitParagraph();
-        } else if (cleanLine.startsWith('#') || cleanLine.startsWith('*') || cleanLine.startsWith('-') || cleanLine.startsWith('{{') || cleanLine.startsWith('[[')) {
+        } else if (cleanLine.startsWith('# ') || cleanLine.startsWith('## ') || cleanLine.startsWith('### ') || cleanLine.startsWith('* ') || cleanLine.startsWith('- ') || cleanLine.startsWith('{{') || cleanLine.startsWith('[[')) {
             commitParagraph();
             currentParagraph = cleanLine;
             commitParagraph();
@@ -400,13 +433,15 @@ window.renderPublisherPages = async (text) => {
         }
     }
     commitParagraph();
+
     for (let block of blocks) {
         if (block.type === 'column_break') {
-            if (currentY > 33) {
+            if (currentY > GRID_TOP) {
                 advanceToNextColumn();
             }
             continue;
         }
+
         if (block.type === 'image') {
             const targetUrl = block.url;
             let img = null;
@@ -417,7 +452,12 @@ window.renderPublisherPages = async (text) => {
             if (img && img.width > 0 && img.height > 0) {
                 drawHeight = colWidth * (img.height / img.width);
             }
-            if (currentY + drawHeight > maxY) {
+            // Enforce baseline grid alignment for images: calculate integer row span
+            const minMarginBottom = 14;
+            const rowsNeeded = Math.ceil((drawHeight + minMarginBottom) / ROW_HEIGHT);
+            const totalImageBlockHeight = rowsNeeded * ROW_HEIGHT;
+
+            if (currentY + totalImageBlockHeight > maxY) {
                 advanceToNextColumn();
             }
             if (img) {
@@ -441,7 +481,7 @@ window.renderPublisherPages = async (text) => {
                 ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
                 ctx.textAlign = 'left';
             }
-            currentY += drawHeight + 20;
+            currentY += totalImageBlockHeight;
             currentPageTextParts.push(`{{IMAGE: ${targetUrl}}}`);
         } else if (block.type === 'template_block' && block.templateNum === 1) {
             const targetUrl = block.url;
@@ -458,12 +498,13 @@ window.renderPublisherPages = async (text) => {
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
             const textLeadingStep = fontSize * 1.4;
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
+
             if (block.targetRow !== null && block.targetRow !== undefined) {
-                let targetYBottom = 33 + block.targetRow * 42;
+                let targetYBottom = GRID_TOP + block.targetRow * ROW_HEIGHT;
                 let targetYTop = targetYBottom - imgHeight;
                 if (currentY > targetYTop || targetYBottom + totalTextHeight > maxY) {
                     advanceToNextColumn();
-                    targetYBottom = 33 + block.targetRow * 42;
+                    targetYBottom = GRID_TOP + block.targetRow * ROW_HEIGHT;
                     targetYTop = targetYBottom - imgHeight;
                 }
                 if (img) {
@@ -479,10 +520,12 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
                     currentY += textLeadingStep;
                 }
-                currentY += 24;
+                currentY = snapToGrid(currentY + 14);
             } else {
                 const compositeBlockHeight = imgHeight + totalTextHeight + 20;
-                if (currentY + compositeBlockHeight > maxY) {
+                const rowsNeeded = Math.ceil((compositeBlockHeight + 14) / ROW_HEIGHT);
+                const totalBlockHeight = rowsNeeded * ROW_HEIGHT;
+                if (currentY + totalBlockHeight > maxY) {
                     advanceToNextColumn();
                 }
                 if (img) {
@@ -491,33 +534,33 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillStyle = '#f3f4f6';
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
-                currentY += imgHeight + 16;
+                let captionY = currentY + imgHeight + 16;
                 ctx.font = `${fontSize}px ${fontName}`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
-                    ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
-                    currentY += textLeadingStep;
+                    ctx.fillText(line, columnsX[colIndex], captionY + fontSize);
+                    captionY += textLeadingStep;
                 }
-                currentY += 24;
+                currentY += totalBlockHeight;
             }
             currentPageTextParts.push(`{{TEMPLATE_1: ${targetUrl} | ${block.content}}}`);
         } else {
-            let fontSize, fontName, bold = false, heightMultiplier = 1.5, spaceBelow = 12;
+            let fontSize, fontName, bold = false;
+            let step = ROW_HEIGHT; // Default line advance sits strictly on the 42px baseline grid
             if (block.type === 'h1') {
-                fontSize = 42; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 16;
+                fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
             } else if (block.type === 'h2') {
-                fontSize = 36; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 14;
+                fontSize = 36; fontName = 'Impact'; bold = true; step = 48;
             } else if (block.type === 'h3') {
-                fontSize = 28; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 12;
+                fontSize = 28; fontName = 'Impact'; bold = true; step = ROW_HEIGHT;
             } else {
-                fontSize = 28; fontName = 'Arial'; heightMultiplier = 1.5; spaceBelow = 12;
+                fontSize = 28; fontName = 'Arial'; bold = false; step = ROW_HEIGHT;
             }
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "   " + block.content : block.content;
+            const textToWrap = isBullet ? "•   " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
             ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
             ctx.fillStyle = '#1a1a1a';
-            const step = fontSize * heightMultiplier;
             let currentParagraphRenderedLines = [];
             for (let i = 0; i < linesToDraw.length; i++) {
                 const line = linesToDraw[i];
@@ -551,7 +594,8 @@ window.renderPublisherPages = async (text) => {
                 currentY += step;
                 currentParagraphRenderedLines.push(line);
             }
-            currentY += spaceBelow;
+            // Snap currentY to the baseline grid with a 14px minimum separation gap
+            currentY = snapToGrid(currentY + 14);
             if (currentParagraphRenderedLines.length > 0) {
                 if (block.type === 'h1') currentPageTextParts.push('# ' + currentParagraphRenderedLines.join(' '));
                 else if (block.type === 'h2') currentPageTextParts.push('## ' + currentParagraphRenderedLines.join(' '));
@@ -561,7 +605,7 @@ window.renderPublisherPages = async (text) => {
             }
         }
     }
-    if (currentY > 33 || colIndex > 0) {
+    if (currentY > GRID_TOP || colIndex > 0) {
         finalizeCurrentPage();
     }
     return JSON.stringify(pagesResults);

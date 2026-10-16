@@ -278,37 +278,39 @@ class AddressRadiusLetters {
     return matchingLetters.take(limit).toList();
   }
 
+  /// Calculates estimated height structured around the strict 42px baseline grid.
   static double estimateMarkdownHeight(String markdown) {
+    const double rowHeight = 42.0;
     double totalHeight = 0.0;
     final lines = markdown.split('\n');
 
     for (final rawLine in lines) {
       final line = rawLine.trim();
       if (line.isEmpty) {
-        totalHeight += 16.0;
+        totalHeight += rowHeight;
         continue;
       }
 
       if (line.startsWith('{{TEMPLATE')) {
-        totalHeight += 1200.0;
+        totalHeight += 29.0 * rowHeight; // ~1218px
       } else if (line.startsWith('{{IMAGE')) {
-        totalHeight += 480.0;
-      } else if (line.startsWith('###')) {
-        totalHeight += 55.0;
-      } else if (line.startsWith('##')) {
-        totalHeight += 65.0;
-      } else if (line.startsWith('#')) {
-        totalHeight += 75.0;
+        totalHeight += 12.0 * rowHeight; // ~504px
+      } else if (line.startsWith('### ')) {
+        totalHeight += 2.0 * rowHeight; // 84px
+      } else if (line.startsWith('## ')) {
+        totalHeight += 2.0 * rowHeight; // 84px
+      } else if (line.startsWith('# ')) {
+        totalHeight += 2.0 * rowHeight; // 84px
       } else {
         final words = line.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
         if (words.isNotEmpty) {
           final lineCount = math.max(1, (words.length / 7.2).ceil());
-          totalHeight += (lineCount * 42.0) + 16.0;
+          totalHeight += (lineCount * rowHeight) + rowHeight;
         }
       }
     }
 
-    totalHeight += 40.0;
+    totalHeight += rowHeight;
     return totalHeight;
   }
 
@@ -437,7 +439,6 @@ class AddressRadiusLetters {
     }
 
     // Phase 2: Exact Two-Way Canvas Convergence
-    // Measure actual rendered pages
     int renderedPages = await _testRenderPageCount(selectedLetters);
     print('[AddressRadiusLetters] Initial canvas test: $renderedPages pages (Target: $contentPagesCount)');
 
@@ -466,7 +467,7 @@ class AddressRadiusLetters {
           print('[AddressRadiusLetters] Fine-tuned exact match: ${selectedLetters.length} letters -> $renderedPages pages');
           break;
         } else if (testCount > contentPagesCount) {
-          selectedLetters.removeLast(); // Exceeded, try next candidate
+          selectedLetters.removeLast();
         } else {
           renderedPages = testCount;
         }

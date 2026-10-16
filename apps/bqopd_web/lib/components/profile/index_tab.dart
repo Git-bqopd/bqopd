@@ -31,7 +31,7 @@ class ProfileIndexTab extends StatefulComponent {
 
 class _ProfileIndexTabState extends State<ProfileIndexTab> {
   @override
-  ProfileIndexTab get component => super.component as ProfileIndexTab;
+  ProfileIndexTab get component => super.component;
 
   int _activeSubTab = 0; // 0: mentions, 1: comments
   List<Map<String, dynamic>> _mentions = [];
@@ -336,7 +336,7 @@ class ProfileCommentItem extends StatefulComponent {
 
 class _ProfileCommentItemState extends State<ProfileCommentItem> {
   @override
-  ProfileCommentItem get component => super.component as ProfileCommentItem;
+  ProfileCommentItem get component => super.component;
 
   String _fanzineTitle = '';
   String? _fanzineUsername;
@@ -713,7 +713,7 @@ class MentionsWorkGridTile extends StatefulComponent {
 
 class _MentionsWorkGridTileState extends State<MentionsWorkGridTile> {
   @override
-  MentionsWorkGridTile get component => super.component as MentionsWorkGridTile;
+  MentionsWorkGridTile get component => super.component;
 
   String? _resolvedCoverUrl;
 

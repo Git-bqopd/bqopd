@@ -2,7 +2,8 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 
 /// Highly authentic HTML/CSS-driven Web rendering of the 2000x3200 Publisher text template.
-/// Replicates multi-column text flow, custom heading styles, and dynamic image insertion.
+/// Replicates multi-column text flow, custom heading styles, dynamic image insertion,
+/// and baseline grid row alignment.
 class BasicTextTemplate extends StatelessComponent {
   final String textContent;
 
@@ -25,7 +26,7 @@ class BasicTextTemplate extends StatelessComponent {
             attributes: const {
               'style': 'column-count: 3; column-gap: 36px; column-rule: 4px solid #000000; '
                   'height: 100%; width: 100%; box-sizing: border-box; text-align: justify; '
-                  'overflow: hidden;'
+                  'overflow: hidden; line-height: 1.5;'
             },
             parsedParagraphs
         )
@@ -38,7 +39,7 @@ class BasicTextTemplate extends StatelessComponent {
     final lines = rawText.split('\n');
 
     String currentParagraph = "";
-    int currentRow = 0; // Track estimated vertical row lines
+    int currentRow = 0; // Track vertical row lines on the baseline grid
     bool forceNextColumn = false; // Flag to force the next non-empty content block into the subsequent column
 
     void commitParagraph() {
@@ -83,8 +84,6 @@ class BasicTextTemplate extends StatelessComponent {
               elements.add(
                   div(
                     attributes: {
-                      // Move the column break onto the spacer element so that the spacer
-                      // and template element remain in the exact same column flow!
                       'style': 'break-before: column; height: ${blankRows * 24}px; width: 100%;',
                     },
                     [],
@@ -96,10 +95,6 @@ class BasicTextTemplate extends StatelessComponent {
             currentRow += imgRows + captionRows;
           }
 
-          // Use a standard block-level wrapper div to apply the column break styling.
-          // Block-level elements guarantee cross-browser compatibility for column fragmentation,
-          // bypassing flexbox multi-column layout rendering bugs entirely.
-          // Adding break-after: column natively and strictly forces any trailing text to the next column.
           final String wrapperStyle = 'display: block; width: 100%; break-after: column; ' +
               (hasRowOffset ? '' : 'break-before: column;');
 
@@ -142,9 +137,8 @@ class BasicTextTemplate extends StatelessComponent {
               )
           );
 
-          // Signal that the next content element MUST be placed in the next column
           forceNextColumn = true;
-          currentRow = 0; // reset column flow for any subsequent elements in next columns!
+          currentRow = 0;
         } else {
           elements.add(p([Component.text('Unknown Template $templateNum: $caption')]));
         }
@@ -162,34 +156,34 @@ class BasicTextTemplate extends StatelessComponent {
               'style': styleStr
             }
         ));
-        currentRow += 8;
+        currentRow += 10; // Reserved row span on grid
         forceNextColumn = false;
-      } else if (pText.startsWith('###')) {
+      } else if (pText.startsWith('### ')) {
         final String styleStr = 'font-family: "Impact", sans-serif; font-size: 16px; margin: 12px 0 6px 0; '
             'text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; break-inside: avoid;' +
             (forceNextColumn ? ' break-before: column;' : '');
 
-        elements.add(h3([Component.text(pText.substring(3).trim())], attributes: {
+        elements.add(h3([Component.text(pText.substring(4).trim())], attributes: {
           'style': styleStr
         }));
         currentRow += 2;
         forceNextColumn = false;
-      } else if (pText.startsWith('##')) {
+      } else if (pText.startsWith('## ')) {
         final String styleStr = 'font-family: "Impact", sans-serif; font-size: 20px; margin: 16px 0 8px 0; '
             'text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; break-inside: avoid;' +
             (forceNextColumn ? ' break-before: column;' : '');
 
-        elements.add(h2([Component.text(pText.substring(2).trim())], attributes: {
+        elements.add(h2([Component.text(pText.substring(3).trim())], attributes: {
           'style': styleStr
         }));
         currentRow += 2;
         forceNextColumn = false;
-      } else if (pText.startsWith('#')) {
+      } else if (pText.startsWith('# ')) {
         final String styleStr = 'font-family: "Impact", sans-serif; font-size: 24px; margin: 18px 0 10px 0; '
             'text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; break-inside: avoid;' +
             (forceNextColumn ? ' break-before: column;' : '');
 
-        elements.add(h1([Component.text(pText.substring(1).trim())], attributes: {
+        elements.add(h1([Component.text(pText.substring(2).trim())], attributes: {
           'style': styleStr
         }));
         currentRow += 2;
@@ -217,7 +211,7 @@ class BasicTextTemplate extends StatelessComponent {
         elements.add(p([Component.text(pText)], attributes: {
           'style': styleStr
         }));
-        currentRow += (pText.length / 60).ceil();
+        currentRow += (pText.length / 60).ceil() + 1;
         forceNextColumn = false;
       }
       currentParagraph = "";
@@ -227,7 +221,7 @@ class BasicTextTemplate extends StatelessComponent {
       final cleanLine = line.trim();
       if (cleanLine.isEmpty) {
         commitParagraph();
-      } else if (cleanLine.startsWith('#') || cleanLine.startsWith('*') || cleanLine.startsWith('-') || cleanLine.startsWith('{{')) {
+      } else if (cleanLine.startsWith('# ') || cleanLine.startsWith('## ') || cleanLine.startsWith('### ') || cleanLine.startsWith('* ') || cleanLine.startsWith('- ') || cleanLine.startsWith('{{')) {
         commitParagraph();
         currentParagraph = cleanLine;
         commitParagraph();

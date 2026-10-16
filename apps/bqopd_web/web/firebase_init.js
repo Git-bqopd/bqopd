@@ -140,6 +140,18 @@ window.stUpload = function(path, bytes, contentType) { return storage.ref(path).
 
 window.renderPublisherPages = async (text) => {
     const pagesResults = [];
+    const GRID_TOP = 33;
+    const ROW_HEIGHT = 42;
+    const columnsX = [33, 696, 1359];
+    const colWidth = 608;
+    const maxY = 3120;
+
+    function snapToGrid(y) {
+        if (y <= GRID_TOP) return GRID_TOP;
+        const rows = Math.ceil((y - GRID_TOP) / ROW_HEIGHT);
+        return GRID_TOP + (rows * ROW_HEIGHT);
+    }
+
     function initPageCanvas() {
         const c = document.createElement('canvas');
         c.width = 2000;
@@ -159,11 +171,8 @@ window.renderPublisherPages = async (text) => {
     let active = initPageCanvas();
     let canvas = active.canvas;
     let ctx = active.ctx;
-    const columnsX = [33, 696, 1359];
-    const colWidth = 608;
-    const maxY = 3120;
     let colIndex = 0;
-    let currentY = 33;
+    let currentY = GRID_TOP;
     let currentPageTextParts = [];
 
     function wrapText(textToWrap, fontSize, fontName, bold) {
@@ -241,13 +250,13 @@ window.renderPublisherPages = async (text) => {
         canvas = active.canvas;
         ctx = active.ctx;
         colIndex = 0;
-        currentY = 33;
+        currentY = GRID_TOP;
         currentPageTextParts = [];
     }
 
     function advanceToNextColumn() {
         colIndex++;
-        currentY = 33;
+        currentY = GRID_TOP;
         if (colIndex >= 3) {
             finalizeCurrentPage();
         }
@@ -290,12 +299,12 @@ window.renderPublisherPages = async (text) => {
             blocks.push({ type: 'column_break' });
         } else if (cbMatch || pText.toLowerCase() === 'column-break' || pText.toLowerCase() === 'column_break') {
             blocks.push({ type: 'column_break' });
-        } else if (pText.startsWith('###')) {
-            blocks.push({ type: 'h3', content: pText.substring(3).trim(), raw: pText });
-        } else if (pText.startsWith('##')) {
-            blocks.push({ type: 'h2', content: pText.substring(2).trim(), raw: pText });
-        } else if (pText.startsWith('#')) {
-            blocks.push({ type: 'h1', content: pText.substring(1).trim(), raw: pText });
+        } else if (pText.startsWith('### ')) {
+            blocks.push({ type: 'h3', content: pText.substring(4).trim(), raw: pText });
+        } else if (pText.startsWith('## ')) {
+            blocks.push({ type: 'h2', content: pText.substring(3).trim(), raw: pText });
+        } else if (pText.startsWith('# ')) {
+            blocks.push({ type: 'h1', content: pText.substring(2).trim(), raw: pText });
         } else if (pText.startsWith('* ') || pText.startsWith('- ')) {
             blocks.push({ type: 'bullet', content: pText.substring(2).trim(), raw: pText });
         } else {
@@ -308,7 +317,7 @@ window.renderPublisherPages = async (text) => {
         const cleanLine = line.trim();
         if (cleanLine === "") {
             commitParagraph();
-        } else if (cleanLine.startsWith('#') || cleanLine.startsWith('*') || cleanLine.startsWith('-') || cleanLine.startsWith('{{') || cleanLine.startsWith('[[')) {
+        } else if (cleanLine.startsWith('# ') || cleanLine.startsWith('## ') || cleanLine.startsWith('### ') || cleanLine.startsWith('* ') || cleanLine.startsWith('- ') || cleanLine.startsWith('{{') || cleanLine.startsWith('[[')) {
             commitParagraph();
             currentParagraph = cleanLine;
             commitParagraph();
@@ -320,7 +329,7 @@ window.renderPublisherPages = async (text) => {
 
     for (let block of blocks) {
         if (block.type === 'column_break') {
-            if (currentY > 33) {
+            if (currentY > GRID_TOP) {
                 advanceToNextColumn();
             }
             continue;
@@ -336,7 +345,12 @@ window.renderPublisherPages = async (text) => {
             if (img && img.width > 0 && img.height > 0) {
                 drawHeight = colWidth * (img.height / img.width);
             }
-            if (currentY + drawHeight > maxY) {
+            // Enforce baseline grid alignment for images: calculate integer row span
+            const minMarginBottom = 14;
+            const rowsNeeded = Math.ceil((drawHeight + minMarginBottom) / ROW_HEIGHT);
+            const totalImageBlockHeight = rowsNeeded * ROW_HEIGHT;
+
+            if (currentY + totalImageBlockHeight > maxY) {
                 advanceToNextColumn();
             }
             if (img) {
@@ -360,7 +374,7 @@ window.renderPublisherPages = async (text) => {
                 ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
                 ctx.textAlign = 'left';
             }
-            currentY += drawHeight + 20;
+            currentY += totalImageBlockHeight;
             currentPageTextParts.push(`{{IMAGE: ${targetUrl}}}`);
         } else if (block.type === 'template_block' && block.templateNum === 1) {
             const targetUrl = block.url;
@@ -379,11 +393,11 @@ window.renderPublisherPages = async (text) => {
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
 
             if (block.targetRow !== null && block.targetRow !== undefined) {
-                let targetYBottom = 33 + block.targetRow * 42;
+                let targetYBottom = GRID_TOP + block.targetRow * ROW_HEIGHT;
                 let targetYTop = targetYBottom - imgHeight;
                 if (currentY > targetYTop || targetYBottom + totalTextHeight > maxY) {
                     advanceToNextColumn();
-                    targetYBottom = 33 + block.targetRow * 42;
+                    targetYBottom = GRID_TOP + block.targetRow * ROW_HEIGHT;
                     targetYTop = targetYBottom - imgHeight;
                 }
                 if (img) {
@@ -399,10 +413,12 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
                     currentY += textLeadingStep;
                 }
-                currentY += 24;
+                currentY = snapToGrid(currentY + 14);
             } else {
                 const compositeBlockHeight = imgHeight + totalTextHeight + 20;
-                if (currentY + compositeBlockHeight > maxY) {
+                const rowsNeeded = Math.ceil((compositeBlockHeight + 14) / ROW_HEIGHT);
+                const totalBlockHeight = rowsNeeded * ROW_HEIGHT;
+                if (currentY + totalBlockHeight > maxY) {
                     advanceToNextColumn();
                 }
                 if (img) {
@@ -411,33 +427,33 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillStyle = '#f3f4f6';
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
-                currentY += imgHeight + 16;
+                let captionY = currentY + imgHeight + 16;
                 ctx.font = `${fontSize}px ${fontName}`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
-                    ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
-                    currentY += textLeadingStep;
+                    ctx.fillText(line, columnsX[colIndex], captionY + fontSize);
+                    captionY += textLeadingStep;
                 }
-                currentY += 24;
+                currentY += totalBlockHeight;
             }
             currentPageTextParts.push(`{{TEMPLATE_1: ${targetUrl} | ${block.content}}}`);
         } else {
-            let fontSize, fontName, bold = false, heightMultiplier = 1.5, spaceBelow = 12;
+            let fontSize, fontName, bold = false;
+            let step = ROW_HEIGHT; // Default line advance sits strictly on the 42px baseline grid
             if (block.type === 'h1') {
-                fontSize = 42; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 16;
+                fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
             } else if (block.type === 'h2') {
-                fontSize = 36; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 14;
+                fontSize = 36; fontName = 'Impact'; bold = true; step = 48;
             } else if (block.type === 'h3') {
-                fontSize = 28; fontName = 'Impact'; bold = true; heightMultiplier = 1.25; spaceBelow = 12;
+                fontSize = 28; fontName = 'Impact'; bold = true; step = ROW_HEIGHT;
             } else {
-                fontSize = 28; fontName = 'Arial'; heightMultiplier = 1.5; spaceBelow = 12;
+                fontSize = 28; fontName = 'Arial'; bold = false; step = ROW_HEIGHT;
             }
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "   " + block.content : block.content;
+            const textToWrap = isBullet ? "•   " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
             ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
             ctx.fillStyle = '#1a1a1a';
-            const step = fontSize * heightMultiplier;
             let currentParagraphRenderedLines = [];
             for (let i = 0; i < linesToDraw.length; i++) {
                 const line = linesToDraw[i];
@@ -471,7 +487,8 @@ window.renderPublisherPages = async (text) => {
                 currentY += step;
                 currentParagraphRenderedLines.push(line);
             }
-            currentY += spaceBelow;
+            // Snap currentY to the baseline grid with a 14px minimum separation gap
+            currentY = snapToGrid(currentY + 14);
             if (currentParagraphRenderedLines.length > 0) {
                 if (block.type === 'h1') currentPageTextParts.push('# ' + currentParagraphRenderedLines.join(' '));
                 else if (block.type === 'h2') currentPageTextParts.push('## ' + currentParagraphRenderedLines.join(' '));
@@ -481,7 +498,7 @@ window.renderPublisherPages = async (text) => {
             }
         }
     }
-    if (currentY > 33 || colIndex > 0) {
+    if (currentY > GRID_TOP || colIndex > 0) {
         finalizeCurrentPage();
     }
     return JSON.stringify(pagesResults);
