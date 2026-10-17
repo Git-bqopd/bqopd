@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_utils.dart';
+import '../../utils/web_firebase_interop.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
 import '../../services/address_radius_letters.dart';
 import '../fanzine_thumbnail_card.dart';
@@ -453,6 +455,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   }
 
   Component _buildRadiusLettersForm() {
+    final int remainingLettersPages = _hasMapCover ? math.max(1, _pageCount - 1) : _pageCount;
     return div(
       [
         div(
@@ -551,7 +554,7 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
             p([
               Component.text(
                 _hasMapCover
-                    ? 'Page 1 will be a clean Google Map cover with pins, followed by ${_pageCount - 1} letter ${_pageCount - 1 == 1 ? "page" : "pages"}.'
+                    ? 'Page 1 will be a clean Google Map cover with pins, followed by $remainingLettersPages letter ${remainingLettersPages == 1 ? "page" : "pages"}.'
                     : 'Generates continuous letter pages without a cover image.',
               ),
             ],

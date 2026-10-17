@@ -72,6 +72,27 @@ class StubPipelineRepository implements IPipelineRepository {
   Future<void> triggerGenerateLinks(String fanzineId) async {}
   @override
   Future<void> rescanFanzine(String fanzineId) async {}
+
+  @override
+  Future<Map<String, dynamic>> compilePublisherFolio({
+    required String fanzineId,
+    required String fullText,
+    String? ownerUserId,
+    String templateId = 'basic_text',
+    int startPageNumber = 1,
+  }) async => {};
+
+  @override
+  Future<Map<String, dynamic>> compilePublisherPage({
+    required String fanzineId,
+    required String imageId,
+    required String text,
+    String? ownerUserId,
+    String templateId = 'basic_text',
+  }) async => {};
+
+  @override
+  Future<Map<String, dynamic>> compileMapCover(Map<String, dynamic> config) async => {};
 }
 
 class StubUploadRepository implements IUploadRepository {

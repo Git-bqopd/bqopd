@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/publisher_compiler.dart';
+import '../utils/unsaved_fanzine_registry.dart';
 import '../components/historical_letter_card.dart';
 
 /// Result container holding the compiled [Fanzine] folio document and generated [FanzinePage] list.
@@ -16,13 +17,14 @@ class RadiusFolioResult {
   });
 }
 
-/// Internal helper bundle holding a selected letter along with its distance and parsed historical date.
+/// Internal helper bundle holding a selected letter along with its distance, parsed date, and precalculated height.
 class _SelectedRadiusLetter {
   final HistoricalLetterEntry entry;
   final Map<String, dynamic> raw;
   final String markdown;
   final double distance;
   final DateTime publishedDate;
+  final double estimatedHeight;
 
   _SelectedRadiusLetter({
     required this.entry,
@@ -30,11 +32,12 @@ class _SelectedRadiusLetter {
     required this.markdown,
     required this.distance,
     required this.publishedDate,
+    required this.estimatedHeight,
   });
 }
 
 /// Encapsulates geospatial nearest-neighbor resolution, letter querying,
-/// distance calculation, ordering, fast mathematical layout fitting, and map cover generation.
+/// distance calculation, ordering, fast mathematical layout fitting, and server-side compilation.
 class AddressRadiusLetters {
   /// Usable height per column in pixels derived from the registered basic_text publisher template.
   static double get kColumnHeight {
@@ -52,8 +55,8 @@ class AddressRadiusLetters {
     return 3;
   }
 
-  /// Total theoretical vertical pixels available per page across all columns.
-  static double get kTotalPageHeight => kColumnHeight * kColumnsPerPage; // 9,261 px
+  /// Total theoretical vertical pixels available per page across all columns (3 * 3087 = 9,261 px).
+  static double get kTotalPageHeight => kColumnHeight * kColumnsPerPage;
 
   /// Parses historical/vintage date strings (e.g. "March 1, 1927", "January, 1971", "1935")
   /// into comparable DateTime objects for chronological ordering.
@@ -350,6 +353,129 @@ class AddressRadiusLetters {
     }
   }
 
+  /// Resolves all candidate letter metadata with internal caching for fanzines and image assets.
+  static Future<List<HistoricalLetterEntry>> _resolveLetterEntriesBatch(
+      List<Map<String, dynamic>> rawComments,
+      ) async {
+    final Map<String, Map<String, dynamic>> fanzineCache = {};
+    final Map<String, String> imageCache = {};
+
+    final Set<String> fzIdsToFetch = {};
+    final Set<String> imgIdsToFetch = {};
+
+    for (var raw in rawComments) {
+      final contextMap = raw['context'] is Map ? (raw['context'] as Map<String, dynamic>) : {};
+      final fzId = (contextMap['fanzineId'] ?? '').toString();
+      final imgId = (raw['contentId'] ?? '').toString();
+      if (fzId.isNotEmpty && !UnsavedFanzineRegistry.fanzines.containsKey(fzId)) {
+        fzIdsToFetch.add(fzId);
+      }
+      if (imgId.isNotEmpty) {
+        imgIdsToFetch.add(imgId);
+      }
+    }
+
+    final List<Future<void>> parallelFetches = [];
+
+    for (var fzId in fzIdsToFetch) {
+      parallelFetches.add(
+        fsGetDoc('fanzines/$fzId').then((fzRes) {
+          try {
+            final doc = jsonDecode(fzRes);
+            if (doc['exists'] == true) {
+              fanzineCache[fzId] = doc['data'] as Map<String, dynamic>? ?? {};
+            }
+          } catch (_) {}
+        }),
+      );
+    }
+
+    for (var imgId in imgIdsToFetch) {
+      parallelFetches.add(
+        fsGetDoc('images/$imgId').then((imgRes) {
+          try {
+            final doc = jsonDecode(imgRes);
+            if (doc['exists'] == true) {
+              final d = doc['data'] as Map<String, dynamic>? ?? {};
+              final url = d['fileUrl'] ?? d['listUrl'] ?? d['gridUrl'] ?? d['imageUrl'];
+              if (url != null && url.toString().isNotEmpty) {
+                imageCache[imgId] = url.toString();
+              }
+            }
+          } catch (_) {}
+        }),
+      );
+    }
+
+    if (parallelFetches.isNotEmpty) {
+      await Future.wait(parallelFetches);
+    }
+
+    final List<HistoricalLetterEntry> entries = [];
+    for (var raw in rawComments) {
+      final dist = (raw['_calculatedDistanceMiles'] as num?)?.toDouble();
+      final entry = HistoricalLetterEntry.fromCommentMap(raw, distanceMiles: dist);
+
+      String resolvedTitle = entry.fanzineTitle;
+      String? resolvedVolume = entry.volume;
+      String? resolvedIssue = entry.issue;
+      String? resolvedCover = entry.coverImageUrl;
+      String? resolvedPubDate = entry.publishedDate;
+      String? resolvedShortCode = entry.fanzineShortCode;
+      String? resolvedPageUrl = entry.pageImageUrl;
+
+      if ((resolvedPageUrl == null || resolvedPageUrl.isEmpty) &&
+          entry.imageId != null &&
+          imageCache.containsKey(entry.imageId)) {
+        resolvedPageUrl = imageCache[entry.imageId];
+      }
+
+      if (entry.fanzineId.isNotEmpty) {
+        if (UnsavedFanzineRegistry.fanzines.containsKey(entry.fanzineId)) {
+          final fz = UnsavedFanzineRegistry.fanzines[entry.fanzineId]!;
+          resolvedTitle = fz.title;
+          resolvedVolume ??= fz.volume;
+          resolvedIssue ??= fz.issue;
+          resolvedShortCode ??= fz.shortCode;
+          resolvedPubDate ??= fz.publishedDate;
+          final pgs = UnsavedFanzineRegistry.pages[entry.fanzineId] ?? [];
+          if (pgs.isNotEmpty) {
+            resolvedCover ??= pgs.first.gridUrl ?? pgs.first.imageUrl;
+          }
+        } else if (fanzineCache.containsKey(entry.fanzineId)) {
+          final fzData = fanzineCache[entry.fanzineId]!;
+          resolvedTitle = fzData['title'] ?? resolvedTitle;
+          resolvedVolume ??= fzData['volume']?.toString();
+          resolvedIssue ??= fzData['issue']?.toString();
+          resolvedShortCode ??= fzData['shortCode'];
+          resolvedPubDate ??= fzData['publishedDate'];
+          resolvedCover ??= fzData['gridCoverImage'];
+        }
+      }
+
+      entries.add(HistoricalLetterEntry(
+        commentId: entry.commentId,
+        fanzineId: entry.fanzineId,
+        fanzineTitle: resolvedTitle,
+        volume: resolvedVolume,
+        issue: resolvedIssue,
+        fanzineShortCode: resolvedShortCode,
+        coverImageUrl: resolvedCover,
+        publishedDate: resolvedPubDate,
+        imageId: entry.imageId,
+        pageImageUrl: resolvedPageUrl,
+        pageNumber: entry.pageNumber,
+        letterText: entry.letterText,
+        authorName: entry.authorName,
+        authorHandle: entry.authorHandle,
+        location: entry.location,
+        distanceMiles: dist,
+      ));
+    }
+
+    return entries;
+  }
+
   /// Orchestrates geocoding, candidate spatial querying, parallel metadata resolution,
   /// two-way convergence layout fitting, chronological sorting, map cover generation, and compiles publisher pages.
   static Future<RadiusFolioResult> buildFolio({
@@ -400,12 +526,7 @@ class AddressRadiusLetters {
     print('[AddressRadiusLetters] Found ${candidateLetters.length} candidate letters. Resolving metadata in parallel...');
     onProgress?.call('Resolving letter metadata...');
 
-    final resolvedEntries = await Future.wait(
-      candidateLetters.map((raw) => HistoricalLetterEntry.resolveComplete(
-        rawComment: raw,
-        distanceMiles: (raw['_calculatedDistanceMiles'] as num?)?.toDouble(),
-      )),
-    );
+    final resolvedEntries = await _resolveLetterEntriesBatch(candidateLetters);
 
     // Build complete pool of candidate radius letters ordered by proximity (closest first)
     final List<_SelectedRadiusLetter> allCandidates = [];
@@ -418,6 +539,7 @@ class AddressRadiusLetters {
         raw['historicalDate'] ?? (raw['context'] is Map ? raw['context']['publishedDate'] : null),
         letterMd,
       );
+      final estHeight = estimateMarkdownHeight(letterMd);
 
       allCandidates.add(_SelectedRadiusLetter(
         entry: entry,
@@ -425,6 +547,7 @@ class AddressRadiusLetters {
         markdown: letterMd,
         distance: dist,
         publishedDate: pubDate,
+        estimatedHeight: estHeight,
       ));
     }
 
@@ -439,9 +562,8 @@ class AddressRadiusLetters {
 
     for (int i = 0; i < allCandidates.length; i++) {
       final letter = allCandidates[i];
-      final height = estimateMarkdownHeight(letter.markdown);
       selectedLetters.add(letter);
-      accumulatedEstPixels += height;
+      accumulatedEstPixels += letter.estimatedHeight;
       candidateIndex = i + 1;
       if (accumulatedEstPixels >= targetCapacityPixels) {
         break;
@@ -508,8 +630,6 @@ class AddressRadiusLetters {
     final fanzineId = 'folio_${DateTime.now().millisecondsSinceEpoch}';
     final List<FanzinePage> finalPages = [];
     String? coverImageUrl;
-    String? coverListUrl;
-    String? coverGridUrl;
 
     // 5. Generate Map Cover Page (If enabled)
     if (hasMapCover) {
@@ -536,6 +656,8 @@ class AddressRadiusLetters {
       }
 
       final mapCoverConfig = {
+        'fanzineId': fanzineId,
+        'ownerUserId': ownerUserId,
         'title': 'Letters near $cleanTargetAddr',
         'center': {
           'address': formattedCenter,
@@ -543,70 +665,94 @@ class AddressRadiusLetters {
           'lng': targetLng,
         },
         'letters': mapLettersPayload,
+        'shortCode': shortCode ?? ShortcodeGenerator.generateStandardCode(),
       };
 
+      // 5.A: Primary Server-Side Cloud Function Map Cover Compilation
       try {
-        final coverJson = await renderMapCoverPage(jsonEncode(mapCoverConfig));
-        final coverData = jsonDecode(coverJson) as Map<String, dynamic>;
+        final resStr = await fnCall('compile_map_cover', jsonEncode(mapCoverConfig));
+        final decoded = jsonDecode(resStr);
+        if (decoded is Map && decoded['status'] == 'success' && decoded['coverPage'] is Map) {
+          final cpMap = Map<String, dynamic>.from(decoded['coverPage'] as Map);
+          final coverPage = FanzinePage.fromMap(cpMap['id']?.toString() ?? '${fanzineId}_page_1', cpMap);
+          coverImageUrl = coverPage.imageUrl;
+          finalPages.add(coverPage);
+          print('[AddressRadiusLetters] Map cover published server-side as Page 1.');
+        }
+      } catch (e) {
+        print('[AddressRadiusLetters] Server compile_map_cover error, falling back to client: $e');
+      }
 
-        onProgress?.call('Publishing map cover image...');
-        final origBytes = base64Decode(coverData['original'] as String);
-        final listBytes = base64Decode(coverData['list'] as String);
-        final gridBytes = base64Decode(coverData['grid'] as String);
+      // 5.B: Client Fallback if Server Function is offline
+      if (finalPages.isEmpty) {
+        try {
+          final coverJson = await renderMapCoverPage(jsonEncode(mapCoverConfig));
+          final coverData = jsonDecode(coverJson) as Map<String, dynamic>;
 
-        coverImageUrl = await stUpload('fanzines/$fanzineId/page_1.webp', origBytes, 'image/webp');
-        coverListUrl = await stUpload('fanzines/$fanzineId/page_1_list.webp', listBytes, 'image/webp');
-        coverGridUrl = await stUpload('fanzines/$fanzineId/page_1_grid.webp', gridBytes, 'image/webp');
+          onProgress?.call('Publishing map cover image...');
+          final origBytes = base64Decode(coverData['original'] as String);
+          final listBytes = base64Decode(coverData['list'] as String);
+          final gridBytes = base64Decode(coverData['grid'] as String);
 
-        final coverImageId = 'map_cover_${fanzineId}_1';
-        final coverMetadata = {
-          'uid': ownerUserId,
-          'uploaderId': ownerUserId,
-          'type': 'template',
-          'templateId': 'map_cover',
-          'title': 'Map Cover',
-          'isGenerated': true,
-          'width': 2000,
-          'height': 3200,
-          'aspectRatio': 0.625,
-          'is5x8': true,
-          'shortCode': shortCode ?? ShortcodeGenerator.generateStandardCode(),
-          'folioContext': fanzineId,
-          'usedInFanzines': [fanzineId],
-          'fileUrl': coverImageUrl,
-          'listUrl': coverListUrl,
-          'gridUrl': coverGridUrl,
-        };
-        await fsSetDoc('images/$coverImageId', jsonEncode(coverMetadata), true);
+          final coverUrls = await Future.wait([
+            stUpload('fanzines/$fanzineId/page_1.webp', origBytes, 'image/webp'),
+            stUpload('fanzines/$fanzineId/page_1_list.webp', listBytes, 'image/webp'),
+            stUpload('fanzines/$fanzineId/page_1_grid.webp', gridBytes, 'image/webp'),
+          ]);
 
-        final coverPage = FanzinePage(
-          id: '${fanzineId}_page_1',
-          pageNumber: 1,
-          imageId: coverImageId,
-          imageUrl: coverImageUrl,
-          gridUrl: coverGridUrl,
-          listUrl: coverListUrl,
-          templateId: 'map_cover',
-          width: 2000,
-          height: 3200,
-          is5x8: true,
-          status: 'ready',
-        );
+          coverImageUrl = coverUrls[0];
+          final coverImageId = 'map_cover_${fanzineId}_1';
+          final coverMetadata = {
+            'uid': ownerUserId,
+            'uploaderId': ownerUserId,
+            'type': 'template',
+            'templateId': 'map_cover',
+            'title': 'Map Cover',
+            'isGenerated': true,
+            'width': 2000,
+            'height': 3200,
+            'aspectRatio': 0.625,
+            'is5x8': true,
+            'shortCode': shortCode ?? ShortcodeGenerator.generateStandardCode(),
+            'folioContext': fanzineId,
+            'usedInFanzines': [fanzineId],
+            'fileUrl': coverUrls[0],
+            'listUrl': coverUrls[1],
+            'gridUrl': coverUrls[2],
+          };
+          await fsSetDoc('images/$coverImageId', jsonEncode(coverMetadata), true);
 
-        finalPages.add(coverPage);
-        print('[AddressRadiusLetters] Map cover published successfully as Page 1.');
-      } catch (e, stack) {
-        print('[AddressRadiusLetters] Failed to render or upload map cover: $e\n$stack');
+          final coverPage = FanzinePage(
+            id: '${fanzineId}_page_1',
+            pageNumber: 1,
+            imageId: coverImageId,
+            imageUrl: coverUrls[0],
+            gridUrl: coverUrls[2],
+            listUrl: coverUrls[1],
+            templateId: 'map_cover',
+            width: 2000,
+            height: 3200,
+            is5x8: true,
+            status: 'ready',
+          );
+
+          finalPages.add(coverPage);
+          print('[AddressRadiusLetters] Map cover published via client fallback as Page 1.');
+        } catch (e, stack) {
+          print('[AddressRadiusLetters] Failed client map cover fallback: $e\n$stack');
+        }
       }
     }
 
-    // 6. Compile Content Pages
+    // 6. Compile Content Pages via Server-Side Cloud Function
     print('[AddressRadiusLetters] Compiling and publishing final folio text pages...');
     onProgress?.call('Compiling publisher text pages...');
 
+    final int startPageNum = hasMapCover && finalPages.isNotEmpty ? 2 : 1;
     final List<FanzinePage> contentPages = await PublisherCompiler.compileAndPublishMultiPage(
       fanzineId: fanzineId,
       fullText: fullText,
+      startPageNumber: startPageNum,
       onProgress: (current, total) {
         onProgress?.call('Compiling publisher text page $current of $total...');
       },

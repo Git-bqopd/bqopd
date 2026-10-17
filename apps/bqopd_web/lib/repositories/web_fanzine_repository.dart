@@ -4,6 +4,7 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/firebase_mocks.dart';
 import '../utils/unsaved_fanzine_registry.dart';
+import '../utils/publisher_compiler.dart';
 
 /// Concrete web implementation of IFanzineRepository using Firebase JS SDK Interop.
 /// Integrates seamlessly with the in-memory UnsavedFanzineRegistry for draft folios.
@@ -418,29 +419,22 @@ class WebFanzineRepository implements IFanzineRepository {
     final imageId = 'temp_pub_page_${DateTime.now().millisecondsSinceEpoch}';
     final pageId = 'page_${DateTime.now().millisecondsSinceEpoch}';
     final shortCode = ShortcodeGenerator.generateStandardCode();
+
     String fileUrl = '';
     String listUrl = '';
     String gridUrl = '';
 
+    // Primary: Offload layout compilation, WebP rendering, and Storage uploads to PublisherCompiler
     try {
-      final resultJson = await renderPublisherPage(initialText);
-      final decoded = jsonDecode(resultJson);
-      final String origBase64 = decoded['original'];
-      final String listBase64 = decoded['list'];
-      final String gridBase64 = decoded['grid'];
-      final origBytes = base64Decode(origBase64);
-      final listBytes = base64Decode(listBase64);
-      final gridBytes = base64Decode(gridBase64);
-      final String baseDir = 'uploads/$uid/folio_assets/$fanzineId/$imageId';
-      final urls = await Future.wait([
-        stUpload('$baseDir/original.webp', origBytes, 'image/webp'),
-        stUpload('$baseDir/list.webp', listBytes, 'image/webp'),
-        stUpload('$baseDir/grid.webp', gridBytes, 'image/webp'),
-      ]);
-      final cb = DateTime.now().millisecondsSinceEpoch;
-      fileUrl = '${urls[0]}&cb=$cb';
-      listUrl = '${urls[1]}&cb=$cb';
-      gridUrl = '${urls[2]}&cb=$cb';
+      final compiledUrls = await PublisherCompiler.compileAndPublish(
+        fanzineId: fanzineId,
+        imageId: imageId,
+        text: initialText,
+        templateId: templateId,
+      );
+      fileUrl = compiledUrls['fileUrl']?.toString() ?? '';
+      listUrl = compiledUrls['listUrl']?.toString() ?? '';
+      gridUrl = compiledUrls['gridUrl']?.toString() ?? '';
     } catch (e) {
       print('[insertPublisherPage WebP Compile Error] $e');
     }

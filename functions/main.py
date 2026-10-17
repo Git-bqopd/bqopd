@@ -1,25 +1,54 @@
 """Cloud Functions for Firebase (Python 3.14).
 
 Provides server-side verified address geocoding with Firestore caching,
-geospatial nearest-neighbor queries, map rendering, and maintenance
-routines for Radius Letters.
+geospatial nearest-neighbor queries, Google Maps rasterization, baseline-grid
+multi-column typography layout compilation with open-source Google Fonts
+(Arimo & Anton variable fonts), font diagnostic inspection, and direct Storage
+uploads for Radius Letters and Folio creation.
 """
 
-import math
+import base64
 import json
+import math
+import os
+import random
 import re
-import urllib.request
+import string
+import time
 import urllib.parse
+import urllib.request
+from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
+import firebase_admin
+from firebase_admin import firestore, storage
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
-from firebase_admin import initialize_app, firestore
+from PIL import Image, ImageDraw, ImageFont
 
 # Keep max instances controlled to prevent unexpected compute costs
 set_global_options(max_instances=10)
 
-initialize_app()
+# Initialize Firebase Admin SDK if not already initialized
+if not firebase_admin._apps:
+    firebase_admin.initialize_app()
+
+
+# ---------------------------------------------------------------------------
+# Layout and Baseline Grid Constants (Matching 2000x3200 Template Standard)
+# ---------------------------------------------------------------------------
+
+PAGE_WIDTH = 2000
+PAGE_HEIGHT = 3200
+GRID_TOP = 33
+ROW_HEIGHT = 42
+MAX_Y = 3120
+COLUMNS_X = [33, 696, 1359]
+COL_WIDTH = 608
+USABLE_COL_HEIGHT = 3087
+
+# Directory for bundled project TrueType fonts
+FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +76,7 @@ def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
                 ch |= bits[bit]
                 lng_interval[0] = mid
             else:
-                lng_interval[1] = mid
+                lng_interval[0] = mid
         else:
             mid = (lat_interval[0] + lat_interval[1]) / 2.0
             if lat > mid:
@@ -113,7 +142,6 @@ def get_geohash_neighbors(geohash: str) -> List[str]:
                 n_lng += 360.0
             neighbors.append(encode_geohash(n_lat, n_lng, precision))
 
-    # Return unique cell prefixes preserving order
     return list(dict.fromkeys(neighbors))
 
 
@@ -128,7 +156,6 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
         * (1.0 - math.cos((lon2 - lon1) * p))
         / 2.0
     )
-    # 12742 km * 0.621371 = Earth diameter in miles (~7917.5 mi)
     return 12742.0 * math.asin(math.sqrt(max(0.0, min(1.0, a)))) * 0.621371
 
 
@@ -161,6 +188,16 @@ def clean_location_string(raw: str) -> str:
     return loc
 
 
+def generate_shortcode() -> str:
+    """Generates a standard Base36 7-character alphanumeric shortcode."""
+    chars = string.ascii_uppercase + string.digits
+    return "".join(random.choices(chars, k=7))
+
+
+# ---------------------------------------------------------------------------
+# Geocoding and Firestore Geo-Cache Routines
+# ---------------------------------------------------------------------------
+
 def resolve_or_cache_geocode(address: str, db: Optional[firestore.Client] = None) -> Optional[Dict[str, Any]]:
     """Resolves coordinates using Firestore geocache, Google Maps API, and Nominatim fallback."""
     clean_loc = clean_location_string(address)
@@ -182,7 +219,7 @@ def resolve_or_cache_geocode(address: str, db: Optional[firestore.Client] = None
         .collection("geocache")
     )
 
-    # 1. Check Firestore cache first for instant sub-30ms returns
+    # 1. Check Firestore cache first for sub-30ms returns
     try:
         cached_doc = geocache_col.document(cache_key).get()
         if cached_doc.exists:
@@ -257,7 +294,7 @@ def resolve_or_cache_geocode(address: str, db: Optional[firestore.Client] = None
     except Exception as e:
         print(f"[resolve_or_cache_geocode] Google Geocoding API failed for '{clean_loc}': {e}")
 
-    # 3. Fallback to OpenStreetMap Nominatim with clean headers
+    # 3. Fallback to OpenStreetMap Nominatim
     if not resolved:
         try:
             encoded = urllib.parse.quote(clean_loc)
@@ -323,30 +360,572 @@ def geocode_location_http(location_str: str) -> Optional[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Cloud Functions Callables
+# Server-Side Typography and Image Rasterization Engine (Pillow)
+# ---------------------------------------------------------------------------
+
+_font_cache: Dict[Tuple[str, int, bool, bool], ImageFont.ImageFont] = {}
+_font_resolved_sources: Dict[Tuple[str, int, bool, bool], str] = {}
+
+
+def get_font_path_candidates(font_family: str, bold: bool = False, italic: bool = False) -> List[str]:
+    """Generates an ordered list of candidate paths prioritizing actual bundled Google Fonts.
+
+    Exact bundled filenames:
+      - Anton-Regular.ttf
+      - Arimo-VariableFont_wght.ttf
+      - Arimo-Italic-VariableFont_wght.ttf
+    """
+    candidates: List[str] = []
+    f_lower = font_family.lower()
+
+    # 1. Bundled project fonts folder (functions/fonts/)
+    if "anton" in f_lower or "impact" in f_lower:
+        candidates.extend([
+            os.path.join(FONTS_DIR, "Anton-Regular.ttf"),
+            os.path.join(FONTS_DIR, "anton.ttf"),
+            os.path.join(FONTS_DIR, "Anton.ttf"),
+            os.path.join(FONTS_DIR, "Impact.ttf"),
+        ])
+    elif italic:
+        candidates.extend([
+            os.path.join(FONTS_DIR, "Arimo-Italic-VariableFont_wght.ttf"),
+            os.path.join(FONTS_DIR, "Arimo-VariableFont_wght.ttf"),
+            os.path.join(FONTS_DIR, "Arimo-Regular.ttf"),
+            os.path.join(FONTS_DIR, "LiberationSans-Italic.ttf"),
+            os.path.join(FONTS_DIR, "DejaVuSans-Oblique.ttf"),
+        ])
+    else:
+        candidates.extend([
+            os.path.join(FONTS_DIR, "Arimo-VariableFont_wght.ttf"),
+            os.path.join(FONTS_DIR, "Arimo-Regular.ttf"),
+            os.path.join(FONTS_DIR, "Arimo-Bold.ttf"),
+            os.path.join(FONTS_DIR, "arimobd.ttf"),
+            os.path.join(FONTS_DIR, "LiberationSans-Regular.ttf"),
+            os.path.join(FONTS_DIR, "DejaVuSans.ttf"),
+        ])
+
+    # 2. Linux / Debian Container System Fonts (Fallback)
+    if "anton" in f_lower or "impact" in f_lower:
+        candidates.extend([
+            "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        ])
+    elif bold:
+        candidates.extend([
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        ])
+    else:
+        candidates.extend([
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        ])
+
+    return candidates
+
+
+def get_font(font_family: str, size: int, bold: bool = False, italic: bool = False) -> ImageFont.ImageFont:
+    """Loads a TTF font matching browser rendering, configuring variable font weight axes."""
+    cache_key = (font_family.lower(), size, bold, italic)
+    if cache_key in _font_cache:
+        return _font_cache[cache_key]
+
+    candidates = get_font_path_candidates(font_family, bold=bold, italic=italic)
+    font_obj: Optional[ImageFont.ImageFont] = None
+    resolved_path: str = "fallback_default"
+
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                font_obj = ImageFont.truetype(path, size=size)
+                # If loading Arimo variable font, configure variation axis (weight=700 for bold, 400 for regular)
+                if "variablefont" in path.lower():
+                    target_weight = 700 if bold else 400
+                    try:
+                        if hasattr(font_obj, "set_variation_by_axes"):
+                            font_obj.set_variation_by_axes([target_weight])
+                        elif hasattr(font_obj, "set_variation_by_name"):
+                            font_obj.set_variation_by_name("Bold" if bold else "Regular")
+                    except Exception:
+                        pass
+                resolved_path = path
+                break
+            except Exception:
+                continue
+
+    if font_obj is None:
+        try:
+            font_obj = ImageFont.truetype("DejaVuSans.ttf", size=size)
+            resolved_path = "system_dejavu_name"
+        except Exception:
+            font_obj = ImageFont.load_default()
+            resolved_path = "pillow_internal_default"
+
+    _font_cache[cache_key] = font_obj
+    _font_resolved_sources[cache_key] = resolved_path
+    return font_obj
+
+
+def measure_text_width(text: str, font: ImageFont.ImageFont) -> float:
+    """Calculates horizontal pixel width of a string with sub-pixel accuracy."""
+    if not text:
+        return 0.0
+    try:
+        bbox = font.getbbox(text)
+        return float(bbox[2] - bbox[0])
+    except Exception:
+        return float(len(text) * 16)
+
+
+def wrap_text_words(text_to_wrap: str, font: ImageFont.ImageFont, max_width: float) -> List[str]:
+    """Wraps text into lines that do not exceed max_width."""
+    words = text_to_wrap.split(" ")
+    lines: List[str] = []
+    current_line = ""
+
+    for word in words:
+        test_line = f"{current_line} {word}" if current_line else word
+        if measure_text_width(test_line, font) > max_width:
+            if current_line:
+                lines.append(current_line)
+            current_line = word
+        else:
+            current_line = test_line
+
+    if current_line:
+        lines.append(current_line)
+    return lines
+
+
+def snap_to_grid(y: float) -> float:
+    """Snaps a vertical coordinate to the nearest baseline grid row."""
+    if y <= GRID_TOP:
+        return float(GRID_TOP)
+    rows = math.ceil((y - GRID_TOP) / float(ROW_HEIGHT))
+    return float(GRID_TOP + (rows * ROW_HEIGHT))
+
+
+def init_page_canvas() -> Tuple[Image.Image, ImageDraw.ImageDraw]:
+    """Initializes a blank 2000x3200 page canvas with outer border and column dividers."""
+    canvas = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), color=(255, 255, 255))
+    ctx = ImageDraw.Draw(canvas)
+
+    # Outer border (11px stroke width)
+    ctx.rectangle([5, 5, PAGE_WIDTH - 6, PAGE_HEIGHT - 6], outline=(0, 0, 0), width=11)
+
+    # Two column divider lines at x=663 and x=1326
+    ctx.rectangle([663, 99, 663 + 11, 3101], fill=(0, 0, 0))
+    ctx.rectangle([1326, 99, 1326 + 11, 3101], fill=(0, 0, 0))
+
+    return canvas, ctx
+
+
+def download_remote_image(url: str, timeout: int = 6) -> Optional[Image.Image]:
+    """Downloads and decodes an image URL into a Pillow Image."""
+    if not url or not url.strip().startswith("http"):
+        return None
+    try:
+        req = urllib.request.Request(
+            url.strip(),
+            headers={"User-Agent": "bqopd-server-publisher/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+            img = Image.open(BytesIO(data))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            return img
+    except Exception as e:
+        print(f"[download_remote_image] Could not fetch '{url}': {e}")
+        return None
+
+
+def upload_three_webp_scales(
+    canvas: Image.Image,
+    bucket: Any,
+    storage_prefix: str,
+    token: str,
+) -> Tuple[str, str, str]:
+    """Compresses canvas into original (2000x3200), list (800x1280), and grid (450x720) WebPs.
+
+    Uploads all three directly to Cloud Storage and returns the public URLs.
+    """
+    # 1. Original (2000x3200)
+    orig_io = BytesIO()
+    canvas.save(orig_io, format="WEBP", quality=90)
+    orig_bytes = orig_io.getvalue()
+
+    # 2. List (800x1280)
+    list_img = canvas.resize((800, 1280), Image.Resampling.LANCZOS)
+    list_io = BytesIO()
+    list_img.save(list_io, format="WEBP", quality=80)
+    list_bytes = list_io.getvalue()
+
+    # 3. Grid (450x720)
+    grid_img = canvas.resize((450, 720), Image.Resampling.LANCZOS)
+    grid_io = BytesIO()
+    grid_img.save(grid_io, format="WEBP", quality=80)
+    grid_bytes = grid_io.getvalue()
+
+    def _upload(filename: str, raw_bytes: bytes) -> str:
+        full_path = f"{storage_prefix}/{filename}"
+        blob = bucket.blob(full_path)
+        blob.metadata = {"firebaseStorageDownloadTokens": token}
+        blob.upload_from_string(raw_bytes, content_type="image/webp")
+        blob.patch()
+        encoded = urllib.parse.quote(full_path, safe="")
+        cb = int(time.time() * 1000)
+        return f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{encoded}?alt=media&token={token}&cb={cb}"
+
+    orig_url = _upload("original.webp", orig_bytes)
+    list_url = _upload("list.webp", list_bytes)
+    grid_url = _upload("grid.webp", grid_bytes)
+    return orig_url, list_url, grid_url
+
+
+# ---------------------------------------------------------------------------
+# Server-Side Markdown & Layout Parsing
+# ---------------------------------------------------------------------------
+
+def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
+    """Parses markdown into typed blocks for the 3-column publisher layout engine."""
+    blocks: List[Dict[str, Any]] = []
+    current_paragraph = ""
+
+    def commit_paragraph():
+        nonlocal current_paragraph
+        p_text = current_paragraph.strip()
+        if not p_text:
+            return
+
+        image_regex = r"^\{\{IMAGE(?::\s*(.*?))?\}\}$"
+        template_regex = r"^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$"
+        col_break_regex = r"^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$"
+
+        m_img = re.match(image_regex, p_text, flags=re.IGNORECASE)
+        m_tmpl = re.match(template_regex, p_text, flags=re.IGNORECASE)
+        m_cb = re.match(col_break_regex, p_text, flags=re.IGNORECASE)
+
+        if m_img:
+            blocks.append({"type": "image", "url": m_img.group(1).strip() if m_img.group(1) else ""})
+        elif m_tmpl:
+            t_num = int(m_tmpl.group(1))
+            t_url = m_tmpl.group(2).strip()
+            rest = m_tmpl.group(3).strip()
+            target_row = None
+            caption_text = rest
+            row_match = re.match(r"^row=(\d+)\s*\|\s*(.*)$", rest, flags=re.IGNORECASE)
+            if row_match:
+                target_row = int(row_match.group(1))
+                caption_text = row_match.group(2).strip()
+
+            blocks.append({"type": "column_break"})
+            blocks.append({
+                "type": "template_block",
+                "templateNum": t_num,
+                "url": t_url,
+                "content": caption_text,
+                "targetRow": target_row,
+            })
+            blocks.append({"type": "column_break"})
+        elif m_cb or p_text.lower() in ("column-break", "column_break"):
+            blocks.append({"type": "column_break"})
+        elif p_text.startswith("### "):
+            blocks.append({"type": "h3", "content": p_text[4:].strip(), "raw": p_text})
+        elif p_text.startswith("## "):
+            blocks.append({"type": "h2", "content": p_text[3:].strip(), "raw": p_text})
+        elif p_text.startswith("# "):
+            blocks.append({"type": "h1", "content": p_text[2:].strip(), "raw": p_text})
+        elif p_text.startswith("* ") or p_text.startswith("- "):
+            blocks.append({"type": "bullet", "content": p_text[2:].strip(), "raw": p_text})
+        else:
+            blocks.append({"type": "text", "content": p_text, "raw": p_text})
+
+        current_paragraph = ""
+
+    lines = raw_text.split("\n")
+    for line in lines:
+        clean_line = line.strip()
+        if clean_line == "":
+            commit_paragraph()
+        elif (
+            clean_line.startswith("# ")
+            or clean_line.startswith("## ")
+            or clean_line.startswith("### ")
+            or clean_line.startswith("* ")
+            or clean_line.startswith("- ")
+            or clean_line.startswith("{{")
+            or clean_line.startswith("[[")
+        ):
+            commit_paragraph()
+            current_paragraph = clean_line
+            commit_paragraph()
+        else:
+            if current_paragraph:
+                current_paragraph += " " + clean_line
+            else:
+                current_paragraph = clean_line
+
+    commit_paragraph()
+    return blocks
+
+
+def render_publisher_pages_internal(raw_text: str) -> List[Tuple[Image.Image, str]]:
+    """Lays out and rasterizes markdown text across 2000x3200 3-column canvases in Pillow with Anton & Arimo."""
+    pages_results: List[Tuple[Image.Image, str]] = []
+    blocks = parse_markdown_to_blocks(raw_text)
+
+    active_canvas, ctx = init_page_canvas()
+    col_index = 0
+    current_y = float(GRID_TOP)
+    current_page_text_parts: List[str] = []
+
+    def finalize_current_page():
+        nonlocal active_canvas, ctx, col_index, current_y, current_page_text_parts
+        page_text = "\n\n".join(current_page_text_parts).strip()
+        pages_results.append((active_canvas, page_text))
+        active_canvas, ctx = init_page_canvas()
+        col_index = 0
+        current_y = float(GRID_TOP)
+        current_page_text_parts = []
+
+    def advance_to_next_column():
+        nonlocal col_index, current_y
+        col_index += 1
+        current_y = float(GRID_TOP)
+        if col_index >= 3:
+            finalize_current_page()
+
+    for block in blocks:
+        b_type = block.get("type")
+
+        if b_type == "column_break":
+            if current_y > GRID_TOP:
+                advance_to_next_column()
+            continue
+
+        if b_type == "image":
+            target_url = block.get("url", "")
+            img_obj = download_remote_image(target_url) if target_url else None
+            draw_height = 400
+            if img_obj and img_obj.width > 0 and img_obj.height > 0:
+                draw_height = int(COL_WIDTH * (img_obj.height / float(img_obj.width)))
+
+            min_margin_bottom = 14
+            rows_needed = math.ceil((draw_height + min_margin_bottom) / float(ROW_HEIGHT))
+            total_image_block_height = int(rows_needed * ROW_HEIGHT)
+
+            if current_y + total_image_block_height > MAX_Y:
+                advance_to_next_column()
+
+            x = COLUMNS_X[col_index]
+            y = int(current_y)
+
+            if img_obj:
+                resized_img = img_obj.resize((COL_WIDTH, draw_height), Image.Resampling.LANCZOS)
+                active_canvas.paste(resized_img, (x, y))
+            else:
+                ctx.rectangle([x, y, x + COL_WIDTH, y + draw_height], fill=(243, 244, 246), outline=(209, 213, 219), width=2)
+                ctx.line([x + 10, y + 10, x + COL_WIDTH - 10, y + draw_height - 10], fill=(209, 213, 219), width=2)
+                ctx.line([x + COL_WIDTH - 10, y + 10, x + 10, y + draw_height - 10], fill=(209, 213, 219), width=2)
+
+            current_y += float(total_image_block_height)
+            current_page_text_parts.append(f"{{{{IMAGE: {target_url}}}}}")
+
+        elif b_type == "template_block" and block.get("templateNum") == 1:
+            target_url = block.get("url", "")
+            caption = block.get("content", "")
+            target_row = block.get("targetRow")
+
+            img_obj = download_remote_image(target_url) if target_url else None
+            img_height = 400
+            if img_obj and img_obj.width > 0 and img_obj.height > 0:
+                img_height = int(COL_WIDTH * (img_obj.height / float(img_obj.width)))
+
+            font_caption = get_font("Arimo", 24, bold=False)
+            lines_to_draw = wrap_text_words(caption, font_caption, COL_WIDTH)
+            text_leading_step = 24.0 * 1.4
+            total_text_height = len(lines_to_draw) * text_leading_step + 12.0
+
+            x = COLUMNS_X[col_index]
+
+            if target_row is not None:
+                target_y_bottom = GRID_TOP + target_row * ROW_HEIGHT
+                target_y_top = target_y_bottom - img_height
+                if current_y > target_y_top or target_y_bottom + total_text_height > MAX_Y:
+                    advance_to_next_column()
+                    x = COLUMNS_X[col_index]
+                    target_y_bottom = GRID_TOP + target_row * ROW_HEIGHT
+                    target_y_top = target_y_bottom - img_height
+
+                if img_obj:
+                    resized = img_obj.resize((COL_WIDTH, img_height), Image.Resampling.LANCZOS)
+                    active_canvas.paste(resized, (x, int(target_y_top)))
+                else:
+                    ctx.rectangle([x, int(target_y_top), x + COL_WIDTH, int(target_y_top + img_height)], fill=(243, 244, 246))
+
+                caption_y = target_y_top + img_height + 16.0
+                for line in lines_to_draw:
+                    ctx.text((x, caption_y), line, font=font_caption, fill=(26, 26, 26))
+                    caption_y += text_leading_step
+                current_y = snap_to_grid(caption_y + 14.0)
+            else:
+                composite_height = img_height + total_text_height + 20.0
+                rows_needed = math.ceil((composite_height + 14.0) / float(ROW_HEIGHT))
+                total_block_height = rows_needed * ROW_HEIGHT
+
+                if current_y + total_block_height > MAX_Y:
+                    advance_to_next_column()
+                    x = COLUMNS_X[col_index]
+
+                if img_obj:
+                    resized = img_obj.resize((COL_WIDTH, img_height), Image.Resampling.LANCZOS)
+                    active_canvas.paste(resized, (x, int(current_y)))
+                else:
+                    ctx.rectangle([x, int(current_y), x + COL_WIDTH, int(current_y + img_height)], fill=(243, 244, 246))
+
+                caption_y = current_y + img_height + 16.0
+                for line in lines_to_draw:
+                    ctx.text((x, caption_y), line, font=font_caption, fill=(26, 26, 26))
+                    caption_y += text_leading_step
+                current_y += float(total_block_height)
+
+            current_page_text_parts.append(f"{{{{TEMPLATE_1: {target_url} | {caption}}}}}")
+
+        else:
+            font_size = 28
+            font_family = "Arimo"
+            is_bold = False
+            step = float(ROW_HEIGHT)
+
+            if b_type == "h1":
+                font_size = 42
+                font_family = "Anton"
+                is_bold = False
+                step = 56.0
+            elif b_type == "h2":
+                font_size = 36
+                font_family = "Anton"
+                is_bold = False
+                step = 48.0
+            elif b_type == "h3":
+                font_size = 28
+                font_family = "Anton"
+                is_bold = False
+                step = float(ROW_HEIGHT)
+            else:
+                font_size = 28
+                font_family = "Arimo"
+                is_bold = False
+                step = float(ROW_HEIGHT)
+
+            font = get_font(font_family, font_size, bold=is_bold)
+            content_str = block.get("content", "")
+            is_bullet = b_type == "bullet"
+            text_to_wrap = f"    {content_str}" if is_bullet else content_str
+
+            lines_to_draw = wrap_text_words(text_to_wrap, font, COL_WIDTH)
+            current_paragraph_lines: List[str] = []
+
+            for i, line in enumerate(lines_to_draw):
+                if current_y + font_size > MAX_Y:
+                    if current_paragraph_lines:
+                        current_page_text_parts.append(" ".join(current_paragraph_lines))
+                        current_paragraph_lines = []
+                    advance_to_next_column()
+
+                x = COLUMNS_X[col_index]
+                is_last_line = i == len(lines_to_draw) - 1
+
+                if not is_last_line and b_type == "text" and len(lines_to_draw) > 1:
+                    words = line.split(" ")
+                    if len(words) > 1:
+                        words_w = sum(measure_text_width(w, font) for w in words)
+                        spacing = (COL_WIDTH - words_w) / float(len(words) - 1)
+                        curr_x = float(x)
+                        for w in words:
+                            ctx.text((curr_x, current_y), w, font=font, fill=(26, 26, 26))
+                            curr_x += measure_text_width(w, font) + spacing
+                    else:
+                        ctx.text((x, current_y), line, font=font, fill=(26, 26, 26))
+                else:
+                    ctx.text((x, current_y), line, font=font, fill=(26, 26, 26))
+
+                current_y += step
+                current_paragraph_lines.append(line)
+
+            current_y = snap_to_grid(current_y + 14.0)
+
+            if current_paragraph_lines:
+                if b_type == "h1":
+                    current_page_text_parts.append("# " + " ".join(current_paragraph_lines))
+                elif b_type == "h2":
+                    current_page_text_parts.append("## " + " ".join(current_paragraph_lines))
+                elif b_type == "h3":
+                    current_page_text_parts.append("### " + " ".join(current_paragraph_lines))
+                elif b_type == "bullet":
+                    current_page_text_parts.append("* " + " ".join(current_paragraph_lines))
+                else:
+                    current_page_text_parts.append(" ".join(current_paragraph_lines))
+
+    if current_y > GRID_TOP or col_index > 0:
+        finalizeCurrentPage()
+
+    return pages_results
+
+
+# ---------------------------------------------------------------------------
+# Cloud Functions Callables: Diagnostics, Geocoding, Search, and Map Cover
 # ---------------------------------------------------------------------------
 
 @https_fn.on_call()
-def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
-    """Server-side verified address geocoding with Firestore caching.
+def check_server_fonts(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """Diagnostic callable to inspect font availability and test-render on server."""
+    fonts_dir_exists = os.path.exists(FONTS_DIR)
+    bundled_files = os.listdir(FONTS_DIR) if fonts_dir_exists else []
 
-    Expected payload:
-      - address (str): Street address, city, state, or location string.
-    Returns:
-      {
+    system_paths = [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ]
+    system_found = [p for p in system_paths if os.path.exists(p)]
+
+    # Test-load fonts and measure text width to verify rendering
+    tests = {}
+    for family, sz, bold, name in [
+        ("Anton", 42, False, "Anton_42"),
+        ("Arimo", 36, True, "Arimo_Bold_36"),
+        ("Arimo", 28, False, "Arimo_28"),
+    ]:
+        f_obj = get_font(family, sz, bold=bold)
+        source = _font_resolved_sources.get((family.lower(), sz, bold, False), "unknown")
+        width = measure_text_width("THE FANTASY FAN 1934", f_obj)
+        tests[name] = {
+            "source": source,
+            "is_bundled": source.startswith(FONTS_DIR),
+            "width_sample": width,
+            "is_default_fallback": source == "pillow_internal_default",
+        }
+
+    return {
         "status": "success",
-        "lat": float,
-        "lng": float,
-        "formatted": str,
-        "city": str,
-        "state": str,
-        "country": str,
-        "geohash": str,
-        "geohash_3": str,
-        "geohash_2": str,
-        "cached": bool
-      }
-    """
+        "fonts_dir": FONTS_DIR,
+        "fonts_dir_exists": fonts_dir_exists,
+        "bundled_fonts_found": bundled_files,
+        "system_fonts_found": system_found,
+        "test_render": tests,
+    }
+
+
+@https_fn.on_call()
+def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """Server-side verified address geocoding with Firestore caching."""
     data = req.data or {}
     raw_address = data.get("address", "")
     if not isinstance(raw_address, str) or not raw_address.strip():
@@ -370,14 +949,7 @@ def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
 @https_fn.on_call()
 def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
-    """Queries and returns the closest N historical letters to target (lat, lng).
-
-    Expected payload:
-      - lat (float): Target center latitude.
-      - lng (float): Target center longitude.
-      - limit (int, optional): Candidate buffer size (e.g. 24 for 4 pages, default 20, max 160).
-      - max_radius_miles (float, optional): Maximum radius in miles to consider.
-    """
+    """Queries and returns the closest N historical letters to target (lat, lng)."""
     data = req.data or {}
     try:
         target_lat = float(data.get("lat"))
@@ -389,7 +961,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
         )
 
     limit = int(data.get("limit", 20))
-    limit = max(1, min(limit, 160))  # Safeguard bounded candidate limit
+    limit = max(1, min(limit, 160))
     max_radius = float(data.get("max_radius_miles", 5000.0))
 
     db = firestore.client()
@@ -405,7 +977,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
     seen_ids = set()
     candidate_letters: List[Dict[str, Any]] = []
 
-    # Ring 1: Try precision 3 cells (~156km x 156km each; 3x3 grid covers ~300 mi across)
+    # Ring 1: Precision 3 cells (~156km x 156km each; 3x3 grid covers ~300 mi across)
     p3_neighbors = get_geohash_neighbors(center_gh[:3])
     p3_docs = comments_col.where(
         filter=firestore.FieldFilter("geo.geohash_3", "in", p3_neighbors)
@@ -425,7 +997,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
                 doc_data["_calculatedDistanceMiles"] = round(dist, 2)
                 candidate_letters.append(doc_data)
 
-    # Ring 2: If we don't have enough candidates, expand to precision 2 cells (~1250km)
+    # Ring 2: Precision 2 cells (~1250km)
     if len(candidate_letters) < limit:
         p2_neighbors = get_geohash_neighbors(center_gh[:2])
         p2_docs = comments_col.where(
@@ -448,7 +1020,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
                     doc_data["_calculatedDistanceMiles"] = round(dist, 2)
                     candidate_letters.append(doc_data)
 
-    # Fallback: If still under candidate limit, query un-migrated letter records with cached resolver
+    # Fallback: Query un-migrated letter records with cached resolver
     if len(candidate_letters) < limit:
         fallback_query = (
             comments_col.where(filter=firestore.FieldFilter("sourceType", "==", "letter_column"))
@@ -466,7 +1038,6 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
             l_lat = geo.get("lat")
             l_lng = geo.get("lng")
 
-            # If document lacks geo, resolve via cached server geocoder
             if (l_lat is None or l_lng is None) and doc_data.get("location"):
                 geocoded = resolve_or_cache_geocode(str(doc_data["location"]), db=db)
                 if geocoded:
@@ -484,10 +1055,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
                     doc_data["_calculatedDistanceMiles"] = round(dist, 2)
                     candidate_letters.append(doc_data)
 
-    # Sort strictly closest-first
     candidate_letters.sort(key=lambda item: item.get("_calculatedDistanceMiles", 999999.0))
-
-    # Slice to exact requested candidate limit
     results = candidate_letters[:limit]
 
     return {
@@ -500,13 +1068,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
 @https_fn.on_call()
 def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
-    """Fetches an official Google Maps Static API image server-side.
-
-    Avoids browser CORS restrictions and prevents canvas tainting so the
-    generated map image can be exported directly to Firebase Storage.
-    """
-    import base64
-
+    """Fetches an official Google Maps Static API image server-side."""
     data = req.data or {}
     markers = data.get("markers", [])
     width = int(data.get("width", 400))
@@ -521,7 +1083,6 @@ def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
         f"key={api_key}",
     ]
 
-    # Append pins: center pin (dark red) and letter pins (Google red)
     for m in markers:
         lat = m.get("lat")
         lng = m.get("lng")
@@ -559,11 +1120,7 @@ def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
 @https_fn.on_call()
 def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
-    """Maintenance routine: Scans existing letter comments and stamps `geo` metadata.
-
-    Can be triggered by an administrator or curator to backfill legacy comments
-    with lat, lng, and geohashes so future nearest-neighbor searches are instantaneous.
-    """
+    """Maintenance routine: Scans existing letter comments and stamps `geo` metadata."""
     db = firestore.client()
     comments_col = (
         db.collection("artifacts")
@@ -573,7 +1130,6 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
         .collection("comments")
     )
 
-    # Fetch letters
     docs = comments_col.where(
         filter=firestore.FieldFilter("sourceType", "==", "letter_column")
     ).stream()
@@ -585,14 +1141,12 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
     for doc in docs:
         data = doc.to_dict() or {}
-        # Skip if already stamped with valid geohash
         if data.get("geo") and data["geo"].get("geohash"):
             skipped_count += 1
             continue
 
         raw_loc = data.get("location") or ""
         if not raw_loc.strip():
-            # Check author profile if location is missing
             uid = data.get("userId")
             if uid and not str(uid).startswith("archival_"):
                 try:
@@ -634,4 +1188,268 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
         "skipped": skipped_count,
         "failed": failed_count,
         "cached_locations": len(cache),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Cloud Functions Callables: Heavy Server-Side Layout & WebP Compilation
+# ---------------------------------------------------------------------------
+
+@https_fn.on_call(memory=1024, timeout_sec=300)
+def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """Compiles multi-page continuous markdown text into 2000x3200 publisher pages.
+
+    Renders layouts on a 42px baseline grid in Pillow with Anton & Arimo variable fonts,
+    generates 3-size WebP binaries (original, list, grid), streams them to
+    Cloud Storage, and registers the Firestore documents.
+    """
+    data = req.data or {}
+    fanzine_id = data.get("fanzineId")
+    full_text = data.get("fullText", "")
+    owner_user_id = data.get("ownerUserId") or (req.auth.uid if req.auth else "system_web")
+    template_id = data.get("templateId", "basic_text")
+    start_page_number = int(data.get("startPageNumber", 1))
+
+    if not fanzine_id or not full_text.strip():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Both 'fanzineId' and non-empty 'fullText' parameters are required.",
+        )
+
+    db = firestore.client()
+    bucket = storage.bucket()
+
+    pages_and_text = render_publisher_pages_internal(full_text)
+    if not pages_and_text:
+        return {"status": "success", "count": 0, "pages": []}
+
+    output_pages: List[Dict[str, Any]] = []
+    now_ms = int(time.time() * 1000)
+
+    for i, (canvas, page_text) in enumerate(pages_and_text):
+        page_num = start_page_number + i
+        page_image_id = f"folio_text_page_{now_ms}_{page_num}"
+        page_id = f"page_{now_ms}_{page_num}"
+        short_code = generate_shortcode()
+        storage_prefix = f"uploads/{owner_user_id}/folio_assets/{fanzine_id}/{page_image_id}"
+
+        orig_url, list_url, grid_url = upload_three_webp_scales(
+            canvas=canvas,
+            bucket=bucket,
+            storage_prefix=storage_prefix,
+            token=page_image_id,
+        )
+
+        image_metadata = {
+            "uid": owner_user_id,
+            "uploaderId": owner_user_id,
+            "type": "template",
+            "templateId": template_id,
+            "text": page_text,
+            "text_corrected": page_text,
+            "text_linked": page_text,
+            "title": f"Letters Page {page_num}",
+            "isGenerated": True,
+            "width": PAGE_WIDTH,
+            "height": PAGE_HEIGHT,
+            "aspectRatio": 0.625,
+            "is5x8": True,
+            "shortCode": short_code,
+            "folioContext": fanzine_id,
+            "usedInFanzines": [fanzine_id],
+            "fileUrl": orig_url,
+            "listUrl": list_url,
+            "gridUrl": grid_url,
+            "timestamp": firestore.SERVER_TIMESTAMP,
+        }
+        db.collection("images").document(page_image_id).set(image_metadata, merge=True)
+
+        output_pages.append({
+            "id": page_id,
+            "pageNumber": page_num,
+            "imageId": page_image_id,
+            "imageUrl": orig_url,
+            "gridUrl": grid_url,
+            "listUrl": list_url,
+            "status": "ready",
+            "templateId": template_id,
+            "width": PAGE_WIDTH,
+            "height": PAGE_HEIGHT,
+            "is5x8": True,
+        })
+
+    return {
+        "status": "success",
+        "fanzineId": fanzine_id,
+        "count": len(output_pages),
+        "pages": output_pages,
+    }
+
+
+@https_fn.on_call(memory=512, timeout_sec=120)
+def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """Re-compiles a single 2000x3200 page from markdown and uploads WebP scales.
+
+    Used by the text and publisher editors when updating individual pages.
+    """
+    data = req.data or {}
+    fanzine_id = data.get("fanzineId")
+    image_id = data.get("imageId")
+    text = data.get("text", "")
+    owner_user_id = data.get("ownerUserId") or (req.auth.uid if req.auth else "system_web")
+    template_id = data.get("templateId", "basic_text")
+
+    if not fanzine_id or not image_id or not text.strip():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "'fanzineId', 'imageId', and 'text' parameters are required.",
+        )
+
+    db = firestore.client()
+    bucket = storage.bucket()
+
+    pages = render_publisher_pages_internal(text)
+    canvas = pages[0][0] if pages else init_page_canvas()[0]
+    storage_prefix = f"uploads/{owner_user_id}/folio_assets/{fanzine_id}/{image_id}"
+
+    orig_url, list_url, grid_url = upload_three_webp_scales(
+        canvas=canvas,
+        bucket=bucket,
+        storage_prefix=storage_prefix,
+        token=image_id,
+    )
+
+    db.collection("images").document(image_id).set({
+        "fileUrl": orig_url,
+        "listUrl": list_url,
+        "gridUrl": grid_url,
+        "status": "ready",
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }, merge=True)
+
+    return {
+        "status": "success",
+        "fileUrl": orig_url,
+        "listUrl": list_url,
+        "gridUrl": grid_url,
+    }
+
+
+@https_fn.on_call(memory=512, timeout_sec=120)
+def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """Generates an illustrated 2000x3200 Google Maps cover page with radial markers.
+
+    Uploads 3 WebP sizes directly to Cloud Storage and registers the image record.
+    """
+    data = req.data or {}
+    fanzine_id = data.get("fanzineId")
+    owner_user_id = data.get("ownerUserId") or (req.auth.uid if req.auth else "system_web")
+    center = data.get("center", {})
+    letters = data.get("letters", [])
+    title = data.get("title") or f"Letters near {center.get('address', 'Location')}"
+    short_code = data.get("shortCode") or generate_shortcode()
+
+    if not fanzine_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "'fanzineId' is required.",
+        )
+
+    db = firestore.client()
+    bucket = storage.bucket()
+    api_key = "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g"
+
+    # Assemble Static Map query pins
+    markers_payload: List[Dict[str, Any]] = []
+    if center.get("lat") is not None and center.get("lng") is not None:
+        markers_payload.append({
+            "lat": float(center["lat"]),
+            "lng": float(center["lng"]),
+            "isCenter": True,
+        })
+
+    for l in letters:
+        lat = l.get("lat")
+        lng = l.get("lng")
+        if lat is not None and lng is not None:
+            markers_payload.append({
+                "lat": float(lat),
+                "lng": float(lng),
+                "isCenter": False,
+            })
+
+    query_parts = [
+        "size=640x1024",
+        "scale=2",
+        "maptype=roadmap",
+        f"key={api_key}",
+    ]
+    for m in markers_payload:
+        lat = m["lat"]
+        lng = m["lng"]
+        is_center = m.get("isCenter", False)
+        color = "0xd32f2f" if is_center else "0xea4335"
+        size = "mid" if is_center else "small"
+        query_parts.append(f"markers=color:{color}%7Csize:{size}%7C{lat},{lng}")
+
+    static_map_url = f"https://maps.googleapis.com/maps/api/staticmap?{'&'.join(query_parts)}"
+    map_img = download_remote_image(static_map_url)
+
+    # Initialize 2000x3200 plate
+    cover_canvas = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), color=(229, 227, 223))
+    if map_img:
+        resized_map = map_img.resize((PAGE_WIDTH, PAGE_HEIGHT), Image.Resampling.LANCZOS)
+        cover_canvas.paste(resized_map, (0, 0))
+
+    cover_ctx = ImageDraw.Draw(cover_canvas)
+    cover_ctx.rectangle([5, 5, PAGE_WIDTH - 6, PAGE_HEIGHT - 6], outline=(0, 0, 0), width=11)
+
+    cover_image_id = f"map_cover_{fanzine_id}_1"
+    storage_prefix = f"fanzines/{fanzine_id}"
+    orig_url, list_url, grid_url = upload_three_webp_scales(
+        canvas=cover_canvas,
+        bucket=bucket,
+        storage_prefix=storage_prefix,
+        token=cover_image_id,
+    )
+
+    cover_metadata = {
+        "uid": owner_user_id,
+        "uploaderId": owner_user_id,
+        "type": "template",
+        "templateId": "map_cover",
+        "title": "Map Cover",
+        "isGenerated": True,
+        "width": PAGE_WIDTH,
+        "height": PAGE_HEIGHT,
+        "aspectRatio": 0.625,
+        "is5x8": True,
+        "shortCode": short_code,
+        "folioContext": fanzine_id,
+        "usedInFanzines": [fanzine_id],
+        "fileUrl": orig_url,
+        "listUrl": list_url,
+        "gridUrl": grid_url,
+        "timestamp": firestore.SERVER_TIMESTAMP,
+    }
+    db.collection("images").document(cover_image_id).set(cover_metadata, merge=True)
+
+    cover_page = {
+        "id": f"{fanzine_id}_page_1",
+        "pageNumber": 1,
+        "imageId": cover_image_id,
+        "imageUrl": orig_url,
+        "gridUrl": grid_url,
+        "listUrl": list_url,
+        "templateId": "map_cover",
+        "width": PAGE_WIDTH,
+        "height": PAGE_HEIGHT,
+        "is5x8": true,
+        "status": "ready",
+    }
+
+    return {
+        "status": "success",
+        "fanzineId": fanzine_id,
+        "coverPage": cover_page,
     }

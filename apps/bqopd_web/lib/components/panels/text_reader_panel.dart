@@ -6,7 +6,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/firebase_mocks.dart';
 
-/// Helper to render markdown and wiki-links into styled components
+/// Helper to render markdown and wiki-links into styled components with Anton and Arimo.
 List<Component> renderWikilinkSpans(
     String textContent,
     Map<String, Map<String, dynamic>> loadedProfiles,
@@ -21,6 +21,7 @@ List<Component> renderWikilinkSpans(
     if (match.start > currentIndex) {
       children.add(Component.text(textContent.substring(currentIndex, match.start)));
     }
+
     final content = match.group(1) ?? '';
     final parts = content.split('|');
     String display = '';
@@ -49,7 +50,8 @@ List<Component> renderWikilinkSpans(
           children.add(a(
             href: '/@$username',
             attributes: const {
-              'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
+              'style':
+              'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
             },
             events: {
               'click': (e) {
@@ -62,7 +64,8 @@ List<Component> renderWikilinkSpans(
         } else {
           children.add(span(
             attributes: const {
-              'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+              'style':
+              'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
             },
             [Component.text(display)],
           ));
@@ -74,13 +77,17 @@ List<Component> renderWikilinkSpans(
           href: 'https://www.google.com/maps/search/?api=1&query=$encodedAddr',
           attributes: const {
             'target': '_blank',
-            'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
+            'style':
+            'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
           },
           [
             span(
               [Component.text('pin_drop')],
               classes: 'material-symbols-outlined',
-              attributes: const {'style': 'font-size: 14px; margin-right: 2px; vertical-align: middle; display: inline-block;'},
+              attributes: const {
+                'style':
+                'font-size: 14px; margin-right: 2px; vertical-align: middle; display: inline-block;'
+              },
             ),
             Component.text(display),
           ],
@@ -88,7 +95,8 @@ List<Component> renderWikilinkSpans(
       } else {
         children.add(span(
           attributes: const {
-            'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+            'style':
+            'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
           },
           [Component.text(display)],
         ));
@@ -96,7 +104,8 @@ List<Component> renderWikilinkSpans(
     } else {
       children.add(span(
         attributes: const {
-          'style': 'font-family: Impact, Charcoal, "Arial Black", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+          'style':
+          'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
         },
         [Component.text(display)],
       ));
@@ -107,6 +116,7 @@ List<Component> renderWikilinkSpans(
   if (currentIndex < textContent.length) {
     children.add(Component.text(textContent.substring(currentIndex)));
   }
+
   return children;
 }
 
@@ -158,6 +168,7 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
     }
 
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -167,17 +178,21 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
             data['text_corrected'] ??
             data['text_raw'] ??
             data['text'];
+
         final resolvedText = (textVal != null && textVal.trim().isNotEmpty)
             ? textVal
             : "Transcription pending for this page.";
+
         final String fullyResolvedText = await resolveAndReplaceShortcodes(
           component.fanzineId ?? '',
           resolvedText,
         );
+
         setState(() {
           _content = fullyResolvedText;
           _loading = false;
         });
+
         _loadProfiles(fullyResolvedText);
       } else {
         setState(() {
@@ -202,11 +217,13 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
       final content = m.group(1) ?? '';
       final parts = content.split('|');
       String? ref;
+
       if (parts.length == 2 && parts[1].contains(':')) {
         ref = parts[1].trim();
       } else if (parts.length >= 3) {
         ref = parts[2].trim();
       }
+
       if (ref != null && ref.startsWith('user:')) {
         final uid = ref.substring(5);
         if (!_loadedProfiles.containsKey(uid)) {
@@ -246,24 +263,36 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
         lineComponents.add(div([], attributes: const {'style': 'height: 14px;'}));
         continue;
       }
+
       final headerMatch = headerRegex.firstMatch(cleanLine);
       if (headerMatch != null) {
         final level = headerMatch.group(1)!.length;
         final content = headerMatch.group(2)!.trim();
         final double headerSize = _fontSize + (4.0 * (7 - level));
         final headingChildren = renderWikilinkSpans(content, _loadedProfiles, context);
-        lineComponents.add(h2(headingChildren, attributes: {
-          'style': 'font-size: ${headerSize}px; font-family: Impact, Charcoal, "Arial Black", sans-serif; line-height: 1.2; color: #111; margin: 16px 0 8px 0; font-weight: normal;'
-        }));
+
+        lineComponents.add(
+          h2(
+            headingChildren,
+            attributes: {
+              'style':
+              'font-size: ${headerSize}px; font-family: "Anton", "Impact", sans-serif; line-height: 1.2; color: #111; margin: 16px 0 8px 0; font-weight: normal;'
+            },
+          ),
+        );
       } else {
-        lineComponents.add(p(
-          renderWikilinkSpans(cleanLine, _loadedProfiles, context),
-          attributes: {
-            'style': 'font-size: ${_fontSize}px; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #2D3748; text-align: justify; margin: 0 0 12px 0;'
-          },
-        ));
+        lineComponents.add(
+          p(
+            renderWikilinkSpans(cleanLine, _loadedProfiles, context),
+            attributes: {
+              'style':
+              'font-size: ${_fontSize}px; font-family: "Arimo", "Arial", sans-serif; line-height: 1.6; color: #2D3748; text-align: justify; margin: 0 0 12px 0;'
+            },
+          ),
+        );
       }
     }
+
     return lineComponents;
   }
 
@@ -271,19 +300,22 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
   Component build(BuildContext context) {
     return div(
       attributes: const {
-        'style': 'position: relative; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;'
+        'style':
+        'position: relative; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;'
       },
       [
         div(
           classes: 'flex-row gap-2',
           attributes: const {
-            'style': 'position: absolute; top: 0; right: 0; display: flex; gap: 8px; z-index: 10;'
+            'style':
+            'position: absolute; top: 0; right: 0; display: flex; gap: 8px; z-index: 10;'
           },
           [
             button(
               classes: 'nav-pill',
               attributes: const {
-                'style': 'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
+                'style':
+                'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
               },
               events: {'click': (e) => setState(() => _fontSize = (_fontSize > 10) ? _fontSize - 2 : 10)},
               [Component.text('A-')],
@@ -291,7 +323,8 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
             button(
               classes: 'nav-pill',
               attributes: const {
-                'style': 'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
+                'style':
+                'margin-bottom: 0; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;'
               },
               events: {'click': (e) => setState(() => _fontSize = (_fontSize < 48) ? _fontSize + 2 : 48)},
               [Component.text('A+')],
@@ -300,7 +333,8 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
         ),
         div(
           attributes: const {
-            'style': 'margin-top: 36px; width: 100%; box-sizing: border-box; overflow: visible;'
+            'style':
+            'margin-top: 36px; width: 100%; box-sizing: border-box; overflow: visible;'
           },
           [
             if (_loading)
@@ -367,6 +401,7 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
     }
 
     setState(() => _loading = true);
+
     try {
       final res = await fsGetDoc('images/${component.imageId}');
       final doc = jsonDecode(res);
@@ -376,17 +411,21 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
             data['text_corrected'] ??
             data['text_raw'] ??
             data['text'];
+
         final resolvedText = (textVal != null && textVal.trim().isNotEmpty)
             ? textVal
             : "Transcription pending for this page.";
+
         final String fullyResolvedText = await resolveAndReplaceShortcodes(
           component.fanzineId ?? '',
           resolvedText,
         );
+
         setState(() {
           _content = fullyResolvedText;
           _loading = false;
         });
+
         _loadProfiles(fullyResolvedText);
       } else {
         setState(() {
@@ -411,11 +450,13 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
       final content = m.group(1) ?? '';
       final parts = content.split('|');
       String? ref;
+
       if (parts.length == 2 && parts[1].contains(':')) {
         ref = parts[1].trim();
       } else if (parts.length >= 3) {
         ref = parts[2].trim();
       }
+
       if (ref != null && ref.startsWith('user:')) {
         final uid = ref.substring(5);
         if (!_loadedProfiles.containsKey(uid)) {
@@ -458,7 +499,8 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
         p(
           renderWikilinkSpans(_content, _loadedProfiles, context),
           attributes: const {
-            'style': 'font-size: 14px; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #1e293b; text-align: justify; margin: 0; white-space: pre-line;'
+            'style':
+            'font-size: 14px; font-family: "Arimo", "Arial", sans-serif; line-height: 1.6; color: #1e293b; text-align: justify; margin: 0; white-space: pre-line;'
           },
         )
       ],

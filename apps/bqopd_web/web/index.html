@@ -5,11 +5,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>bqopd Web</title>
-
     <!-- Material Symbols for Toolbar Icons -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <!-- Google Fonts: Anton & Arimo (Permissive Open-Source Typography) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Arimo:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-
     <!-- Force Google Autocomplete dropdown layer on top of premium manila modals -->
     <style>
         .pac-container {
@@ -17,20 +19,17 @@
             border-radius: 8px !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
             border: 1px solid #eee !important;
-            font-family: inherit !important;
+            font-family: 'Arimo', sans-serif !important;
         }
     </style>
-
     <!-- Firebase SDK Compat libraries (Web) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-
     <!-- Google Maps Places SDK -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g&libraries=places&loading=async"></script>
-
     <!-- Initialize Firebase -->
     <script>
         const firebaseConfig = {
@@ -43,234 +42,10 @@
           appId: "1:17060476719:web:9c7e201c50938561e2d3da"
         };
         firebase.initializeApp(firebaseConfig);
-
         const db = firebase.firestore();
         const storage = firebase.storage();
         const functions = firebase.functions();
     </script>
-
-    <!-- JS Interop Bridge for Pure Dart -->
-    <script>
-        // --- Auth Bridge ---
-        window.loginWithFirebase = (email, password) => firebase.auth().signInWithEmailAndPassword(email, password);
-        window.registerWithFirebase = (email, password, username) => {
-            return firebase.auth().createUserWithEmailAndPassword(email, password).then(userCredential => {
-                var user = userCredential.user;
-                var batch = db.batch();
-                batch.set(db.collection('Users').doc(user.uid), {
-                    uid: user.uid, email: user.email, username: username,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    Editor: false, bio: '', firstName: '', lastName: ''
-                });
-                batch.set(db.collection('usernames').doc(username.toLowerCase()), {
-                    uid: user.uid, email: user.email, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                return batch.commit();
-            });
-        };
-        window.logoutFromFirebase = () => firebase.auth().signOut();
-        window.getCurrentUserId = () => firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
-        window.getCurrentUserEmail = () => firebase.auth().currentUser ? firebase.auth().currentUser.email : null;
-        window.onAuthStateChangedListener = (callback) => {
-            firebase.auth().onAuthStateChanged(user => callback(user ? user.uid : null, user ? user.email : null));
-        };
-
-        function serializeFirebaseData(data) {
-            if (data === null || data === undefined) return data;
-            if (data.toDate && typeof data.toDate === 'function') return { __type: 'timestamp', iso: data.toDate().toISOString() };
-            if (Array.isArray(data)) return data.map(serializeFirebaseData);
-            if (typeof data === 'object') {
-                let res = {};
-                for (let key in data) res[key] = serializeFirebaseData(data[key]);
-                return res;
-            }
-            return data;
-        }
-
-        function parseFirebaseOps(obj) {
-            if (obj === null || typeof obj !== 'object') return obj;
-            if (Array.isArray(obj)) return obj.map(parseFirebaseOps);
-            if (obj.__op === 'serverTimestamp') return firebase.firestore.FieldValue.serverTimestamp();
-            if (obj.__op === 'increment') return firebase.firestore.FieldValue.increment(obj.value);
-            if (obj.__op === 'arrayUnion') return firebase.firestore.FieldValue.arrayUnion(...obj.values);
-            if (obj.__op === 'arrayRemove') return firebase.firestore.FieldValue.arrayRemove(...obj.values);
-            if (obj.__op === 'delete') return firebase.firestore.FieldValue.delete();
-            let res = {};
-            for (let key in obj) res[key] = parseFirebaseOps(obj[key]);
-            return res;
-        }
-
-        window.fsGetDoc = (path) => {
-            return db.doc(path).get()
-                .then(d => JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null}))
-                .catch(err => JSON.stringify({id: '', path: path, exists: false, error: err.message}));
-        };
-
-        window.fsListenDoc = (path, dartCallback) => {
-            return db.doc(path).onSnapshot(
-                d => dartCallback(JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null})),
-                err => console.error("fsListenDoc error on path " + path + ":", err)
-            );
-        };
-
-        window.fsListenQuery = (path, field, op, valueJson, orderBy, desc, dartCallback) => {
-            let q = db.collection(path);
-            if (field && op && valueJson) q = q.where(field, op, JSON.parse(valueJson));
-            if (orderBy) q = q.orderBy(orderBy, desc ? 'desc' : 'asc');
-            return q.onSnapshot(
-                s => {
-                    let docs = s.docs.map(d => ({id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}));
-                    dartCallback(JSON.stringify(docs));
-                },
-                err => console.error("fsListenQuery error on path " + path + ":", err)
-            );
-        };
-
-        window.fsUpdateDoc = (path, dataStr) => db.doc(path).update(parseFirebaseOps(JSON.parse(dataStr))).catch(err => { console.error("fsUpdateDoc error:", err); throw err; });
-        window.fsSetDoc = (path, dataStr, merge) => db.doc(path).set(parseFirebaseOps(JSON.parse(dataStr)), {merge: merge}).catch(err => { console.error("fsSetDoc error:", err); throw err; });
-        window.fsDeleteDoc = (path) => db.doc(path).delete().catch(err => { console.error("fsDeleteDoc error:", err); throw err; });
-        window.fsAddDoc = (path, dataStr) => db.collection(path).add(parseFirebaseOps(JSON.parse(dataStr))).then(r => r.id).catch(err => { console.error("fsAddDoc error:", err); throw err; });
-
-        window.fsQuery = (path, field, op, valueJson, orderBy) => {
-            let q = db.collection(path);
-            if (field && op && valueJson) q = q.where(field, op, JSON.parse(valueJson));
-            if (orderBy) q = q.orderBy(orderBy);
-            return q.get()
-                .then(s => JSON.stringify(s.docs.map(d => ({id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}))))
-                .catch(err => { console.error("fsQuery error:", err); return JSON.stringify([]); });
-        };
-
-        window.fnCall = (name, dataStr) => functions.httpsCallable(name)(JSON.parse(dataStr)).then(r => JSON.stringify(r.data)).catch(err => { console.error("fnCall error:", err); throw err; });
-        window.stUpload = (path, bytes, contentType) => storage.ref(path).put(bytes, {contentType: contentType}).then(s => s.ref.getDownloadURL()).catch(err => { console.error("stUpload error:", err); throw err; });
-
-        window.pickAndReadFile = (inputElementId, callback) => {
-            let input = document.getElementById(inputElementId);
-            if (!input) {
-                input = document.createElement('input');
-                input.id = inputElementId;
-                input.type = 'file';
-                input.accept = 'image/*'
-                input.style.display = 'none';
-                document.body.appendChild(input);
-            }
-            input.onchange = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (evt) => {
-                    const dataUrl = evt.target.result;
-                    const base64 = dataUrl.split(',')[1];
-                    const objectUrl = URL.createObjectURL(file);
-                    callback(base64, file.name, objectUrl);
-                };
-                reader.readAsDataURL(file);
-            };
-            input.click();
-        };
-
-        window.readInputFile = (inputElementId, callback) => {
-            let input = document.getElementById(inputElementId);
-            if (!input) return;
-            const file = input.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                const dataUrl = evt.target.result;
-                const base64 = dataUrl.split(',')[1];
-                const objectUrl = URL.createObjectURL(file);
-                callback(base64, file.name, objectUrl);
-            };
-            reader.readAsDataURL(file);
-        };
-
-        window.getPlacePredictions = (input) => {
-            return new Promise((resolve) => {
-                if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-                    resolve(JSON.stringify([]));
-                    return;
-                }
-                const service = new google.maps.places.AutocompleteService();
-                service.getPlacePredictions({ input: input }, (predictions, status) => {
-                    if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
-                        resolve(JSON.stringify([]));
-                        return;
-                    }
-                    const results = predictions.map(p => ({
-                        description: p.description,
-                        placeId: p.place_id
-                    }));
-                    resolve(JSON.stringify(results));
-                });
-            });
-        };
-
-        window.initAddressAutocomplete = (inputId, callback) => {
-            const input = document.getElementById(inputId);
-            if (!input) return;
-            if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-                setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
-                return;
-            }
-            const autocomplete = new google.maps.places.Autocomplete(input, {
-                fields: ['formatted_address']
-            });
-            autocomplete.addListener('place_changed', () => {
-                const place = autocomplete.getPlace();
-                if (place && place.formatted_address) {
-                    callback(place.formatted_address);
-                }
-            });
-        };
-
-        window.geocodeAddress = async (address) => {
-            if (!address || typeof address !== 'string' || !address.trim()) {
-                return null;
-            }
-            const cleanAddress = address.trim();
-
-            if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
-                try {
-                    const googleResult = await new Promise((resolve) => {
-                        const geocoder = new google.maps.Geocoder();
-                        geocoder.geocode({ address: cleanAddress }, (results, status) => {
-                            if (status === 'OK' && results && results.length > 0) {
-                                const loc = results[0].geometry.location;
-                                resolve(JSON.stringify({ lat: loc.lat(), lng: loc.lng() }));
-                            } else {
-                                console.warn('[geocodeAddress] Google Geocoder status:', status, 'for address:', cleanAddress);
-                                resolve(null);
-                            }
-                        });
-                    });
-                    if (googleResult) return googleResult;
-                } catch (e) {
-                    console.warn('[geocodeAddress] Google Geocoder threw:', e);
-                }
-            }
-
-            try {
-                console.log('[geocodeAddress] Attempting OpenStreetMap Nominatim fallback for:', cleanAddress);
-                const encoded = encodeURIComponent(cleanAddress);
-                const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (Array.isArray(data) && data.length > 0) {
-                        const lat = parseFloat(data[0].lat);
-                        const lng = parseFloat(data[0].lon);
-                        console.log('[geocodeAddress] Nominatim resolved:', cleanAddress, '->', lat, lng);
-                        return JSON.stringify({ lat: lat, lng: lng });
-                    }
-                }
-            } catch (err) {
-                console.error('[geocodeAddress] Nominatim fallback failed:', err);
-            }
-
-            return null;
-        };
-    </script>
-
     <!-- Import our central JavaScript initialize script containing multi-page canvas compilation -->
     <script src="firebase_init.js"></script>
     <script src="main.dart.js" defer></script>

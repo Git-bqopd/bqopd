@@ -9,7 +9,6 @@ import 'dart:typed_data';
 import 'package:web/web.dart' as web;
 import 'web_firebase_interop.dart';
 
-/// Web implementation of the subscription wrapper to bridge the JS unsubscription callback.
 class WebSubscription implements FirebaseSubscription {
   final JSFunction _jsFunction;
   WebSubscription(this._jsFunction);
@@ -304,7 +303,7 @@ window.measurePublisherPages = (text) => {
     }
 
     function wrapText(textToWrap, fontSize, fontName, bold) {
-        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
@@ -407,7 +406,7 @@ window.measurePublisherPages = (text) => {
         } else if (block.type === 'template_block' && block.templateNum === 1) {
             const imgHeight = 400;
             const fontSize = 24;
-            const fontName = 'Arial';
+            const fontName = 'Arimo';
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
             const textLeadingStep = fontSize * 1.4;
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
@@ -434,17 +433,17 @@ window.measurePublisherPages = (text) => {
             let fontSize, fontName, bold = false;
             let step = ROW_HEIGHT;
             if (block.type === 'h1') {
-                fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
+                fontSize = 42; fontName = 'Anton'; bold = false; step = 56;
             } else if (block.type === 'h2') {
-                fontSize = 36; fontName = 'Impact'; bold = true; step = 48;
+                fontSize = 36; fontName = 'Anton'; bold = false; step = 48;
             } else if (block.type === 'h3') {
-                fontSize = 28; fontName = 'Impact'; bold = true; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Anton'; bold = false; step = ROW_HEIGHT;
             } else {
-                fontSize = 28; fontName = 'Arial'; bold = false; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Arimo'; bold = false; step = ROW_HEIGHT;
             }
 
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "•   " + block.content : block.content;
+            const textToWrap = isBullet ? "    " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
 
             for (let i = 0; i < linesToDraw.length; i++) {
@@ -504,7 +503,7 @@ window.renderPublisherPages = async (text) => {
     let currentPageTextParts = [];
 
     function wrapText(textToWrap, fontSize, fontName, bold) {
-        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
@@ -681,7 +680,7 @@ window.renderPublisherPages = async (text) => {
                 ctx.moveTo(columnsX[colIndex] + colWidth - 10, currentY + 10);
                 ctx.lineTo(columnsX[colIndex] + 10, currentY + drawHeight - 10);
                 ctx.stroke();
-                ctx.font = 'bold 24px Arial';
+                ctx.font = 'bold 24px "Arimo", Arial, sans-serif';
                 ctx.fillStyle = '#9ca3af';
                 ctx.textAlign = 'center';
                 ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
@@ -700,7 +699,7 @@ window.renderPublisherPages = async (text) => {
                 imgHeight = colWidth * (img.height / img.width);
             }
             const fontSize = 24;
-            const fontName = 'Arial';
+            const fontName = 'Arimo';
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
             const textLeadingStep = fontSize * 1.4;
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
@@ -720,7 +719,7 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 }
                 currentY = targetYTop + imgHeight + 16;
-                ctx.font = `${fontSize}px ${fontName}`;
+                ctx.font = `${fontSize}px "${fontName}", Arial, sans-serif`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
                     ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
@@ -741,7 +740,7 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
                 let captionY = currentY + imgHeight + 16;
-                ctx.font = `${fontSize}px ${fontName}`;
+                ctx.font = `${fontSize}px "${fontName}", Arial, sans-serif`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
                     ctx.fillText(line, columnsX[colIndex], captionY + fontSize);
@@ -754,18 +753,18 @@ window.renderPublisherPages = async (text) => {
             let fontSize, fontName, bold = false;
             let step = ROW_HEIGHT; // Default line advance sits strictly on the 42px baseline grid
             if (block.type === 'h1') {
-                fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
+                fontSize = 42; fontName = 'Anton'; bold = false; step = 56;
             } else if (block.type === 'h2') {
-                fontSize = 36; fontName = 'Impact'; bold = true; step = 48;
+                fontSize = 36; fontName = 'Anton'; bold = false; step = 48;
             } else if (block.type === 'h3') {
-                fontSize = 28; fontName = 'Impact'; bold = true; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Anton'; bold = false; step = ROW_HEIGHT;
             } else {
-                fontSize = 28; fontName = 'Arial'; bold = false; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Arimo'; bold = false; step = ROW_HEIGHT;
             }
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "•   " + block.content : block.content;
+            const textToWrap = isBullet ? "    " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
-            ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+            ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
             ctx.fillStyle = '#1a1a1a';
             let currentParagraphRenderedLines = [];
             for (let i = 0; i < linesToDraw.length; i++) {
@@ -776,7 +775,7 @@ window.renderPublisherPages = async (text) => {
                         currentParagraphRenderedLines = [];
                     }
                     advanceToNextColumn();
-                    ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+                    ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
                     ctx.fillStyle = '#1a1a1a';
                 }
                 const isLastLine = i === linesToDraw.length - 1;
@@ -846,9 +845,12 @@ external JSPromise? _renderPublisherPages(JSString text);
 Future<String> renderPublisherPages(String text) async {
   try {
     _ensureRenderPublisherPagesScript();
-    final jsRes = await _renderPublisherPages(text.toJS)?.toDart;
-    if (jsRes != null) {
-      return (jsRes as JSString).toDart;
+    final promise = _renderPublisherPages(text.toJS);
+    if (promise != null) {
+      final jsRes = await promise.toDart;
+      if (jsRes != null) {
+        return (jsRes as JSString).toDart;
+      }
     }
   } catch (e) {
     print('[renderPublisherPages Call] $e. Falling back to singular renderPublisherPage.');
@@ -863,16 +865,23 @@ Future<String> renderPublisherPages(String text) async {
 }
 
 @JS('renderPublisherPage')
-external JSPromise _renderPublisherPage(JSString text);
+external JSPromise? _renderPublisherPage(JSString text);
 
 Future<String> renderPublisherPage(String text) async {
   try {
-    final jsRes = await _renderPublisherPage(text.toJS).toDart;
-    return (jsRes as JSString).toDart;
+    _ensureRenderPublisherPagesScript();
+    final promise = _renderPublisherPage(text.toJS);
+    if (promise != null) {
+      final jsRes = await promise.toDart;
+      if (jsRes != null) {
+        return (jsRes as JSString).toDart;
+      }
+    }
   } catch (e) {
     print('[renderPublisherPage Error] $e');
     rethrow;
   }
+  return '{}';
 }
 
 @JS('getCurrentUserId')
@@ -918,10 +927,22 @@ Future<void> logoutFromFirebase() async {
 }
 
 @JS('fnCall')
-external JSPromise _fnCall(JSString name, JSString dataStr);
+external JSPromise? _fnCall(JSString name, JSString dataStr);
+
 Future<String> fnCall(String name, String dataStr) async {
-  final jsRes = await _fnCall(name.toJS, dataStr.toJS).toDart;
-  return (jsRes as JSString).toDart;
+  try {
+    final promise = _fnCall(name.toJS, dataStr.toJS);
+    if (promise != null) {
+      final jsRes = await promise.toDart;
+      if (jsRes != null) {
+        return (jsRes as JSString).toDart;
+      }
+    }
+  } catch (e) {
+    print('[fnCall Error on "$name"] $e');
+    rethrow;
+  }
+  return '{}';
 }
 
 @JS('fsGetDoc')
@@ -1085,7 +1106,7 @@ Future<String> getPlacePredictions(String input) async {
 }
 
 @JS('geocodeAddress')
-external JSPromise _geocodeAddress(JSString address);
+external JSPromise? _geocodeAddress(JSString address);
 Future<String?> geocodeAddress(String address) async {
   final cleanAddress = address.trim();
   if (cleanAddress.isEmpty) return null;
@@ -1105,7 +1126,7 @@ Future<String?> geocodeAddress(String address) async {
 
   // 2. Fallback: Query local JS window.geocodeAddress if Cloud Function is offline
   try {
-    final jsRes = await _geocodeAddress(cleanAddress.toJS).toDart;
+    final jsRes = await _geocodeAddress(cleanAddress.toJS)?.toDart;
     if (jsRes == null) return null;
     return (jsRes as JSString).toDart;
   } catch (e) {

@@ -1,7 +1,16 @@
 import 'dart:async';
+import 'web_firebase_interop.dart';
 
 /// Stub implementation for non-web environments (Server SSR / AOT VM).
-/// Pure Dart signatures with zero browser/JS dependencies.
+/// Pure Dart signatures with zero browser/JS dependencies, matching the
+/// exact public API surface of [web_firebase_interop_web.dart].
+
+/// Non-web fallback subscription implementing [FirebaseSubscription] to safely
+/// absorb cancellation callbacks without runtime null-check exceptions.
+class StubSubscription implements FirebaseSubscription {
+  @override
+  void callAsFunction() {}
+}
 
 /// Stub for generating 2000x3200 map cover page on non-web environments.
 Future<String> renderMapCoverPage(String configJson) async {
@@ -35,7 +44,11 @@ Future<String> fnCall(String name, String dataStr) async {
 
 Future<void> loginWithFirebase(String email, String password) async {}
 
-Future<void> registerWithFirebase(String email, String password, String username) async {}
+Future<void> registerWithFirebase(
+    String email,
+    String password,
+    String username,
+    ) async {}
 
 Future<void> logoutFromFirebase() async {}
 
@@ -47,9 +60,13 @@ void onAuthStateChangedListener(void Function(String?, String?) callback) {}
 
 Future<String> fsGetDoc(String path) async => '{"exists": false}';
 
-dynamic fsListenDoc(String path, void Function(String) dartCallback) => null;
+FirebaseSubscription fsListenDoc(
+    String path,
+    void Function(String) dartCallback,
+    ) =>
+    StubSubscription();
 
-dynamic fsListenQuery(
+FirebaseSubscription fsListenQuery(
     String path,
     String? field,
     String? op,
@@ -57,7 +74,8 @@ dynamic fsListenQuery(
     String? orderBy,
     bool? desc,
     void Function(String) dartCallback,
-    ) => null;
+    ) =>
+    StubSubscription();
 
 Future<String> fsQuery(
     String path,
@@ -65,7 +83,8 @@ Future<String> fsQuery(
     String op,
     String valueJson,
     String orderBy,
-    ) async => '[]';
+    ) async =>
+    '[]';
 
 Future<void> fsUpdateDoc(String path, String dataStr) async {}
 
@@ -75,7 +94,22 @@ Future<void> fsDeleteDoc(String path) async {}
 
 Future<String> fsAddDoc(String path, String dataStr) async => '';
 
-Future<String> stUpload(String path, List<int> bytes, String contentType) async => '';
+Future<String> stUpload(
+    String path,
+    List<int> bytes,
+    String contentType,
+    ) async =>
+    '';
+
+void pickAndReadFile(
+    String inputId,
+    void Function(String base64, String fileName, String objectUrl) callback,
+    ) {}
+
+void readInputFile(
+    String inputId,
+    void Function(String base64, String fileName, String objectUrl) callback,
+    ) {}
 
 Future<String> getPlacePredictions(String input) async => '[]';
 
@@ -83,8 +117,17 @@ void renderEntityMap(String containerId, String markersJson) {}
 
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
-  static Map<String, dynamic> increment(num val) => {'__op': 'increment', 'value': val};
-  static Map<String, dynamic> arrayUnion(List<dynamic> elements) => {'__op': 'arrayUnion', 'values': elements};
-  static Map<String, dynamic> arrayRemove(List<dynamic> elements) => {'__op': 'arrayRemove', 'values': elements};
+  static Map<String, dynamic> increment(num val) => {
+    '__op': 'increment',
+    'value': val,
+  };
+  static Map<String, dynamic> arrayUnion(List<dynamic> elements) => {
+    '__op': 'arrayUnion',
+    'values': elements,
+  };
+  static Map<String, dynamic> arrayRemove(List<dynamic> elements) => {
+    '__op': 'arrayRemove',
+    'values': elements,
+  };
   static Map<String, dynamic> delete() => {'__op': 'delete'};
 }
