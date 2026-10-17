@@ -81,6 +81,23 @@ Future<Map<String, dynamic>?> resolveGeoForLocation(String locationStr) async {
   return null;
 }
 
+Map<String, dynamic> _sanitizeGeoMap(Map g) {
+  final double lat = (g['lat'] as num).toDouble();
+  final double lng = (g['lng'] as num).toDouble();
+  final String gh = g['geohash']?.toString() ?? encodeGeohash(lat, lng, 6);
+  return {
+    'lat': lat,
+    'lng': lng,
+    'geohash': gh,
+    'geohash_3': g['geohash_3']?.toString() ?? (gh.length >= 3 ? gh.substring(0, 3) : gh),
+    'geohash_2': g['geohash_2']?.toString() ?? (gh.length >= 2 ? gh.substring(0, 2) : gh),
+    if (g['formatted'] != null) 'formatted': g['formatted'],
+    if (g['city'] != null) 'city': g['city'],
+    if (g['state'] != null) 'state': g['state'],
+    if (g['country'] != null) 'country': g['country'],
+  };
+}
+
 String normalizeHandle(String input) {
   return input
       .trim()
@@ -113,8 +130,23 @@ String extractLocationFromData(Map<String, dynamic> data) {
   return parts.join(', ');
 }
 
-/// Looks up an author's location from their public profile or private user account doc.
-Future<String> lookupLocationForAuthor({String? uid, String? username}) async {
+/// Encapsulates pulled location text along with verified geographic coordinates from an author profile.
+class AuthorProfileLocationData {
+  final String location;
+  final Map<String, dynamic>? geo;
+  final String? displayName;
+  final String? uid;
+
+  const AuthorProfileLocationData({
+    required this.location,
+    this.geo,
+    this.displayName,
+    this.uid,
+  });
+}
+
+/// Looks up author profile metadata, pulling coordinates and physical locations.
+Future<AuthorProfileLocationData> lookupAuthorProfileData({String? uid, String? username}) async {
   String? resolvedUid = uid;
   if (resolvedUid == null || resolvedUid.isEmpty || resolvedUid.startsWith('archival_')) {
     if (username != null && username.isNotEmpty) {
@@ -139,38 +171,87 @@ Future<String> lookupLocationForAuthor({String? uid, String? username}) async {
     }
   }
 
+  Map<String, dynamic>? resolvedGeo;
+  String resolvedLocation = '';
+  String? resolvedDisplayName;
+
   if (resolvedUid != null && resolvedUid.isNotEmpty && !resolvedUid.startsWith('archival_')) {
+    // 1. Check public profile document first (where verified geo is stored)
     try {
       final pRes = await fsGetDoc('profiles/$resolvedUid');
       final pDoc = jsonDecode(pRes);
       if (pDoc['exists'] == true) {
         final pData = pDoc['data'] as Map<String, dynamic>? ?? {};
-        final loc = extractLocationFromData(pData);
-        if (loc.isNotEmpty) return loc;
+        resolvedDisplayName = pData['displayName'] ?? pData['username'];
+        resolvedLocation = extractLocationFromData(pData);
+        if (pData['geo'] is Map) {
+          final g = pData['geo'] as Map;
+          if (g['lat'] != null && g['lng'] != null) {
+            resolvedGeo = _sanitizeGeoMap(g);
+          }
+        }
       }
     } catch (_) {}
 
-    try {
-      final uRes = await fsGetDoc('Users/$resolvedUid');
-      final uDoc = jsonDecode(uRes);
-      if (uDoc['exists'] == true) {
-        final uData = uDoc['data'] as Map<String, dynamic>? ?? {};
-        final loc = extractLocationFromData(uData);
-        if (loc.isNotEmpty) return loc;
-      }
-    } catch (_) {}
+    // 2. Check private Users doc fallback
+    if (resolvedGeo == null) {
+      try {
+        final uRes = await fsGetDoc('Users/$resolvedUid');
+        final uDoc = jsonDecode(uRes);
+        if (uDoc['exists'] == true) {
+          final uData = uDoc['data'] as Map<String, dynamic>? ?? {};
+          if (resolvedLocation.isEmpty) {
+            resolvedLocation = extractLocationFromData(uData);
+          }
+          if (uData['geo'] is Map) {
+            final g = uData['geo'] as Map;
+            if (g['lat'] != null && g['lng'] != null) {
+              resolvedGeo = _sanitizeGeoMap(g);
+            }
+          }
+        }
+      } catch (_) {}
+    }
   } else if (username != null && username.isNotEmpty) {
     try {
       final pQuery = await fsQuery('profiles', 'username', '==', jsonEncode(normalizeHandle(username)), '');
       final List pDocs = jsonDecode(pQuery);
       if (pDocs.isNotEmpty) {
-        final pData = pDocs.first['data'] as Map<String, dynamic>? ?? {};
-        final loc = extractLocationFromData(pData);
-        if (loc.isNotEmpty) return loc;
+        final firstDoc = pDocs.first;
+        resolvedUid = firstDoc['id'] ?? (firstDoc['data'] as Map?)?['uid'];
+        final pData = firstDoc['data'] as Map<String, dynamic>? ?? {};
+        resolvedDisplayName = pData['displayName'] ?? pData['username'];
+        resolvedLocation = extractLocationFromData(pData);
+        if (pData['geo'] is Map) {
+          final g = pData['geo'] as Map;
+          if (g['lat'] != null && g['lng'] != null) {
+            resolvedGeo = _sanitizeGeoMap(g);
+          }
+        }
       }
     } catch (_) {}
   }
-  return '';
+
+  // 3. Fallback: if location text exists but geo coordinates are not yet saved on profile, geocode and backfill
+  if (resolvedGeo == null && resolvedLocation.trim().isNotEmpty) {
+    resolvedGeo = await resolveGeoForLocation(resolvedLocation.trim());
+    if (resolvedGeo != null && resolvedUid != null && resolvedUid.isNotEmpty && !resolvedUid.startsWith('archival_')) {
+      fsUpdateDoc('profiles/$resolvedUid', jsonEncode({'geo': resolvedGeo})).catchError((_) => null);
+    }
+  }
+
+  return AuthorProfileLocationData(
+    location: resolvedLocation,
+    geo: resolvedGeo,
+    displayName: resolvedDisplayName,
+    uid: resolvedUid,
+  );
+}
+
+/// Backwards-compatible string helper for looking up location string only.
+Future<String> lookupLocationForAuthor({String? uid, String? username}) async {
+  final data = await lookupAuthorProfileData(uid: uid, username: username);
+  return data.location;
 }
 
 /// Dedicated inline accordion drawer (bonusRow) comments panel.
@@ -212,6 +293,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
   String _authorName = "";
   String _authorHandle = "";
   String _authorLocation = "";
+  Map<String, dynamic>? _authorGeo; // Stores pulled coordinates
   String _letterText = "";
   String _letterDate = "";
 
@@ -352,6 +434,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
     _authorHandle = suggested;
     _resolvedAuthorUid = null;
     _profileFound = false;
+    _authorGeo = null;
     if (suggested.isNotEmpty) {
       _checkAuthorHandle(suggested);
     }
@@ -362,70 +445,26 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
     if (cleanHandle.isEmpty) return;
     setState(() => _isLookingUpAuthor = true);
     try {
-      String? targetUid;
-      String? actualHandle = cleanHandle;
-
-      final res = await fsGetDoc('usernames/$cleanHandle');
-      final decoded = jsonDecode(res);
-      if (decoded['exists'] == true) {
-        final data = decoded['data'] as Map<String, dynamic>? ?? {};
-        if (data['isAlias'] == true && data['redirect'] != null) {
-          final redirectHandle = normalizeHandle(data['redirect'].toString());
-          actualHandle = redirectHandle;
-          final rRes = await fsGetDoc('usernames/$redirectHandle');
-          final rDecoded = jsonDecode(rRes);
-          if (rDecoded['exists'] == true) {
-            targetUid = (rDecoded['data'] as Map<String, dynamic>?)?['uid'];
-          }
-        } else {
-          targetUid = data['uid'];
-        }
-      }
-
-      if (targetUid == null) {
-        final pQuery = await fsQuery('profiles', 'username', '==', jsonEncode(cleanHandle), '');
-        final List pDocs = jsonDecode(pQuery);
-        if (pDocs.isNotEmpty) {
-          targetUid = pDocs.first['id'];
-        }
-      }
-
-      if (targetUid != null && targetUid.isNotEmpty && mounted) {
-        String pulledLocation = '';
-        String? profileDisplayName;
-
-        final profRes = await fsGetDoc('profiles/$targetUid');
-        final profDoc = jsonDecode(profRes);
-        if (profDoc['exists'] == true) {
-          final pData = profDoc['data'] as Map<String, dynamic>? ?? {};
-          profileDisplayName = pData['displayName'] ?? pData['username'];
-          pulledLocation = extractLocationFromData(pData);
-        }
-
-        if (pulledLocation.isEmpty) {
-          try {
-            final userRes = await fsGetDoc('Users/$targetUid');
-            final userDoc = jsonDecode(userRes);
-            if (userDoc['exists'] == true) {
-              final uData = userDoc['data'] as Map<String, dynamic>? ?? {};
-              pulledLocation = extractLocationFromData(uData);
-            }
-          } catch (_) {}
-        }
-
+      final data = await lookupAuthorProfileData(username: cleanHandle);
+      if (data.uid != null && data.uid!.isNotEmpty && mounted) {
         setState(() {
           _profileFound = true;
-          _resolvedAuthorUid = targetUid;
+          _resolvedAuthorUid = data.uid;
           _isLookingUpAuthor = false;
-          if (_authorLocation.trim().isEmpty && pulledLocation.isNotEmpty) {
-            _authorLocation = pulledLocation;
+          if (data.geo != null) {
+            _authorGeo = data.geo;
           }
-          if (_authorName.trim().isEmpty && profileDisplayName != null && profileDisplayName.isNotEmpty) {
-            _authorName = profileDisplayName;
+          if (_authorLocation.trim().isEmpty && data.location.isNotEmpty) {
+            _authorLocation = data.location;
           }
-          _curatorFeedback = pulledLocation.isNotEmpty
-              ? "Profile linked: @$actualHandle ($pulledLocation)"
-              : "Profile linked: @$actualHandle";
+          if (_authorName.trim().isEmpty && data.displayName != null && data.displayName!.isNotEmpty) {
+            _authorName = data.displayName!;
+          }
+          final locDisplay = data.location.isNotEmpty ? data.location : (data.geo?['formatted'] ?? '');
+          final coordDisplay = data.geo != null ? " [${data.geo!['lat']?.toStringAsFixed(2)}, ${data.geo!['lng']?.toStringAsFixed(2)}]" : "";
+          _curatorFeedback = locDisplay.isNotEmpty
+              ? "Profile linked: @$cleanHandle ($locDisplay)$coordDisplay"
+              : "Profile linked: @$cleanHandle$coordDisplay";
           _isCuratorError = false;
         });
       } else {
@@ -433,6 +472,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
           setState(() {
             _profileFound = false;
             _resolvedAuthorUid = null;
+            _authorGeo = null;
             _isLookingUpAuthor = false;
             _curatorFeedback = null;
           });
@@ -445,18 +485,45 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
 
   Future<void> _manualRefreshLocation() async {
     final handle = _authorHandle.isNotEmpty ? _authorHandle : _authorName;
-    if (handle.trim().isEmpty) return;
+    if (handle.trim().isEmpty) {
+      setState(() {
+        _curatorFeedback = "Enter a writer name or @handle first.";
+        _isCuratorError = true;
+      });
+      return;
+    }
     setState(() => _isLookingUpAuthor = true);
-    final pulled = await lookupLocationForAuthor(uid: _resolvedAuthorUid, username: handle);
+    final data = await lookupAuthorProfileData(uid: _resolvedAuthorUid, username: handle);
     if (mounted) {
       setState(() {
         _isLookingUpAuthor = false;
-        if (pulled.isNotEmpty) {
-          _authorLocation = pulled;
-          _curatorFeedback = "Location pulled: $pulled";
+        if (data.geo != null) {
+          _authorGeo = data.geo;
+          if (data.location.isNotEmpty) {
+            _authorLocation = data.location;
+          }
+          if (data.displayName != null && data.displayName!.isNotEmpty && _authorName.isEmpty) {
+            _authorName = data.displayName!;
+          }
+          if (data.uid != null && data.uid!.isNotEmpty) {
+            _resolvedAuthorUid = data.uid;
+            _profileFound = true;
+          }
+          _curatorFeedback = "Coordinates pulled: ${_authorGeo!['lat']?.toStringAsFixed(4)}, ${_authorGeo!['lng']?.toStringAsFixed(4)} (${_authorLocation.isNotEmpty ? _authorLocation : _authorGeo!['formatted'] ?? ''})";
+          _isCuratorError = false;
+        } else if (data.location.isNotEmpty) {
+          _authorLocation = data.location;
+          if (data.displayName != null && data.displayName!.isNotEmpty && _authorName.isEmpty) {
+            _authorName = data.displayName!;
+          }
+          if (data.uid != null && data.uid!.isNotEmpty) {
+            _resolvedAuthorUid = data.uid;
+            _profileFound = true;
+          }
+          _curatorFeedback = "Location pulled: ${data.location} (no coordinates saved on profile, will geocode on save)";
           _isCuratorError = false;
         } else {
-          _curatorFeedback = "No location found on profile for @${normalizeHandle(handle)}.";
+          _curatorFeedback = "No location or coordinates found on profile for @${normalizeHandle(handle)}.";
           _isCuratorError = true;
         }
       });
@@ -491,6 +558,11 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
       } else {
         city = _authorLocation.trim();
       }
+      Map<String, dynamic>? initialGeo = _authorGeo;
+      if (initialGeo == null && _authorLocation.trim().isNotEmpty) {
+        initialGeo = await resolveGeoForLocation(_authorLocation.trim());
+      }
+
       final profileData = {
         'uid': profileId,
         'username': handle,
@@ -500,6 +572,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
         'city': city,
         'state': state,
         'location': _authorLocation.trim(),
+        if (initialGeo != null) 'geo': initialGeo,
         'photoUrl': '',
         'bio': _authorLocation.isNotEmpty
             ? 'Historical letter writer from $_authorLocation.'
@@ -530,7 +603,10 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
           _isCreatingProfile = false;
           _profileFound = true;
           _resolvedAuthorUid = profileId;
-          _curatorFeedback = "Managed profile @$handle created and linked!";
+          _authorGeo = initialGeo;
+          _curatorFeedback = initialGeo != null
+              ? "Managed profile @$handle created with coordinates!"
+              : "Managed profile @$handle created and linked!";
           _isCuratorError = false;
         });
       }
@@ -564,8 +640,8 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
     });
 
     try {
-      Map<String, dynamic>? geoData;
-      if (_authorLocation.trim().isNotEmpty) {
+      Map<String, dynamic>? geoData = _authorGeo;
+      if (geoData == null && _authorLocation.trim().isNotEmpty) {
         geoData = await resolveGeoForLocation(_authorLocation.trim());
       }
 
@@ -606,6 +682,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
           _authorName = "";
           _authorHandle = "";
           _authorLocation = "";
+          _authorGeo = null;
           _letterDate = _fanzinePublishedDate;
           _curatorFeedback = "Letter transcribed and linked to @$handle!";
           _isCuratorError = false;
@@ -780,7 +857,22 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
                         'style': 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;'
                       },
                       [
-                        span([Component.text('location:')], attributes: const {'style': 'font-size: 9px; color: #666; font-weight: bold;'}),
+                        div(
+                          attributes: const {'style': 'display: flex; align-items: center; gap: 4px;'},
+                          [
+                            span([Component.text('location:')], attributes: const {'style': 'font-size: 9px; color: #666; font-weight: bold;'}),
+                            if (_authorGeo != null)
+                              span(
+                                [
+                                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 10px; vertical-align: middle; margin-right: 1px;'}),
+                                  Component.text('${_authorGeo!['lat']?.toStringAsFixed(4)}, ${_authorGeo!['lng']?.toStringAsFixed(4)}'),
+                                ],
+                                attributes: const {
+                                  'style': 'font-size: 9px; font-weight: bold; color: #16a34a; font-family: monospace; background: #ecfdf5; padding: 1px 4px; border-radius: 4px; border: 1px solid #bbf7d0; display: inline-flex; align-items: center;'
+                                },
+                              ),
+                          ],
+                        ),
                         button(
                           [
                             span([Component.text('refresh')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 11px; margin-right: 2px; vertical-align: middle;'}),
@@ -788,7 +880,7 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
                           ],
                           attributes: const {
                             'type': 'button',
-                            'title': 'Re-pull location from author profile',
+                            'title': 'Re-pull location and coordinates from author profile',
                             'style': 'border: none; background: transparent; color: #6750A4; font-size: 9px; font-weight: bold; cursor: pointer; padding: 0; text-decoration: underline;'
                           },
                           events: {'click': (e) => _manualRefreshLocation()},
@@ -804,7 +896,18 @@ class _CommentsRowPanelState extends State<CommentsRowPanel> {
                         'width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; background: white; outline: none; box-sizing: border-box; margin: 0;'
                       },
                       events: {
-                        'input': (e) => setState(() => _authorLocation = getInputValue(e))
+                        'input': (e) {
+                          final newLoc = getInputValue(e);
+                          setState(() {
+                            _authorLocation = newLoc;
+                            if (_authorGeo != null) {
+                              final geoLoc = _authorGeo!['formatted'] ?? _authorGeo!['city'] ?? '';
+                              if (newLoc.trim().toLowerCase() != geoLoc.toString().trim().toLowerCase()) {
+                                _authorGeo = null;
+                              }
+                            }
+                          });
+                        }
                       },
                     )
                   ],
@@ -1049,6 +1152,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
   String _authorName = "";
   String _authorHandle = "";
   String _authorLocation = "";
+  Map<String, dynamic>? _authorGeo; // Stores pulled coordinates
   String _letterText = "";
   String _letterDate = "";
 
@@ -1188,6 +1292,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
     _authorHandle = suggested;
     _resolvedAuthorUid = null;
     _profileFound = false;
+    _authorGeo = null;
     if (suggested.isNotEmpty) {
       _checkAuthorHandle(suggested);
     }
@@ -1198,70 +1303,26 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
     if (cleanHandle.isEmpty) return;
     setState(() => _isLookingUpAuthor = true);
     try {
-      String? targetUid;
-      String? actualHandle = cleanHandle;
-
-      final res = await fsGetDoc('usernames/$cleanHandle');
-      final decoded = jsonDecode(res);
-      if (decoded['exists'] == true) {
-        final data = decoded['data'] as Map<String, dynamic>? ?? {};
-        if (data['isAlias'] == true && data['redirect'] != null) {
-          final redirectHandle = normalizeHandle(data['redirect'].toString());
-          actualHandle = redirectHandle;
-          final rRes = await fsGetDoc('usernames/$redirectHandle');
-          final rDecoded = jsonDecode(rRes);
-          if (rDecoded['exists'] == true) {
-            targetUid = (rDecoded['data'] as Map<String, dynamic>?)?['uid'];
-          }
-        } else {
-          targetUid = data['uid'];
-        }
-      }
-
-      if (targetUid == null) {
-        final pQuery = await fsQuery('profiles', 'username', '==', jsonEncode(cleanHandle), '');
-        final List pDocs = jsonDecode(pQuery);
-        if (pDocs.isNotEmpty) {
-          targetUid = pDocs.first['id'];
-        }
-      }
-
-      if (targetUid != null && targetUid.isNotEmpty && mounted) {
-        String pulledLocation = '';
-        String? profileDisplayName;
-
-        final profRes = await fsGetDoc('profiles/$targetUid');
-        final profDoc = jsonDecode(profRes);
-        if (profDoc['exists'] == true) {
-          final pData = profDoc['data'] as Map<String, dynamic>? ?? {};
-          profileDisplayName = pData['displayName'] ?? pData['username'];
-          pulledLocation = extractLocationFromData(pData);
-        }
-
-        if (pulledLocation.isEmpty) {
-          try {
-            final userRes = await fsGetDoc('Users/$targetUid');
-            final userDoc = jsonDecode(userRes);
-            if (userDoc['exists'] == true) {
-              final uData = userDoc['data'] as Map<String, dynamic>? ?? {};
-              pulledLocation = extractLocationFromData(uData);
-            }
-          } catch (_) {}
-        }
-
+      final data = await lookupAuthorProfileData(username: cleanHandle);
+      if (data.uid != null && data.uid!.isNotEmpty && mounted) {
         setState(() {
           _profileFound = true;
-          _resolvedAuthorUid = targetUid;
+          _resolvedAuthorUid = data.uid;
           _isLookingUpAuthor = false;
-          if (_authorLocation.trim().isEmpty && pulledLocation.isNotEmpty) {
-            _authorLocation = pulledLocation;
+          if (data.geo != null) {
+            _authorGeo = data.geo;
           }
-          if (_authorName.trim().isEmpty && profileDisplayName != null && profileDisplayName.isNotEmpty) {
-            _authorName = profileDisplayName;
+          if (_authorLocation.trim().isEmpty && data.location.isNotEmpty) {
+            _authorLocation = data.location;
           }
-          _curatorFeedback = pulledLocation.isNotEmpty
-              ? "Profile linked: @$actualHandle ($pulledLocation)"
-              : "Profile linked: @$actualHandle";
+          if (_authorName.trim().isEmpty && data.displayName != null && data.displayName!.isNotEmpty) {
+            _authorName = data.displayName!;
+          }
+          final locDisplay = data.location.isNotEmpty ? data.location : (data.geo?['formatted'] ?? '');
+          final coordDisplay = data.geo != null ? " [${data.geo!['lat']?.toStringAsFixed(2)}, ${data.geo!['lng']?.toStringAsFixed(2)}]" : "";
+          _curatorFeedback = locDisplay.isNotEmpty
+              ? "Profile linked: @$cleanHandle ($locDisplay)$coordDisplay"
+              : "Profile linked: @$cleanHandle$coordDisplay";
           _isCuratorError = false;
         });
       } else {
@@ -1269,6 +1330,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
           setState(() {
             _profileFound = false;
             _resolvedAuthorUid = null;
+            _authorGeo = null;
             _isLookingUpAuthor = false;
             _curatorFeedback = null;
           });
@@ -1281,18 +1343,45 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
 
   Future<void> _manualRefreshLocation() async {
     final handle = _authorHandle.isNotEmpty ? _authorHandle : _authorName;
-    if (handle.trim().isEmpty) return;
+    if (handle.trim().isEmpty) {
+      setState(() {
+        _curatorFeedback = "Enter a writer name or @handle first.";
+        _isCuratorError = true;
+      });
+      return;
+    }
     setState(() => _isLookingUpAuthor = true);
-    final pulled = await lookupLocationForAuthor(uid: _resolvedAuthorUid, username: handle);
+    final data = await lookupAuthorProfileData(uid: _resolvedAuthorUid, username: handle);
     if (mounted) {
       setState(() {
         _isLookingUpAuthor = false;
-        if (pulled.isNotEmpty) {
-          _authorLocation = pulled;
-          _curatorFeedback = "Location pulled: $pulled";
+        if (data.geo != null) {
+          _authorGeo = data.geo;
+          if (data.location.isNotEmpty) {
+            _authorLocation = data.location;
+          }
+          if (data.displayName != null && data.displayName!.isNotEmpty && _authorName.isEmpty) {
+            _authorName = data.displayName!;
+          }
+          if (data.uid != null && data.uid!.isNotEmpty) {
+            _resolvedAuthorUid = data.uid;
+            _profileFound = true;
+          }
+          _curatorFeedback = "Coordinates pulled: ${_authorGeo!['lat']?.toStringAsFixed(4)}, ${_authorGeo!['lng']?.toStringAsFixed(4)} (${_authorLocation.isNotEmpty ? _authorLocation : _authorGeo!['formatted'] ?? ''})";
+          _isCuratorError = false;
+        } else if (data.location.isNotEmpty) {
+          _authorLocation = data.location;
+          if (data.displayName != null && data.displayName!.isNotEmpty && _authorName.isEmpty) {
+            _authorName = data.displayName!;
+          }
+          if (data.uid != null && data.uid!.isNotEmpty) {
+            _resolvedAuthorUid = data.uid;
+            _profileFound = true;
+          }
+          _curatorFeedback = "Location pulled: ${data.location} (no coordinates saved on profile, will geocode on save)";
           _isCuratorError = false;
         } else {
-          _curatorFeedback = "No location found on profile for @${normalizeHandle(handle)}.";
+          _curatorFeedback = "No location or coordinates found on profile for @${normalizeHandle(handle)}.";
           _isCuratorError = true;
         }
       });
@@ -1327,6 +1416,11 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
       } else {
         city = _authorLocation.trim();
       }
+      Map<String, dynamic>? initialGeo = _authorGeo;
+      if (initialGeo == null && _authorLocation.trim().isNotEmpty) {
+        initialGeo = await resolveGeoForLocation(_authorLocation.trim());
+      }
+
       final profileData = {
         'uid': profileId,
         'username': handle,
@@ -1336,6 +1430,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
         'city': city,
         'state': state,
         'location': _authorLocation.trim(),
+        if (initialGeo != null) 'geo': initialGeo,
         'photoUrl': '',
         'bio': _authorLocation.isNotEmpty
             ? 'Historical letter writer from $_authorLocation.'
@@ -1366,7 +1461,10 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
           _isCreatingProfile = false;
           _profileFound = true;
           _resolvedAuthorUid = profileId;
-          _curatorFeedback = "Managed profile @$handle created and linked!";
+          _authorGeo = initialGeo;
+          _curatorFeedback = initialGeo != null
+              ? "Managed profile @$handle created with coordinates!"
+              : "Managed profile @$handle created and linked!";
           _isCuratorError = false;
         });
       }
@@ -1400,8 +1498,8 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
     });
 
     try {
-      Map<String, dynamic>? geoData;
-      if (_authorLocation.trim().isNotEmpty) {
+      Map<String, dynamic>? geoData = _authorGeo;
+      if (geoData == null && _authorLocation.trim().isNotEmpty) {
         geoData = await resolveGeoForLocation(_authorLocation.trim());
       }
 
@@ -1442,6 +1540,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
           _authorName = "";
           _authorHandle = "";
           _authorLocation = "";
+          _authorGeo = null;
           _letterDate = _fanzinePublishedDate;
           _curatorFeedback = "Letter transcribed and linked to @$handle!";
           _isCuratorError = false;
@@ -1609,14 +1708,29 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
               },
               [
                 div(
-                  attributes: const {'style': 'flex: 2; min-width: 140px;'},
+                  attributes: const {'style': 'flex: 2; min-width: 140px; position: relative;'},
                   [
                     div(
                       attributes: const {
                         'style': 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;'
                       },
                       [
-                        span([Component.text('location:')], attributes: const {'style': 'font-size: 9px; color: #666; font-weight: bold;'}),
+                        div(
+                          attributes: const {'style': 'display: flex; align-items: center; gap: 4px;'},
+                          [
+                            span([Component.text('location:')], attributes: const {'style': 'font-size: 9px; color: #666; font-weight: bold;'}),
+                            if (_authorGeo != null)
+                              span(
+                                [
+                                  span([Component.text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 10px; vertical-align: middle; margin-right: 1px;'}),
+                                  Component.text('${_authorGeo!['lat']?.toStringAsFixed(4)}, ${_authorGeo!['lng']?.toStringAsFixed(4)}'),
+                                ],
+                                attributes: const {
+                                  'style': 'font-size: 9px; font-weight: bold; color: #16a34a; font-family: monospace; background: #ecfdf5; padding: 1px 4px; border-radius: 4px; border: 1px solid #bbf7d0; display: inline-flex; align-items: center;'
+                                },
+                              ),
+                          ],
+                        ),
                         button(
                           [
                             span([Component.text('refresh')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 11px; margin-right: 2px; vertical-align: middle;'}),
@@ -1624,7 +1738,7 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
                           ],
                           attributes: const {
                             'type': 'button',
-                            'title': 'Re-pull location from author profile',
+                            'title': 'Re-pull location and coordinates from author profile',
                             'style': 'border: none; background: transparent; color: #6750A4; font-size: 9px; font-weight: bold; cursor: pointer; padding: 0; text-decoration: underline;'
                           },
                           events: {'click': (e) => _manualRefreshLocation()},
@@ -1640,7 +1754,18 @@ class _CommentsColumnPanelState extends State<CommentsColumnPanel> {
                         'width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; outline: none; box-sizing: border-box;'
                       },
                       events: {
-                        'input': (e) => setState(() => _authorLocation = getInputValue(e))
+                        'input': (e) {
+                          final newLoc = getInputValue(e);
+                          setState(() {
+                            _authorLocation = newLoc;
+                            if (_authorGeo != null) {
+                              final geoLoc = _authorGeo!['formatted'] ?? _authorGeo!['city'] ?? '';
+                              if (newLoc.trim().toLowerCase() != geoLoc.toString().trim().toLowerCase()) {
+                                _authorGeo = null;
+                              }
+                            }
+                          });
+                        }
                       },
                     )
                   ],
@@ -1879,6 +2004,7 @@ class _CommentItemState extends State<CommentItem> {
   bool _refreshingLocation = false;
   String _editText = '';
   String _editLocation = '';
+  Map<String, dynamic>? _editGeo; // Stores pulled coordinates for edited comment
   String _editHistoricalDate = '';
   String _editAuthorName = '';
   String _editAuthorHandle = '';
@@ -1947,29 +2073,41 @@ class _CommentItemState extends State<CommentItem> {
   }
 
   /// Opens the comment for curator inspection/editing and automatically refreshes
-  /// the location from the writer's profile if it was previously empty.
+  /// the location and coordinates from the writer's profile if it was previously empty.
   Future<void> _openAndRefreshLocation() async {
     _editText = component.data['text'] ?? '';
     _editAuthorName = component.data['displayName'] ?? '';
     _editAuthorHandle = component.data['username'] ?? '';
     _editHistoricalDate = component.data['historicalDate'] ?? '';
     _editLocation = component.data['location'] ?? '';
+    _editGeo = component.data['geo'] is Map ? Map<String, dynamic>.from(component.data['geo']) : null;
     _locationRefreshedMessage = null;
 
-    if (_editLocation.trim().isEmpty) {
+    if (_editGeo == null || _editLocation.trim().isEmpty) {
       _refreshingLocation = true;
       setState(() => _isEditing = true);
 
       final uid = component.data['userId'];
       final username = component.data['username'];
-      final pulled = await lookupLocationForAuthor(uid: uid, username: username);
-      if (pulled.isNotEmpty && mounted) {
-        _editLocation = pulled;
-        _locationRefreshedMessage = 'Location pulled from profile: $pulled';
+      final pulled = await lookupAuthorProfileData(uid: uid, username: username);
+      if (mounted) {
+        setState(() {
+          if (pulled.geo != null) {
+            _editGeo = pulled.geo;
+          }
+          if (pulled.location.isNotEmpty) {
+            _editLocation = pulled.location;
+          }
+          if (_editGeo != null) {
+            _locationRefreshedMessage = 'Coordinates pulled: ${_editGeo!['lat']?.toStringAsFixed(4)}, ${_editGeo!['lng']?.toStringAsFixed(4)} (${_editLocation})';
+          } else if (pulled.location.isNotEmpty) {
+            _locationRefreshedMessage = 'Location pulled: ${pulled.location}';
+          }
+          _refreshingLocation = false;
+        });
       }
-      _refreshingLocation = false;
     } else {
-      _isEditing = true;
+      setState(() => _isEditing = true);
     }
 
     if (_editHistoricalDate.trim().isEmpty &&
@@ -1985,15 +2123,21 @@ class _CommentItemState extends State<CommentItem> {
     setState(() => _refreshingLocation = true);
     final uid = component.data['userId'];
     final username = _editAuthorHandle.isNotEmpty ? _editAuthorHandle : component.data['username'];
-    final pulled = await lookupLocationForAuthor(uid: uid, username: handleOrUser(username));
+    final pulled = await lookupAuthorProfileData(uid: uid, username: handleOrUser(username));
     if (mounted) {
       setState(() {
         _refreshingLocation = false;
-        if (pulled.isNotEmpty) {
-          _editLocation = pulled;
-          _locationRefreshedMessage = 'Refreshed from profile: $pulled';
+        if (pulled.geo != null) {
+          _editGeo = pulled.geo;
+          if (pulled.location.isNotEmpty) {
+            _editLocation = pulled.location;
+          }
+          _locationRefreshedMessage = 'Coordinates pulled: ${_editGeo!['lat']?.toStringAsFixed(4)}, ${_editGeo!['lng']?.toStringAsFixed(4)} (${_editLocation})';
+        } else if (pulled.location.isNotEmpty) {
+          _editLocation = pulled.location;
+          _locationRefreshedMessage = 'Location pulled: ${pulled.location} (no coordinates on profile)';
         } else {
-          _locationRefreshedMessage = 'No location set on profile yet.';
+          _locationRefreshedMessage = 'No location or coordinates on profile yet.';
         }
       });
     }
@@ -2008,8 +2152,8 @@ class _CommentItemState extends State<CommentItem> {
     if (commentId == null || _isSaving) return;
     setState(() => _isSaving = true);
     try {
-      Map<String, dynamic>? geoData;
-      if (_editLocation.trim().isNotEmpty) {
+      Map<String, dynamic>? geoData = _editGeo;
+      if (geoData == null && _editLocation.trim().isNotEmpty) {
         geoData = await resolveGeoForLocation(_editLocation.trim());
       }
 
@@ -2124,7 +2268,22 @@ class _CommentItemState extends State<CommentItem> {
                       'style': 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;'
                     },
                     [
-                      span([Component.text('location:')], attributes: const {'style': 'font-size: 10px; color: #666; font-weight: bold;'}),
+                      div(
+                        attributes: const {'style': 'display: flex; align-items: center; gap: 4px;'},
+                        [
+                          span([Component.text('location:')], attributes: const {'style': 'font-size: 10px; color: #666; font-weight: bold;'}),
+                          if (_editGeo != null)
+                            span(
+                              [
+                                span([Component.text('pin_drop')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 10px; vertical-align: middle; margin-right: 1px;'}),
+                                Component.text('${_editGeo!['lat']?.toStringAsFixed(4)}, ${_editGeo!['lng']?.toStringAsFixed(4)}'),
+                              ],
+                              attributes: const {
+                                'style': 'font-size: 9px; font-weight: bold; color: #16a34a; font-family: monospace; background: #ecfdf5; padding: 1px 4px; border-radius: 4px; border: 1px solid #bbf7d0; display: inline-flex; align-items: center;'
+                              },
+                            ),
+                        ],
+                      ),
                       button(
                         [
                           span([Component.text('refresh')], classes: 'material-symbols-outlined', attributes: const {'style': 'font-size: 11px; margin-right: 2px; vertical-align: middle;'}),
@@ -2132,7 +2291,7 @@ class _CommentItemState extends State<CommentItem> {
                         ],
                         attributes: const {
                           'type': 'button',
-                          'title': 'Re-pull location from author profile',
+                          'title': 'Re-pull location and coordinates from author profile',
                           'style': 'border: none; background: transparent; color: #6750A4; font-size: 9px; font-weight: bold; cursor: pointer; padding: 0; text-decoration: underline;'
                         },
                         events: {'click': (e) => _manualRefreshLocation()},
@@ -2147,7 +2306,20 @@ class _CommentItemState extends State<CommentItem> {
                       'style':
                       'width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; background: white; box-sizing: border-box; margin: 0;'
                     },
-                    events: {'input': (e) => _editLocation = getInputValue(e)},
+                    events: {
+                      'input': (e) {
+                        final newLoc = getInputValue(e);
+                        setState(() {
+                          _editLocation = newLoc;
+                          if (_editGeo != null) {
+                            final geoLoc = _editGeo!['formatted'] ?? _editGeo!['city'] ?? '';
+                            if (newLoc.trim().toLowerCase() != geoLoc.toString().trim().toLowerCase()) {
+                              _editGeo = null;
+                            }
+                          }
+                        });
+                      }
+                    },
                   ),
                 ],
               ),
@@ -2226,6 +2398,8 @@ class _CommentItemState extends State<CommentItem> {
     final bool isLetter = component.data['sourceType'] == 'letter_column';
     final String? location = component.data['location'];
     final String? historicalDate = component.data['historicalDate'];
+    final dynamic geoData = component.data['geo'];
+    final Map<String, dynamic>? geo = geoData is Map ? Map<String, dynamic>.from(geoData) : null;
     String dateStr = '';
     final createdAt = component.data['createdAt'];
     if (createdAt is DateTime) {
@@ -2308,6 +2482,15 @@ class _CommentItemState extends State<CommentItem> {
                             ],
                             attributes: const {
                               'style': 'color: #64748b; font-size: 10px; font-weight: 500; margin-right: 6px;'
+                            },
+                          ),
+                        if (component.isCuratorMode && geo != null && geo['lat'] != null)
+                          span(
+                            [
+                              Component.text('[${(geo['lat'] as num).toDouble().toStringAsFixed(2)}, ${(geo['lng'] as num).toDouble().toStringAsFixed(2)}]')
+                            ],
+                            attributes: const {
+                              'style': 'color: #16a34a; font-size: 10px; font-family: monospace; font-weight: bold; margin-right: 6px;'
                             },
                           ),
                         if (historicalDate != null && historicalDate.isNotEmpty)
