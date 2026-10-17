@@ -6,7 +6,6 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_utils.dart';
-import '../../utils/web_firebase_interop.dart';
 import '../../utils/unsaved_fanzine_registry.dart';
 import '../../services/address_radius_letters.dart';
 import '../fanzine_thumbnail_card.dart';
