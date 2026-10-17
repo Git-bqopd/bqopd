@@ -52,7 +52,7 @@ class PublisherCompiler {
     }
 
     String processedText = text;
-    final templateRegex = RegExp(r'(?:\{\{|\[\[)(\d+)\|([^|]+)\|(.*?)(?:\}\}|\]\])');
+    final templateRegex = RegExp(r'(?:\{\{|\[\[)(\d+)\Vert{}([^\vert{}]+)\Vert{}(.*?)(?:\}\}\vert{}\]\])');
     processedText = processedText.replaceAllMapped(templateRegex, (match) {
       final templateNum = match.group(1);
       final imgShortCode = match.group(2)?.trim() ?? '';
@@ -77,9 +77,9 @@ class PublisherCompiler {
       if (shortNameMap.containsKey(imgShortCode)) {
         final absoluteUrl = shortNameMap[imgShortCode];
         if (rowOffset != null) {
-          return '{{TEMPLATE_$templateNum: $absoluteUrl | row=$rowOffset | $captionText}}';
+          return '{{TEMPLATE_$templateNum:$absoluteUrl | row=$rowOffset \vert{}$captionText}}';
         } else {
-          return '{{TEMPLATE_$templateNum: $absoluteUrl | $captionText}}';
+          return '{{TEMPLATE_$templateNum: $absoluteUrl \vert{}$captionText}}';
         }
       }
       return match.group(0)!;
@@ -257,6 +257,9 @@ class PublisherCompiler {
       final decoded = jsonDecode(resStr);
       if (decoded is Map && decoded['status'] == 'success' && decoded['pages'] is List) {
         final List pagesList = decoded['pages'];
+        if (onProgress != null && pagesList.isNotEmpty) {
+          onProgress(pagesList.length, pagesList.length);
+        }
         return pagesList.map((p) {
           final Map<String, dynamic> pMap = Map<String, dynamic>.from(p as Map);
           return FanzinePage.fromMap(pMap['id']?.toString() ?? '', pMap);
