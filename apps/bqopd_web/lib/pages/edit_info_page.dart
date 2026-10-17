@@ -8,6 +8,47 @@ import '../utils/web_firebase_interop.dart';
 import '../utils/web_utils.dart';
 import '../components/segmented_button.dart';
 
+const String _base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+
+String _encodeGeohashLocal(double lat, double lng, [int precision = 6]) {
+  List<double> latInterval = [-90.0, 90.0];
+  List<double> lngInterval = [-180.0, 180.0];
+  final buffer = StringBuffer();
+  const bits = [16, 8, 4, 2, 1];
+  int bit = 0;
+  int ch = 0;
+  bool even = true;
+
+  while (buffer.length < precision) {
+    if (even) {
+      final mid = (lngInterval[0] + lngInterval[1]) / 2.0;
+      if (lng > mid) {
+        ch |= bits[bit];
+        lngInterval[0] = mid;
+      } else {
+        lngInterval[1] = mid;
+      }
+    } else {
+      final mid = (latInterval[0] + latInterval[1]) / 2.0;
+      if (lat > mid) {
+        ch |= bits[bit];
+        latInterval[0] = mid;
+      } else {
+        latInterval[1] = mid;
+      }
+    }
+    even = !even;
+    if (bit < 4) {
+      bit++;
+    } else {
+      buffer.write(_base32[ch]);
+      bit = 0;
+      ch = 0;
+    }
+  }
+  return buffer.toString();
+}
+
 /// Full-featured Web Profile & Account Editor Page for Jaspr.
 /// Supports updating public profile metadata, social media handles,
 /// photo avatar URLs, and private contact/address information.
@@ -164,21 +205,36 @@ class _EditInfoPageState extends State<EditInfoPage> {
       }
     });
 
-    // Query profiles and users documents to fetch address visibility preference
+    // Query profiles and users documents to fetch address visibility preference and pre-load location fields
     fsGetDoc('profiles/$uid').then((res) {
       try {
         final doc = jsonDecode(res);
         if (doc['exists'] == true && mounted) {
           final data = doc['data'] as Map<String, dynamic>;
-          if (data.containsKey('addressVisibility')) {
-            setState(() {
+          setState(() {
+            if (data.containsKey('addressVisibility')) {
               _addressVisibility = data['addressVisibility']?.toString() ?? 'private';
-            });
-          } else if (data.containsKey('isAddressPublic')) {
-            setState(() {
+            } else if (data.containsKey('isAddressPublic')) {
               _addressVisibility = data['isAddressPublic'] == true ? 'address' : 'private';
-            });
-          }
+            } else if (data['isManaged'] == true) {
+              _addressVisibility = 'city';
+            }
+
+            if (_street1.isEmpty && data['street1'] != null) _street1 = data['street1'].toString();
+            if (_street2.isEmpty && data['street2'] != null) _street2 = data['street2'].toString();
+            if (_city.isEmpty && data['city'] != null) _city = data['city'].toString();
+            if (_state.isEmpty && data['state'] != null) _state = data['state'].toString();
+            if (_zipCode.isEmpty && data['zipCode'] != null) _zipCode = data['zipCode'].toString();
+            if (_country.isEmpty && data['country'] != null) _country = data['country'].toString();
+            if (_firstName.isEmpty && data['firstName'] != null) _firstName = data['firstName'].toString();
+            if (_lastName.isEmpty && data['lastName'] != null) _lastName = data['lastName'].toString();
+
+            if (_city.isEmpty && _state.isEmpty && data['location'] != null && data['location'].toString().contains(',')) {
+              final locParts = data['location'].toString().split(',');
+              _city = locParts[0].trim();
+              _state = locParts.sublist(1).join(',').trim();
+            }
+          });
         }
       } catch (_) {}
     });
@@ -242,14 +298,14 @@ class _EditInfoPageState extends State<EditInfoPage> {
     _accountSub = component.userRepository.watchUserAccount(uid).listen((account) {
       if (account != null && mounted) {
         setState(() {
-          _firstName = account.firstName;
-          _lastName = account.lastName;
-          _street1 = account.street1 ?? '';
-          _street2 = account.street2 ?? '';
-          _city = account.city ?? '';
-          _state = account.state ?? '';
-          _zipCode = account.zipCode ?? '';
-          _country = account.country ?? '';
+          if (account.firstName.isNotEmpty) _firstName = account.firstName;
+          if (account.lastName.isNotEmpty) _lastName = account.lastName;
+          if (account.street1 != null && account.street1!.isNotEmpty) _street1 = account.street1!;
+          if (account.street2 != null && account.street2!.isNotEmpty) _street2 = account.street2!;
+          if (account.city != null && account.city!.isNotEmpty) _city = account.city!;
+          if (account.state != null && account.state!.isNotEmpty) _state = account.state!;
+          if (account.zipCode != null && account.zipCode!.isNotEmpty) _zipCode = account.zipCode!;
+          if (account.country != null && account.country!.isNotEmpty) _country = account.country!;
           if (account.preferences.containsKey('addressVisibility')) {
             _addressVisibility = account.preferences['addressVisibility']?.toString() ?? 'private';
           } else if (account.preferences.containsKey('isAddressPublic')) {
@@ -270,12 +326,49 @@ class _EditInfoPageState extends State<EditInfoPage> {
 
     setState(() {
       _saving = true;
-      _statusMessage = 'Saving profile info...';
+      _statusMessage = 'Geocoding and saving profile...';
       _isError = false;
     });
 
     try {
       final finalUsername = _cleanHandle(_username);
+
+      // Build address query for server geocoding
+      final geoQueryParts = [
+        if (_street1.trim().isNotEmpty) _street1.trim(),
+        if (_city.trim().isNotEmpty) _city.trim(),
+        if (_state.trim().isNotEmpty) _state.trim(),
+        if (_zipCode.trim().isNotEmpty) _zipCode.trim(),
+      ];
+      final geoQuery = geoQueryParts.join(', ');
+
+      Map<String, dynamic>? geoMeta;
+      if (geoQuery.isNotEmpty) {
+        try {
+          final geoJson = await geocodeAddress(geoQuery);
+          if (geoJson != null && geoJson.isNotEmpty) {
+            final decoded = jsonDecode(geoJson);
+            if (decoded is Map && decoded['lat'] != null && decoded['lng'] != null) {
+              final double lat = (decoded['lat'] as num).toDouble();
+              final double lng = (decoded['lng'] as num).toDouble();
+              final String gh = decoded['geohash']?.toString() ?? _encodeGeohashLocal(lat, lng, 6);
+              geoMeta = {
+                'lat': lat,
+                'lng': lng,
+                'geohash': gh,
+                'geohash_3': decoded['geohash_3']?.toString() ?? (gh.length >= 3 ? gh.substring(0, 3) : gh),
+                'geohash_2': decoded['geohash_2']?.toString() ?? (gh.length >= 2 ? gh.substring(0, 2) : gh),
+                'formatted': decoded['formatted']?.toString() ?? geoQuery,
+                'city': decoded['city']?.toString() ?? _city.trim(),
+                'state': decoded['state']?.toString() ?? _state.trim(),
+                'country': decoded['country']?.toString() ?? _country.trim(),
+              };
+            }
+          }
+        } catch (e) {
+          print('[EditInfoPage] Geocode error for "$geoQuery": $e');
+        }
+      }
 
       // 1. Update public profile fields with selected geographic precision
       final publicData = <String, dynamic>{
@@ -290,8 +383,22 @@ class _EditInfoPageState extends State<EditInfoPage> {
         'updatedAt': WebFieldValue.serverTimestamp(),
       };
 
+      if (geoMeta != null) {
+        publicData['geo'] = geoMeta;
+      }
+
+      final locParts = [
+        if (_city.trim().isNotEmpty) _city.trim(),
+        if (_state.trim().isNotEmpty) _state.trim(),
+      ];
+      if (locParts.isNotEmpty) {
+        publicData['location'] = locParts.join(', ');
+      }
+
       if (_isManaged) {
         publicData['managers'] = _managers;
+        publicData['firstName'] = _firstName.trim();
+        publicData['lastName'] = _lastName.trim();
       }
 
       switch (_addressVisibility) {
@@ -336,22 +443,25 @@ class _EditInfoPageState extends State<EditInfoPage> {
       await fsSetDoc('profiles/$uid', jsonEncode(publicData), true);
 
       // 2. Update private user account details (always preserves full address)
-      final privateData = <String, dynamic>{
-        'firstName': _firstName.trim(),
-        'lastName': _lastName.trim(),
-        'street1': _street1.trim(),
-        'street2': _street2.trim(),
-        'city': _city.trim(),
-        'state': _state.trim(),
-        'zipCode': _zipCode.trim(),
-        'country': _country.trim(),
-        'addressVisibility': _addressVisibility,
-        'isAddressPublic': _addressVisibility != 'private',
-        'preferences.addressVisibility': _addressVisibility,
-        'preferences.isAddressPublic': _addressVisibility != 'private',
-        'updatedAt': WebFieldValue.serverTimestamp(),
-      };
-      await fsSetDoc('Users/$uid', jsonEncode(privateData), true);
+      if (!_isManaged) {
+        final privateData = <String, dynamic>{
+          'firstName': _firstName.trim(),
+          'lastName': _lastName.trim(),
+          'street1': _street1.trim(),
+          'street2': _street2.trim(),
+          'city': _city.trim(),
+          'state': _state.trim(),
+          'zipCode': _zipCode.trim(),
+          'country': _country.trim(),
+          'addressVisibility': _addressVisibility,
+          'isAddressPublic': _addressVisibility != 'private',
+          'preferences.addressVisibility': _addressVisibility,
+          'preferences.isAddressPublic': _addressVisibility != 'private',
+          if (geoMeta != null) 'geo': geoMeta,
+          'updatedAt': WebFieldValue.serverTimestamp(),
+        };
+        await fsSetDoc('Users/$uid', jsonEncode(privateData), true);
+      }
 
       // 3. Update username and shortcode mappings if handle was changed
       if (finalUsername.isNotEmpty && finalUsername != _initialUsername) {
@@ -376,7 +486,9 @@ class _EditInfoPageState extends State<EditInfoPage> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _statusMessage = 'Profile updated successfully!';
+          _statusMessage = geoMeta != null
+              ? 'Profile & coordinates updated successfully!'
+              : 'Profile updated successfully!';
           _isError = false;
           _initialUsername = finalUsername;
         });
@@ -547,7 +659,7 @@ class _EditInfoPageState extends State<EditInfoPage> {
                     ]),
                     div([], attributes: const {'style': 'height: 1px; background: #eee; margin: 16px 0;'}),
 
-                    // --- SECTION 3: PERSONAL & MAILING DETAILS ---
+                    // --- SECTION 4: PERSONAL & MAILING DETAILS ---
                     div(
                       classes: 'flex-row justify-between items-center mb-3 mt-0',
                       attributes: const {
