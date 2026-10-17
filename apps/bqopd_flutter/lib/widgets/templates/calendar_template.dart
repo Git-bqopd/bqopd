@@ -255,7 +255,7 @@ class _MonthColumn extends StatelessWidget {
           Container(
             height: 80,
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.black, width: 8.0))),
-            child: Center(child: Text(month.name, style: const TextStyle(fontFamily: 'Impact', fontSize: 54, fontWeight: FontWeight.bold, letterSpacing: 2.0))),
+            child: Center(child: Text(month.name, style: const TextStyle(fontFamily: 'Anton', fontSize: 54, fontWeight: FontWeight.bold, letterSpacing: 2.0))),
           ),
           Expanded(
             child: Row(
@@ -291,7 +291,7 @@ class _WeekColumn extends StatelessWidget {
             Container(
               height: 75,
               decoration: BoxDecoration(color: week.highlightedDates[i] ? Colors.black : Colors.white, border: const Border(bottom: BorderSide(color: Colors.black, width: 3.0))),
-              child: Center(child: Text(week.dates[i], style: TextStyle(fontFamily: 'Arial', fontSize: 42, fontWeight: FontWeight.w900, color: week.highlightedDates[i] ? Colors.white : Colors.black))),
+              child: Center(child: Text(week.dates[i], style: TextStyle(fontFamily: 'Arimo', fontSize: 42, fontWeight: FontWeight.w900, color: week.highlightedDates[i] ? Colors.white : Colors.black))),
             ),
           Expanded(child: Container(color: (week.event?.isHighlighted ?? false) ? Colors.black : Colors.white, child: _buildEventContent(week.event))),
         ],
@@ -306,13 +306,13 @@ class _WeekColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(child: RotatedBox(quarterTurns: 1, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24.0), child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [Text(event.name, style: TextStyle(fontFamily: 'Arial', fontSize: 48, fontWeight: FontWeight.w900, color: textColor)), const Spacer(), Text(event.handle, style: TextStyle(fontFamily: 'Arial', fontSize: 40, fontWeight: FontWeight.bold, color: textColor)), const Spacer(), Text(event.location, style: TextStyle(fontFamily: 'Arial', fontSize: 40, fontWeight: FontWeight.bold, color: textColor))])))),
+        Expanded(child: RotatedBox(quarterTurns: 1, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24.0), child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [Text(event.name, style: TextStyle(fontFamily: 'Arimo', fontSize: 48, fontWeight: FontWeight.w900, color: textColor)), const Spacer(), Text(event.handle, style: TextStyle(fontFamily: 'Arimo', fontSize: 40, fontWeight: FontWeight.bold, color: textColor)), const Spacer(), Text(event.location, style: TextStyle(fontFamily: 'Arimo', fontSize: 40, fontWeight: FontWeight.bold, color: textColor))])))),
         if (event.bqopdAttending)
           Container(
             height: 500,
             color: Colors.black,
             padding: const EdgeInsets.symmetric(vertical: 24.0),
-            child: RotatedBox(quarterTurns: 3, child: Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [ColorFiltered(colorFilter: const ColorFilter.matrix([-1,0,0,0,255,0,-1,0,0,255,0,0,-1,0,255,0,0,0,1,0]), child: Image.asset('assets/logo400.gif', height: 70, fit: BoxFit.contain)), const SizedBox(width: 24), const Text("bqopd will be there", style: TextStyle(fontFamily: 'Arial', fontSize: 44, fontWeight: FontWeight.w900, color: Colors.white))])),
+            child: RotatedBox(quarterTurns: 3, child: Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.center, children: [ColorFiltered(colorFilter: const ColorFilter.matrix([-1,0,0,0,255,0,-1,0,0,255,0,0,-1,0,255,0,0,0,1,0]), child: Image.asset('assets/logo400.gif', height: 70, fit: BoxFit.contain)), const SizedBox(width: 24), const Text("bqopd will be there", style: TextStyle(fontFamily: 'Arimo', fontSize: 44, fontWeight: FontWeight.w900, color: Colors.white))])),
           ),
       ],
     );

@@ -34,7 +34,6 @@ set_global_options(max_instances=10)
 if not firebase_admin._apps:
   firebase_admin.initialize_app()
 
-
 # ---------------------------------------------------------------------------
 # Layout and Baseline Grid Constants (Matching 2000x3200 Template Standard)
 # ---------------------------------------------------------------------------
@@ -50,7 +49,6 @@ USABLE_COL_HEIGHT = 3087
 
 # Directory for bundled project TrueType fonts
 FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
-
 
 # ---------------------------------------------------------------------------
 # Pure-Python Geohash Utilities (Zero external C/binary dependencies needed)
@@ -93,7 +91,6 @@ def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
       bit = 0
       ch = 0
   return "".join(geohash)
-
 
 def decode_geohash(geohash: str) -> Tuple[float, float, float, float]:
   """Decodes a geohash string into (lat, lng, lat_error, lng_error)."""
@@ -145,7 +142,6 @@ def get_geohash_neighbors(geohash: str) -> List[str]:
 
   return list(dict.fromkeys(neighbors))
 
-
 def haversine_miles(
     lat1: float, lon1: float, lat2: float, lon2: float
 ) -> float:
@@ -196,11 +192,9 @@ def generate_shortcode() -> str:
   chars = string.ascii_uppercase + string.digits
   return "".join(random.choices(chars, k=7))
 
-
 # ---------------------------------------------------------------------------
 # Geocoding and Firestore Geo-Cache Routines
 # ---------------------------------------------------------------------------
-
 
 def resolve_or_cache_geocode(
     address: str, db: Optional[firestore.Client] = None
@@ -389,7 +383,6 @@ def geocode_location_http(location_str: str) -> Optional[Dict[str, Any]]:
   """Backward-compatible helper redirecting to resolve_or_cache_geocode."""
   return resolve_or_cache_geocode(location_str)
 
-
 # ---------------------------------------------------------------------------
 # Server-Side Typography and Image Rasterization Engine (Pillow)
 # ---------------------------------------------------------------------------
@@ -412,12 +405,11 @@ def get_font_path_candidates(
   f_lower = font_family.lower()
 
   # 1. Bundled project fonts folder (functions/fonts/)
-  if "anton" in f_lower or "impact" in f_lower:
+  if "anton" in f_lower:
     candidates.extend([
         os.path.join(FONTS_DIR, "Anton-Regular.ttf"),
         os.path.join(FONTS_DIR, "anton.ttf"),
         os.path.join(FONTS_DIR, "Anton.ttf"),
-        os.path.join(FONTS_DIR, "Impact.ttf"),
     ])
   elif italic:
     candidates.extend([
@@ -438,9 +430,8 @@ def get_font_path_candidates(
     ])
 
   # 2. Linux / Debian Container System Fonts (Fallback)
-  if "anton" in f_lower or "impact" in f_lower:
+  if "anton" in f_lower:
     candidates.extend([
-        "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -459,7 +450,6 @@ def get_font_path_candidates(
     ])
 
   return candidates
-
 
 def get_font(
     font_family: str, size: int, bold: bool = False, italic: bool = False
@@ -544,7 +534,6 @@ def snap_to_grid(y: float) -> float:
   rows = math.ceil((y - GRID_TOP) / float(ROW_HEIGHT))
   return float(GRID_TOP + (rows * ROW_HEIGHT))
 
-
 def init_page_canvas() -> Tuple[Image.Image, ImageDraw.ImageDraw]:
   """Initializes a blank 2000x3200 page canvas with outer border and column dividers."""
   canvas = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), color=(255, 255, 255))
@@ -581,7 +570,6 @@ def download_remote_image(url: str, timeout: int = 6) -> Optional[Image.Image]:
     print(f"[download_remote_image] Could not fetch '{url}': {e}")
     return None
 
-
 def upload_three_webp_scales(
     canvas: Image.Image,
     bucket: Any,
@@ -590,7 +578,8 @@ def upload_three_webp_scales(
 ) -> Tuple[str, str, str]:
   """Compresses canvas into original (2000x3200), list (800x1280), and grid (450x720) WebPs.
 
-  Uploads all three directly to Cloud Storage and returns the public URLs.
+  Uploads all three directly to Cloud Storage with metadata and returns public URLs.
+  Redundant blob.patch() calls are eliminated to maximize throughput.
   """
   # 1. Original (2000x3200)
   orig_io = BytesIO()
@@ -614,7 +603,6 @@ def upload_three_webp_scales(
     blob = bucket.blob(full_path)
     blob.metadata = {"firebaseStorageDownloadTokens": token}
     blob.upload_from_string(raw_bytes, content_type="image/webp")
-    blob.patch()
     encoded = urllib.parse.quote(full_path, safe="")
     cb = int(time.time() * 1000)
     return (
@@ -625,12 +613,6 @@ def upload_three_webp_scales(
   list_url = _upload("list.webp", list_bytes)
   grid_url = _upload("grid.webp", grid_bytes)
   return orig_url, list_url, grid_url
-
-
-# ---------------------------------------------------------------------------
-# Server-Side Markdown & Layout Parsing
-# ---------------------------------------------------------------------------
-
 
 def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
   """Parses markdown into typed blocks for the 3-column publisher layout engine."""
@@ -726,7 +708,6 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
 
   commit_paragraph()
   return blocks
-
 
 def render_publisher_pages_internal(
     raw_text: str,
@@ -978,11 +959,9 @@ def render_publisher_pages_internal(
 
   return pages_results
 
-
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Diagnostics, Geocoding, Search, and Map Cover
 # ---------------------------------------------------------------------------
-
 
 @https_fn.on_call()
 def check_server_fonts(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1024,7 +1003,6 @@ def check_server_fonts(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "system_fonts_found": system_found,
       "test_render": tests,
   }
-
 
 @https_fn.on_call()
 def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1178,7 +1156,6 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "letters": results,
   }
 
-
 @https_fn.on_call()
 def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Fetches an official Google Maps Static API image server-side."""
@@ -1305,21 +1282,17 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "cached_locations": len(cache),
   }
 
-
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Heavy Server-Side Layout & WebP Compilation
 # ---------------------------------------------------------------------------
 
-
-@https_fn.on_call(memory=1024, timeout_sec=300)
+@https_fn.on_call(memory=2048, timeout_sec=300, cpu=2)
 def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Compiles multi-page continuous markdown text into 2000x3200 publisher pages.
 
-  Renders layouts on a 42px baseline grid in Pillow with Anton & Arimo variable
-  fonts,
-  generates 3-size WebP binaries (original, list, grid) with multithreaded
-  uploads,
-  streams them to Cloud Storage, and registers the Firestore documents.
+  Renders layouts on a 42px baseline grid in Pillow with Anton & Arimo variable fonts,
+  generates 3-size WebP binaries (original, list, grid) with multithreaded uploads,
+  streams them to Cloud Storage with 2 vCPUs and 2048MB RAM, and registers the Firestore documents.
   """
   data = req.data or {}
   fanzine_id = data.get("fanzineId")
@@ -1408,7 +1381,7 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
       (i, canvas, page_text)
       for i, (canvas, page_text) in enumerate(pages_and_text)
   ]
-  worker_count = min(6, len(tasks)) if tasks else 1
+  worker_count = min(8, len(tasks)) if tasks else 1
 
   with ThreadPoolExecutor(max_workers=worker_count) as executor:
     results = list(executor.map(_process_and_upload_page, tasks))
@@ -1422,7 +1395,6 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "count": len(output_pages),
       "pages": output_pages,
   }
-
 
 @https_fn.on_call(memory=512, timeout_sec=120)
 def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1476,7 +1448,6 @@ def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "listUrl": list_url,
       "gridUrl": grid_url,
   }
-
 
 @https_fn.on_call(memory=512, timeout_sec=120)
 def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:

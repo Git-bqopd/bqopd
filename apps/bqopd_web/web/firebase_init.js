@@ -181,11 +181,12 @@ window.fsQuery = function(path, field, op, valueJson, orderBy) {
         });
 };
 
+// Configured with a 5-minute (300,000ms) client timeout to prevent deadline-exceeded failures during heavy folio compilation
 window.fnCall = function(name, dataStr) {
-    return functions.httpsCallable(name)(JSON.parse(dataStr)).then(function(r) {
+    return functions.httpsCallable(name, { timeout: 300000 })(JSON.parse(dataStr)).then(function(r) {
         return JSON.stringify(r.data);
     }).catch(function(err) {
-        console.error("fnCall error:", err);
+        console.error("fnCall error on " + name + ":", err);
         throw err;
     });
 };
@@ -241,7 +242,7 @@ window.measurePublisherPages = (text) => {
     }
 
     function wrapText(textToWrap, fontSize, fontName, bold) {
-        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
@@ -344,7 +345,7 @@ window.measurePublisherPages = (text) => {
         } else if (block.type === 'template_block' && block.templateNum === 1) {
             const imgHeight = 400;
             const fontSize = 24;
-            const fontName = 'Arial';
+            const fontName = 'Arimo';
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
             const textLeadingStep = fontSize * 1.4;
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
@@ -371,17 +372,17 @@ window.measurePublisherPages = (text) => {
             let fontSize, fontName, bold = false;
             let step = ROW_HEIGHT;
             if (block.type === 'h1') {
-                fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
+                fontSize = 42; fontName = 'Anton'; bold = false; step = 56;
             } else if (block.type === 'h2') {
-                fontSize = 36; fontName = 'Impact'; bold = true; step = 48;
+                fontSize = 36; fontName = 'Anton'; bold = false; step = 48;
             } else if (block.type === 'h3') {
-                fontSize = 28; fontName = 'Impact'; bold = true; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Anton'; bold = false; step = ROW_HEIGHT;
             } else {
-                fontSize = 28; fontName = 'Arial'; bold = false; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Arimo'; bold = false; step = ROW_HEIGHT;
             }
 
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "•   " + block.content : block.content;
+            const textToWrap = isBullet ? "    " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
 
             for (let i = 0; i < linesToDraw.length; i++) {
@@ -440,7 +441,7 @@ window.renderPublisherPages = async (text) => {
     let currentPageTextParts = [];
 
     function wrapText(textToWrap, fontSize, fontName, bold) {
-        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
@@ -631,7 +632,7 @@ window.renderPublisherPages = async (text) => {
                 ctx.moveTo(columnsX[colIndex] + colWidth - 10, currentY + 10);
                 ctx.lineTo(columnsX[colIndex] + 10, currentY + drawHeight - 10);
                 ctx.stroke();
-                ctx.font = 'bold 24px Arial';
+                ctx.font = 'bold 24px "Arimo", sans-serif';
                 ctx.fillStyle = '#9ca3af';
                 ctx.textAlign = 'center';
                 ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
@@ -650,7 +651,7 @@ window.renderPublisherPages = async (text) => {
                 imgHeight = colWidth * (img.height / img.width);
             }
             const fontSize = 24;
-            const fontName = 'Arial';
+            const fontName = 'Arimo';
             const linesToDraw = wrapText(block.content, fontSize, fontName, false);
             const textLeadingStep = fontSize * 1.4;
             const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
@@ -670,7 +671,7 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 }
                 currentY = targetYTop + imgHeight + 16;
-                ctx.font = `${fontSize}px ${fontName}`;
+                ctx.font = `${fontSize}px "${fontName}", Arimo, sans-serif`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
                     ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
@@ -691,7 +692,7 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
                 let captionY = currentY + imgHeight + 16;
-                ctx.font = `${fontSize}px ${fontName}`;
+                ctx.font = `${fontSize}px "${fontName}", Arimo, sans-serif`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
                     ctx.fillText(line, columnsX[colIndex], captionY + fontSize);
@@ -704,18 +705,18 @@ window.renderPublisherPages = async (text) => {
             let fontSize, fontName, bold = false;
             let step = ROW_HEIGHT;
             if (block.type === 'h1') {
-                fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
+                fontSize = 42; fontName = 'Anton'; bold = false; step = 56;
             } else if (block.type === 'h2') {
-                fontSize = 36; fontName = 'Impact'; bold = true; step = 48;
+                fontSize = 36; fontName = 'Anton'; bold = false; step = 48;
             } else if (block.type === 'h3') {
-                fontSize = 28; fontName = 'Impact'; bold = true; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Anton'; bold = false; step = ROW_HEIGHT;
             } else {
-                fontSize = 28; fontName = 'Arial'; bold = false; step = ROW_HEIGHT;
+                fontSize = 28; fontName = 'Arimo'; bold = false; step = ROW_HEIGHT;
             }
             const isBullet = block.type === 'bullet';
-            const textToWrap = isBullet ? "•   " + block.content : block.content;
+            const textToWrap = isBullet ? "    " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
-            ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+            ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
             ctx.fillStyle = '#1a1a1a';
             let currentParagraphRenderedLines = [];
             for (let i = 0; i < linesToDraw.length; i++) {
@@ -726,7 +727,7 @@ window.renderPublisherPages = async (text) => {
                         currentParagraphRenderedLines = [];
                     }
                     advanceToNextColumn();
-                    ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+                    ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
                     ctx.fillStyle = '#1a1a1a';
                 }
                 const isLastLine = i === linesToDraw.length - 1;
@@ -765,7 +766,6 @@ window.renderPublisherPages = async (text) => {
     }
     return JSON.stringify(pagesResults);
 };
-
 globalThis.renderPublisherPages = window.renderPublisherPages;
 
 window.renderPublisherPage = async (text) => {
@@ -862,7 +862,7 @@ window.renderMapCoverPage = async (configJson) => {
 
     let mapLoaded = false;
     try {
-        const fnResult = await functions.httpsCallable('fetch_static_map')({
+        const fnResult = await functions.httpsCallable('fetch_static_map', { timeout: 60000 })({
             markers: allCoords.map(c => ({ lat: c.lat, lng: c.lng, isCenter: c.isCenter })),
             center: `${centerLat},${centerLng}`,
             zoom: zoom,
@@ -1001,20 +1001,47 @@ window.getPlacePredictions = (input) => {
             resolve(JSON.stringify([]));
             return;
         }
-        const service = new google.maps.places.AutocompleteService();
-        service.getPlacePredictions({ input: input }, (predictions, status) => {
-            if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
-                resolve(JSON.stringify([]));
-                return;
-            }
-            const results = predictions.map(p => ({
-                description: p.description,
-                placeId: p.place_id
-            }));
-            resolve(JSON.stringify(results));
-        });
+        // Support modern AutocompleteSuggestion if available
+        if (google.maps.places.AutocompleteSuggestion && typeof google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions === 'function') {
+            google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({ input: input })
+                .then(({ suggestions }) => {
+                    const results = (suggestions || []).map(s => {
+                        const pred = s.placePrediction;
+                        return {
+                            description: pred.text ? pred.text.toString() : (pred.displayName || ''),
+                            placeId: pred.placeId || ''
+                        };
+                    });
+                    resolve(JSON.stringify(results));
+                })
+                .catch(() => {
+                    // Fallback to legacy service
+                    _legacyGetPlacePredictions(input, resolve);
+                });
+            return;
+        }
+        _legacyGetPlacePredictions(input, resolve);
     });
 };
+
+function _legacyGetPlacePredictions(input, resolve) {
+    if (typeof google === 'undefined' || !google.maps || !google.maps.places || !google.maps.places.AutocompleteService) {
+        resolve(JSON.stringify([]));
+        return;
+    }
+    const service = new google.maps.places.AutocompleteService();
+    service.getPlacePredictions({ input: input }, (predictions, status) => {
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !predictions) {
+            resolve(JSON.stringify([]));
+            return;
+        }
+        const results = predictions.map(p => ({
+            description: p.description,
+            placeId: p.place_id
+        }));
+        resolve(JSON.stringify(results));
+    });
+}
 
 window.initAddressAutocomplete = (inputId, callback) => {
     const input = document.getElementById(inputId);
@@ -1023,6 +1050,50 @@ window.initAddressAutocomplete = (inputId, callback) => {
         setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
         return;
     }
+    if (input._autocompleteBound) return;
+    input._autocompleteBound = true;
+
+    // Check for modern PlaceAutocompleteElement to eliminate deprecation warning
+    if (typeof google.maps.places.PlaceAutocompleteElement !== 'undefined') {
+        try {
+            const pac = new google.maps.places.PlaceAutocompleteElement();
+            pac.style.width = '100%';
+            pac.style.boxSizing = 'border-box';
+
+            const handleSelect = async (event) => {
+                let address = '';
+                if (event.placePrediction && typeof event.placePrediction.toPlace === 'function') {
+                    const place = event.placePrediction.toPlace();
+                    await place.fetchFields({ fields: ['formattedAddress', 'displayName'] });
+                    address = place.formattedAddress || place.displayName || '';
+                } else if (event.place) {
+                    if (typeof event.place.fetchFields === 'function') {
+                        await event.place.fetchFields({ fields: ['formattedAddress', 'displayName'] });
+                        address = event.place.formattedAddress || event.place.displayName || '';
+                    } else {
+                        address = event.place.formatted_address || event.place.formattedAddress || '';
+                    }
+                }
+                if (address) {
+                    input.value = address;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    callback(address);
+                }
+            };
+
+            pac.addEventListener('gmp-select', handleSelect);
+            pac.addEventListener('gmp-placeselect', handleSelect);
+
+            if (input.parentNode) {
+                input.style.display = 'none';
+                input.parentNode.insertBefore(pac, input.nextSibling);
+                return;
+            }
+        } catch (e) {
+            console.warn('[initAddressAutocomplete] PlaceAutocompleteElement fallback to Autocomplete:', e);
+        }
+    }
+
     const autocomplete = new google.maps.places.Autocomplete(input, {
         fields: ['formatted_address']
     });
@@ -1042,7 +1113,7 @@ window.geocodeAddress = async (address) => {
 
     // 1. Primary: Server-side verified Cloud Function with Firestore geocache
     try {
-        const result = await functions.httpsCallable('geocode_address')({ address: cleanAddress });
+        const result = await functions.httpsCallable('geocode_address', { timeout: 60000 })({ address: cleanAddress });
         if (result && result.data && result.data.status === 'success') {
             return JSON.stringify(result.data);
         }

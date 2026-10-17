@@ -19,7 +19,7 @@ class BasicTextTemplate extends StatelessComponent {
         'style':
         'width: 100%; height: 100%; background: #ffffff; border: 8px solid #000000; '
             'box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; '
-            'overflow: hidden; font-family: "Arimo", "Arial", sans-serif; position: relative;'
+            'overflow: hidden; font-family: "Arimo", sans-serif; position: relative;'
       },
       [
         div(
@@ -163,7 +163,7 @@ class BasicTextTemplate extends StatelessComponent {
         forceNextColumn = false;
       } else if (pText.startsWith('### ')) {
         final String styleStr =
-            'font-family: "Anton", "Impact", sans-serif; font-size: 16px; margin: 12px 0 6px 0; '
+            'font-family: "Anton", sans-serif; font-size: 16px; margin: 12px 0 6px 0; '
             'text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; break-inside: avoid;${forceNextColumn ? " break-before: column;" : ""}';
         elements.add(
           h3(
@@ -175,7 +175,7 @@ class BasicTextTemplate extends StatelessComponent {
         forceNextColumn = false;
       } else if (pText.startsWith('## ')) {
         final String styleStr =
-            'font-family: "Anton", "Impact", sans-serif; font-size: 20px; margin: 16px 0 8px 0; '
+            'font-family: "Anton", sans-serif; font-size: 20px; margin: 16px 0 8px 0; '
             'text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; break-inside: avoid;${forceNextColumn ? " break-before: column;" : ""}';
         elements.add(
           h2(
@@ -187,7 +187,7 @@ class BasicTextTemplate extends StatelessComponent {
         forceNextColumn = false;
       } else if (pText.startsWith('# ')) {
         final String styleStr =
-            'font-family: "Anton", "Impact", sans-serif; font-size: 24px; margin: 18px 0 10px 0; '
+            'font-family: "Anton", sans-serif; font-size: 24px; margin: 18px 0 10px 0; '
             'text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2; break-inside: avoid;${forceNextColumn ? " break-before: column;" : ""}';
         elements.add(
           h1(
@@ -214,7 +214,7 @@ class BasicTextTemplate extends StatelessComponent {
         forceNextColumn = false;
       } else {
         final String styleStr =
-            'font-family: "Arimo", "Arial", sans-serif; font-size: 11px; line-height: 1.5; color: #1a1a1a; margin-top: 0; '
+            'font-family: "Arimo", sans-serif; font-size: 11px; line-height: 1.5; color: #1a1a1a; margin-top: 0; '
             'margin-bottom: 12px; text-align: justify;${forceNextColumn ? " break-before: column;" : ""}';
         elements.add(
           p(

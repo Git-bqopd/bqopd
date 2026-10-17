@@ -31,14 +31,14 @@ class BasicTextTemplate extends StatelessWidget {
       targetHeight - (outerBorderWidth * 2) - (innerPadding * 2);
 
   static const TextStyle baseTextStyle = TextStyle(
-    fontFamily: 'Arial',
+    fontFamily: 'Arimo',
     fontSize: 32,
     color: Colors.black87,
     height: 1.5625,
   );
 
   static const TextStyle headerTextStyle = TextStyle(
-    fontFamily: 'Impact',
+    fontFamily: 'Anton',
     fontSize: 40,
     fontWeight: FontWeight.normal,
     color: Colors.black,
@@ -46,7 +46,7 @@ class BasicTextTemplate extends StatelessWidget {
   );
 
   static const StrutStyle masterGridStrut = StrutStyle(
-    fontFamily: 'Arial',
+    fontFamily: 'Arimo',
     fontSize: 32,
     height: 1.5625,
     forceStrutHeight: true,

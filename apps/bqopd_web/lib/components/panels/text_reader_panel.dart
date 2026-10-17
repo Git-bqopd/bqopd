@@ -51,7 +51,7 @@ List<Component> renderWikilinkSpans(
             href: '/@$username',
             attributes: const {
               'style':
-              'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
+              'font-family: "Anton", sans-serif; font-weight: normal; text-decoration: underline; color: black; cursor: pointer;'
             },
             events: {
               'click': (e) {
@@ -65,7 +65,7 @@ List<Component> renderWikilinkSpans(
           children.add(span(
             attributes: const {
               'style':
-              'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+              'font-family: "Anton", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
             },
             [Component.text(display)],
           ));
@@ -78,7 +78,7 @@ List<Component> renderWikilinkSpans(
           attributes: const {
             'target': '_blank',
             'style':
-            'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
+            'font-family: "Anton", sans-serif; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;'
           },
           [
             span(
@@ -96,7 +96,7 @@ List<Component> renderWikilinkSpans(
         children.add(span(
           attributes: const {
             'style':
-            'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+            'font-family: "Anton", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
           },
           [Component.text(display)],
         ));
@@ -105,7 +105,7 @@ List<Component> renderWikilinkSpans(
       children.add(span(
         attributes: const {
           'style':
-          'font-family: "Anton", "Impact", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
+          'font-family: "Anton", sans-serif; font-weight: normal; text-decoration: none; color: black; cursor: default;'
         },
         [Component.text(display)],
       ));
@@ -276,7 +276,7 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
             headingChildren,
             attributes: {
               'style':
-              'font-size: ${headerSize}px; font-family: "Anton", "Impact", sans-serif; line-height: 1.2; color: #111; margin: 16px 0 8px 0; font-weight: normal;'
+              'font-size: ${headerSize}px; font-family: "Anton", sans-serif; line-height: 1.2; color: #111; margin: 16px 0 8px 0; font-weight: normal;'
             },
           ),
         );
@@ -286,7 +286,7 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
             renderWikilinkSpans(cleanLine, _loadedProfiles, context),
             attributes: {
               'style':
-              'font-size: ${_fontSize}px; font-family: "Arimo", "Arial", sans-serif; line-height: 1.6; color: #2D3748; text-align: justify; margin: 0 0 12px 0;'
+              'font-size: ${_fontSize}px; font-family: "Arimo", sans-serif; line-height: 1.6; color: #2D3748; text-align: justify; margin: 0 0 12px 0;'
             },
           ),
         );
@@ -500,7 +500,7 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
           renderWikilinkSpans(_content, _loadedProfiles, context),
           attributes: const {
             'style':
-            'font-size: 14px; font-family: "Arimo", "Arial", sans-serif; line-height: 1.6; color: #1e293b; text-align: justify; margin: 0; white-space: pre-line;'
+            'font-size: 14px; font-family: "Arimo", sans-serif; line-height: 1.6; color: #1e293b; text-align: justify; margin: 0; white-space: pre-line;'
           },
         )
       ],

@@ -653,11 +653,32 @@ void openWindow(String url, String target) {
 }
 
 /// Dynamically binds Google Places Autocomplete to an input element.
+/// Uses the central window.initAddressAutocomplete polyfill in firebase_init.js if present,
+/// falling back to direct JS SDK instantiation.
 void initAddressAutocomplete(String inputId, void Function(String) callback) {
   final input = web.document.getElementById(inputId) as web.HTMLInputElement?;
   if (input == null) return;
 
   final jsWindow = web.window as JSObject;
+
+  // 1. Delegate to central window.initAddressAutocomplete in firebase_init.js
+  if (jsWindow.has('initAddressAutocomplete')) {
+    try {
+      final fn = jsWindow['initAddressAutocomplete'] as JSFunction?;
+      if (fn != null) {
+        fn.callAsFunction(
+          null,
+          inputId.toJS,
+          ((JSString address) => callback(address.toDart)).toJS,
+        );
+        return;
+      }
+    } catch (e) {
+      print('[initAddressAutocomplete central call failed, falling back] $e');
+    }
+  }
+
+  // 2. Direct Places SDK initialization
   if (!jsWindow.has('google')) {
     web.window.setTimeout((() {
       initAddressAutocomplete(inputId, callback);

@@ -171,8 +171,10 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   Future<void> _loadGlobalSettings() async {
     try {
       final res = await fsGetDoc('app_settings/main_settings');
+      if (!mounted) return;
       final doc = jsonDecode(res);
       if (doc['exists'] == true) {
+        if (!mounted) return;
         setState(() {
           _loginZineShortcode = doc['data']['login_zine_shortcode'] ?? '';
           _registerZineShortcode = doc['data']['register_zine_shortcode'] ?? '';
@@ -242,6 +244,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   Future<void> _saveGlobalSettings() async {
+    if (!mounted) return;
     setState(() {
       _isSavingSettings = true;
       _settingsFeedback = "Saving global settings...";
@@ -252,18 +255,22 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'login_zine_shortcode': _loginZineShortcode.trim(),
         'register_zine_shortcode': _registerZineShortcode.trim()
       }), true);
+      if (!mounted) return;
       setState(() {
         _settingsFeedback = 'Global settings updated successfully!';
         _isSettingsError = false;
       });
     } catch (e) {
       print("Error saving global settings: $e");
+      if (!mounted) return;
       setState(() {
         _settingsFeedback = 'Failed to save settings: ${e.toString()}';
         _isSettingsError = true;
       });
     }
-    setState(() => _isSavingSettings = false);
+    if (mounted) {
+      setState(() => _isSavingSettings = false);
+    }
   }
 
   Future<void> _createManagedProfile() async {
@@ -308,6 +315,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'displayCode': baseHandle,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
+      if (!mounted) return;
       setState(() {
         _newManagedFirstName = '';
         _newManagedLastName = '';
@@ -318,6 +326,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       });
     } catch (e) {
       print("Error creating managed profile: $e");
+      if (!mounted) return;
       setState(() {
         _isCreatingManagedProfile = false;
         _managedProfileFeedback = "Failed to initialize: ${e.toString()}";
@@ -327,6 +336,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   Future<void> _deleteManagedProfile(String id, String username) async {
+    if (!mounted) return;
     setState(() {
       _managedProfileFeedback = "Deleting managed profile @$username...";
       _isManagedProfileError = false;
@@ -342,12 +352,14 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         deletions.add(fsDeleteDoc('shortcodes/${cleanUsername.toUpperCase()}'));
       }
       await Future.wait(deletions);
+      if (!mounted) return;
       setState(() {
         _managedProfileFeedback = "Managed profile @$username deleted successfully.";
         _isManagedProfileError = false;
       });
     } catch (e) {
       print("[SETTINGS TAB] Error deleting managed profile: $e");
+      if (!mounted) return;
       setState(() {
         _managedProfileFeedback = "Failed to delete: ${e.toString()}";
         _isManagedProfileError = true;
@@ -356,6 +368,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   Future<void> _updateUserPermission(String uid, String newRole) async {
+    if (!mounted) return;
     setState(() {
       _permissionFeedbackUid = uid;
       _permissionFeedback = "Updating access levels...";
@@ -370,10 +383,12 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         'isCurator': isCurator,
         'isAdmin': newRole == 'admin'
       }));
+      if (!mounted) return;
       setState(() {
         _permissionFeedback = "Access privileges saved!";
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _permissionFeedback = "Update failed: ${e.toString()}";
       });
@@ -435,7 +450,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     final bool isMenuOpen = _openMenuProfileId == profileDocId;
 
     final String cleanUsername = username.trim().toLowerCase();
-    // CANONICAL VANITY ROUTE: /@handle/edit-info
     final String editPath = cleanUsername.isNotEmpty
         ? '/@$cleanUsername/edit-info'
         : '/edit-info?userId=$profileDocId';
@@ -456,7 +470,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
             'style': 'display: flex; flex-direction: column; padding: 14px 12px; text-decoration: none; border-radius: 6px;'
           },
         ),
-        // Three-dot Action Trigger Button Container
         div(
           attributes: const {
             'style': 'position: absolute; top: 8px; right: 8px; z-index: 10;'
@@ -488,7 +501,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
               },
             ),
             if (isMenuOpen) ...[
-              // Transparent click-outside backdrop to dismiss dropdown
               div(
                 attributes: const {
                   'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;',
@@ -504,14 +516,12 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                 },
                 [],
               ),
-              // Dropdown Menu Container
               div(
                 classes: 'three-dot-dropdown-menu',
                 attributes: const {
                   'style': 'position: absolute; right: 0; top: calc(100% + 4px); background: white; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 125px; overflow: hidden; display: flex; flex-direction: column;',
                 },
                 [
-                  // Option: Edit Info (navigates to canonical vanity /@handle/edit-info)
                   a(
                     [
                       span(
@@ -537,7 +547,6 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
                     },
                   ),
                   div(attributes: const {'style': 'height: 1px; background-color: #f3f4f6; margin: 0;'}, []),
-                  // Option: Delete
                   button(
                     [
                       span(

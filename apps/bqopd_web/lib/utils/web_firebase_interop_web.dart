@@ -303,7 +303,7 @@ window.measurePublisherPages = (text) => {
     }
 
     function wrapText(textToWrap, fontSize, fontName, bold) {
-        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
@@ -503,7 +503,7 @@ window.renderPublisherPages = async (text) => {
     let currentPageTextParts = [];
 
     function wrapText(textToWrap, fontSize, fontName, bold) {
-        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
         const words = textToWrap.split(' ');
         const lines = [];
         let currentLine = "";
@@ -680,7 +680,7 @@ window.renderPublisherPages = async (text) => {
                 ctx.moveTo(columnsX[colIndex] + colWidth - 10, currentY + 10);
                 ctx.lineTo(columnsX[colIndex] + 10, currentY + drawHeight - 10);
                 ctx.stroke();
-                ctx.font = 'bold 24px "Arimo", Arial, sans-serif';
+                ctx.font = 'bold 24px "Arimo", sans-serif';
                 ctx.fillStyle = '#9ca3af';
                 ctx.textAlign = 'center';
                 ctx.fillText('Image Asset Placeholder', columnsX[colIndex] + colWidth / 2, currentY + drawHeight / 2);
@@ -719,7 +719,7 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], targetYTop, colWidth, imgHeight);
                 }
                 currentY = targetYTop + imgHeight + 16;
-                ctx.font = `${fontSize}px "${fontName}", Arial, sans-serif`;
+                ctx.font = `${fontSize}px "${fontName}", Arimo, sans-serif`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
                     ctx.fillText(line, columnsX[colIndex], currentY + fontSize);
@@ -740,7 +740,7 @@ window.renderPublisherPages = async (text) => {
                     ctx.fillRect(columnsX[colIndex], currentY, colWidth, imgHeight);
                 }
                 let captionY = currentY + imgHeight + 16;
-                ctx.font = `${fontSize}px "${fontName}", Arial, sans-serif`;
+                ctx.font = `${fontSize}px "${fontName}", Arimo, sans-serif`;
                 ctx.fillStyle = '#1a1a1a';
                 for (let line of linesToDraw) {
                     ctx.fillText(line, columnsX[colIndex], captionY + fontSize);
@@ -764,7 +764,7 @@ window.renderPublisherPages = async (text) => {
             const isBullet = block.type === 'bullet';
             const textToWrap = isBullet ? "    " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
-            ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
+            ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
             ctx.fillStyle = '#1a1a1a';
             let currentParagraphRenderedLines = [];
             for (let i = 0; i < linesToDraw.length; i++) {
@@ -775,7 +775,7 @@ window.renderPublisherPages = async (text) => {
                         currentParagraphRenderedLines = [];
                     }
                     advanceToNextColumn();
-                    ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arial, sans-serif`;
+                    ctx.font = `${bold ? 'bold ' : ''}${fontSize}px "${fontName}", Arimo, sans-serif`;
                     ctx.fillStyle = '#1a1a1a';
                 }
                 const isLastLine = i === linesToDraw.length - 1;
