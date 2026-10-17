@@ -28,6 +28,43 @@ void scrollElementToTopOfContainer(
   // No-op on the server
 }
 
+/// Server VM stub for calculating the active scroll item index.
+int? calculateListScrollActiveIndex({
+  required String containerId,
+  required int totalItems,
+  required String Function(int index) itemIdBuilder,
+  double boundaryOffset = 15.0,
+  double itemMargin = 16.0,
+}) => null;
+
+/// Server VM stub for the physical target line indicator and wheel physics coordinator.
+class PanelColumnIndicatorCoordinator {
+  final String scrollAreaId;
+  final String lineId;
+  final String cardPrefix;
+  final int Function() totalPages;
+  final int Function() getCurrentTargetIndex;
+  final void Function(int) onTargetChanged;
+  final void Function() onUserScrollStart;
+
+  PanelColumnIndicatorCoordinator({
+    required this.scrollAreaId,
+    required this.lineId,
+    required this.cardPrefix,
+    required this.totalPages,
+    required this.getCurrentTargetIndex,
+    required this.onTargetChanged,
+    required this.onUserScrollStart,
+  });
+
+  void init() {}
+  void syncLineWithTarget({int tries = 6}) {}
+  void alignLineToTarget() {}
+  void handleScroll() {}
+  void handleCardTap(int i) {}
+  void dispose() {}
+}
+
 void copyToClipboard(String text) {
   // No-op on the server
 }

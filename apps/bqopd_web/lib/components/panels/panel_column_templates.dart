@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:js_interop';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:web/web.dart' as web;
+import '../../utils/web_utils.dart';
 
 /// Template layout for singleton tools that occupy the entire column width and height
 /// without repeating per page (e.g. Terminal, YouTube, Settings, Analytics).
@@ -106,19 +104,34 @@ class MultiPageColumnLayout extends StatefulComponent {
 
 class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
   int _currentTargetIndex = 0;
-  double _lineY = -1.0;
-  bool _isLineLockedAtCenter = false;
-  web.HTMLDivElement? _scrollAreaEl;
-  JSFunction? _wheelListener;
+  late final PanelColumnIndicatorCoordinator _indicatorCoordinator;
 
   @override
   void initState() {
     super.initState();
     _currentTargetIndex = component.targetPageIndex ?? 0;
+    _indicatorCoordinator = PanelColumnIndicatorCoordinator(
+      scrollAreaId: 'panel-column-scroll-area',
+      lineId: 'panel-target-indicator-line',
+      cardPrefix: 'panel-page-',
+      totalPages: () => component.pages.length,
+      getCurrentTargetIndex: () => _currentTargetIndex,
+      onTargetChanged: (newIdx) {
+        _currentTargetIndex = newIdx;
+        if (component.onTargetChanged != null) {
+          component.onTargetChanged!(newIdx);
+        }
+      },
+      onUserScrollStart: () {
+        if (component.onUserScrollStart != null) {
+          component.onUserScrollStart!();
+        }
+      },
+    );
+
     if (kIsWeb) {
       Future.microtask(() {
-        _attachNativeWheelListener();
-        _syncLineWithTarget();
+        _indicatorCoordinator.init();
       });
     }
   }
@@ -132,7 +145,7 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
         _currentTargetIndex = component.targetPageIndex!;
         if (kIsWeb) {
           Future.microtask(() {
-            _syncLineWithTarget();
+            _indicatorCoordinator.syncLineWithTarget();
           });
         }
       }
@@ -141,282 +154,22 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
 
   @override
   void dispose() {
-    _detachNativeWheelListener();
+    _indicatorCoordinator.dispose();
     super.dispose();
-  }
-
-  void _attachNativeWheelListener() {
-    final el = web.document.getElementById('panel-column-scroll-area')
-    as web.HTMLDivElement?;
-    if (el == null) return;
-    _scrollAreaEl = el;
-
-    final jsHandler = ((web.WheelEvent e) {
-      _handleWheel(e);
-    }).toJS;
-    _wheelListener = jsHandler;
-
-    // Use non-passive listener (false) so preventDefault() can stop page scrolling while the line moves
-    el.addEventListener('wheel', jsHandler, false.toJS);
-  }
-
-  void _detachNativeWheelListener() {
-    if (_scrollAreaEl != null && _wheelListener != null) {
-      _scrollAreaEl!.removeEventListener('wheel', _wheelListener!, false.toJS);
-      _wheelListener = null;
-      _scrollAreaEl = null;
-    }
-  }
-
-  double? _getCardCenterY(int pageIndex) {
-    final scrollArea = web.document.getElementById('panel-column-scroll-area');
-    final card = web.document.getElementById('panel-page-$pageIndex');
-    if (scrollArea == null || card == null) return null;
-    final areaRect = scrollArea.getBoundingClientRect();
-    final cardRect = card.getBoundingClientRect();
-    return (cardRect.top - areaRect.top) + (cardRect.height / 2.0);
-  }
-
-  void _syncLineWithTarget({int tries = 6}) {
-    if (!kIsWeb) return;
-    final scrollArea = web.document.getElementById('panel-column-scroll-area');
-    final card = web.document.getElementById('panel-page-$_currentTargetIndex');
-    if (scrollArea != null &&
-        card != null &&
-        card.getBoundingClientRect().height > 0) {
-      _alignLineToTarget();
-      return;
-    }
-    if (tries > 0) {
-      web.window.setTimeout((() {
-        _syncLineWithTarget(tries: tries - 1);
-      }).toJS, 40.toJS);
-    }
-  }
-
-  void _alignLineToTarget() {
-    if (!kIsWeb) return;
-    final scrollArea = web.document.getElementById('panel-column-scroll-area');
-    if (scrollArea == null) return;
-    final double areaHeight = scrollArea.clientHeight.toDouble();
-    if (areaHeight <= 0) return;
-    final double viewportCenter = areaHeight / 2.0;
-
-    final cardCenter = _getCardCenterY(_currentTargetIndex);
-    if (cardCenter != null) {
-      _lineY = cardCenter;
-      final diffFromCenter = (_lineY - viewportCenter).abs();
-      _isLineLockedAtCenter = diffFromCenter <= 6.0;
-      if (_isLineLockedAtCenter) {
-        _lineY = viewportCenter;
-      }
-      _updateLineDOM();
-      _updateCardHighlightsDOM();
-    }
-  }
-
-  void _handleWheel(web.WheelEvent e) {
-    if (component.onUserScrollStart != null) {
-      component.onUserScrollStart!();
-    }
-
-    final scrollArea = web.document.getElementById('panel-column-scroll-area');
-    if (scrollArea == null) return;
-
-    final double areaHeight = scrollArea.clientHeight.toDouble();
-    if (areaHeight <= 0) return;
-    final double viewportCenter = areaHeight / 2.0;
-    final double scrollTop = scrollArea.scrollTop.toDouble();
-    final double maxScrollTop =
-    (scrollArea.scrollHeight - scrollArea.clientHeight).toDouble();
-    final bool isAtTop = scrollTop <= 2.0;
-    final bool isAtBottom = scrollTop >= (maxScrollTop - 4.0);
-
-    final double delta = e.deltaY.toDouble();
-    if (delta == 0) return;
-
-    final totalPages = component.pages.length;
-    final topCardCenter = _getCardCenterY(0) ?? 16.0;
-    final bottomCardCenter =
-        _getCardCenterY(totalPages - 1) ?? (areaHeight - 16.0);
-
-    if (!_isLineLockedAtCenter) {
-      // Phase 1: Line is moving towards or away from the viewport vertical center
-      if (_lineY < viewportCenter) {
-        // Line is currently above center
-        if (delta > 0) {
-          // Scrolling down (towards center) -> move line down, NOT page
-          e.preventDefault();
-          _lineY += delta;
-          if (_lineY >= viewportCenter) {
-            _lineY = viewportCenter;
-            _isLineLockedAtCenter = true;
-          }
-          _onLinePositionChanged();
-        } else {
-          // Scrolling up (away from center towards top widget midpoint)
-          e.preventDefault();
-          _lineY = math.max(topCardCenter, _lineY + delta);
-          _onLinePositionChanged();
-        }
-      } else {
-        // Line is currently below center
-        if (delta < 0) {
-          // Scrolling up (towards center) -> move line up, NOT page
-          e.preventDefault();
-          _lineY += delta;
-          if (_lineY <= viewportCenter) {
-            _lineY = viewportCenter;
-            _isLineLockedAtCenter = true;
-          }
-          _onLinePositionChanged();
-        } else {
-          // Scrolling down (away from center towards bottom widget midpoint)
-          e.preventDefault();
-          _lineY = math.min(bottomCardCenter, _lineY + delta);
-          _onLinePositionChanged();
-        }
-      }
-    } else {
-      // Phase 2: Line is locked at viewport center
-      if (delta < 0 && isAtTop) {
-        // Scrolled all the way to the top boundary: move line up towards top widget midpoint
-        if (topCardCenter < viewportCenter) {
-          e.preventDefault();
-          _lineY = math.max(topCardCenter, _lineY + delta);
-          if (_lineY < viewportCenter) {
-            _isLineLockedAtCenter = false;
-          }
-          _onLinePositionChanged();
-        }
-      } else if (delta > 0 && isAtBottom) {
-        // Scrolled all the way to the bottom boundary: move line down towards bottom widget midpoint
-        if (bottomCardCenter > viewportCenter) {
-          e.preventDefault();
-          _lineY = math.min(bottomCardCenter, _lineY + delta);
-          if (_lineY > viewportCenter) {
-            _isLineLockedAtCenter = false;
-          }
-          _onLinePositionChanged();
-        }
-      } else {
-        // Normal scrolling: line stays locked at viewport center
-        _lineY = viewportCenter;
-        _updateLineDOM();
-      }
-    }
   }
 
   void _handleScroll() {
     if (component.onScroll != null) {
       component.onScroll!();
     }
-    final scrollArea = web.document.getElementById('panel-column-scroll-area');
-    if (scrollArea == null) return;
-    final double areaHeight = scrollArea.clientHeight.toDouble();
-    final double viewportCenter = areaHeight / 2.0;
-
-    if (_isLineLockedAtCenter) {
-      _lineY = viewportCenter;
-      _updateLineDOM();
-      final cardIdx = _findCardUnderLine(_lineY);
-      if (cardIdx != null && cardIdx != _currentTargetIndex) {
-        _currentTargetIndex = cardIdx;
-        _updateCardHighlightsDOM();
-        if (component.onTargetChanged != null) {
-          component.onTargetChanged!(cardIdx);
-        }
-      }
-    }
-  }
-
-  void _onLinePositionChanged() {
-    _updateLineDOM();
-    final cardIdx = _findCardUnderLine(_lineY);
-    if (cardIdx != null && cardIdx != _currentTargetIndex) {
-      _currentTargetIndex = cardIdx;
-      _updateCardHighlightsDOM();
-      if (component.onTargetChanged != null) {
-        component.onTargetChanged!(cardIdx);
-      }
-    }
-  }
-
-  int? _findCardUnderLine(double lineY) {
-    final scrollArea = web.document.getElementById('panel-column-scroll-area');
-    if (scrollArea == null) return null;
-    final areaRect = scrollArea.getBoundingClientRect();
-    final totalPages = component.pages.length;
-
-    for (int i = 0; i < totalPages; i++) {
-      final card = web.document.getElementById('panel-page-$i');
-      if (card != null) {
-        final cardRect = card.getBoundingClientRect();
-        final cardTop = cardRect.top - areaRect.top;
-        final cardBottom = cardRect.bottom - areaRect.top;
-        if (lineY >= cardTop && lineY <= cardBottom) {
-          return i;
-        }
-      }
-    }
-
-    // Fallback: choose whichever card's center midpoint is closest
-    int closestIdx = 0;
-    double minDiff = 999999.0;
-    for (int i = 0; i < totalPages; i++) {
-      final center = _getCardCenterY(i);
-      if (center != null) {
-        final diff = (center - lineY).abs();
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestIdx = i;
-        }
-      }
-    }
-    return closestIdx;
-  }
-
-  void _updateLineDOM() {
-    final line = web.document.getElementById('panel-target-indicator-line')
-    as web.HTMLDivElement?;
-    if (line != null && _lineY >= 0) {
-      line.style.top = '${_lineY.toStringAsFixed(1)}px';
-      line.style.display = 'flex';
-    }
-  }
-
-  void _updateCardHighlightsDOM() {
-    for (int i = 0; i < component.pages.length; i++) {
-      final el = web.document.getElementById('panel-page-$i')
-      as web.HTMLDivElement?;
-      if (el != null) {
-        if (i == _currentTargetIndex) {
-          el.classList.remove('non-target');
-          el.classList.add('target');
-        } else {
-          el.classList.remove('target');
-          el.classList.add('non-target');
-        }
-      }
-    }
+    _indicatorCoordinator.handleScroll();
   }
 
   void _handleCardTap(int i) {
     _currentTargetIndex = i;
-    _updateCardHighlightsDOM();
+    _indicatorCoordinator.handleCardTap(i);
     if (component.onPageCardTap != null) {
       component.onPageCardTap!(i);
-    }
-    if (kIsWeb) {
-      final scrollArea =
-      web.document.getElementById('panel-column-scroll-area');
-      if (scrollArea != null) {
-        final double areaHeight = scrollArea.clientHeight.toDouble();
-        final double viewportCenter = areaHeight / 2.0;
-        _lineY = viewportCenter;
-        _isLineLockedAtCenter = true;
-        _updateLineDOM();
-      }
     }
   }
 

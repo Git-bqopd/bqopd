@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
-import 'package:web/web.dart' as web;
 import 'readers/fanzine_grid_renderer.dart';
 import 'readers/fanzine_list_renderer.dart';
 import 'readers/panel_column_renderer.dart';
@@ -226,58 +225,23 @@ class _FanzineLayoutState extends State<FanzineLayout> {
       return;
     }
 
-    final listArea = web.document.getElementById('fanzine-list-area');
-    final gridArea = web.document.getElementById('fanzine-grid-area');
-    if (listArea == null || gridArea == null) return;
-
-    final containerRect = listArea.getBoundingClientRect();
     final totalItems = component.pages.length + 1; // 0 is header, 1..N are pages
 
-    // 1. Top boundary check: when scrolled to the very top, snap Column 1 to the top
-    if (listArea.scrollTop <= 15) {
-      if (_lastFullyInFrameIndex != 0) {
-        _lastFullyInFrameIndex = 0;
-        _listTargetIndex = 0;
-        scrollContainerToTop('fanzine-grid-area', smooth: true);
-      }
-      return;
-    }
+    // Delegate DOM container inspection through platform-safe web_utils bridge
+    final activeIndex = calculateListScrollActiveIndex(
+      containerId: 'fanzine-list-area',
+      totalItems: totalItems,
+      itemIdBuilder: (i) => i == 0 ? 'fanzine-header' : 'reader-page-${i - 1}',
+    );
 
-    // 2. Bottom boundary check: when scrolled to the very bottom, snap Column 1 to the bottom
-    if (listArea.scrollTop + listArea.clientHeight >= listArea.scrollHeight - 15) {
-      final lastIdx = totalItems - 1;
-      if (_lastFullyInFrameIndex != lastIdx) {
-        _lastFullyInFrameIndex = lastIdx;
-        _listTargetIndex = lastIdx;
-        scrollContainerToBottom('fanzine-grid-area', smooth: true);
-      }
-      return;
-    }
-
-    int? currentFullyInFrame;
-    for (int i = 0; i < totalItems; i++) {
-      final String itemId = i == 0 ? 'fanzine-header' : 'reader-page-${i - 1}';
-      final itemEl = web.document.getElementById(itemId);
-      if (itemEl != null) {
-        final itemRect = itemEl.getBoundingClientRect();
-        // Fully in frame when its top and bottom both sit comfortably inside the scroll viewport
-        if (itemRect.top >= containerRect.top - 16 &&
-            itemRect.bottom <= containerRect.bottom + 16) {
-          currentFullyInFrame = i;
-          break;
-        }
-      }
-    }
-
-    // 3. Synchronize ONLY Column 1 when a new widget comes fully into frame
+    // Synchronize ONLY Column 1 when a new widget comes fully into frame
     // RULE: Column 3 is completely untouched when Column 2 is scrolled!
     // CRITICAL: We deliberately avoid calling setState() here so Column 2 maintains
     // uninterrupted native scroll momentum with zero sticking, jittering, or jumps.
-    if (currentFullyInFrame != null && currentFullyInFrame != _lastFullyInFrameIndex) {
-      final int frameIndex = currentFullyInFrame;
-      _lastFullyInFrameIndex = frameIndex;
-      _listTargetIndex = frameIndex;
-      _syncColumn1(frameIndex, totalItems);
+    if (activeIndex != null && activeIndex != _lastFullyInFrameIndex) {
+      _lastFullyInFrameIndex = activeIndex;
+      _listTargetIndex = activeIndex;
+      _syncColumn1(activeIndex, totalItems);
     }
   }
 
