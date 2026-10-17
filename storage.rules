@@ -1,12 +1,71 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // ---------------------------------------------------------------------------
+    // Helper Functions
+    // ---------------------------------------------------------------------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isEditor() {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/Users/$(request.auth.uid)) &&
+        (firestore.get(/databases/(default)/documents/Users/$(request.auth.uid)).data.get('Editor', false) == true ||
+         firestore.get(/databases/(default)/documents/Users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'moderator', 'curator']);
+    }
+
+    function isValidImage() {
+      return request.resource.size < 20 * 1024 * 1024
+          && (request.resource.contentType.matches('image/(webp|jpeg|jpg|png|gif)') || request.resource.contentType.matches('image/.*'));
+    }
+
+    function isValidPdf() {
+      return request.resource.size < 100 * 1024 * 1024
+          && (request.resource.contentType == 'application/pdf' || request.resource.contentType.matches('image/.*'));
+    }
+
+    // ---------------------------------------------------------------------------
+    // 1. User Personal Uploads & Folio Multi-Scale Assets
+    // ---------------------------------------------------------------------------
+    match /uploads/{userId}/{allPaths=**} {
+      // Prevent public reads if the userId parameter matches the raw_pdfs pipeline
+      allow read: if userId != 'raw_pdfs';
+      allow create, update: if isOwner(userId) && isValidImage();
+      allow delete: if isOwner(userId) || isEditor();
+    }
+
+    // ---------------------------------------------------------------------------
+    // 2. Curator PDF Ingest Pipeline
+    // ---------------------------------------------------------------------------
+    match /uploads/raw_pdfs/{allPaths=**} {
+      allow read: if isEditor();
+      allow create, update: if isEditor() && isValidPdf();
+      allow delete: if isEditor();
+    }
+
+    // ---------------------------------------------------------------------------
+    // 3. Compiled Fanzine Static Pages & Map Covers
+    // ---------------------------------------------------------------------------
+    match /fanzines/{fanzineId}/{allPaths=**} {
+      allow read: if true;
+      // Client-side fallback writes require authentication and image constraints
+      allow create, update: if isAuthenticated() && isValidImage();
+      allow delete: if isEditor();
+    }
+
+    // ---------------------------------------------------------------------------
+    // 4. Default Deny Fallback
+    // ---------------------------------------------------------------------------
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

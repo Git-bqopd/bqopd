@@ -713,6 +713,7 @@ window.renderPublisherPages = async (text) => {
             } else {
                 fontSize = 28; fontName = 'Arimo'; bold = false; step = ROW_HEIGHT;
             }
+
             const isBullet = block.type === 'bullet';
             const textToWrap = isBullet ? "    " + block.content : block.content;
             const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
@@ -784,7 +785,7 @@ window.renderMapCoverPage = async (configJson) => {
     const center = config.center || { lat: 43.8396, lng: -91.2436, address: "La Crosse, WI" };
     const letters = Array.isArray(config.letters) ? config.letters : [];
     const folioTitle = config.title || `Letters near ${center.address}`;
-    const apiKey = (window.firebaseConfig && window.firebaseConfig.apiKey) || "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g";
+    const apiKey = (window.firebaseConfig && window.firebaseConfig.apiKey) || "";
 
     const canvas = document.createElement('canvas');
     canvas.width = 2000;
@@ -862,15 +863,18 @@ window.renderMapCoverPage = async (configJson) => {
 
     let mapLoaded = false;
     try {
-        const fnResult = await functions.httpsCallable('fetch_static_map', { timeout: 60000 })({
+        const fnPayload = {
             markers: allCoords.map(c => ({ lat: c.lat, lng: c.lng, isCenter: c.isCenter })),
             center: `${centerLat},${centerLng}`,
             zoom: zoom,
             width: 400,
             height: 640,
-            scale: 2,
-            api_key: apiKey
-        });
+            scale: 2
+        };
+        if (apiKey) {
+            fnPayload.api_key = apiKey;
+        }
+        const fnResult = await functions.httpsCallable('fetch_static_map', { timeout: 60000 })(fnPayload);
         if (fnResult && fnResult.data && fnResult.data.status === 'success' && fnResult.data.data_url) {
             await new Promise((resolve) => {
                 const img = new Image();

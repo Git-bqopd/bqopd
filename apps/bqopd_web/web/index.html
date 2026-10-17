@@ -12,6 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Anton&family=Arimo:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+
     <!-- Force Google Autocomplete dropdown layer on top of premium manila modals -->
     <style>
         .pac-container {
@@ -22,31 +23,35 @@
             font-family: 'Arimo', sans-serif !important;
         }
     </style>
+
     <!-- Firebase SDK Compat libraries (Web) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-    <!-- Google Maps Places SDK -->
+
+    <!-- Google Maps Places SDK (Client Key restricted via HTTP Referrers in Google Cloud Console) -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g&libraries=places&loading=async"></script>
-    <!-- Initialize Firebase -->
+
+    <!-- Initialize Firebase and assign configuration directly to window namespace -->
     <script>
-        const firebaseConfig = {
+        window.firebaseConfig = {
           apiKey: "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g",
-          attributes: null,
           authDomain: "bqopd-9ce06.firebaseapp.com",
           projectId: "bqopd-9ce06",
           storageBucket: "bqopd-9ce06.appspot.com",
           messagingSenderId: "17060476719",
           appId: "1:17060476719:web:9c7e201c50938561e2d3da"
         };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const storage = firebase.storage();
-        const functions = firebase.functions();
+        if (!firebase.apps.length) {
+          firebase.initializeApp(window.firebaseConfig);
+        }
+        window.db = firebase.firestore();
+        window.storage = firebase.storage();
+        window.functions = firebase.functions();
     </script>
-    <!-- Import our central JavaScript initialize script containing multi-page canvas compilation -->
+    <!-- Import central JavaScript initialize script containing multi-page canvas compilation -->
     <script src="firebase_init.js"></script>
     <script src="main.dart.js" defer></script>
 </head>

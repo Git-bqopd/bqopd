@@ -25,10 +25,27 @@ import firebase_admin
 from firebase_admin import firestore, storage
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
+from firebase_functions.params import SecretParam
 from PIL import Image, ImageDraw, ImageFont
 
 # Keep max instances controlled to prevent unexpected compute costs
 set_global_options(max_instances=10)
+
+# Secret parameter for Google Maps API key (managed via Secret Manager)
+MAPS_API_KEY = SecretParam("MAPS_API_KEY")
+
+
+def get_maps_api_key(override_key: Optional[str] = None) -> str:
+  """Resolves the Google Maps API key from override, SecretParam, or environment."""
+  if override_key and override_key.strip():
+    return override_key.strip()
+  try:
+    if MAPS_API_KEY.value:
+      return MAPS_API_KEY.value
+  except Exception:
+    pass
+  return os.environ.get("MAPS_API_KEY", "")
+
 
 # Initialize Firebase Admin SDK if not already initialized
 if not firebase_admin._apps:
@@ -56,6 +73,7 @@ FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
 BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 DECODE_MAP = {c: i for i, c in enumerate(BASE32)}
+
 
 
 def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
@@ -92,6 +110,7 @@ def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
       ch = 0
   return "".join(geohash)
 
+
 def decode_geohash(geohash: str) -> Tuple[float, float, float, float]:
   """Decodes a geohash string into (lat, lng, lat_error, lng_error)."""
   lat_interval = [-90.0, 90.0]
@@ -124,6 +143,7 @@ def decode_geohash(geohash: str) -> Tuple[float, float, float, float]:
   return lat, lng, lat_err, lng_err
 
 
+
 def get_geohash_neighbors(geohash: str) -> List[str]:
   """Returns the center geohash cell plus its 8 surrounding bounding neighbors."""
   lat, lng, lat_err, lng_err = decode_geohash(geohash)
@@ -141,6 +161,7 @@ def get_geohash_neighbors(geohash: str) -> List[str]:
       neighbors.append(encode_geohash(n_lat, n_lng, precision))
 
   return list(dict.fromkeys(neighbors))
+
 
 def haversine_miles(
     lat1: float, lon1: float, lat2: float, lon2: float
@@ -192,12 +213,12 @@ def generate_shortcode() -> str:
   chars = string.ascii_uppercase + string.digits
   return "".join(random.choices(chars, k=7))
 
-# ---------------------------------------------------------------------------
-# Geocoding and Firestore Geo-Cache Routines
-# ---------------------------------------------------------------------------
+
 
 def resolve_or_cache_geocode(
-    address: str, db: Optional[firestore.Client] = None
+    address: str,
+    db: Optional[firestore.Client] = None,
+    api_key: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
   """Resolves coordinates using Firestore geocache, Google Maps API, and Nominatim fallback."""
   clean_loc = clean_location_string(address)
@@ -250,65 +271,66 @@ def resolve_or_cache_geocode(
     )
 
   resolved: Optional[Dict[str, Any]] = None
-  api_key = "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g"
+  active_key = get_maps_api_key(api_key)
 
   # 2. Query Google Geocoding API server-side
-  try:
-    encoded = urllib.parse.quote(clean_loc)
-    url = (
-        "https://maps.googleapis.com/maps/api/geocode/json?address="
-        f"{encoded}&key={api_key}"
-    )
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "bqopd-server-geocoder/1.0",
-            "Accept": "application/json",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=6) as response:
-      g_data = json.loads(response.read().decode("utf-8"))
-      if g_data.get("status") == "OK" and g_data.get("results"):
-        res0 = g_data["results"][0]
-        loc = res0["geometry"]["location"]
-        lat = float(loc["lat"])
-        lng = float(loc["lng"])
-        formatted = res0.get("formatted_address", clean_loc)
+  if active_key:
+    try:
+      encoded = urllib.parse.quote(clean_loc)
+      url = (
+          "https://maps.googleapis.com/maps/api/geocode/json?address="
+          f"{encoded}&key={active_key}"
+      )
+      req = urllib.request.Request(
+          url,
+          headers={
+              "User-Agent": "bqopd-server-geocoder/1.0",
+              "Accept": "application/json",
+          },
+      )
+      with urllib.request.urlopen(req, timeout=6) as response:
+        g_data = json.loads(response.read().decode("utf-8"))
+        if g_data.get("status") == "OK" and g_data.get("results"):
+          res0 = g_data["results"][0]
+          loc = res0["geometry"]["location"]
+          lat = float(loc["lat"])
+          lng = float(loc["lng"])
+          formatted = res0.get("formatted_address", clean_loc)
 
-        city = ""
-        state = ""
-        country = ""
-        for comp in res0.get("address_components", []):
-          types = comp.get("types", [])
-          if (
-              "locality" in types
-              or "sublocality" in types
-              or "postal_town" in types
-          ):
-            if not city:
-              city = comp.get("long_name") or comp.get("short_name", "")
-          elif "administrative_area_level_1" in types:
-            state = comp.get("short_name") or comp.get("long_name", "")
-          elif "country" in types:
-            country = comp.get("short_name") or comp.get("long_name", "")
+          city = ""
+          state = ""
+          country = ""
+          for comp in res0.get("address_components", []):
+            types = comp.get("types", [])
+            if (
+                "locality" in types
+                or "sublocality" in types
+                or "postal_town" in types
+            ):
+              if not city:
+                city = comp.get("long_name") or comp.get("short_name", "")
+            elif "administrative_area_level_1" in types:
+              state = comp.get("short_name") or comp.get("long_name", "")
+            elif "country" in types:
+              country = comp.get("short_name") or comp.get("long_name", "")
 
-        gh = encode_geohash(lat, lng, 6)
-        resolved = {
-            "lat": lat,
-            "lng": lng,
-            "geohash": gh,
-            "geohash_3": gh[:3],
-            "geohash_2": gh[:2],
-            "formatted": formatted,
-            "city": city,
-            "state": state,
-            "country": country,
-        }
-  except Exception as e:
-    print(
-        f"[resolve_or_cache_geocode] Google Geocoding API failed for"
-        f" '{clean_loc}': {e}"
-    )
+          gh = encode_geohash(lat, lng, 6)
+          resolved = {
+              "lat": lat,
+              "lng": lng,
+              "geohash": gh,
+              "geohash_3": gh[:3],
+              "geohash_2": gh[:2],
+              "formatted": formatted,
+              "city": city,
+              "state": state,
+              "country": country,
+          }
+    except Exception as e:
+      print(
+          f"[resolve_or_cache_geocode] Google Geocoding API failed for"
+          f" '{clean_loc}': {e}"
+      )
 
   # 3. Fallback to OpenStreetMap Nominatim
   if not resolved:
@@ -383,9 +405,6 @@ def geocode_location_http(location_str: str) -> Optional[Dict[str, Any]]:
   """Backward-compatible helper redirecting to resolve_or_cache_geocode."""
   return resolve_or_cache_geocode(location_str)
 
-# ---------------------------------------------------------------------------
-# Server-Side Typography and Image Rasterization Engine (Pillow)
-# ---------------------------------------------------------------------------
 
 _font_cache: Dict[Tuple[str, int, bool, bool], ImageFont.ImageFont] = {}
 _font_resolved_sources: Dict[Tuple[str, int, bool, bool], str] = {}
@@ -451,6 +470,7 @@ def get_font_path_candidates(
 
   return candidates
 
+
 def get_font(
     font_family: str, size: int, bold: bool = False, italic: bool = False
 ) -> ImageFont.ImageFont:
@@ -494,6 +514,7 @@ def get_font(
   return font_obj
 
 
+
 def measure_text_width(text: str, font: ImageFont.ImageFont) -> float:
   """Calculates horizontal pixel width of a string with sub-pixel accuracy."""
   if not text:
@@ -534,6 +555,7 @@ def snap_to_grid(y: float) -> float:
   rows = math.ceil((y - GRID_TOP) / float(ROW_HEIGHT))
   return float(GRID_TOP + (rows * ROW_HEIGHT))
 
+
 def init_page_canvas() -> Tuple[Image.Image, ImageDraw.ImageDraw]:
   """Initializes a blank 2000x3200 page canvas with outer border and column dividers."""
   canvas = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), color=(255, 255, 255))
@@ -569,6 +591,8 @@ def download_remote_image(url: str, timeout: int = 6) -> Optional[Image.Image]:
   except Exception as e:
     print(f"[download_remote_image] Could not fetch '{url}': {e}")
     return None
+
+
 
 def upload_three_webp_scales(
     canvas: Image.Image,
@@ -613,6 +637,8 @@ def upload_three_webp_scales(
   list_url = _upload("list.webp", list_bytes)
   grid_url = _upload("grid.webp", grid_bytes)
   return orig_url, list_url, grid_url
+
+
 
 def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
   """Parses markdown into typed blocks for the 3-column publisher layout engine."""
@@ -708,6 +734,8 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
 
   commit_paragraph()
   return blocks
+
+
 
 def render_publisher_pages_internal(
     raw_text: str,
@@ -963,6 +991,8 @@ def render_publisher_pages_internal(
 # Cloud Functions Callables: Diagnostics, Geocoding, Search, and Map Cover
 # ---------------------------------------------------------------------------
 
+
+
 @https_fn.on_call()
 def check_server_fonts(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Diagnostic callable to inspect font availability and test-render on server."""
@@ -1004,7 +1034,8 @@ def check_server_fonts(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "test_render": tests,
   }
 
-@https_fn.on_call()
+
+@https_fn.on_call(secrets=[MAPS_API_KEY])
 def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Server-side verified address geocoding with Firestore caching."""
   data = req.data or {}
@@ -1015,7 +1046,7 @@ def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
         "An 'address' string parameter is required.",
     )
 
-  res = resolve_or_cache_geocode(raw_address.strip())
+  res = resolve_or_cache_geocode(raw_address.strip(), api_key=get_maps_api_key())
   if res:
     return {
         "status": "success",
@@ -1030,7 +1061,7 @@ def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
   }
 
 
-@https_fn.on_call()
+@https_fn.on_call(secrets=[MAPS_API_KEY])
 def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Queries and returns the closest N historical letters to target (lat, lng)."""
   data = req.data or {}
@@ -1126,7 +1157,9 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
       l_lng = geo.get("lng")
 
       if (l_lat is None or l_lng is None) and doc_data.get("location"):
-        geocoded = resolve_or_cache_geocode(str(doc_data["location"]), db=db)
+        geocoded = resolve_or_cache_geocode(
+            str(doc_data["location"]), db=db, api_key=get_maps_api_key()
+        )
         if geocoded:
           l_lat = geocoded["lat"]
           l_lng = geocoded["lng"]
@@ -1156,7 +1189,9 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "letters": results,
   }
 
-@https_fn.on_call()
+
+
+@https_fn.on_call(secrets=[MAPS_API_KEY])
 def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Fetches an official Google Maps Static API image server-side."""
   data = req.data or {}
@@ -1164,7 +1199,7 @@ def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
   width = int(data.get("width", 400))
   height = int(data.get("height", 640))
   scale = int(data.get("scale", 2))
-  api_key = data.get("api_key") or "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g"
+  api_key = get_maps_api_key(data.get("api_key") or data.get("apiKey"))
 
   query_parts = [
       f"size={width}x{height}",
@@ -1208,7 +1243,7 @@ def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(secrets=[MAPS_API_KEY])
 def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Maintenance routine: Scans existing letter comments and stamps `geo` metadata."""
   db = firestore.client()
@@ -1257,8 +1292,9 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
     cleaned = clean_location_string(raw_loc)
     if cleaned not in cache:
-      cache[cleaned] = resolve_or_cache_geocode(cleaned, db=db)
-
+      cache[cleaned] = resolve_or_cache_geocode(
+          cleaned, db=db, api_key=get_maps_api_key()
+      )
     geo_meta = cache[cleaned]
     if geo_meta:
       try:
@@ -1285,6 +1321,8 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Heavy Server-Side Layout & WebP Compilation
 # ---------------------------------------------------------------------------
+
+
 
 @https_fn.on_call(memory=2048, timeout_sec=300, cpu=2)
 def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1396,6 +1434,8 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "pages": output_pages,
   }
 
+
+
 @https_fn.on_call(memory=512, timeout_sec=120)
 def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Re-compiles a single 2000x3200 page from markdown and uploads WebP scales.
@@ -1449,7 +1489,8 @@ def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "gridUrl": grid_url,
   }
 
-@https_fn.on_call(memory=512, timeout_sec=120)
+
+@https_fn.on_call(memory=512, timeout_sec=120, secrets=[MAPS_API_KEY])
 def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Generates an illustrated 2000x3200 Google Maps cover page with radial markers.
 
@@ -1473,7 +1514,7 @@ def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
   db = firestore.client()
   bucket = storage.bucket()
-  api_key = "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g"
+  api_key = get_maps_api_key(data.get("apiKey") or data.get("api_key"))
 
   markers_payload: List[Dict[str, Any]] = []
   if center.get("lat") is not None and center.get("lng") is not None:

@@ -10,7 +10,13 @@ import 'unsaved_fanzine_registry.dart';
 /// via interop for client-side routing.
 class ServerFirestoreClient {
   static const String projectId = 'bqopd-9ce06';
-  static const String apiKey = 'AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g';
+
+  // Environment-driven Web API key configured via --dart-define or runtime container parameters
+  static const String apiKey = String.fromEnvironment(
+    'FIREBASE_WEB_API_KEY',
+    defaultValue: 'AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g',
+  );
+
   static const String baseUrl =
       'https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents';
 
@@ -39,7 +45,9 @@ class ServerFirestoreClient {
     try {
       final secs = val.seconds;
       if (secs != null) {
-        final dt = DateTime.fromMillisecondsSinceEpoch((secs as num).toInt() * 1000).toUtc();
+        final dt = DateTime.fromMillisecondsSinceEpoch(
+            (secs as num).toInt() * 1000)
+            .toUtc();
         return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
       }
     } catch (_) {}
@@ -47,7 +55,9 @@ class ServerFirestoreClient {
       final seconds = val['seconds'] ?? val['_seconds'];
       if (seconds != null) {
         try {
-          final dt = DateTime.fromMillisecondsSinceEpoch((seconds as num).toInt() * 1000).toUtc();
+          final dt = DateTime.fromMillisecondsSinceEpoch(
+              (seconds as num).toInt() * 1000)
+              .toUtc();
           return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
         } catch (_) {}
       }
@@ -61,7 +71,8 @@ class ServerFirestoreClient {
         final match = regExp.firstMatch(str);
         if (match != null) {
           final secs = int.parse(match.group(1)!);
-          final dt = DateTime.fromMillisecondsSinceEpoch(secs * 1000).toUtc();
+          final dt =
+          DateTime.fromMillisecondsSinceEpoch(secs * 1000).toUtc();
           return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
         }
       } catch (_) {}
@@ -108,15 +119,22 @@ class ServerFirestoreClient {
   static dynamic _decodeValue(Map<String, dynamic> val) {
     if (val.containsKey('stringValue')) return val['stringValue'];
     if (val.containsKey('booleanValue')) return val['booleanValue'];
-    if (val.containsKey('integerValue')) return int.tryParse(val['integerValue'].toString()) ?? 0;
-    if (val.containsKey('doubleValue')) return (val['doubleValue'] as num).toDouble();
+    if (val.containsKey('integerValue')) {
+      return int.tryParse(val['integerValue'].toString()) ?? 0;
+    }
+    if (val.containsKey('doubleValue')) {
+      return (val['doubleValue'] as num).toDouble();
+    }
     if (val.containsKey('arrayValue')) {
       final values = val['arrayValue']['values'] as List? ?? [];
-      return values.map((v) => _decodeValue(v as Map<String, dynamic>)).toList();
+      return values
+          .map((v) => _decodeValue(v as Map<String, dynamic>))
+          .toList();
     }
     if (val.containsKey('mapValue')) {
       final fields = val['mapValue']['fields'] as Map<String, dynamic>? ?? {};
-      return fields.map((key, value) => MapEntry(key, _decodeValue(value as Map<String, dynamic>)));
+      return fields.map((key, value) =>
+          MapEntry(key, _decodeValue(value as Map<String, dynamic>)));
     }
     if (val.containsKey('timestampValue')) {
       return val['timestampValue'];
@@ -128,7 +146,8 @@ class ServerFirestoreClient {
   }
 
   static Map<String, dynamic> decodeFields(Map<String, dynamic> fields) {
-    return fields.map((key, value) => MapEntry(key, _decodeValue(value as Map<String, dynamic>)));
+    return fields.map((key, value) =>
+        MapEntry(key, _decodeValue(value as Map<String, dynamic>)));
   }
 
   static Future<Map<String, dynamic>?> getDocument(String path) async {
@@ -137,7 +156,8 @@ class ServerFirestoreClient {
       final url = Uri.parse('$baseUrl/$path${_getQueryString()}');
       final response = await http.get(url);
       stopwatch.stop();
-      print('[REST CLIENT] GET /$path - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
+      print(
+          '[REST CLIENT] GET /$path - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final fields = data['fields'] as Map<String, dynamic>? ?? {};
@@ -145,7 +165,8 @@ class ServerFirestoreClient {
         decoded['id'] = data['name'].toString().split('/').last;
         return sanitizeFanzineData(decoded);
       } else {
-        print('[REST CLIENT ERROR] GET /$path failed: Status ${response.statusCode}\nBody: ${response.body}');
+        print(
+            '[REST CLIENT ERROR] GET /$path failed: Status ${response.statusCode}\nBody: ${response.body}');
       }
     } catch (e, stack) {
       print('[REST CLIENT EXCEPTION] GET /$path - Error: $e\n$stack');
@@ -159,7 +180,8 @@ class ServerFirestoreClient {
       final url = Uri.parse('$baseUrl/$path${_getQueryString()}');
       final response = await http.get(url);
       stopwatch.stop();
-      print('[REST CLIENT] GET COLLECTION /$path - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
+      print(
+          '[REST CLIENT] GET COLLECTION /$path - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
         final docs = body['documents'] as List? ?? [];
@@ -171,7 +193,8 @@ class ServerFirestoreClient {
           return sanitizeFanzineData(decoded);
         }).toList();
       } else {
-        print('[REST CLIENT ERROR] GET COLLECTION /$path failed: Status ${response.statusCode}\nBody: ${response.body}');
+        print(
+            '[REST CLIENT ERROR] GET COLLECTION /$path failed: Status ${response.statusCode}\nBody: ${response.body}');
       }
     } catch (e, stack) {
       print('[REST CLIENT EXCEPTION] GET COLLECTION /$path - Error: $e\n$stack');
@@ -208,7 +231,8 @@ class ServerFirestoreClient {
         body: jsonEncode(body),
       );
       stopwatch.stop();
-      print('[REST CLIENT] runQuery on $collectionId ($fieldPath == $value) - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
+      print(
+          '[REST CLIENT] runQuery on $collectionId ($fieldPath == $value) - Status: ${response.statusCode} (${stopwatch.elapsedMilliseconds}ms)');
       if (response.statusCode == 200) {
         final results = jsonDecode(response.body) as List? ?? [];
         final List<Map<String, dynamic>> decodedDocs = [];
@@ -223,21 +247,26 @@ class ServerFirestoreClient {
         }
         return decodedDocs;
       } else {
-        print('[REST CLIENT ERROR] runQuery on $collectionId failed: Status ${response.statusCode}\nBody: ${response.body}');
+        print(
+            '[REST CLIENT ERROR] runQuery on $collectionId failed: Status ${response.statusCode}\nBody: ${response.body}');
       }
     } catch (e, stack) {
-      print('[REST CLIENT EXCEPTION] runQuery on $collectionId - Error: $e\n$stack');
+      print(
+          '[REST CLIENT EXCEPTION] runQuery on $collectionId - Error: $e\n$stack');
     }
     return [];
   }
 
   static Future<Map<String, dynamic>> resolveFullPayload(String code) async {
-    print('[PAYLOAD RESOLVER] Beginning payload resolution for path code: "$code"');
+    print(
+        '[PAYLOAD RESOLVER] Beginning payload resolution for path code: "$code"');
     if (kIsWeb) {
-      print('[PAYLOAD RESOLVER] Context: Client-side browser. Routing to JS SDK channels.');
+      print(
+          '[PAYLOAD RESOLVER] Context: Client-side browser. Routing to JS SDK channels.');
       return _resolveViaJsSdk(code);
     } else {
-      print('[PAYLOAD RESOLVER] Context: Server-side container. Routing to REST public endpoints.');
+      print(
+          '[PAYLOAD RESOLVER] Context: Server-side container. Routing to REST public endpoints.');
       return _resolveViaRest(code);
     }
   }
@@ -281,9 +310,9 @@ class ServerFirestoreClient {
           'series': fz.series,
           'publishedDate': fz.publishedDate,
         });
-
         final pgs = UnsavedFanzineRegistry.pages[fz.id] ?? [];
-        payload['pages'] = pgs.map((p) => {
+        payload['pages'] = pgs
+            .map((p) => {
           'id': p.id,
           'pageNumber': p.pageNumber,
           'imageId': p.imageId,
@@ -297,7 +326,8 @@ class ServerFirestoreClient {
           'width': p.width,
           'height': p.height,
           'is5x8': p.is5x8 ?? true,
-        }).toList();
+        })
+            .toList();
         payload['creatorProfiles'] = <String, Map<String, dynamic>>{};
         payload['imageStats'] = <String, Map<String, dynamic>>{};
         return payload;
@@ -311,7 +341,8 @@ class ServerFirestoreClient {
           payload['targetUserId'] = data['uid'];
           payload['status'] = 'user';
         } else {
-          final prRes = await fsQuery('profiles', 'username', '==', jsonEncode(codeLower), '');
+          final prRes = await fsQuery(
+              'profiles', 'username', '==', jsonEncode(codeLower), '');
           final List prDocs = jsonDecode(prRes);
           if (prDocs.isNotEmpty) {
             final firstDoc = prDocs.first;
@@ -343,7 +374,8 @@ class ServerFirestoreClient {
           }
         }
         if (payload.isEmpty) {
-          final fzRes = await fsQuery('fanzines', 'shortCode', '==', jsonEncode(cleanCode), '');
+          final fzRes = await fsQuery(
+              'fanzines', 'shortCode', '==', jsonEncode(cleanCode), '');
           final List fzDocs = jsonDecode(fzRes);
           if (fzDocs.isNotEmpty) {
             final firstDoc = fzDocs.first;
@@ -363,7 +395,8 @@ class ServerFirestoreClient {
         final List pagesListRaw = jsonDecode(fzResults[1]);
         if (fzDoc['exists'] == true) {
           final Map<String, dynamic> fzData = fzDoc['data'] ?? {};
-          payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(restoreTimestamps(fzData));
+          payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(
+              restoreTimestamps(fzData));
           final pagesList = pagesListRaw.map((p) {
             final Map<String, dynamic> mapItem = p;
             final d = restoreTimestamps(mapItem['data']);
@@ -371,6 +404,7 @@ class ServerFirestoreClient {
             return d;
           }).toList();
           payload['pages'] = pagesList;
+
           final creators = fzData['masterCreators'] as List? ?? [];
           final uidsToFetch = creators
               .whereType<Map>()
@@ -382,6 +416,7 @@ class ServerFirestoreClient {
           final Map<String, dynamic> creatorProfiles = {};
           final Map<String, dynamic> imageStats = {};
           final List<Future<void>> parallelFetches = [];
+
           for (final uid in uidsToFetch) {
             parallelFetches.add(
               fsGetDoc('profiles/$uid').then((pRes) {
@@ -392,6 +427,7 @@ class ServerFirestoreClient {
               }),
             );
           }
+
           for (final page in pagesList) {
             final imageId = page['imageId'];
             if (imageId != null && imageId.isNotEmpty) {
@@ -399,7 +435,8 @@ class ServerFirestoreClient {
                 fsGetDoc('images/$imageId').then((imgRes) {
                   final Map<String, dynamic> imgDoc = jsonDecode(imgRes);
                   if (imgDoc['exists'] == true) {
-                    final Map<String, dynamic> imgData = imgDoc['data'] ?? {};
+                    final Map<String, dynamic> imgData =
+                        imgDoc['data'] ?? {};
                     imageStats[imageId] = {
                       'likeCount': imgData['likeCount'] ?? 0,
                       'commentCount': imgData['commentCount'] ?? 0,
@@ -442,13 +479,18 @@ class ServerFirestoreClient {
         if (usernameDoc != null) {
           payload['targetUserId'] = usernameDoc['uid'];
           payload['status'] = 'user';
-          print('[RESOLVE REST] Successfully mapped "@$handle" to target User ID: "${usernameDoc['uid']}"');
+          print(
+              '[RESOLVE REST] Successfully mapped "@$handle" to target User ID: "${usernameDoc['uid']}"');
         } else {
-          final profileDocs = await runQuery(collectionId: 'profiles', fieldPath: 'username', value: codeLower);
+          final profileDocs = await runQuery(
+              collectionId: 'profiles',
+              fieldPath: 'username',
+              value: codeLower);
           if (profileDocs.isNotEmpty) {
             payload['targetUserId'] = profileDocs.first['id'];
             payload['status'] = 'user';
-            print('[RESOLVE REST] Query matched "@$handle". Target ID: "${profileDocs.first['id']}"');
+            print(
+                '[RESOLVE REST] Query matched "@$handle". Target ID: "${profileDocs.first['id']}"');
           } else {
             final scDoc = await getDocument('shortcodes/$codeUpper');
             if (scDoc != null && scDoc['type'] == 'user') {
@@ -468,35 +510,46 @@ class ServerFirestoreClient {
             payload['targetFanzineId'] = scDoc['contentId'];
             payload['status'] = 'fanzine';
           }
-          print('[RESOLVE REST] Successfully mapped code "$cleanCode" (type: $type) to contentId: "${scDoc['contentId']}"');
+          print(
+              '[RESOLVE REST] Successfully mapped code "$cleanCode" (type: $type) to contentId: "${scDoc['contentId']}"');
         } else {
-          final fzDocs = await runQuery(collectionId: 'fanzines', fieldPath: 'shortCode', value: cleanCode);
+          final fzDocs = await runQuery(
+              collectionId: 'fanzines',
+              fieldPath: 'shortCode',
+              value: cleanCode);
           if (fzDocs.isNotEmpty) {
             payload['targetFanzineId'] = fzDocs.first['id'];
             payload['status'] = 'fanzine';
-            print('[RESOLVE REST] Query matched fanzine shortcode. Target ID: "${fzDocs.first['id']}"');
+            print(
+                '[RESOLVE REST] Query matched fanzine shortcode. Target ID: "${fzDocs.first['id']}"');
           }
         }
       }
 
       if (payload['targetFanzineId'] != null) {
         final String fanzineId = payload['targetFanzineId'];
-        print('[RESOLVE REST] Gathering fanzine data and page matrices for ID: "$fanzineId"');
+        print(
+            '[RESOLVE REST] Gathering fanzine data and page matrices for ID: "$fanzineId"');
         final fzDataResults = await Future.wait([
           getDocument('fanzines/$fanzineId'),
           getCollection('fanzines/$fanzineId/pages'),
         ]);
-        final Map<String, dynamic>? fanzineData = fzDataResults[0] as Map<String, dynamic>?;
-        final List<Map<String, dynamic>> pagesList = (fzDataResults[1] as List).cast<Map<String, dynamic>>();
+
+        final Map<String, dynamic>? fanzineData =
+        fzDataResults[0] as Map<String, dynamic>?;
+        final List<Map<String, dynamic>> pagesList =
+        (fzDataResults[1] as List).cast<Map<String, dynamic>>();
 
         if (fanzineData != null) {
-          payload['fanzineData'] = ServerFirestoreClient.sanitizeFanzineData(fanzineData);
+          payload['fanzineData'] =
+              ServerFirestoreClient.sanitizeFanzineData(fanzineData);
           pagesList.sort((a, b) {
             final int pA = a['pageNumber'] ?? 0;
             final int pB = b['pageNumber'] ?? 0;
             return pA.compareTo(pB);
           });
           payload['pages'] = pagesList;
+
           final creators = fanzineData['masterCreators'] as List? ?? [];
           final Set<String> uidsToFetch = creators
               .whereType<Map>()
@@ -506,6 +559,7 @@ class ServerFirestoreClient {
           final Map<String, dynamic> creatorProfiles = {};
           final Map<String, dynamic> imageStats = {};
           final List<Future<void>> parallelFetches = [];
+
           for (final uid in uidsToFetch) {
             parallelFetches.add(
               getDocument('profiles/$uid').then((pDoc) {
@@ -538,9 +592,11 @@ class ServerFirestoreClient {
           await Future.wait(parallelFetches);
           payload['creatorProfiles'] = creatorProfiles;
           payload['imageStats'] = imageStats;
-          print('[RESOLVE REST] Preloaded Creator and Image Stats payload successfully built!');
+          print(
+              '[RESOLVE REST] Preloaded Creator and Image Stats payload successfully built!');
         } else {
-          print('[RESOLVE REST ERROR] Fanzine metadata was NULL for ID: "$fanzineId"');
+          print(
+              '[RESOLVE REST ERROR] Fanzine metadata was NULL for ID: "$fanzineId"');
         }
       }
     } catch (e, stack) {
@@ -549,7 +605,8 @@ class ServerFirestoreClient {
     }
     if (payload.isEmpty) {
       payload['status'] = "Link '$code' not found.";
-      print('[RESOLVE REST WARNING] No target entity mapped. Resolving with empty lookup payload.');
+      print(
+          '[RESOLVE REST WARNING] No target entity mapped. Resolving with empty lookup payload.');
     }
     return payload;
   }
