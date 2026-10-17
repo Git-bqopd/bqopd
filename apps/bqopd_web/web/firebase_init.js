@@ -26,12 +26,19 @@ window.registerWithFirebase = function(email, password, username) {
         var user = userCredential.user;
         var batch = db.batch();
         batch.set(db.collection('Users').doc(user.uid), {
-            uid: user.uid, email: user.email, username: username,
+            uid: user.uid,
+            email: user.email,
+            username: username,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            Editor: false, bio: '', firstName: '', lastName: ''
+            Editor: false,
+            bio: '',
+            firstName: '',
+            lastName: ''
         });
         batch.set(db.collection('usernames').doc(username.toLowerCase()), {
-            uid: user.uid, email: user.email, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            uid: user.uid,
+            email: user.email,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         return batch.commit();
     });
@@ -47,12 +54,9 @@ window.onAuthStateChangedListener = function(callback) {
 };
 
 function serializeFirebaseData(data) {
-    if (data === null) return data;
-    if (data === undefined) return data;
-    if (data.toDate) {
-        if (typeof data.toDate === 'function') {
-            return { __type: 'timestamp', iso: data.toDate().toISOString() };
-        }
+    if (data === null || data === undefined) return data;
+    if (data.toDate && typeof data.toDate === 'function') {
+        return { __type: 'timestamp', iso: data.toDate().toISOString() };
     }
     if (Array.isArray(data)) return data.map(serializeFirebaseData);
     if (typeof data === 'object') {
@@ -64,8 +68,7 @@ function serializeFirebaseData(data) {
 }
 
 function parseFirebaseOps(obj) {
-    if (obj === null) return obj;
-    if (typeof obj !== 'object') return obj;
+    if (obj === null || typeof obj !== 'object') return obj;
     if (Array.isArray(obj)) return obj.map(parseFirebaseOps);
     if (obj.__op === 'serverTimestamp') return firebase.firestore.FieldValue.serverTimestamp();
     if (obj.__op === 'increment') return firebase.firestore.FieldValue.increment(obj.value);
@@ -79,13 +82,29 @@ function parseFirebaseOps(obj) {
 
 window.fsGetDoc = function(path) {
     return db.doc(path).get()
-        .then(function(d) { return JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null}); })
-        .catch(function(err) { return JSON.stringify({id: '', path: path, exists: false, error: err.message}); });
+        .then(function(d) {
+            return JSON.stringify({
+                id: d.id,
+                path: d.ref.path,
+                exists: d.exists,
+                data: d.exists ? serializeFirebaseData(d.data()) : null
+            });
+        })
+        .catch(function(err) {
+            return JSON.stringify({id: '', path: path, exists: false, error: err.message});
+        });
 };
 
 window.fsListenDoc = function(path, dartCallback) {
     var unsub = db.doc(path).onSnapshot(
-        function(d) { dartCallback(JSON.stringify({id: d.id, path: d.ref.path, exists: d.exists, data: d.exists ? serializeFirebaseData(d.data()) : null})); },
+        function(d) {
+            dartCallback(JSON.stringify({
+                id: d.id,
+                path: d.ref.path,
+                exists: d.exists,
+                data: d.exists ? serializeFirebaseData(d.data()) : null
+            }));
+        },
         function(err) { console.error("fsListenDoc error on path " + path + ":", err); }
     );
     unsub.callAsFunction = unsub;
@@ -94,21 +113,18 @@ window.fsListenDoc = function(path, dartCallback) {
 
 window.fsListenQuery = function(path, field, op, valueJson, orderBy, desc, dartCallback) {
     let q = db.collection(path);
-    if (field) {
-        if (op) {
-            if (valueJson) {
-                q = q.where(field, op, JSON.parse(valueJson));
-            }
-        }
+    if (field && op && valueJson) {
+        q = q.where(field, op, JSON.parse(valueJson));
     }
     if (orderBy) {
-        let dir = 'asc';
-        if (desc) dir = 'desc';
+        let dir = desc ? 'desc' : 'asc';
         q = q.orderBy(orderBy, dir);
     }
     var unsub = q.onSnapshot(
         function(s) {
-            let docs = s.docs.map(function(d) { return {id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}; });
+            let docs = s.docs.map(function(d) {
+                return {id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())};
+            });
             dartCallback(JSON.stringify(docs));
         },
         function(err) { console.error("fsListenQuery error on path " + path + ":", err); }
@@ -117,26 +133,274 @@ window.fsListenQuery = function(path, field, op, valueJson, orderBy, desc, dartC
     return unsub;
 };
 
-window.fsUpdateDoc = function(path, dataStr) { return db.doc(path).update(parseFirebaseOps(JSON.parse(dataStr))).catch(function(err) { console.error("fsUpdateDoc error:", err); throw err; }); };
-window.fsSetDoc = function(path, dataStr, merge) { return db.doc(path).set(parseFirebaseOps(JSON.parse(dataStr)), {merge: merge}).catch(function(err) { console.error("fsSetDoc error:", err); throw err; }); };
-window.fsDeleteDoc = function(path) { return db.doc(path).delete().catch(function(err) { console.error("fsDeleteDoc error:", err); throw err; }); };
-window.fsAddDoc = function(path, dataStr) { return db.collection(path).add(parseFirebaseOps(JSON.parse(dataStr))).then(function(r) { return r.id; }).catch(function(err) { console.error("fsAddDoc error:", err); throw err; }); };
+window.fsUpdateDoc = function(path, dataStr) {
+    return db.doc(path).update(parseFirebaseOps(JSON.parse(dataStr))).catch(function(err) {
+        console.error("fsUpdateDoc error:", err);
+        throw err;
+    });
+};
+
+window.fsSetDoc = function(path, dataStr, merge) {
+    return db.doc(path).set(parseFirebaseOps(JSON.parse(dataStr)), {merge: merge}).catch(function(err) {
+        console.error("fsSetDoc error:", err);
+        throw err;
+    });
+};
+
+window.fsDeleteDoc = function(path) {
+    return db.doc(path).delete().catch(function(err) {
+        console.error("fsDeleteDoc error:", err);
+        throw err;
+    });
+};
+
+window.fsAddDoc = function(path, dataStr) {
+    return db.collection(path).add(parseFirebaseOps(JSON.parse(dataStr))).then(function(r) {
+        return r.id;
+    }).catch(function(err) {
+        console.error("fsAddDoc error:", err);
+        throw err;
+    });
+};
+
 window.fsQuery = function(path, field, op, valueJson, orderBy) {
     let q = db.collection(path);
-    if (field) {
-        if (op) {
-            if (valueJson) {
-                q = q.where(field, op, JSON.parse(valueJson));
-            }
-        }
+    if (field && op && valueJson) {
+        q = q.where(field, op, JSON.parse(valueJson));
     }
     if (orderBy) q = q.orderBy(orderBy);
     return q.get()
-        .then(function(s) { return JSON.stringify(s.docs.map(function(d) { return {id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())}; })); })
-        .catch(function(err) { console.error("fsQuery error:", err); return JSON.stringify([]); });
+        .then(function(s) {
+            return JSON.stringify(s.docs.map(function(d) {
+                return {id: d.id, path: d.ref.path, exists: d.exists, data: serializeFirebaseData(d.data())};
+            }));
+        })
+        .catch(function(err) {
+            console.error("fsQuery error:", err);
+            return JSON.stringify([]);
+        });
 };
-window.fnCall = function(name, dataStr) { return functions.httpsCallable(name)(JSON.parse(dataStr)).then(function(r) { return JSON.stringify(r.data); }).catch(function(err) { console.error("fnCall error:", err); throw err; }); };
-window.stUpload = function(path, bytes, contentType) { return storage.ref(path).put(bytes, {contentType: contentType}).then(function(s) { return s.ref.getDownloadURL(); }).catch(function(err) { console.error("stUpload error:", err); throw err; }); };
+
+window.fnCall = function(name, dataStr) {
+    return functions.httpsCallable(name)(JSON.parse(dataStr)).then(function(r) {
+        return JSON.stringify(r.data);
+    }).catch(function(err) {
+        console.error("fnCall error:", err);
+        throw err;
+    });
+};
+
+window.stUpload = function(path, bytes, contentType) {
+    return storage.ref(path).put(bytes, {contentType: contentType}).then(function(s) {
+        return s.ref.getDownloadURL();
+    }).catch(function(err) {
+        console.error("stUpload error:", err);
+        throw err;
+    });
+};
+
+let _scratchMeasureCtx = null;
+function getScratchMeasureCtx() {
+    if (!_scratchMeasureCtx) {
+        const c = document.createElement('canvas');
+        c.width = 1;
+        c.height = 1;
+        _scratchMeasureCtx = c.getContext('2d');
+    }
+    return _scratchMeasureCtx;
+}
+
+window.measurePublisherPages = (text) => {
+    if (!text || typeof text !== 'string' || !text.trim()) {
+        return 0;
+    }
+
+    const GRID_TOP = 33;
+    const ROW_HEIGHT = 42;
+    const colWidth = 608;
+    const maxY = 3120;
+    const ctx = getScratchMeasureCtx();
+
+    function snapToGrid(y) {
+        if (y <= GRID_TOP) return GRID_TOP;
+        const rows = Math.ceil((y - GRID_TOP) / ROW_HEIGHT);
+        return GRID_TOP + (rows * ROW_HEIGHT);
+    }
+
+    let pageCount = 0;
+    let colIndex = 0;
+    let currentY = GRID_TOP;
+
+    function advanceToNextColumn() {
+        colIndex++;
+        currentY = GRID_TOP;
+        if (colIndex >= 3) {
+            pageCount++;
+            colIndex = 0;
+        }
+    }
+
+    function wrapText(textToWrap, fontSize, fontName, bold) {
+        ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontName}`;
+        const words = textToWrap.split(' ');
+        const lines = [];
+        let currentLine = "";
+        for (let word of words) {
+            const testLine = currentLine ? currentLine + " " + word : word;
+            if (ctx.measureText(testLine).width > colWidth) {
+                lines.push(currentLine);
+                currentLine = word;
+            } else {
+                currentLine = testLine;
+            }
+        }
+        if (currentLine) lines.push(currentLine);
+        return lines;
+    }
+
+    const lines = text.split('\n');
+    const blocks = [];
+    let currentParagraph = "";
+
+    function commitParagraph() {
+        const pText = currentParagraph.trim();
+        if (!pText) return;
+
+        const imageRegex = /^\{\{IMAGE(?::\s*(.*?))?\}\}$/i;
+        const templateRegex = /^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$/i;
+        const colBreakRegex = /^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$/i;
+
+        const match = imageRegex.exec(pText);
+        const tMatch = templateRegex.exec(pText);
+        const cbMatch = colBreakRegex.exec(pText);
+
+        if (match) {
+            blocks.push({ type: 'image', url: match[1] ? match[1].trim() : '' });
+        } else if (tMatch) {
+            let targetRow = null;
+            let captionText = tMatch[3].trim();
+            const rowMatch = /^row=(\d+)\s*\|\s*(.*)$/i.exec(captionText);
+            if (rowMatch) {
+                targetRow = parseInt(rowMatch[1]);
+                captionText = rowMatch[2].trim();
+            }
+            blocks.push({ type: 'column_break' });
+            blocks.push({
+                type: 'template_block',
+                templateNum: parseInt(tMatch[1]),
+                url: tMatch[2].trim(),
+                content: captionText,
+                targetRow: targetRow
+            });
+            blocks.push({ type: 'column_break' });
+        } else if (cbMatch || pText.toLowerCase() === 'column-break' || pText.toLowerCase() === 'column_break') {
+            blocks.push({ type: 'column_break' });
+        } else if (pText.startsWith('### ')) {
+            blocks.push({ type: 'h3', content: pText.substring(4).trim() });
+        } else if (pText.startsWith('## ')) {
+            blocks.push({ type: 'h2', content: pText.substring(3).trim() });
+        } else if (pText.startsWith('# ')) {
+            blocks.push({ type: 'h1', content: pText.substring(2).trim() });
+        } else if (pText.startsWith('* ') || pText.startsWith('- ')) {
+            blocks.push({ type: 'bullet', content: pText.substring(2).trim() });
+        } else {
+            blocks.push({ type: 'text', content: pText });
+        }
+        currentParagraph = "";
+    }
+
+    for (let line of lines) {
+        const cleanLine = line.trim();
+        if (cleanLine === "") {
+            commitParagraph();
+        } else if (cleanLine.startsWith('# ') || cleanLine.startsWith('## ') || cleanLine.startsWith('### ') || cleanLine.startsWith('* ') || cleanLine.startsWith('- ') || cleanLine.startsWith('{{') || cleanLine.startsWith('[[')) {
+            commitParagraph();
+            currentParagraph = cleanLine;
+            commitParagraph();
+        } else {
+            currentParagraph = currentParagraph ? currentParagraph + " " + cleanLine : cleanLine;
+        }
+    }
+    commitParagraph();
+
+    for (let block of blocks) {
+        if (block.type === 'column_break') {
+            if (currentY > GRID_TOP) {
+                advanceToNextColumn();
+            }
+            continue;
+        }
+
+        if (block.type === 'image') {
+            const drawHeight = 400;
+            const minMarginBottom = 14;
+            const rowsNeeded = Math.ceil((drawHeight + minMarginBottom) / ROW_HEIGHT);
+            const totalImageBlockHeight = rowsNeeded * ROW_HEIGHT;
+
+            if (currentY + totalImageBlockHeight > maxY) {
+                advanceToNextColumn();
+            }
+            currentY += totalImageBlockHeight;
+        } else if (block.type === 'template_block' && block.templateNum === 1) {
+            const imgHeight = 400;
+            const fontSize = 24;
+            const fontName = 'Arial';
+            const linesToDraw = wrapText(block.content, fontSize, fontName, false);
+            const textLeadingStep = fontSize * 1.4;
+            const totalTextHeight = linesToDraw.length * textLeadingStep + 12;
+
+            if (block.targetRow !== null && block.targetRow !== undefined) {
+                let targetYBottom = GRID_TOP + block.targetRow * ROW_HEIGHT;
+                let targetYTop = targetYBottom - imgHeight;
+                if (currentY > targetYTop || targetYBottom + totalTextHeight > maxY) {
+                    advanceToNextColumn();
+                    targetYBottom = GRID_TOP + block.targetRow * ROW_HEIGHT;
+                    targetYTop = targetYBottom - imgHeight;
+                }
+                currentY = snapToGrid(targetYTop + imgHeight + 16 + (linesToDraw.length * textLeadingStep) + 14);
+            } else {
+                const compositeBlockHeight = imgHeight + totalTextHeight + 20;
+                const rowsNeeded = Math.ceil((compositeBlockHeight + 14) / ROW_HEIGHT);
+                const totalBlockHeight = rowsNeeded * ROW_HEIGHT;
+                if (currentY + totalBlockHeight > maxY) {
+                    advanceToNextColumn();
+                }
+                currentY += totalBlockHeight;
+            }
+        } else {
+            let fontSize, fontName, bold = false;
+            let step = ROW_HEIGHT;
+            if (block.type === 'h1') {
+                fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
+            } else if (block.type === 'h2') {
+                fontSize = 36; fontName = 'Impact'; bold = true; step = 48;
+            } else if (block.type === 'h3') {
+                fontSize = 28; fontName = 'Impact'; bold = true; step = ROW_HEIGHT;
+            } else {
+                fontSize = 28; fontName = 'Arial'; bold = false; step = ROW_HEIGHT;
+            }
+
+            const isBullet = block.type === 'bullet';
+            const textToWrap = isBullet ? "•   " + block.content : block.content;
+            const linesToDraw = wrapText(textToWrap, fontSize, fontName, bold);
+
+            for (let i = 0; i < linesToDraw.length; i++) {
+                if (currentY + fontSize > maxY) {
+                    advanceToNextColumn();
+                }
+                currentY += step;
+            }
+            currentY = snapToGrid(currentY + 14);
+        }
+    }
+
+    if (currentY > GRID_TOP || colIndex > 0) {
+        pageCount++;
+    }
+
+    return pageCount;
+};
+globalThis.measurePublisherPages = window.measurePublisherPages;
 
 window.renderPublisherPages = async (text) => {
     const pagesResults = [];
@@ -345,7 +609,6 @@ window.renderPublisherPages = async (text) => {
             if (img && img.width > 0 && img.height > 0) {
                 drawHeight = colWidth * (img.height / img.width);
             }
-            // Enforce baseline grid alignment for images: calculate integer row span
             const minMarginBottom = 14;
             const rowsNeeded = Math.ceil((drawHeight + minMarginBottom) / ROW_HEIGHT);
             const totalImageBlockHeight = rowsNeeded * ROW_HEIGHT;
@@ -439,7 +702,7 @@ window.renderPublisherPages = async (text) => {
             currentPageTextParts.push(`{{TEMPLATE_1: ${targetUrl} | ${block.content}}}`);
         } else {
             let fontSize, fontName, bold = false;
-            let step = ROW_HEIGHT; // Default line advance sits strictly on the 42px baseline grid
+            let step = ROW_HEIGHT;
             if (block.type === 'h1') {
                 fontSize = 42; fontName = 'Impact'; bold = true; step = 56;
             } else if (block.type === 'h2') {
@@ -487,7 +750,6 @@ window.renderPublisherPages = async (text) => {
                 currentY += step;
                 currentParagraphRenderedLines.push(line);
             }
-            // Snap currentY to the baseline grid with a 14px minimum separation gap
             currentY = snapToGrid(currentY + 14);
             if (currentParagraphRenderedLines.length > 0) {
                 if (block.type === 'h1') currentPageTextParts.push('# ' + currentParagraphRenderedLines.join(' '));
@@ -505,6 +767,7 @@ window.renderPublisherPages = async (text) => {
 };
 
 globalThis.renderPublisherPages = window.renderPublisherPages;
+
 window.renderPublisherPage = async (text) => {
     const multiJson = await window.renderPublisherPages(text);
     const pages = JSON.parse(multiJson);
@@ -528,11 +791,9 @@ window.renderMapCoverPage = async (configJson) => {
     canvas.height = 3200;
     const ctx = canvas.getContext('2d');
 
-    // Default roadmap neutral background
     ctx.fillStyle = '#e5e3df';
     ctx.fillRect(0, 0, 2000, 3200);
 
-    // 1. Gather all coordinates
     const allCoords = [];
     if (center.lat != null && center.lng != null) {
         allCoords.push({ lat: Number(center.lat), lng: Number(center.lng), isCenter: true });
@@ -553,7 +814,6 @@ window.renderMapCoverPage = async (configJson) => {
         allCoords.push({ lat: 43.8396, lng: -91.2436, isCenter: true });
     }
 
-    // 2. Compute geographic bounding box
     let minLat = allCoords[0].lat, maxLat = allCoords[0].lat;
     let minLng = allCoords[0].lng, maxLng = allCoords[0].lng;
     allCoords.forEach(c => {
@@ -563,7 +823,6 @@ window.renderMapCoverPage = async (configJson) => {
         if (c.lng > maxLng) maxLng = c.lng;
     });
 
-    // Add padding so pins don't clip the edges
     const latSpan = Math.max(0.02, maxLat - minLat);
     const lngSpan = Math.max(0.02, maxLng - minLng);
     minLat -= latSpan * 0.20;
@@ -574,7 +833,6 @@ window.renderMapCoverPage = async (configJson) => {
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
 
-    // 3. Mercator projection math
     function latToRad(lat) {
         const sin = Math.sin(lat * Math.PI / 180);
         return Math.log((1 + sin) / (1 - sin)) / 2;
@@ -627,7 +885,6 @@ window.renderMapCoverPage = async (configJson) => {
         }
     } catch (_) {}
 
-    // Fallback: Seamless CORS-friendly roadmap tiles (CartoDB Voyager @2x)
     if (!mapLoaded) {
         const tileSize = 512;
         const minTileX = Math.floor(originX / tileSize);
@@ -667,13 +924,11 @@ window.renderMapCoverPage = async (configJson) => {
         const pinHeight = 58 * scale;
         const headY = y - pinHeight;
 
-        // Drop shadow under tip
         ctx.beginPath();
         ctx.ellipse(x + 4 * scale, y + 2 * scale, 15 * scale, 6.5 * scale, 0, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.fill();
 
-        // Pin teardrop body (tip at x, y; center of head at x, headY)
         ctx.beginPath();
         ctx.arc(x, headY, radius, Math.PI * 0.18, Math.PI * 0.82, true);
         ctx.lineTo(x, y);
@@ -686,7 +941,6 @@ window.renderMapCoverPage = async (configJson) => {
         ctx.stroke();
 
         if (isCenter) {
-            // Home address pin: distinctive bullseye design, slightly larger
             ctx.beginPath();
             ctx.arc(x, headY, radius * 0.52, 0, Math.PI * 2);
             ctx.fillStyle = '#ffebee';
@@ -697,7 +951,6 @@ window.renderMapCoverPage = async (configJson) => {
             ctx.fillStyle = '#b71c1c';
             ctx.fill();
         } else {
-            // Standard red map pin: iconic dark crimson center dot, no numbers
             ctx.beginPath();
             ctx.arc(x, headY, radius * 0.34, 0, Math.PI * 2);
             ctx.fillStyle = '#761214';
@@ -707,7 +960,6 @@ window.renderMapCoverPage = async (configJson) => {
         ctx.restore();
     }
 
-    // Draw letter pins first, then home address pin on top
     allCoords.filter(c => !c.isCenter).forEach(c => {
         const pt = projectToWorld(c.lat, c.lng, zoom);
         drawPin(pt.x - originX, pt.y - originY, false);
@@ -787,6 +1039,18 @@ window.geocodeAddress = async (address) => {
         return null;
     }
     const cleanAddress = address.trim();
+
+    // 1. Primary: Server-side verified Cloud Function with Firestore geocache
+    try {
+        const result = await functions.httpsCallable('geocode_address')({ address: cleanAddress });
+        if (result && result.data && result.data.status === 'success') {
+            return JSON.stringify(result.data);
+        }
+    } catch (e) {
+        console.warn('[geocodeAddress] Server callable geocode_address failed:', e);
+    }
+
+    // 2. Fallback: Google Maps Geocoder SDK in browser
     if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
         try {
             const googleResult = await new Promise((resolve) => {
@@ -807,24 +1071,6 @@ window.geocodeAddress = async (address) => {
         }
     }
 
-    try {
-        console.log('[geocodeAddress] Attempting OpenStreetMap Nominatim fallback for:', cleanAddress);
-        const encoded = encodeURIComponent(cleanAddress);
-        const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`, {
-            headers: { 'Accept': 'application/json' }
-        });
-        if (resp.ok) {
-            const data = await resp.json();
-            if (Array.isArray(data) && data.length > 0) {
-                const lat = parseFloat(data[0].lat);
-                const lng = parseFloat(data[0].lon);
-                console.log('[geocodeAddress] Nominatim resolved:', cleanAddress, '->', lat, lng);
-                return JSON.stringify({ lat: lat, lng: lng });
-            }
-        }
-    } catch (err) {
-        console.error('[geocodeAddress] Nominatim fallback failed:', err);
-    }
     return null;
 };
 

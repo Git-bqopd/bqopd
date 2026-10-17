@@ -3,22 +3,32 @@ import 'dart:async';
 /// Stub implementation for non-web environments (Server SSR / AOT VM).
 /// Pure Dart signatures with zero browser/JS dependencies.
 
+/// Stub for generating 2000x3200 map cover page on non-web environments.
 Future<String> renderMapCoverPage(String configJson) async {
   return '{}';
 }
 
+/// Stub for generating multi-page publisher layouts on non-web environments.
 Future<String> renderPublisherPages(String text) async {
   return '[]';
 }
 
+/// Stub for rendering a single publisher layout on non-web environments.
 Future<String> renderPublisherPage(String text) async {
   return '{}';
 }
 
+/// Zero-pixel dry-run measurement stub returning 0 pages on non-web targets.
+Future<int> measurePublisherPages(String text) async {
+  return 0;
+}
+
+/// Stub for server-side verified address geocoding on non-web environments.
 Future<String?> geocodeAddress(String address) async {
   return null;
 }
 
+/// Generic Cloud Function callable bridge stub.
 Future<String> fnCall(String name, String dataStr) async {
   return '{}';
 }

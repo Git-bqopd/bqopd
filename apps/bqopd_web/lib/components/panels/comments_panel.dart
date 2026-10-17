@@ -52,7 +52,7 @@ String encodeGeohash(double lat, double lng, [int precision = 6]) {
   return buffer.toString();
 }
 
-/// Geocodes a location string and resolves coordinates with pre-calculated geohashes.
+/// Geocodes a location string using server-side verified endpoints and cached Firestore records.
 Future<Map<String, dynamic>?> resolveGeoForLocation(String locationStr) async {
   final cleanLoc = locationStr.trim();
   if (cleanLoc.isEmpty) return null;
@@ -60,16 +60,20 @@ Future<Map<String, dynamic>?> resolveGeoForLocation(String locationStr) async {
     final geoJson = await geocodeAddress(cleanLoc);
     if (geoJson != null && geoJson.isNotEmpty) {
       final decoded = jsonDecode(geoJson);
-      if (decoded != null && decoded['lat'] != null && decoded['lng'] != null) {
+      if (decoded is Map && decoded['lat'] != null && decoded['lng'] != null) {
         final double lat = (decoded['lat'] as num).toDouble();
         final double lng = (decoded['lng'] as num).toDouble();
-        final gh = encodeGeohash(lat, lng, 6);
+        final String gh = decoded['geohash']?.toString() ?? encodeGeohash(lat, lng, 6);
         return {
           'lat': lat,
           'lng': lng,
           'geohash': gh,
-          'geohash_3': gh.length >= 3 ? gh.substring(0, 3) : gh,
-          'geohash_2': gh.length >= 2 ? gh.substring(0, 2) : gh,
+          'geohash_3': decoded['geohash_3']?.toString() ?? (gh.length >= 3 ? gh.substring(0, 3) : gh),
+          'geohash_2': decoded['geohash_2']?.toString() ?? (gh.length >= 2 ? gh.substring(0, 2) : gh),
+          if (decoded['formatted'] != null) 'formatted': decoded['formatted'],
+          if (decoded['city'] != null) 'city': decoded['city'],
+          if (decoded['state'] != null) 'state': decoded['state'],
+          if (decoded['country'] != null) 'country': decoded['country'],
         };
       }
     }
@@ -1981,7 +1985,7 @@ class _CommentItemState extends State<CommentItem> {
     setState(() => _refreshingLocation = true);
     final uid = component.data['userId'];
     final username = _editAuthorHandle.isNotEmpty ? _editAuthorHandle : component.data['username'];
-    final pulled = await lookupLocationForAuthor(uid: uid, username: username);
+    final pulled = await lookupLocationForAuthor(uid: uid, username: handleOrUser(username));
     if (mounted) {
       setState(() {
         _refreshingLocation = false;
@@ -1993,6 +1997,10 @@ class _CommentItemState extends State<CommentItem> {
         }
       });
     }
+  }
+
+  String handleOrUser(dynamic val) {
+    return val?.toString() ?? '';
   }
 
   Future<void> _saveEditedComment() async {

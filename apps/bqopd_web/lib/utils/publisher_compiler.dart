@@ -5,7 +5,7 @@ import 'firebase_mocks.dart';
 import 'unsaved_fanzine_registry.dart';
 
 /// Centralized service to handle high-performance, client-side WebP layout
-/// compilation and asset synchronization for template pages.
+/// compilation, zero-pixel page measurement, and asset synchronization for template pages.
 /// Decouples business and rendering rules from the UI panel views.
 class PublisherCompiler {
   /// Compiles raw markdown text into three standardized WebP sizes using the
@@ -163,6 +163,19 @@ class PublisherCompiler {
       }
     }
     return updates;
+  }
+
+  /// Quickly evaluates the exact baseline-grid page count for markdown text
+  /// without allocating HTML5 canvas plates, downloading image assets, or encoding Base64 strings.
+  static Future<int> measurePageCount({
+    required String fanzineId,
+    required String fullText,
+  }) async {
+    final String compiledText = await resolveAndReplaceShortcodes(
+      fanzineId,
+      fullText,
+    );
+    return await measurePublisherPages(compiledText);
   }
 
   /// Compiles a long markdown document into multiple connected 2000x3200 pages.

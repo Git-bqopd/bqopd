@@ -1,11 +1,13 @@
 """Cloud Functions for Firebase (Python 3.14).
 
-Provides geospatial nearest-neighbor queries and maintenance routines
-for Radius Letters, alongside core platform tasks.
+Provides server-side verified address geocoding with Firestore caching,
+geospatial nearest-neighbor queries, map rendering, and maintenance
+routines for Radius Letters.
 """
 
 import math
 import json
+import re
 import urllib.request
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple
@@ -149,7 +151,6 @@ def clean_location_string(raw: str) -> str:
         (r"\bConn\b\.?", "CT"),
         (r"\bWash\b\.?", "WA"),
     ]
-    import re
     for pat, rep in replacements:
         loc = re.sub(pat, rep, loc, flags=re.IGNORECASE)
 
@@ -160,44 +161,212 @@ def clean_location_string(raw: str) -> str:
     return loc
 
 
-def geocode_location_http(location_str: str) -> Optional[Dict[str, Any]]:
-    """Geocodes a location string using OpenStreetMap Nominatim with clean fallback."""
-    clean_loc = clean_location_string(location_str)
+def resolve_or_cache_geocode(address: str, db: Optional[firestore.Client] = None) -> Optional[Dict[str, Any]]:
+    """Resolves coordinates using Firestore geocache, Google Maps API, and Nominatim fallback."""
+    clean_loc = clean_location_string(address)
     if not clean_loc:
         return None
 
+    if db is None:
+        db = firestore.client()
+
+    cache_key = re.sub(r"[^a-z0-9]+", "-", clean_loc.lower()).strip("-")
+    if not cache_key:
+        cache_key = "default"
+
+    geocache_col = (
+        db.collection("artifacts")
+        .document("bqopd")
+        .collection("public")
+        .document("data")
+        .collection("geocache")
+    )
+
+    # 1. Check Firestore cache first for instant sub-30ms returns
+    try:
+        cached_doc = geocache_col.document(cache_key).get()
+        if cached_doc.exists:
+            cached_data = cached_doc.to_dict() or {}
+            if cached_data.get("lat") is not None and cached_data.get("lng") is not None:
+                lat = float(cached_data["lat"])
+                lng = float(cached_data["lng"])
+                gh = cached_data.get("geohash") or encode_geohash(lat, lng, 6)
+                return {
+                    "lat": lat,
+                    "lng": lng,
+                    "geohash": gh,
+                    "geohash_3": cached_data.get("geohash_3") or gh[:3],
+                    "geohash_2": cached_data.get("geohash_2") or gh[:2],
+                    "formatted": cached_data.get("formatted") or clean_loc,
+                    "city": cached_data.get("city") or "",
+                    "state": cached_data.get("state") or "",
+                    "country": cached_data.get("country") or "",
+                    "cached": True,
+                }
+    except Exception as e:
+        print(f"[resolve_or_cache_geocode] Cache check exception for '{clean_loc}': {e}")
+
+    resolved: Optional[Dict[str, Any]] = None
+    api_key = "AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g"
+
+    # 2. Query Google Geocoding API server-side
     try:
         encoded = urllib.parse.quote(clean_loc)
-        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
+        url = f"https://maps.googleapis.com/maps/api/geocode/json?address={encoded}&key={api_key}"
         req = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "bqopd-fanzines-geocoder/1.0 (contact@bqopd.com)",
+                "User-Agent": "bqopd-server-geocoder/1.0",
                 "Accept": "application/json",
             },
         )
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            if isinstance(data, list) and len(data) > 0:
-                lat = float(data[0]["lat"])
-                lng = float(data[0]["lon"])
+        with urllib.request.urlopen(req, timeout=6) as response:
+            g_data = json.loads(response.read().decode("utf-8"))
+            if g_data.get("status") == "OK" and g_data.get("results"):
+                res0 = g_data["results"][0]
+                loc = res0["geometry"]["location"]
+                lat = float(loc["lat"])
+                lng = float(loc["lng"])
+                formatted = res0.get("formatted_address", clean_loc)
+
+                city = ""
+                state = ""
+                country = ""
+                for comp in res0.get("address_components", []):
+                    types = comp.get("types", [])
+                    if "locality" in types or "sublocality" in types or "postal_town" in types:
+                        if not city:
+                            city = comp.get("long_name") or comp.get("short_name", "")
+                    elif "administrative_area_level_1" in types:
+                        state = comp.get("short_name") or comp.get("long_name", "")
+                    elif "country" in types:
+                        country = comp.get("short_name") or comp.get("long_name", "")
+
                 gh = encode_geohash(lat, lng, 6)
-                return {
+                resolved = {
                     "lat": lat,
                     "lng": lng,
                     "geohash": gh,
                     "geohash_3": gh[:3],
                     "geohash_2": gh[:2],
-                    "formatted": data[0].get("display_name", clean_loc),
+                    "formatted": formatted,
+                    "city": city,
+                    "state": state,
+                    "country": country,
                 }
     except Exception as e:
-        print(f"[geocode_location_http] Failed for '{location_str}': {e}")
+        print(f"[resolve_or_cache_geocode] Google Geocoding API failed for '{clean_loc}': {e}")
+
+    # 3. Fallback to OpenStreetMap Nominatim with clean headers
+    if not resolved:
+        try:
+            encoded = urllib.parse.quote(clean_loc)
+            url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&addressdetails=1&limit=1"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": "bqopd-fanzines-geocoder/1.0 (contact@bqopd.com)",
+                    "Accept": "application/json",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=6) as response:
+                n_data = json.loads(response.read().decode("utf-8"))
+                if isinstance(n_data, list) and len(n_data) > 0:
+                    lat = float(n_data[0]["lat"])
+                    lng = float(n_data[0]["lon"])
+                    gh = encode_geohash(lat, lng, 6)
+                    addr_details = n_data[0].get("address", {})
+                    city = (
+                        addr_details.get("city")
+                        or addr_details.get("town")
+                        or addr_details.get("village")
+                        or ""
+                    )
+                    state = addr_details.get("state", "")
+                    country = addr_details.get("country", "")
+                    resolved = {
+                        "lat": lat,
+                        "lng": lng,
+                        "geohash": gh,
+                        "geohash_3": gh[:3],
+                        "geohash_2": gh[:2],
+                        "formatted": n_data[0].get("display_name", clean_loc),
+                        "city": city,
+                        "state": state,
+                        "country": country,
+                    }
+        except Exception as e:
+            print(f"[resolve_or_cache_geocode] Nominatim fallback failed for '{clean_loc}': {e}")
+
+    # 4. Save to Firestore geocache if coordinates resolved
+    if resolved:
+        try:
+            doc_data = {
+                **resolved,
+                "query": address,
+                "normalized": clean_loc,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
+            geocache_col.document(cache_key).set(doc_data, merge=True)
+        except Exception as e:
+            print(f"[resolve_or_cache_geocode] Failed saving cache for '{cache_key}': {e}")
+
+        resolved["cached"] = False
+        return resolved
+
     return None
+
+
+def geocode_location_http(location_str: str) -> Optional[Dict[str, Any]]:
+    """Backward-compatible helper redirecting to resolve_or_cache_geocode."""
+    return resolve_or_cache_geocode(location_str)
 
 
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables
 # ---------------------------------------------------------------------------
+
+@https_fn.on_call()
+def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    """Server-side verified address geocoding with Firestore caching.
+
+    Expected payload:
+      - address (str): Street address, city, state, or location string.
+    Returns:
+      {
+        "status": "success",
+        "lat": float,
+        "lng": float,
+        "formatted": str,
+        "city": str,
+        "state": str,
+        "country": str,
+        "geohash": str,
+        "geohash_3": str,
+        "geohash_2": str,
+        "cached": bool
+      }
+    """
+    data = req.data or {}
+    raw_address = data.get("address", "")
+    if not isinstance(raw_address, str) or not raw_address.strip():
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "An 'address' string parameter is required.",
+        )
+
+    res = resolve_or_cache_geocode(raw_address.strip())
+    if res:
+        return {
+            "status": "success",
+            **res,
+        }
+
+    return {
+        "status": "error",
+        "message": f"Could not resolve geographic coordinates for '{raw_address}'.",
+    }
+
 
 @https_fn.on_call()
 def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -206,7 +375,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
     Expected payload:
       - lat (float): Target center latitude.
       - lng (float): Target center longitude.
-      - limit (int, optional): Candidate buffer size (e.g. 20 for 4 pages, default 20, max 120).
+      - limit (int, optional): Candidate buffer size (e.g. 24 for 4 pages, default 20, max 160).
       - max_radius_miles (float, optional): Maximum radius in miles to consider.
     """
     data = req.data or {}
@@ -220,11 +389,17 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
         )
 
     limit = int(data.get("limit", 20))
-    limit = max(1, min(limit, 120))  # Safeguard bounded candidate limit
+    limit = max(1, min(limit, 160))  # Safeguard bounded candidate limit
     max_radius = float(data.get("max_radius_miles", 5000.0))
 
     db = firestore.client()
-    comments_col = db.collection("artifacts").document("bqopd").collection("public").document("data").collection("comments")
+    comments_col = (
+        db.collection("artifacts")
+        .document("bqopd")
+        .collection("public")
+        .document("data")
+        .collection("comments")
+    )
 
     center_gh = encode_geohash(target_lat, target_lng, 6)
     seen_ids = set()
@@ -232,7 +407,6 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
     # Ring 1: Try precision 3 cells (~156km x 156km each; 3x3 grid covers ~300 mi across)
     p3_neighbors = get_geohash_neighbors(center_gh[:3])
-    # Firestore 'in' query accepts up to 30 items
     p3_docs = comments_col.where(
         filter=firestore.FieldFilter("geo.geohash_3", "in", p3_neighbors)
     ).stream()
@@ -274,12 +448,13 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
                     doc_data["_calculatedDistanceMiles"] = round(dist, 2)
                     candidate_letters.append(doc_data)
 
-    # Fallback: If still under candidate limit (e.g. legacy letters not yet backfilled with geo),
-    # query un-migrated letter records to ensure complete coverage.
+    # Fallback: If still under candidate limit, query un-migrated letter records with cached resolver
     if len(candidate_letters) < limit:
-        fallback_query = comments_col.where(
-            filter=firestore.FieldFilter("sourceType", "==", "letter_column")
-        ).limit(100).stream()
+        fallback_query = (
+            comments_col.where(filter=firestore.FieldFilter("sourceType", "==", "letter_column"))
+            .limit(100)
+            .stream()
+        )
 
         for doc in fallback_query:
             doc_id = doc.id
@@ -291,13 +466,12 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
             l_lat = geo.get("lat")
             l_lng = geo.get("lng")
 
-            # If document lacks geo, check if location string is available and quick-geocode
+            # If document lacks geo, resolve via cached server geocoder
             if (l_lat is None or l_lng is None) and doc_data.get("location"):
-                geocoded = geocode_location_http(str(doc_data["location"]))
+                geocoded = resolve_or_cache_geocode(str(doc_data["location"]), db=db)
                 if geocoded:
                     l_lat = geocoded["lat"]
                     l_lng = geocoded["lng"]
-                    # Silently patch document with newly resolved geo for future queries
                     try:
                         doc.reference.update({"geo": geocoded})
                     except Exception:
@@ -391,7 +565,13 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
     with lat, lng, and geohashes so future nearest-neighbor searches are instantaneous.
     """
     db = firestore.client()
-    comments_col = db.collection("artifacts").document("bqopd").collection("public").document("data").collection("comments")
+    comments_col = (
+        db.collection("artifacts")
+        .document("bqopd")
+        .collection("public")
+        .document("data")
+        .collection("comments")
+    )
 
     # Fetch letters
     docs = comments_col.where(
@@ -431,7 +611,7 @@ def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
         cleaned = clean_location_string(raw_loc)
         if cleaned not in cache:
-            cache[cleaned] = geocode_location_http(cleaned)
+            cache[cleaned] = resolve_or_cache_geocode(cleaned, db=db)
 
         geo_meta = cache[cleaned]
         if geo_meta:

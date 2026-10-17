@@ -143,15 +143,18 @@ class _EntitiesColumnPanelHeaderState extends State<EntitiesColumnPanelHeader> {
         final label = place['label']!;
 
         final String? geocodeJson = await geocodeAddress(address);
-        if (geocodeJson != null) {
+        if (geocodeJson != null && geocodeJson.isNotEmpty) {
           try {
-            final Map<String, dynamic> coords = jsonDecode(geocodeJson);
-            if (coords.containsKey('lat') && coords.containsKey('lng')) {
+            final dynamic decoded = jsonDecode(geocodeJson);
+            if (decoded is Map && decoded['lat'] != null && decoded['lng'] != null) {
+              final double lat = (decoded['lat'] as num).toDouble();
+              final double lng = (decoded['lng'] as num).toDouble();
+              final String subtitle = decoded['formatted']?.toString() ?? address;
               resolvedMarkers.add({
-                'lat': (coords['lat'] as num).toDouble(),
-                'lng': (coords['lng'] as num).toDouble(),
+                'lat': lat,
+                'lng': lng,
                 'title': label,
-                'subtitle': address,
+                'subtitle': subtitle,
               });
             }
           } catch (e) {

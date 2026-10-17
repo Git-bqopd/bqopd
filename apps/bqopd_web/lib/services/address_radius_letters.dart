@@ -154,17 +154,24 @@ class AddressRadiusLetters {
     return loc;
   }
 
-  static Future<Map<String, double>?> _geocodeTarget(String targetAddress) async {
+  /// Resolves the center target address into geographic coordinates using
+  /// the server-verified Cloud Function endpoint with Firestore geocache caching.
+  static Future<Map<String, dynamic>?> _geocodeTarget(String targetAddress) async {
     final cleanAddr = targetAddress.trim();
     if (cleanAddr.isEmpty) return null;
 
     final targetGeoJson = await geocodeAddress(cleanAddr);
     if (targetGeoJson != null && targetGeoJson.isNotEmpty) {
       final decoded = jsonDecode(targetGeoJson);
-      if (decoded != null && decoded['lat'] != null && decoded['lng'] != null) {
+      if (decoded is Map && decoded['lat'] != null && decoded['lng'] != null) {
         return {
           'lat': (decoded['lat'] as num).toDouble(),
           'lng': (decoded['lng'] as num).toDouble(),
+          'formatted': decoded['formatted']?.toString() ?? cleanAddr,
+          'city': decoded['city']?.toString() ?? '',
+          'state': decoded['state']?.toString() ?? '',
+          'country': decoded['country']?.toString() ?? '',
+          'geohash': decoded['geohash']?.toString() ?? '',
         };
       }
     }
@@ -207,8 +214,18 @@ class AddressRadiusLetters {
       double maxRadius,
       ) async {
     print('[AddressRadiusLetters] Running fallback bounded letters query...');
-    final commentsRes = await fsQuery('artifacts/bqopd/public/data/comments', '', '', '', '');
-    final List decodedComments = jsonDecode(commentsRes) as List;
+    final commentsRes = await fsQuery(
+      'artifacts/bqopd/public/data/comments',
+      'sourceType',
+      '==',
+      jsonEncode('letter_column'),
+      '',
+    );
+    List decodedComments = jsonDecode(commentsRes) as List;
+    if (decodedComments.isEmpty) {
+      final fallbackRes = await fsQuery('artifacts/bqopd/public/data/comments', '', '', '', '');
+      decodedComments = jsonDecode(fallbackRes) as List;
+    }
 
     final List<Map<String, dynamic>> matchingLetters = [];
     final Map<String, Map<String, double>?> locationCache = {};
@@ -240,7 +257,7 @@ class AddressRadiusLetters {
             final geoJson = await geocodeAddress(cleanLoc);
             if (geoJson != null && geoJson.isNotEmpty) {
               final d = jsonDecode(geoJson);
-              if (d != null && d['lat'] != null && d['lng'] != null) {
+              if (d is Map && d['lat'] != null && d['lng'] != null) {
                 locationCache[cleanLoc] = {
                   'lat': (d['lat'] as num).toDouble(),
                   'lng': (d['lng'] as num).toDouble(),
@@ -315,7 +332,7 @@ class AddressRadiusLetters {
   }
 
   /// Evaluates exact canvas page count for a set of letters by testing the layout
-  /// in its final chronological publication sequence.
+  /// in its final chronological publication sequence using zero-pixel measurement.
   static Future<int> _testRenderPageCount(List<_SelectedRadiusLetter> letters) async {
     if (letters.isEmpty) return 0;
     final copy = List<_SelectedRadiusLetter>.from(letters);
@@ -326,9 +343,7 @@ class AddressRadiusLetters {
     });
     final testMarkdown = copy.map((l) => l.markdown).join('\n\n').trim();
     try {
-      final testJson = await renderPublisherPages(testMarkdown);
-      final List testPages = jsonDecode(testJson) as List;
-      return testPages.length;
+      return await measurePublisherPages(testMarkdown);
     } catch (e) {
       print('[_testRenderPageCount Error] $e');
       return 0;
@@ -362,9 +377,10 @@ class AddressRadiusLetters {
       throw Exception('Unable to geocode "$cleanTargetAddr". Please check the address or city name.');
     }
 
-    final double targetLat = targetCoords['lat']!;
-    final double targetLng = targetCoords['lng']!;
-    print('[AddressRadiusLetters] Target coordinates: $targetLat, $targetLng');
+    final double targetLat = targetCoords['lat'] as double;
+    final double targetLng = targetCoords['lng'] as double;
+    final String formattedCenter = targetCoords['formatted'] as String? ?? cleanTargetAddr;
+    print('[AddressRadiusLetters] Target coordinates: $targetLat, $targetLng ($formattedCenter)');
 
     // 2. Fetch nearest candidate letters (broad pool to guarantee full page coverage)
     final int candidateLimit = (contentPagesCount * 6).clamp(32, 160);
@@ -381,7 +397,6 @@ class AddressRadiusLetters {
       throw Exception('No historical letters found near $cleanTargetAddr.');
     }
 
-    // 3. Resolve metadata concurrently in parallel
     print('[AddressRadiusLetters] Found ${candidateLetters.length} candidate letters. Resolving metadata in parallel...');
     onProgress?.call('Resolving letter metadata...');
 
@@ -440,7 +455,7 @@ class AddressRadiusLetters {
 
     // Phase 2: Exact Two-Way Canvas Convergence
     int renderedPages = await _testRenderPageCount(selectedLetters);
-    print('[AddressRadiusLetters] Initial canvas test: $renderedPages pages (Target: $contentPagesCount)');
+    print('[AddressRadiusLetters] Initial measurement test: $renderedPages pages (Target: $contentPagesCount)');
 
     // Part A: Grow upwards if under-packed
     while (renderedPages < contentPagesCount && candidateIndex < allCandidates.length) {
@@ -523,7 +538,7 @@ class AddressRadiusLetters {
       final mapCoverConfig = {
         'title': 'Letters near $cleanTargetAddr',
         'center': {
-          'address': cleanTargetAddr,
+          'address': formattedCenter,
           'lat': targetLat,
           'lng': targetLng,
         },
