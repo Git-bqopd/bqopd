@@ -283,11 +283,14 @@ class AddressRadiusLetters {
     return matchingLetters.take(limit).toList();
   }
 
-  /// Calculates estimated height structured around the strict 42px baseline grid.
+  /// Calculates estimated height structured around the strict 42px baseline grid
+  /// using natural aspect ratios for images rather than a fixed height.
   static double estimateMarkdownHeight(String markdown) {
     const double rowHeight = 42.0;
+    const double colWidth = PublisherLayoutEngine.kColumnWidth;
     double totalHeight = 0.0;
     final lines = markdown.split('\n');
+
     for (final rawLine in lines) {
       final line = rawLine.trim();
       if (line.isEmpty) {
@@ -297,7 +300,25 @@ class AddressRadiusLetters {
       if (line.startsWith('{{TEMPLATE')) {
         totalHeight += 29.0 * rowHeight; // ~1218px
       } else if (line.startsWith('{{IMAGE')) {
-        totalHeight += 12.0 * rowHeight; // ~504px
+        // Extract optional dimensions or calculate based on natural 5:8 aspect ratio
+        double drawHeight = colWidth / 0.625; // Default ~972.8px
+        final dimMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch(line);
+        final ratioMatch = RegExp(r'(?:ratio|aspectRatio)=(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(line);
+        if (dimMatch != null) {
+          final w = double.tryParse(dimMatch.group(1) ?? '') ?? 0.0;
+          final h = double.tryParse(dimMatch.group(2) ?? '') ?? 0.0;
+          if (w > 0 && h > 0) {
+            drawHeight = colWidth * (h / w);
+          }
+        } else if (ratioMatch != null) {
+          final r = double.tryParse(ratioMatch.group(1) ?? '') ?? 0.0;
+          if (r > 0) {
+            drawHeight = colWidth / r;
+          }
+        }
+        const double minMarginBottom = 14.0;
+        final int rowsNeeded = ((drawHeight + minMarginBottom) / rowHeight).ceil();
+        totalHeight += rowsNeeded * rowHeight;
       } else if (line.startsWith('### ')) {
         totalHeight += 2.0 * rowHeight; // 84px
       } else if (line.startsWith('## ')) {
@@ -315,6 +336,90 @@ class AddressRadiusLetters {
     }
     totalHeight += rowHeight;
     return totalHeight;
+  }
+
+  /// Builds a Markdown representation of a historical letter, embedding the
+  /// natural dimensions or aspect ratio for both the fanzine cover and the page scan.
+  static String buildLetterMarkdown(
+      HistoricalLetterEntry entry, {
+        Map<String, dynamic>? coverMetadata,
+        Map<String, dynamic>? pageMetadata,
+      }) {
+    final buffer = StringBuffer();
+
+    // 1. Cover Image with dimensions or aspect ratio
+    if (entry.coverImageUrl != null && entry.coverImageUrl!.isNotEmpty) {
+      final int? w = coverMetadata?['width'] as int?;
+      final int? h = coverMetadata?['height'] as int?;
+      final num? ratio = coverMetadata?['aspectRatio'] as num?;
+
+      if (w != null && h != null && w > 0 && h > 0) {
+        buffer.writeln('{{IMAGE: ${entry.coverImageUrl!} | ${w}x${h}}}');
+      } else if (ratio != null && ratio > 0) {
+        buffer.writeln('{{IMAGE: ${entry.coverImageUrl!} | ratio=${ratio.toDouble().toStringAsFixed(4)}}}');
+      } else {
+        buffer.writeln('{{IMAGE: ${entry.coverImageUrl!} | ratio=0.625}}');
+      }
+      buffer.writeln();
+    }
+
+    // 2. Publication Title & Volume/Issue
+    buffer.writeln(entry.fanzineTitle);
+    final volIssueParts = <String>[];
+    if (entry.volume != null && entry.volume!.isNotEmpty) {
+      volIssueParts.add('Volume ${entry.volume!}');
+    }
+    if (entry.issue != null && entry.issue!.isNotEmpty) {
+      volIssueParts.add('Issue ${entry.issue!}');
+    }
+    if (volIssueParts.isNotEmpty) {
+      buffer.writeln(volIssueParts.join(', '));
+    }
+
+    // 3. Published Date
+    if (entry.publishedDate != null && entry.publishedDate!.isNotEmpty) {
+      buffer.writeln(entry.publishedDate!);
+    }
+    buffer.writeln();
+
+    // 4. Letter Page Scan Image with dimensions or aspect ratio
+    if (entry.pageImageUrl != null && entry.pageImageUrl!.isNotEmpty) {
+      final int? w = pageMetadata?['width'] as int?;
+      final int? h = pageMetadata?['height'] as int?;
+      final num? ratio = pageMetadata?['aspectRatio'] as num?;
+
+      if (w != null && h != null && w > 0 && h > 0) {
+        buffer.writeln('{{IMAGE: ${entry.pageImageUrl!} | ${w}x${h}}}');
+      } else if (ratio != null && ratio > 0) {
+        buffer.writeln('{{IMAGE: ${entry.pageImageUrl!} | ratio=${ratio.toDouble().toStringAsFixed(4)}}}');
+      } else {
+        buffer.writeln('{{IMAGE: ${entry.pageImageUrl!} | ratio=0.625}}');
+      }
+      buffer.writeln();
+    }
+
+    // 5. Letter Content
+    buffer.writeln(entry.letterText);
+    buffer.writeln();
+
+    // 6. Author and Location sign-off
+    final cleanTextLower = entry.letterText.toLowerCase();
+    final bool hasAuthor = entry.authorName != null &&
+        entry.authorName!.isNotEmpty &&
+        cleanTextLower.contains(entry.authorName!.toLowerCase());
+    final bool hasLocation = entry.location != null &&
+        entry.location!.isNotEmpty &&
+        cleanTextLower.contains(entry.location!.toLowerCase());
+
+    if (!hasAuthor && entry.authorName != null && entry.authorName!.isNotEmpty) {
+      buffer.writeln(entry.authorName!);
+    }
+    if (!hasLocation && entry.location != null && entry.location!.isNotEmpty) {
+      buffer.writeln(entry.location!);
+    }
+    buffer.writeln();
+
+    return buffer.toString();
   }
 
   /// Evaluates exact canvas page count for a set of letters by testing the layout
@@ -341,10 +446,11 @@ class AddressRadiusLetters {
     }
   }
 
-  /// Resolves all candidate letter metadata with internal caching for fanzines and image assets.
+  /// Resolves all candidate letter metadata and dimension metadata with internal caching for fanzines and image assets.
   static Future<List<HistoricalLetterEntry>> _resolveLetterEntriesBatch(
-      List<Map<String, dynamic>> rawComments,
-      ) async {
+      List<Map<String, dynamic>> rawComments, {
+        Map<String, Map<String, dynamic>>? imageMetadataCache,
+      }) async {
     final Map<String, Map<String, dynamic>> fanzineCache = {};
     final Map<String, String> imageCache = {};
     final Set<String> fzIdsToFetch = {};
@@ -386,6 +492,9 @@ class AddressRadiusLetters {
             final doc = jsonDecode(imgRes);
             if (doc['exists'] == true) {
               final d = doc['data'] as Map<String, dynamic>? ?? {};
+              if (imageMetadataCache != null) {
+                imageMetadataCache[imgId] = d;
+              }
               final url = d['fileUrl'] ??
                   d['listUrl'] ??
                   d['gridUrl'] ??
@@ -519,15 +628,22 @@ class AddressRadiusLetters {
     print(
         '[AddressRadiusLetters] Found ${candidateLetters.length} candidate letters. Resolving metadata in parallel...');
     onProgress?.call('Resolving letter metadata...');
+    final Map<String, Map<String, dynamic>> imageMetadataCache = {};
     final resolvedEntries =
-    await _resolveLetterEntriesBatch(candidateLetters);
+    await _resolveLetterEntriesBatch(candidateLetters, imageMetadataCache: imageMetadataCache);
 
     // Build complete pool of candidate radius letters ordered by proximity (closest first)
     final List<_SelectedRadiusLetter> allCandidates = [];
     for (int i = 0; i < resolvedEntries.length; i++) {
       final entry = resolvedEntries[i];
       final raw = candidateLetters[i];
-      final letterMd = entry.toPublisherMarkdown();
+      final pageMeta = entry.imageId != null ? imageMetadataCache[entry.imageId] : null;
+
+      // Construct markdown preserving natural dimensions and aspect ratios
+      final letterMd = buildLetterMarkdown(
+        entry,
+        pageMetadata: pageMeta,
+      );
       final dist =
           (raw['_calculatedDistanceMiles'] as num?)?.toDouble() ?? 0.0;
       final pubDate = parseHistoricalDate(

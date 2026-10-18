@@ -61,23 +61,24 @@ class PageTemplateRegistry {
       syntaxExample: '{{COLUMN_BREAK}} or [[COLUMN_BREAK]]',
     ),
 
-    // Single Inline Image
+    // Single Inline Image with dynamic aspect ratio preservation
     'image': PageBlockDefinition(
       id: 'image',
       name: 'Column Image Asset',
-      description: 'Full-width column image scaled to match aspect ratio.',
-      syntaxExample: '{{IMAGE: https://example.com/scan.jpg}} or {{img01}}',
+      description: 'Full-width column image scaled to match its natural aspect ratio.',
+      syntaxExample: '{{IMAGE: https://example.com/scan.jpg | ratio=0.625}} or {{IMAGE: url | 608x972}}',
       requiredFields: ['url'],
+      optionalFields: ['width', 'height', 'aspectRatio', 'ratio'],
     ),
 
     // Composite Block: Template 1 (Image + Caption)
     'template_1': PageBlockDefinition(
       id: 'template_1',
       name: 'Composite Image & Caption',
-      description: 'Embedded image with auto-wrapping caption text and optional row offset.',
-      syntaxExample: '{{TEMPLATE_1: url | row=5 | Caption text}} or {{1|img01|Caption}}',
+      description: 'Embedded image scaled to natural aspect ratio with auto-wrapping caption text and optional row offset.',
+      syntaxExample: '{{TEMPLATE_1: url | row=5 | 608x972 | Caption text}} or {{1|img01|Caption}}',
       requiredFields: ['url', 'caption'],
-      optionalFields: ['row'],
+      optionalFields: ['row', 'width', 'height', 'aspectRatio', 'ratio'],
     ),
   };
 

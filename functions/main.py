@@ -64,6 +64,7 @@ MAX_Y = 3120
 COLUMNS_X = [33, 696, 1359]
 COL_WIDTH = 608
 USABLE_COL_HEIGHT = 3087
+STANDARD_ASPECT_RATIO = 0.625
 
 # Directory for bundled project TrueType fonts
 FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
@@ -611,6 +612,23 @@ def download_remote_image(url: str, timeout: int = 6) -> Optional[Image.Image]:
     return None
 
 
+def calculate_image_draw_height(
+    width: Optional[float] = None,
+    height: Optional[float] = None,
+    aspect_ratio: Optional[float] = None,
+    img_obj: Optional[Image.Image] = None,
+    fallback_aspect_ratio: float = STANDARD_ASPECT_RATIO,
+) -> int:
+  """Calculates proportional height of an image scaled to COL_WIDTH without vertical compression."""
+  if aspect_ratio is not None and aspect_ratio > 0:
+    return int(round(COL_WIDTH / aspect_ratio))
+  if width is not None and height is not None and width > 0 and height > 0:
+    return int(round(COL_WIDTH * (height / width)))
+  if img_obj and img_obj.width > 0 and img_obj.height > 0:
+    return int(round(COL_WIDTH * (img_obj.height / float(img_obj.width))))
+  return int(round(COL_WIDTH / fallback_aspect_ratio))
+
+
 def upload_three_webp_scales(
     canvas: Image.Image,
     bucket: Any,
@@ -710,9 +728,14 @@ def rasterize_display_sheet(sheet: Dict[str, Any]) -> Tuple[Image.Image, str]:
       x = int(float(cmd.get("x", 0.0)))
       y = int(float(cmd.get("y", 0.0)))
       w = int(float(cmd.get("width", COL_WIDTH)))
-      h = int(float(cmd.get("height", 400)))
+      h_cmd = float(cmd.get("height", 0.0) or 0.0)
 
       img_obj = download_remote_image(url) if url else None
+      if h_cmd > 0:
+        h = int(h_cmd)
+      else:
+        h = calculate_image_draw_height(img_obj=img_obj)
+
       if img_obj:
         resized = img_obj.resize((w, h), Image.Resampling.LANCZOS)
         canvas.paste(resized, (x, y))
@@ -776,6 +799,49 @@ def rasterize_display_list(
   return results
 
 
+def _extract_image_dimensions(raw_params: str) -> Dict[str, Optional[float]]:
+  """Extracts optional width, height, and aspect ratio from image parameter tokens."""
+  width = None
+  height = None
+  ratio = None
+
+  dim_match = re.search(r"(\d+)\s*[xX]\s*(\d+)", raw_params)
+  if dim_match:
+    try:
+      width = float(dim_match.group(1))
+      height = float(dim_match.group(2))
+    except (ValueError, TypeError):
+      pass
+
+  w_match = re.search(r"width=(\d+(?:\.\d+)?)", raw_params, re.IGNORECASE)
+  if w_match:
+    try:
+      width = float(w_match.group(1))
+    except (ValueError, TypeError):
+      pass
+
+  h_match = re.search(r"height=(\d+(?:\.\d+)?)", raw_params, re.IGNORECASE)
+  if h_match:
+    try:
+      height = float(h_match.group(1))
+    except (ValueError, TypeError):
+      pass
+
+  r_match = re.search(
+      r"(?:ratio|aspectRatio)=(\d+(?:\.\d+)?)", raw_params, re.IGNORECASE
+  )
+  if r_match:
+    try:
+      ratio = float(r_match.group(1))
+    except (ValueError, TypeError):
+      pass
+
+  if ratio is None and width and height and height > 0:
+    ratio = width / height
+
+  return {"width": width, "height": height, "aspectRatio": ratio}
+
+
 def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
   """Parses markdown into typed blocks for the 3-column publisher layout engine."""
   blocks: List[Dict[str, Any]] = []
@@ -787,8 +853,8 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
     if not p_text:
       return
 
-    image_regex = r"^\{\{IMAGE(?::\s*(.*?))?\}\}$"
-    template_regex = r"^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$"
+    image_regex = r"^(?:\{\{|\[\[)IMAGE(?::\s*(.*?))?(?:\}\}|\]\])$"
+    template_regex = r"^(?:\{\{|\[\[)TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)(?:\}\}|\]\])$"
     col_break_regex = r"^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$"
 
     m_img = re.match(image_regex, p_text, flags=re.IGNORECASE)
@@ -796,9 +862,19 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
     m_cb = re.match(col_break_regex, p_text, flags=re.IGNORECASE)
 
     if m_img:
+      raw_arg = m_img.group(1).strip() if m_img.group(1) else ""
+      parts = raw_arg.split("|")
+      url = parts[0].strip()
+      raw_params = "|".join(parts[1:]) if len(parts) > 1 else ""
+      dims = _extract_image_dimensions(raw_params)
+
       blocks.append({
           "type": "image",
-          "url": m_img.group(1).strip() if m_img.group(1) else "",
+          "url": url,
+          "raw": p_text,
+          "width": dims["width"],
+          "height": dims["height"],
+          "aspectRatio": dims["aspectRatio"],
       })
     elif m_tmpl:
       t_num = int(m_tmpl.group(1))
@@ -813,6 +889,8 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
         target_row = int(row_match.group(1))
         caption_text = row_match.group(2).strip()
 
+      dims = _extract_image_dimensions(rest)
+
       blocks.append({"type": "column_break"})
       blocks.append({
           "type": "template_block",
@@ -820,6 +898,10 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
           "url": t_url,
           "content": caption_text,
           "targetRow": target_row,
+          "raw": p_text,
+          "width": dims["width"],
+          "height": dims["height"],
+          "aspectRatio": dims["aspectRatio"],
       })
       blocks.append({"type": "column_break"})
     elif m_cb or p_text.lower() in ("column-break", "column_break"):
@@ -911,9 +993,12 @@ def render_publisher_pages_internal(
     if b_type == "image":
       target_url = block.get("url", "")
       img_obj = download_remote_image(target_url) if target_url else None
-      draw_height = 400
-      if img_obj and img_obj.width > 0 and img_obj.height > 0:
-        draw_height = int(COL_WIDTH * (img_obj.height / float(img_obj.width)))
+      draw_height = calculate_image_draw_height(
+          width=block.get("width"),
+          height=block.get("height"),
+          aspect_ratio=block.get("aspectRatio"),
+          img_obj=img_obj,
+      )
 
       min_margin_bottom = 14
       rows_needed = math.ceil(
@@ -951,7 +1036,7 @@ def render_publisher_pages_internal(
         )
 
       current_y += float(total_image_block_height)
-      current_page_text_parts.append(f"{{{{IMAGE: {target_url}}}}}")
+      current_page_text_parts.append(block.get("raw") or f"{{{{IMAGE: {target_url}}}}}")
 
     elif b_type == "template_block" and block.get("templateNum") == 1:
       target_url = block.get("url", "")
@@ -959,9 +1044,12 @@ def render_publisher_pages_internal(
       target_row = block.get("targetRow")
 
       img_obj = download_remote_image(target_url) if target_url else None
-      img_height = 400
-      if img_obj and img_obj.width > 0 and img_obj.height > 0:
-        img_height = int(COL_WIDTH * (img_obj.height / float(img_obj.width)))
+      img_height = calculate_image_draw_height(
+          width=block.get("width"),
+          height=block.get("height"),
+          aspect_ratio=block.get("aspectRatio"),
+          img_obj=img_obj,
+      )
 
       font_caption = get_font("Arimo", 24, bold=False)
       lines_to_draw = wrap_text_words(caption, font_caption, COL_WIDTH)
@@ -1030,7 +1118,7 @@ def render_publisher_pages_internal(
         current_y += float(total_block_height)
 
       current_page_text_parts.append(
-          f"{{{{TEMPLATE_1: {target_url} | {caption}}}}}"
+          block.get("raw") or f"{{{{TEMPLATE_1: {target_url} | {caption}}}}}"
       )
 
     else:

@@ -23,6 +23,9 @@ class LayoutBlock {
   final String url;
   final int? templateNum;
   final int? targetRow;
+  final double? width;
+  final double? height;
+  final double? aspectRatio;
 
   const LayoutBlock({
     required this.type,
@@ -31,6 +34,9 @@ class LayoutBlock {
     this.url = '',
     this.templateNum,
     this.targetRow,
+    this.width,
+    this.height,
+    this.aspectRatio,
   });
 }
 
@@ -62,11 +68,31 @@ class PublisherLayoutEngine {
   /// Total usable vertical pixels available per column (3120 - 33 = 3087).
   static const double kUsableColumnHeight = 3087.0;
 
+  /// Standard publishing page aspect ratio (5:8 = 0.625).
+  static const double kStandardPageAspectRatio = 0.625;
+
   /// Snaps a vertical [y] coordinate to the nearest subsequent baseline grid row.
   static double snapToGrid(double y) {
     if (y <= kGridTop) return kGridTop;
     final int rows = ((y - kGridTop) / kRowHeight).ceil();
     return kGridTop + (rows * kRowHeight);
+  }
+
+  /// Calculates the proportional height of an image scaled to fill [kColumnWidth],
+  /// preserving its natural aspect ratio.
+  static double calculateImageDrawHeight({
+    double? width,
+    double? height,
+    double? aspectRatio,
+    double fallbackAspectRatio = kStandardPageAspectRatio,
+  }) {
+    if (aspectRatio != null && aspectRatio > 0) {
+      return kColumnWidth / aspectRatio;
+    }
+    if (width != null && height != null && width > 0 && height > 0) {
+      return kColumnWidth * (height / width);
+    }
+    return kColumnWidth / fallbackAspectRatio;
   }
 
   /// Generates the standard physical page chrome (outer 11px border frame
@@ -102,14 +128,48 @@ class PublisherLayoutEngine {
     ];
   }
 
+  /// Helper to extract optional width, height, and aspect ratio from image parameter tokens.
+  static Map<String, double?> _extractImageDimensions(String rawParams) {
+    double? width;
+    double? height;
+    double? ratio;
+
+    final dimMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch(rawParams);
+    if (dimMatch != null) {
+      width = double.tryParse(dimMatch.group(1) ?? '');
+      height = double.tryParse(dimMatch.group(2) ?? '');
+    }
+
+    final wMatch = RegExp(r'width=(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(rawParams);
+    if (wMatch != null) {
+      width = double.tryParse(wMatch.group(1) ?? '');
+    }
+
+    final hMatch = RegExp(r'height=(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(rawParams);
+    if (hMatch != null) {
+      height = double.tryParse(hMatch.group(1) ?? '');
+    }
+
+    final rMatch = RegExp(r'(?:ratio|aspectRatio)=(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(rawParams);
+    if (rMatch != null) {
+      ratio = double.tryParse(rMatch.group(1) ?? '');
+    }
+
+    if (ratio == null && width != null && height != null && height > 0) {
+      ratio = width / height;
+    }
+
+    return {'width': width, 'height': height, 'aspectRatio': ratio};
+  }
+
   /// Parses continuous raw markdown into structured [LayoutBlock] tokens.
   /// Identifies headings, bullets, images, composite templates, and column breaks.
   static List<LayoutBlock> parseMarkdownToBlocks(String rawText) {
     final List<LayoutBlock> blocks = [];
     String currentParagraph = '';
 
-    final imageRegex = RegExp(r'^\{\{IMAGE(?::\s*(.*?))?\}\}$', caseSensitive: false);
-    final templateRegex = RegExp(r'^\{\{TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)\}\}$', caseSensitive: false);
+    final imageRegex = RegExp(r'^(?:\{\{|\[\[)IMAGE(?::\s*(.*?))?(?:\}\}|\]\])$', caseSensitive: false);
+    final templateRegex = RegExp(r'^(?:\{\{|\[\[)TEMPLATE_(\d+):\s*([^|]+)\s*\|\s*(.*?)(?:\}\}|\]\])$', caseSensitive: false);
     final colBreakRegex = RegExp(r'^(?:\{\{|\[\[)COLUMN_BREAK(?:\}\}|\]\])$', caseSensitive: false);
     final rowParamRegex = RegExp(r'^row=(\d+)\s*\|\s*(.*)$', caseSensitive: false);
 
@@ -122,11 +182,19 @@ class PublisherLayoutEngine {
       final mCb = colBreakRegex.firstMatch(pText);
 
       if (mImg != null) {
-        final url = mImg.group(1)?.trim() ?? '';
+        final rawArg = mImg.group(1)?.trim() ?? '';
+        final parts = rawArg.split('|');
+        final url = parts[0].trim();
+        final rawParams = parts.length > 1 ? parts.sublist(1).join('|') : '';
+        final dims = _extractImageDimensions(rawParams);
+
         blocks.add(LayoutBlock(
           type: LayoutBlockType.image,
           url: url,
           raw: pText,
+          width: dims['width'],
+          height: dims['height'],
+          aspectRatio: dims['aspectRatio'],
         ));
       } else if (mTmpl != null) {
         final tNum = int.tryParse(mTmpl.group(1) ?? '1') ?? 1;
@@ -141,6 +209,8 @@ class PublisherLayoutEngine {
           captionText = rowMatch.group(2)?.trim() ?? '';
         }
 
+        final dims = _extractImageDimensions(rest);
+
         blocks.add(const LayoutBlock(type: LayoutBlockType.columnBreak));
         blocks.add(LayoutBlock(
           type: LayoutBlockType.templateBlock,
@@ -149,6 +219,9 @@ class PublisherLayoutEngine {
           content: captionText,
           targetRow: targetRow,
           raw: pText,
+          width: dims['width'],
+          height: dims['height'],
+          aspectRatio: dims['aspectRatio'],
         ));
         blocks.add(const LayoutBlock(type: LayoutBlockType.columnBreak));
       } else if (mCb != null ||
@@ -305,7 +378,11 @@ class PublisherLayoutEngine {
       // 2. Standalone Inline Image Block
       if (block.type == LayoutBlockType.image) {
         final targetUrl = block.url;
-        const double drawHeight = 400.0;
+        final double drawHeight = calculateImageDrawHeight(
+          width: block.width,
+          height: block.height,
+          aspectRatio: block.aspectRatio,
+        );
         const double minMarginBottom = 14.0;
         final int rowsNeeded = ((drawHeight + minMarginBottom) / kRowHeight).ceil();
         final double totalImageBlockHeight = rowsNeeded * kRowHeight;
@@ -337,7 +414,11 @@ class PublisherLayoutEngine {
         final caption = block.content;
         final targetRow = block.targetRow;
 
-        const double imgHeight = 400.0;
+        final double imgHeight = calculateImageDrawHeight(
+          width: block.width,
+          height: block.height,
+          aspectRatio: block.aspectRatio,
+        );
         const double captionFontSize = 24.0;
         const double textLeadingStep = captionFontSize * 1.4; // 33.6px
 
