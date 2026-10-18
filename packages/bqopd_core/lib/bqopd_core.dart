@@ -18,6 +18,11 @@ export 'src/models/game_models.dart';
 export 'src/models/static_page.dart';
 export 'src/models/user_account.dart';
 export 'src/models/user_profile.dart';
+export 'src/models/page_display_list.dart';
+
+// Layout & Typography
+export 'src/layout/font_metrics.dart';
+export 'src/layout/publisher_layout_engine.dart';
 
 // Interfaces (Required for lookup in main.dart and UI)
 export 'src/interfaces/auth_repository_interface.dart';

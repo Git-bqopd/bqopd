@@ -16,22 +16,26 @@ abstract class IPipelineRepository {
   /// Schedules a full rescan of a fanzine's source PDF and resets pipeline states.
   Future<void> rescanFanzine(String fanzineId);
 
-  /// Compiles multi-page continuous markdown text into 2000x3200 publisher pages
-  /// on the 42px baseline grid and streams multi-resolution WebP images to storage.
+  /// Compiles multi-page continuous markdown text or pre-calculated [PageDisplayList]
+  /// command trees into 2000x3200 publisher pages on the 42px baseline grid
+  /// and streams multi-resolution WebP images to storage.
   Future<Map<String, dynamic>> compilePublisherFolio({
     required String fanzineId,
-    required String fullText,
+    String fullText = '',
+    dynamic displayList,
     String? ownerUserId,
     String templateId = 'basic_text',
     int startPageNumber = 1,
   });
 
-  /// Re-compiles a single 2000x3200 publisher template page from markdown on the
-  /// server and generates updated multi-resolution WebP image assets.
+  /// Re-compiles a single 2000x3200 publisher template page from markdown text,
+  /// layout sheet, or display list on the server and generates updated multi-resolution WebP image assets.
   Future<Map<String, dynamic>> compilePublisherPage({
     required String fanzineId,
     required String imageId,
-    required String text,
+    String text = '',
+    dynamic sheet,
+    dynamic displayList,
     String? ownerUserId,
     String templateId = 'basic_text',
   });

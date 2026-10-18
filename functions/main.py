@@ -1,10 +1,11 @@
 """Cloud Functions for Firebase (Python 3.14).
 
 Provides server-side verified address geocoding with Firestore caching,
-geospatial nearest-neighbor queries, Google Maps rasterization, baseline-grid
-multi-column typography layout compilation with open-source Google Fonts
-(Arimo & Anton variable fonts), font diagnostic inspection, and direct Storage
-uploads for Radius Letters and Folio creation.
+fast spatial nearest-neighbor letter queries over pre-indexed coordinates,
+Google Maps rasterization, baseline-grid multi-column typography layout
+compilation with open-source Google Fonts (Arimo & Anton variable fonts),
+deterministic Page Display List command execution, font diagnostic inspection,
+and direct multi-scale WebP Storage uploads.
 """
 
 import base64
@@ -75,7 +76,6 @@ BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 DECODE_MAP = {c: i for i, c in enumerate(BASE32)}
 
 
-
 def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
   """Encodes (lat, lng) into a standard Base32 geohash string."""
   lat_interval = [-90.0, 90.0]
@@ -141,7 +141,6 @@ def decode_geohash(geohash: str) -> Tuple[float, float, float, float]:
   lat_err = lat_interval[1] - lat_interval[0]
   lng_err = lng_interval[1] - lng_interval[0]
   return lat, lng, lat_err, lng_err
-
 
 
 def get_geohash_neighbors(geohash: str) -> List[str]:
@@ -212,7 +211,6 @@ def generate_shortcode() -> str:
   """Generates a standard Base36 7-character alphanumeric shortcode."""
   chars = string.ascii_uppercase + string.digits
   return "".join(random.choices(chars, k=7))
-
 
 
 def resolve_or_cache_geocode(
@@ -514,7 +512,6 @@ def get_font(
   return font_obj
 
 
-
 def measure_text_width(text: str, font: ImageFont.ImageFont) -> float:
   """Calculates horizontal pixel width of a string with sub-pixel accuracy."""
   if not text:
@@ -556,6 +553,27 @@ def snap_to_grid(y: float) -> float:
   return float(GRID_TOP + (rows * ROW_HEIGHT))
 
 
+def hex_to_rgb(
+    hex_str: Optional[str], default: Tuple[int, int, int] = (0, 0, 0)
+) -> Tuple[int, int, int]:
+  """Converts a hex color string (e.g. '#000000', '#1a1a1a') to an RGB tuple."""
+  if not hex_str:
+    return default
+  clean = hex_str.strip().lstrip("#")
+  if len(clean) == 3:
+    clean = "".join(c * 2 for c in clean)
+  if len(clean) == 6:
+    try:
+      return (
+          int(clean[0:2], 16),
+          int(clean[2:4], 16),
+          int(clean[4:6], 16),
+      )
+    except ValueError:
+      return default
+  return default
+
+
 def init_page_canvas() -> Tuple[Image.Image, ImageDraw.ImageDraw]:
   """Initializes a blank 2000x3200 page canvas with outer border and column dividers."""
   canvas = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), color=(255, 255, 255))
@@ -591,7 +609,6 @@ def download_remote_image(url: str, timeout: int = 6) -> Optional[Image.Image]:
   except Exception as e:
     print(f"[download_remote_image] Could not fetch '{url}': {e}")
     return None
-
 
 
 def upload_three_webp_scales(
@@ -638,6 +655,125 @@ def upload_three_webp_scales(
   grid_url = _upload("grid.webp", grid_bytes)
   return orig_url, list_url, grid_url
 
+
+def rasterize_display_sheet(sheet: Dict[str, Any]) -> Tuple[Image.Image, str]:
+  """Executes pre-calculated DrawCommands on a 2000x3200 canvas without making layout decisions."""
+  width = int(sheet.get("width", PAGE_WIDTH))
+  height = int(sheet.get("height", PAGE_HEIGHT))
+  canvas = Image.new("RGB", (width, height), color=(255, 255, 255))
+  ctx = ImageDraw.Draw(canvas)
+
+  commands = sheet.get("commands", [])
+  extracted_text = str(sheet.get("extractedText", "") or "")
+
+  for cmd in commands:
+    c_type = cmd.get("type")
+
+    # 1. Rectangle Command (Outer border, divider lines, image cards)
+    if c_type == "rect":
+      x = float(cmd.get("x", 0.0))
+      y = float(cmd.get("y", 0.0))
+      w = float(cmd.get("width", 0.0))
+      h = float(cmd.get("height", 0.0))
+      fill_hex = cmd.get("fillColor")
+      border_hex = cmd.get("borderColor")
+      border_w = int(float(cmd.get("borderWidth", 0) or 0))
+
+      fill = hex_to_rgb(fill_hex) if fill_hex else None
+      outline = hex_to_rgb(border_hex) if border_hex else None
+
+      if fill or outline:
+        ctx.rectangle(
+            [x, y, x + w, y + h],
+            fill=fill,
+            outline=outline,
+            width=border_w,
+        )
+
+    # 2. Rule Command (Horizontal/Vertical Strokes)
+    elif c_type == "rule":
+      x1 = float(cmd.get("x1", 0.0))
+      y1 = float(cmd.get("y1", 0.0))
+      x2 = float(cmd.get("x2", 0.0))
+      y2 = float(cmd.get("y2", 0.0))
+      stroke_hex = cmd.get("strokeColor", "#000000")
+      stroke_w = int(float(cmd.get("strokeWidth", 1) or 1))
+      ctx.line(
+          [x1, y1, x2, y2],
+          fill=hex_to_rgb(stroke_hex),
+          width=stroke_w,
+      )
+
+    # 3. Image Command (Remote Images and Placeholders)
+    elif c_type == "image":
+      url = str(cmd.get("url", "")).strip()
+      x = int(float(cmd.get("x", 0.0)))
+      y = int(float(cmd.get("y", 0.0)))
+      w = int(float(cmd.get("width", COL_WIDTH)))
+      h = int(float(cmd.get("height", 400)))
+
+      img_obj = download_remote_image(url) if url else None
+      if img_obj:
+        resized = img_obj.resize((w, h), Image.Resampling.LANCZOS)
+        canvas.paste(resized, (x, y))
+      else:
+        ctx.rectangle(
+            [x, y, x + w, y + h],
+            fill=(243, 244, 246),
+            outline=(209, 213, 219),
+            width=2,
+        )
+        ctx.line(
+            [x + 10, y + 10, x + w - 10, y + h - 10],
+            fill=(209, 213, 219),
+            width=2,
+        )
+        ctx.line(
+            [x + w - 10, y + 10, x + 10, y + h - 10],
+            fill=(209, 213, 219),
+            width=2,
+        )
+
+    # 4. Text Command (Font, Weight, Sub-Pixel Justification)
+    elif c_type == "text":
+      text = str(cmd.get("text", "") or "")
+      if not text:
+        continue
+      x = float(cmd.get("x", 0.0))
+      y = float(cmd.get("y", 0.0))
+      font_family = str(cmd.get("fontFamily", "Arimo"))
+      font_size = int(float(cmd.get("fontSize", 28.0)))
+      is_bold = bool(cmd.get("isBold", False))
+      is_italic = bool(cmd.get("isItalic", False))
+      color = hex_to_rgb(cmd.get("color", "#1a1a1a"), default=(26, 26, 26))
+      font = get_font(font_family, font_size, bold=is_bold, italic=is_italic)
+
+      word_spacing = float(cmd.get("wordSpacing", 0.0) or 0.0)
+      text_align = str(cmd.get("textAlign", "left"))
+      words = [w for w in text.split(" ") if w]
+
+      if text_align == "justify" and word_spacing > 0 and len(words) > 1:
+        curr_x = x
+        for w in words:
+          ctx.text((curr_x, y), w, font=font, fill=color)
+          curr_x += measure_text_width(w, font) + word_spacing
+      else:
+        ctx.text((x, y), text, font=font, fill=color)
+
+  return canvas, extracted_text
+
+
+def rasterize_display_list(
+    display_list: Dict[str, Any],
+) -> List[Tuple[Image.Image, str]]:
+  """Rasterizes each PageLayoutSheet in a PageDisplayList dictionary envelope."""
+  pages_data = display_list.get("pages", [])
+  results: List[Tuple[Image.Image, str]] = []
+  for page_dict in pages_data:
+    if isinstance(page_dict, dict):
+      canvas, page_text = rasterize_display_sheet(page_dict)
+      results.append((canvas, page_text))
+  return results
 
 
 def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
@@ -734,7 +870,6 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
 
   commit_paragraph()
   return blocks
-
 
 
 def render_publisher_pages_internal(
@@ -987,10 +1122,10 @@ def render_publisher_pages_internal(
 
   return pages_results
 
+
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Diagnostics, Geocoding, Search, and Map Cover
 # ---------------------------------------------------------------------------
-
 
 
 @https_fn.on_call()
@@ -1061,9 +1196,13 @@ def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
   }
 
 
-@https_fn.on_call(secrets=[MAPS_API_KEY])
+@https_fn.on_call()
 def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
-  """Queries and returns the closest N historical letters to target (lat, lng)."""
+  """Queries and returns the closest N historical letters to target (lat, lng).
+
+  Reads exclusively from pre-indexed spatial data (Ring 1, Ring 2, and broad
+  letter queries) without any synchronous outbound HTTP geocoding calls.
+  """
   data = req.data or {}
   try:
     target_lat = float(data.get("lat"))
@@ -1136,9 +1275,9 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
           doc_data["_calculatedDistanceMiles"] = round(dist, 2)
           candidate_letters.append(doc_data)
 
-  # Fallback: Query un-migrated letter records with cached resolver
+  # Ring 3: Broad query over pre-indexed letter comments (NO outbound HTTP geocoding)
   if len(candidate_letters) < limit:
-    fallback_query = (
+    broad_docs = (
         comments_col.where(
             filter=firestore.FieldFilter("sourceType", "==", "letter_column")
         )
@@ -1146,7 +1285,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
         .stream()
     )
 
-    for doc in fallback_query:
+    for doc in broad_docs:
       doc_id = doc.id
       if doc_id in seen_ids:
         continue
@@ -1155,18 +1294,6 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
       geo = doc_data.get("geo") or {}
       l_lat = geo.get("lat")
       l_lng = geo.get("lng")
-
-      if (l_lat is None or l_lng is None) and doc_data.get("location"):
-        geocoded = resolve_or_cache_geocode(
-            str(doc_data["location"]), db=db, api_key=get_maps_api_key()
-        )
-        if geocoded:
-          l_lat = geocoded["lat"]
-          l_lng = geocoded["lng"]
-          try:
-            doc.reference.update({"geo": geocoded})
-          except Exception:
-            pass
 
       if l_lat is not None and l_lng is not None:
         dist = haversine_miles(
@@ -1188,7 +1315,6 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "count": len(results),
       "letters": results,
   }
-
 
 
 @https_fn.on_call(secrets=[MAPS_API_KEY])
@@ -1243,114 +1369,59 @@ def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
     }
 
 
-@https_fn.on_call(secrets=[MAPS_API_KEY])
-def backfill_letter_geocodes(req: https_fn.CallableRequest) -> Dict[str, Any]:
-  """Maintenance routine: Scans existing letter comments and stamps `geo` metadata."""
-  db = firestore.client()
-  comments_col = (
-      db.collection("artifacts")
-      .document("bqopd")
-      .collection("public")
-      .document("data")
-      .collection("comments")
-  )
-
-  docs = comments_col.where(
-      filter=firestore.FieldFilter("sourceType", "==", "letter_column")
-  ).stream()
-
-  updated_count = 0
-  skipped_count = 0
-  failed_count = 0
-  cache: Dict[str, Optional[Dict[str, Any]]] = {}
-
-  for doc in docs:
-    data = doc.to_dict() or {}
-    if data.get("geo") and data["geo"].get("geohash"):
-      skipped_count += 1
-      continue
-
-    raw_loc = data.get("location") or ""
-    if not raw_loc.strip():
-      uid = data.get("userId")
-      if uid and not str(uid).startswith("archival_"):
-        try:
-          pdoc = db.collection("profiles").document(str(uid)).get()
-          if pdoc.exists:
-            pdata = pdoc.to_dict() or {}
-            raw_loc = pdata.get("location") or pdata.get("city") or ""
-            if pdata.get("state"):
-              raw_loc = (
-                  f"{raw_loc}, {pdata['state']}" if raw_loc else pdata["state"]
-              )
-        except Exception:
-          pass
-
-    if not raw_loc.strip():
-      skipped_count += 1
-      continue
-
-    cleaned = clean_location_string(raw_loc)
-    if cleaned not in cache:
-      cache[cleaned] = resolve_or_cache_geocode(
-          cleaned, db=db, api_key=get_maps_api_key()
-      )
-    geo_meta = cache[cleaned]
-    if geo_meta:
-      try:
-        doc.reference.update({
-            "geo": geo_meta,
-            "location": raw_loc,
-            "updatedAt": firestore.SERVER_TIMESTAMP,
-        })
-        updated_count += 1
-      except Exception as e:
-        print(f"[backfill_letter_geocodes] Failed updating {doc.id}: {e}")
-        failed_count += 1
-    else:
-      failed_count += 1
-
-  return {
-      "status": "complete",
-      "updated": updated_count,
-      "skipped": skipped_count,
-      "failed": failed_count,
-      "cached_locations": len(cache),
-  }
-
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Heavy Server-Side Layout & WebP Compilation
 # ---------------------------------------------------------------------------
 
 
-
 @https_fn.on_call(memory=2048, timeout_sec=300, cpu=2)
 def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
-  """Compiles multi-page continuous markdown text into 2000x3200 publisher pages.
+  """Compiles multi-page publisher folios into 2000x3200 plates.
 
-  Renders layouts on a 42px baseline grid in Pillow with Anton & Arimo variable fonts,
-  generates 3-size WebP binaries (original, list, grid) with multithreaded uploads,
-  streams them to Cloud Storage with 2 vCPUs and 2048MB RAM, and registers the Firestore documents.
+  Renders pages directly from deterministic PageDisplayList drawing command trees
+  (or legacy markdown), generates 3-size WebP binaries with multithreaded uploads,
+  streams them to Cloud Storage with 2 vCPUs and 2048MB RAM, and registers Firestore records.
   """
   data = req.data or {}
   fanzine_id = data.get("fanzineId")
   full_text = data.get("fullText", "")
+  display_list_raw = data.get("displayList")
   owner_user_id = data.get("ownerUserId") or (
       req.auth.uid if req.auth else "system_web"
   )
   template_id = data.get("templateId", "basic_text")
   start_page_number = int(data.get("startPageNumber", 1))
 
-  if not fanzine_id or not full_text.strip():
+  if not fanzine_id:
     raise https_fn.HttpsError(
         https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-        "Both 'fanzineId' and non-empty 'fullText' parameters are required.",
+        "A 'fanzineId' parameter is required.",
     )
 
   db = firestore.client()
   bucket = storage.bucket()
 
-  pages_and_text = render_publisher_pages_internal(full_text)
+  # 1. Primary: Use pre-calculated PageDisplayList from Dart layout engine
+  pages_and_text: List[Tuple[Image.Image, str]] = []
+  if display_list_raw:
+    if isinstance(display_list_raw, str):
+      try:
+        display_list = json.loads(display_list_raw)
+      except Exception:
+        display_list = {}
+    elif isinstance(display_list_raw, dict):
+      display_list = display_list_raw
+    else:
+      display_list = {}
+    pages_and_text = rasterize_display_list(display_list)
+  elif full_text and full_text.strip():
+    pages_and_text = render_publisher_pages_internal(full_text)
+  else:
+    raise https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+        "Either 'displayList' or non-empty 'fullText' must be provided.",
+    )
+
   if not pages_and_text:
     return {"status": "success", "count": 0, "pages": []}
 
@@ -1435,33 +1506,53 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
   }
 
 
-
 @https_fn.on_call(memory=512, timeout_sec=120)
 def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
-  """Re-compiles a single 2000x3200 page from markdown and uploads WebP scales.
-
-  Used by the text and publisher editors when updating individual pages.
-  """
+  """Re-compiles a single 2000x3200 page from display commands or markdown and uploads WebP scales."""
   data = req.data or {}
   fanzine_id = data.get("fanzineId")
   image_id = data.get("imageId")
   text = data.get("text", "")
+  sheet_data = data.get("sheet") or data.get("pageSheet")
+  display_list_raw = data.get("displayList")
   owner_user_id = data.get("ownerUserId") or (
       req.auth.uid if req.auth else "system_web"
   )
   template_id = data.get("templateId", "basic_text")
 
-  if not fanzine_id or not image_id or not text.strip():
+  if not fanzine_id or not image_id:
     raise https_fn.HttpsError(
         https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-        "'fanzineId', 'imageId', and 'text' parameters are required.",
+        "'fanzineId' and 'imageId' parameters are required.",
     )
 
   db = firestore.client()
   bucket = storage.bucket()
 
-  pages = render_publisher_pages_internal(text)
-  canvas = pages[0][0] if pages else init_page_canvas()[0]
+  # 1. Check for structured sheet payload
+  if sheet_data:
+    if isinstance(sheet_data, str):
+      try:
+        sheet_data = json.loads(sheet_data)
+      except Exception:
+        sheet_data = {}
+    canvas, _ = rasterize_display_sheet(sheet_data)
+  elif display_list_raw:
+    if isinstance(display_list_raw, str):
+      try:
+        dl = json.loads(display_list_raw)
+      except Exception:
+        dl = {}
+    else:
+      dl = display_list_raw
+    pages = rasterize_display_list(dl)
+    canvas = pages[0][0] if pages else init_page_canvas()[0]
+  elif text and text.strip():
+    pages = render_publisher_pages_internal(text)
+    canvas = pages[0][0] if pages else init_page_canvas()[0]
+  else:
+    canvas = init_page_canvas()[0]
+
   storage_prefix = f"uploads/{owner_user_id}/folio_assets/{fanzine_id}/{image_id}"
 
   orig_url, list_url, grid_url = upload_three_webp_scales(
@@ -1503,7 +1594,6 @@ def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
   )
   center = data.get("center", {})
   letters = data.get("letters", [])
-  title = data.get("title") or f"Letters near {center.get('address', 'Location')}"
   short_code = data.get("shortCode") or generate_shortcode()
 
   if not fanzine_id:

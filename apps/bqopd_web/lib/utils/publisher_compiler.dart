@@ -6,8 +6,8 @@ import 'unsaved_fanzine_registry.dart';
 
 /// Centralized service to handle high-performance WebP layout compilation,
 /// zero-pixel page measurement, and asset synchronization for template pages.
-/// Offloads heavy rasterization and Cloud Storage uploads to Cloud Functions
-/// with automatic client-side fallback.
+/// Pre-computes page display command trees with [PublisherLayoutEngine] in pure Dart
+/// and offloads heavy rasterization and Cloud Storage uploads to Cloud Functions.
 class PublisherCompiler {
   /// Prepares raw markdown text by expanding shorthand asset tags (e.g. {{1|img01|Caption}})
   /// and resolving wiki shortcodes to absolute URLs.
@@ -52,7 +52,7 @@ class PublisherCompiler {
     }
 
     String processedText = text;
-    final templateRegex = RegExp(r'(?:\{\{|\[\[)(\d+)\Vert{}([^\vert{}]+)\Vert{}(.*?)(?:\}\}\vert{}\]\])');
+    final templateRegex = RegExp(r'(?:\{\{|\[\[)(\d+)\|([^|]+)\|(.*?)(?:\}\}|\]\])');
     processedText = processedText.replaceAllMapped(templateRegex, (match) {
       final templateNum = match.group(1);
       final imgShortCode = match.group(2)?.trim() ?? '';
@@ -77,9 +77,9 @@ class PublisherCompiler {
       if (shortNameMap.containsKey(imgShortCode)) {
         final absoluteUrl = shortNameMap[imgShortCode];
         if (rowOffset != null) {
-          return '{{TEMPLATE_$templateNum:$absoluteUrl | row=$rowOffset \vert{}$captionText}}';
+          return '{{TEMPLATE_$templateNum:$absoluteUrl | row=$rowOffset | $captionText}}';
         } else {
-          return '{{TEMPLATE_$templateNum: $absoluteUrl \vert{}$captionText}}';
+          return '{{TEMPLATE_$templateNum: $absoluteUrl | $captionText}}';
         }
       }
       return match.group(0)!;
@@ -92,8 +92,8 @@ class PublisherCompiler {
   }
 
   /// Compiles a single 2000x3200 page from markdown.
-  /// Calls the server-side Cloud Function `compile_publisher_page` by default,
-  /// falling back to the browser canvas and client storage uploads if needed.
+  /// Generates a pre-calculated [PageDisplayList] in pure Dart and calls the server-side
+  /// Cloud Function `compile_publisher_page`, falling back to the browser canvas if offline.
   static Future<Map<String, dynamic>> compileAndPublish({
     required String fanzineId,
     required String imageId,
@@ -111,6 +111,14 @@ class PublisherCompiler {
       text: text,
     );
 
+    // Pre-calculate the deterministic draw commands tree in pure Dart
+    final displayList = PublisherLayoutEngine.compileToDisplayList(
+      fanzineId: fanzineId,
+      rawMarkdown: compiledText,
+      templateId: templateId,
+    );
+    final pageSheet = displayList.pages.isNotEmpty ? displayList.pages.first : null;
+
     String? fileUrl;
     String? listUrl;
     String? gridUrl;
@@ -121,6 +129,8 @@ class PublisherCompiler {
         'fanzineId': fanzineId,
         'imageId': imageId,
         'text': compiledText,
+        if (pageSheet != null) 'sheet': pageSheet.toMap(),
+        'displayList': displayList.toMap(),
         'ownerUserId': uid,
         'templateId': templateId,
       };
@@ -193,12 +203,12 @@ class PublisherCompiler {
         final pageId = pageDoc['id'] ?? '';
         if (pageId.isNotEmpty) {
           pageUpdates.add(
-              fsUpdateDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
-                'imageUrl': fileUrl,
-                'listUrl': listUrl,
-                'gridUrl': gridUrl,
-                'status': 'ready',
-              }))
+            fsUpdateDoc('fanzines/$fanzineId/pages/$pageId', jsonEncode({
+              'imageUrl': fileUrl,
+              'listUrl': listUrl,
+              'gridUrl': gridUrl,
+              'status': 'ready',
+            })),
           );
         }
       }
@@ -209,8 +219,8 @@ class PublisherCompiler {
     return updates;
   }
 
-  /// Quickly evaluates the exact baseline-grid page count for markdown text
-  /// without allocating HTML5 canvas plates, downloading image assets, or encoding Base64 strings.
+  /// Evaluates the exact baseline-grid page count for markdown text in memory
+  /// using the pure Dart typographical engine without allocating HTML5 canvas plates.
   static Future<int> measurePageCount({
     required String fanzineId,
     required String fullText,
@@ -219,13 +229,17 @@ class PublisherCompiler {
       fanzineId: fanzineId,
       text: fullText,
     );
-    return await measurePublisherPages(compiledText);
+    try {
+      return PublisherLayoutEngine.measurePageCount(compiledText);
+    } catch (e) {
+      print('[PublisherCompiler.measurePageCount Error] $e');
+      return await measurePublisherPages(compiledText);
+    }
   }
 
   /// Compiles a long markdown document into multiple connected 2000x3200 pages.
-  /// Content flows seamlessly across columns and pages without arbitrary truncations.
-  /// Calls `compile_publisher_folio` server-side on Cloud Functions, streaming WebPs
-  /// directly to Storage and returning ready `FanzinePage` models.
+  /// Typesets content into a structured [PageDisplayList] in pure Dart and calls
+  /// `compile_publisher_folio` on Cloud Functions, streaming WebPs to Storage.
   static Future<List<FanzinePage>> compileAndPublishMultiPage({
     required String fanzineId,
     required String fullText,
@@ -244,11 +258,20 @@ class PublisherCompiler {
       text: fullText,
     );
 
+    // Pre-calculate the multi-page command tree using the pure Dart layout engine
+    final displayList = PublisherLayoutEngine.compileToDisplayList(
+      fanzineId: fanzineId,
+      rawMarkdown: compiledText,
+      templateId: templateId,
+      startPageNumber: startPageNumber,
+    );
+
     // 1. Primary: Server-side Cloud Function bulk compilation & storage upload
     try {
       final payload = {
         'fanzineId': fanzineId,
         'fullText': compiledText,
+        'displayList': displayList.toMap(),
         'ownerUserId': uid,
         'templateId': templateId,
         'startPageNumber': startPageNumber,

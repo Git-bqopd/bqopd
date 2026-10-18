@@ -76,7 +76,8 @@ class StubPipelineRepository implements IPipelineRepository {
   @override
   Future<Map<String, dynamic>> compilePublisherFolio({
     required String fanzineId,
-    required String fullText,
+    String fullText = '',
+    dynamic displayList,
     String? ownerUserId,
     String templateId = 'basic_text',
     int startPageNumber = 1,
@@ -86,7 +87,9 @@ class StubPipelineRepository implements IPipelineRepository {
   Future<Map<String, dynamic>> compilePublisherPage({
     required String fanzineId,
     required String imageId,
-    required String text,
+    String text = '',
+    dynamic sheet,
+    dynamic displayList,
     String? ownerUserId,
     String templateId = 'basic_text',
   }) async => {};

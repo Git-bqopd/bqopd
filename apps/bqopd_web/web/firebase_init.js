@@ -181,7 +181,6 @@ window.fsQuery = function(path, field, op, valueJson, orderBy) {
         });
 };
 
-// Configured with a 5-minute (300,000ms) client timeout to prevent deadline-exceeded failures during heavy folio compilation
 window.fnCall = function(name, dataStr) {
     return functions.httpsCallable(name, { timeout: 300000 })(JSON.parse(dataStr)).then(function(r) {
         return JSON.stringify(r.data);
@@ -1005,7 +1004,6 @@ window.getPlacePredictions = (input) => {
             resolve(JSON.stringify([]));
             return;
         }
-        // Support modern AutocompleteSuggestion if available
         if (google.maps.places.AutocompleteSuggestion && typeof google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions === 'function') {
             google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({ input: input })
                 .then(({ suggestions }) => {
@@ -1019,7 +1017,6 @@ window.getPlacePredictions = (input) => {
                     resolve(JSON.stringify(results));
                 })
                 .catch(() => {
-                    // Fallback to legacy service
                     _legacyGetPlacePredictions(input, resolve);
                 });
             return;
@@ -1057,7 +1054,6 @@ window.initAddressAutocomplete = (inputId, callback) => {
     if (input._autocompleteBound) return;
     input._autocompleteBound = true;
 
-    // Check for modern PlaceAutocompleteElement to eliminate deprecation warning
     if (typeof google.maps.places.PlaceAutocompleteElement !== 'undefined') {
         try {
             const pac = new google.maps.places.PlaceAutocompleteElement();
@@ -1115,7 +1111,6 @@ window.geocodeAddress = async (address) => {
     }
     const cleanAddress = address.trim();
 
-    // 1. Primary: Server-side verified Cloud Function with Firestore geocache
     try {
         const result = await functions.httpsCallable('geocode_address', { timeout: 60000 })({ address: cleanAddress });
         if (result && result.data && result.data.status === 'success') {
@@ -1125,7 +1120,6 @@ window.geocodeAddress = async (address) => {
         console.warn('[geocodeAddress] Server callable geocode_address failed:', e);
     }
 
-    // 2. Fallback: Google Maps Geocoder SDK in browser
     if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
         try {
             const googleResult = await new Promise((resolve) => {

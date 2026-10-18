@@ -230,7 +230,7 @@ class AddressRadiusLetters {
       double maxRadius,
       ) async {
     print(
-        '[AddressRadiusLetters] Running fallback bounded letters query...');
+        '[AddressRadiusLetters] Running fallback bounded letters query over pre-indexed geo data...');
     final commentsRes = await fsQuery(
       'artifacts/bqopd/public/data/comments',
       'sourceType',
@@ -245,7 +245,6 @@ class AddressRadiusLetters {
       decodedComments = jsonDecode(fallbackRes) as List;
     }
     final List<Map<String, dynamic>> matchingLetters = [];
-    final Map<String, Map<String, double>?> locationCache = {};
 
     for (final item in decodedComments) {
       final data = Map<String, dynamic>.from(item['data'] as Map);
@@ -262,34 +261,6 @@ class AddressRadiusLetters {
         if (geo['lat'] != null && geo['lng'] != null) {
           letterLat = (geo['lat'] as num).toDouble();
           letterLng = (geo['lng'] as num).toDouble();
-        }
-      }
-
-      if (letterLat == null || letterLng == null) {
-        final rawLoc = (data['location'] ?? '').toString().trim();
-        if (rawLoc.isNotEmpty) {
-          final cleanLoc = cleanLocation(rawLoc);
-          if (!locationCache.containsKey(cleanLoc)) {
-            final geoJson = await geocodeAddress(cleanLoc);
-            if (geoJson != null && geoJson.isNotEmpty) {
-              final d = jsonDecode(geoJson);
-              if (d is Map && d['lat'] != null && d['lng'] != null) {
-                locationCache[cleanLoc] = {
-                  'lat': (d['lat'] as num).toDouble(),
-                  'lng': (d['lng'] as num).toDouble(),
-                };
-              } else {
-                locationCache[cleanLoc] = null;
-              }
-            } else {
-              locationCache[cleanLoc] = null;
-            }
-          }
-          final coords = locationCache[cleanLoc];
-          if (coords != null) {
-            letterLat = coords['lat'];
-            letterLng = coords['lng'];
-          }
         }
       }
 
@@ -347,7 +318,7 @@ class AddressRadiusLetters {
   }
 
   /// Evaluates exact canvas page count for a set of letters by testing the layout
-  /// in its final chronological publication sequence using zero-pixel measurement.
+  /// in its final chronological publication sequence using pure-Dart PublisherLayoutEngine.
   static Future<int> _testRenderPageCount(
       List<_SelectedRadiusLetter> letters) async {
     if (letters.isEmpty) return 0;
@@ -359,10 +330,14 @@ class AddressRadiusLetters {
     });
     final testMarkdown = copy.map((l) => l.markdown).join('\n\n').trim();
     try {
-      return await measurePublisherPages(testMarkdown);
+      return PublisherLayoutEngine.measurePageCount(testMarkdown);
     } catch (e) {
-      print('[_testRenderPageCount Error] $e');
-      return 0;
+      print('[_testRenderPageCount PublisherLayoutEngine Error] $e');
+      try {
+        return await measurePublisherPages(testMarkdown);
+      } catch (_) {
+        return 0;
+      }
     }
   }
 
