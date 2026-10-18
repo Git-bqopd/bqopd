@@ -35,7 +35,6 @@ set_global_options(max_instances=10)
 # Secret parameter for Google Maps API key (managed via Secret Manager)
 MAPS_API_KEY = SecretParam("MAPS_API_KEY")
 
-
 def get_maps_api_key(override_key: Optional[str] = None) -> str:
   """Resolves the Google Maps API key from override, SecretParam, or environment."""
   if override_key and override_key.strip():
@@ -76,7 +75,6 @@ FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 DECODE_MAP = {c: i for i, c in enumerate(BASE32)}
 
-
 def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
   """Encodes (lat, lng) into a standard Base32 geohash string."""
   lat_interval = [-90.0, 90.0]
@@ -110,7 +108,6 @@ def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
       bit = 0
       ch = 0
   return "".join(geohash)
-
 
 def decode_geohash(geohash: str) -> Tuple[float, float, float, float]:
   """Decodes a geohash string into (lat, lng, lat_error, lng_error)."""
@@ -162,7 +159,6 @@ def get_geohash_neighbors(geohash: str) -> List[str]:
 
   return list(dict.fromkeys(neighbors))
 
-
 def haversine_miles(
     lat1: float, lon1: float, lat2: float, lon2: float
 ) -> float:
@@ -212,7 +208,6 @@ def generate_shortcode() -> str:
   """Generates a standard Base36 7-character alphanumeric shortcode."""
   chars = string.ascii_uppercase + string.digits
   return "".join(random.choices(chars, k=7))
-
 
 def resolve_or_cache_geocode(
     address: str,
@@ -331,7 +326,6 @@ def resolve_or_cache_geocode(
           f" '{clean_loc}': {e}"
       )
 
-  # 3. Fallback to OpenStreetMap Nominatim
   if not resolved:
     try:
       encoded = urllib.parse.quote(clean_loc)
@@ -408,7 +402,6 @@ def geocode_location_http(location_str: str) -> Optional[Dict[str, Any]]:
 _font_cache: Dict[Tuple[str, int, bool, bool], ImageFont.ImageFont] = {}
 _font_resolved_sources: Dict[Tuple[str, int, bool, bool], str] = {}
 
-
 def get_font_path_candidates(
     font_family: str, bold: bool = False, italic: bool = False
 ) -> List[str]:
@@ -468,7 +461,6 @@ def get_font_path_candidates(
     ])
 
   return candidates
-
 
 def get_font(
     font_family: str, size: int, bold: bool = False, italic: bool = False
@@ -574,7 +566,6 @@ def hex_to_rgb(
       return default
   return default
 
-
 def init_page_canvas() -> Tuple[Image.Image, ImageDraw.ImageDraw]:
   """Initializes a blank 2000x3200 page canvas with outer border and column dividers."""
   canvas = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), color=(255, 255, 255))
@@ -628,7 +619,6 @@ def calculate_image_draw_height(
     return int(round(COL_WIDTH * (img_obj.height / float(img_obj.width))))
   return int(round(COL_WIDTH / fallback_aspect_ratio))
 
-
 def upload_three_webp_scales(
     canvas: Image.Image,
     bucket: Any,
@@ -673,9 +663,11 @@ def upload_three_webp_scales(
   grid_url = _upload("grid.webp", grid_bytes)
   return orig_url, list_url, grid_url
 
+def rasterize_display_sheet(sheet: Dict[str, Any]) -> Tuple[Image.Image, str, str]:
+  """Executes pre-calculated DrawCommands on a 2000x3200 canvas without making layout decisions.
 
-def rasterize_display_sheet(sheet: Dict[str, Any]) -> Tuple[Image.Image, str]:
-  """Executes pre-calculated DrawCommands on a 2000x3200 canvas without making layout decisions."""
+  Returns canvas, extractedText, and extractedTextHtml.
+  """
   width = int(sheet.get("width", PAGE_WIDTH))
   height = int(sheet.get("height", PAGE_HEIGHT))
   canvas = Image.new("RGB", (width, height), color=(255, 255, 255))
@@ -683,6 +675,11 @@ def rasterize_display_sheet(sheet: Dict[str, Any]) -> Tuple[Image.Image, str]:
 
   commands = sheet.get("commands", [])
   extracted_text = str(sheet.get("extractedText", "") or "")
+  extracted_text_html = str(
+      sheet.get("extractedTextHtml", "")
+      or sheet.get("extracted_text_html", "")
+      or ""
+  )
 
   for cmd in commands:
     c_type = cmd.get("type")
@@ -783,21 +780,20 @@ def rasterize_display_sheet(sheet: Dict[str, Any]) -> Tuple[Image.Image, str]:
       else:
         ctx.text((x, y), text, font=font, fill=color)
 
-  return canvas, extracted_text
+  return canvas, extracted_text, extracted_text_html
 
 
 def rasterize_display_list(
     display_list: Dict[str, Any],
-) -> List[Tuple[Image.Image, str]]:
+) -> List[Tuple[Image.Image, str, str]]:
   """Rasterizes each PageLayoutSheet in a PageDisplayList dictionary envelope."""
   pages_data = display_list.get("pages", [])
-  results: List[Tuple[Image.Image, str]] = []
+  results: List[Tuple[Image.Image, str, str]] = []
   for page_dict in pages_data:
     if isinstance(page_dict, dict):
-      canvas, page_text = rasterize_display_sheet(page_dict)
-      results.append((canvas, page_text))
+      canvas, page_text, page_html = rasterize_display_sheet(page_dict)
+      results.append((canvas, page_text, page_html))
   return results
-
 
 def _extract_image_dimensions(raw_params: str) -> Dict[str, Optional[float]]:
   """Extracts optional width, height, and aspect ratio from image parameter tokens."""
@@ -952,7 +948,6 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
 
   commit_paragraph()
   return blocks
-
 
 def render_publisher_pages_internal(
     raw_text: str,
@@ -1210,11 +1205,9 @@ def render_publisher_pages_internal(
 
   return pages_results
 
-
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Diagnostics, Geocoding, Search, and Map Cover
 # ---------------------------------------------------------------------------
-
 
 @https_fn.on_call()
 def check_server_fonts(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1282,7 +1275,6 @@ def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
           f"Could not resolve geographic coordinates for '{raw_address}'."
       ),
   }
-
 
 @https_fn.on_call()
 def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1404,7 +1396,6 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "letters": results,
   }
 
-
 @https_fn.on_call(secrets=[MAPS_API_KEY])
 def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Fetches an official Google Maps Static API image server-side."""
@@ -1456,11 +1447,9 @@ def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
         "fallback_url": url,
     }
 
-
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Heavy Server-Side Layout & WebP Compilation
 # ---------------------------------------------------------------------------
-
 
 @https_fn.on_call(memory=2048, timeout_sec=300, cpu=2)
 def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1468,7 +1457,8 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
 
   Renders pages directly from deterministic PageDisplayList drawing command trees
   (or legacy markdown), generates 3-size WebP binaries with multithreaded uploads,
-  streams them to Cloud Storage with 2 vCPUs and 2048MB RAM, and registers Firestore records.
+  streams them to Cloud Storage with 2 vCPUs and 2048MB RAM, and registers Firestore records
+  with pre-rendered static HTML (`text_html`).
   """
   data = req.data or {}
   fanzine_id = data.get("fanzineId")
@@ -1490,7 +1480,7 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
   bucket = storage.bucket()
 
   # 1. Primary: Use pre-calculated PageDisplayList from Dart layout engine
-  pages_and_text: List[Tuple[Image.Image, str]] = []
+  pages_and_text: List[Tuple[Image.Image, str, str]] = []
   if display_list_raw:
     if isinstance(display_list_raw, str):
       try:
@@ -1503,7 +1493,8 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
       display_list = {}
     pages_and_text = rasterize_display_list(display_list)
   elif full_text and full_text.strip():
-    pages_and_text = render_publisher_pages_internal(full_text)
+    raw_pages = render_publisher_pages_internal(full_text)
+    pages_and_text = [(canvas, text, "") for canvas, text in raw_pages]
   else:
     raise https_fn.HttpsError(
         https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
@@ -1516,9 +1507,9 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
   now_ms = int(time.time() * 1000)
 
   def _process_and_upload_page(
-      task: Tuple[int, Image.Image, str],
+      task: Tuple[int, Image.Image, str, str],
   ) -> Tuple[int, Dict[str, Any]]:
-    i, canvas, page_text = task
+    i, canvas, page_text, page_html = task
     page_num = start_page_number + i
     page_image_id = f"folio_text_page_{now_ms}_{page_num}"
     page_id = f"page_{now_ms}_{page_num}"
@@ -1542,6 +1533,7 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
         "text": page_text,
         "text_corrected": page_text,
         "text_linked": page_text,
+        "text_html": page_html,
         "title": f"Letters Page {page_num}",
         "isGenerated": True,
         "width": PAGE_WIDTH,
@@ -1572,11 +1564,14 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
         "width": PAGE_WIDTH,
         "height": PAGE_HEIGHT,
         "is5x8": True,
+        "text": page_text,
+        "text_html": page_html,
+        "textHtml": page_html,
     }
 
   tasks = [
-      (i, canvas, page_text)
-      for i, (canvas, page_text) in enumerate(pages_and_text)
+      (i, canvas, page_text, page_html)
+      for i, (canvas, page_text, page_html) in enumerate(pages_and_text)
   ]
   worker_count = min(8, len(tasks)) if tasks else 1
 
@@ -1592,7 +1587,6 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "count": len(output_pages),
       "pages": output_pages,
   }
-
 
 @https_fn.on_call(memory=512, timeout_sec=120)
 def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1618,13 +1612,14 @@ def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
   bucket = storage.bucket()
 
   # 1. Check for structured sheet payload
+  page_html = ""
   if sheet_data:
     if isinstance(sheet_data, str):
       try:
         sheet_data = json.loads(sheet_data)
       except Exception:
         sheet_data = {}
-    canvas, _ = rasterize_display_sheet(sheet_data)
+    canvas, _, page_html = rasterize_display_sheet(sheet_data)
   elif display_list_raw:
     if isinstance(display_list_raw, str):
       try:
@@ -1634,7 +1629,10 @@ def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
     else:
       dl = display_list_raw
     pages = rasterize_display_list(dl)
-    canvas = pages[0][0] if pages else init_page_canvas()[0]
+    if pages:
+      canvas, _, page_html = pages[0]
+    else:
+      canvas = init_page_canvas()[0]
   elif text and text.strip():
     pages = render_publisher_pages_internal(text)
     canvas = pages[0][0] if pages else init_page_canvas()[0]
@@ -1650,14 +1648,22 @@ def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
       token=image_id,
   )
 
+  image_updates: Dict[str, Any] = {
+      "fileUrl": orig_url,
+      "listUrl": list_url,
+      "gridUrl": grid_url,
+      "status": "ready",
+      "updatedAt": firestore.SERVER_TIMESTAMP,
+  }
+  if page_html:
+    image_updates["text_html"] = page_html
+  if text:
+    image_updates["text"] = text
+    image_updates["text_corrected"] = text
+    image_updates["text_linked"] = text
+
   db.collection("images").document(image_id).set(
-      {
-          "fileUrl": orig_url,
-          "listUrl": list_url,
-          "gridUrl": grid_url,
-          "status": "ready",
-          "updatedAt": firestore.SERVER_TIMESTAMP,
-      },
+      image_updates,
       merge=True,
   )
 
@@ -1666,8 +1672,8 @@ def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "fileUrl": orig_url,
       "listUrl": list_url,
       "gridUrl": grid_url,
+      "text_html": page_html,
   }
-
 
 @https_fn.on_call(memory=512, timeout_sec=120, secrets=[MAPS_API_KEY])
 def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1755,6 +1761,17 @@ def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
       token=cover_image_id,
   )
 
+  cover_title = data.get("title") or f"Letters near {center.get('address', '')}"
+  center_addr = center.get("address", "")
+  cover_text = f"Map Cover: {cover_title}\nCenter: {center_addr}\nLetters: {len(letters)}"
+  cover_html = (
+      f"<div class=\"map-cover-text\">"
+      f"<h1 style=\"font-family: 'Anton', sans-serif; font-size: 26px; text-transform: uppercase; margin-bottom: 8px;\">{cover_title}</h1>"
+      f"<p style=\"font-family: 'Arimo', sans-serif; font-size: 14px; color: #475569; margin: 0 0 16px 0;\"><strong>Center:</strong> {center_addr}</p>"
+      f"<p style=\"font-family: 'Arimo', sans-serif; font-size: 13px; color: #64748b; margin: 0;\"><strong>Archival Radius:</strong> {len(letters)} historical letters found radiating from this location.</p>"
+      f"</div>"
+  )
+
   cover_metadata = {
       "uid": owner_user_id,
       "uploaderId": owner_user_id,
@@ -1772,6 +1789,8 @@ def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "fileUrl": orig_url,
       "listUrl": list_url,
       "gridUrl": grid_url,
+      "text": cover_text,
+      "text_html": cover_html,
       "timestamp": firestore.SERVER_TIMESTAMP,
   }
   db.collection("images").document(cover_image_id).set(
@@ -1790,6 +1809,9 @@ def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "height": PAGE_HEIGHT,
       "is5x8": True,
       "status": "ready",
+      "text": cover_text,
+      "text_html": cover_html,
+      "textHtml": cover_html,
   }
 
   return {

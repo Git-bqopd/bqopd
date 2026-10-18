@@ -294,6 +294,9 @@ class PageLayoutSheet extends Equatable {
   /// Used for search indexing, OCR comparisons, and text reader drawers.
   final String extractedText;
 
+  /// Pre-rendered, deterministic HTML markup ready for instantaneous zero-latency injection.
+  final String extractedTextHtml;
+
   /// Optional arbitrary metadata (e.g. column count, baseline row counts, header info).
   final Map<String, dynamic> metadata;
 
@@ -303,6 +306,7 @@ class PageLayoutSheet extends Equatable {
     this.height = 3200,
     required this.commands,
     this.extractedText = '',
+    this.extractedTextHtml = '',
     this.metadata = const {},
   });
 
@@ -314,6 +318,7 @@ class PageLayoutSheet extends Equatable {
       'height': height,
       'commands': commands.map((c) => c.toMap()).toList(),
       'extractedText': extractedText,
+      if (extractedTextHtml.isNotEmpty) 'extractedTextHtml': extractedTextHtml,
       'metadata': metadata,
     };
   }
@@ -330,6 +335,7 @@ class PageLayoutSheet extends Equatable {
           .map(DrawCommand.fromMap)
           .toList(),
       extractedText: (map['extractedText'] ?? '').toString(),
+      extractedTextHtml: (map['extractedTextHtml'] ?? map['extracted_text_html'] ?? '').toString(),
       metadata: Map<String, dynamic>.from(map['metadata'] as Map? ?? {}),
     );
   }
@@ -348,6 +354,7 @@ class PageLayoutSheet extends Equatable {
     height,
     commands,
     extractedText,
+    extractedTextHtml,
     metadata,
   ];
 }
@@ -373,6 +380,10 @@ class PageDisplayList extends Equatable {
   /// Aggregates all extracted text across all pages in publication order.
   String get fullExtractedText =>
       pages.map((p) => p.extractedText).where((t) => t.isNotEmpty).join('\n\n');
+
+  /// Aggregates all pre-rendered HTML across all pages in publication order.
+  String get fullExtractedTextHtml =>
+      pages.map((p) => p.extractedTextHtml).where((t) => t.isNotEmpty).join('\n\n');
 
   /// Serializes the entire display list to a map.
   Map<String, dynamic> toMap() {

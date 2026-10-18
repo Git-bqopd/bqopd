@@ -6,8 +6,9 @@ import 'unsaved_fanzine_registry.dart';
 
 /// Centralized service to handle high-performance WebP layout compilation,
 /// zero-pixel page measurement, and asset synchronization for template pages.
-/// Pre-computes page display command trees with [PublisherLayoutEngine] in pure Dart
-/// and offloads heavy rasterization and Cloud Storage uploads to Cloud Functions.
+/// Pre-computes page display command trees with [PublisherLayoutEngine] in pure Dart,
+/// bakes deterministic static HTML for instant reading, and offloads heavy rasterization
+/// and Cloud Storage uploads to Cloud Functions.
 class PublisherCompiler {
   /// Prepares raw markdown text by expanding shorthand asset tags (e.g. {{1|img01|Caption}})
   /// and resolving wiki shortcodes to absolute URLs.
@@ -92,13 +93,16 @@ class PublisherCompiler {
   }
 
   /// Compiles a single 2000x3200 page from markdown.
-  /// Generates a pre-calculated [PageDisplayList] in pure Dart and calls the server-side
-  /// Cloud Function `compile_publisher_page`, falling back to the browser canvas if offline.
+  /// Generates a pre-calculated [PageDisplayList] in pure Dart, bakes static HTML,
+  /// and calls the server-side Cloud Function `compile_publisher_page` (falling back to client if offline).
   static Future<Map<String, dynamic>> compileAndPublish({
     required String fanzineId,
     required String imageId,
     required String text,
     String templateId = 'basic_text',
+    Map<String, String>? userHandles,
+    Map<String, String>? userNames,
+    Map<String, String>? addressMap,
   }) async {
     final uid = getCurrentUserId() ?? 'system_web';
     final updates = <String, dynamic>{};
@@ -111,13 +115,24 @@ class PublisherCompiler {
       text: text,
     );
 
-    // Pre-calculate the deterministic draw commands tree in pure Dart
+    // Pre-calculate the deterministic draw commands tree and baked HTML in pure Dart
     final displayList = PublisherLayoutEngine.compileToDisplayList(
       fanzineId: fanzineId,
       rawMarkdown: compiledText,
       templateId: templateId,
+      userHandles: userHandles,
+      userNames: userNames,
+      addressMap: addressMap,
     );
     final pageSheet = displayList.pages.isNotEmpty ? displayList.pages.first : null;
+    final String pageHtml = (pageSheet != null && pageSheet.extractedTextHtml.isNotEmpty)
+        ? pageSheet.extractedTextHtml
+        : TextHtmlRenderer.renderToHtml(
+      compiledText,
+      userHandles: userHandles,
+      userNames: userNames,
+      addressMap: addressMap,
+    );
 
     String? fileUrl;
     String? listUrl;
@@ -172,6 +187,21 @@ class PublisherCompiler {
     updates['fileUrl'] = fileUrl;
     updates['listUrl'] = listUrl;
     updates['gridUrl'] = gridUrl;
+    updates['text'] = compiledText;
+    updates['text_corrected'] = compiledText;
+    updates['text_linked'] = compiledText;
+    updates['text_html'] = pageHtml;
+
+    // Persist pre-rendered HTML into Firestore images collection document
+    await fsUpdateDoc('images/$imageId', jsonEncode({
+      'fileUrl': fileUrl,
+      'listUrl': listUrl,
+      'gridUrl': gridUrl,
+      'text': compiledText,
+      'text_corrected': compiledText,
+      'text_linked': compiledText,
+      'text_html': pageHtml,
+    })).catchError((_) => null);
 
     if (UnsavedFanzineRegistry.fanzines.containsKey(fanzineId)) {
       final pages = UnsavedFanzineRegistry.pages[fanzineId] ?? [];
@@ -192,6 +222,8 @@ class PublisherCompiler {
           sidePreference: p.sidePreference,
           width: p.width ?? templateWidth,
           height: p.height ?? templateHeight,
+          text: compiledText,
+          textHtml: pageHtml,
         );
         UnsavedFanzineRegistry.getOrCreatePagesController(fanzineId).add(pages);
       }
@@ -208,6 +240,8 @@ class PublisherCompiler {
               'listUrl': listUrl,
               'gridUrl': gridUrl,
               'status': 'ready',
+              'text': compiledText,
+              'text_html': pageHtml,
             })),
           );
         }
@@ -237,14 +271,17 @@ class PublisherCompiler {
     }
   }
 
-  /// Compiles a long markdown document into multiple connected 2000x3200 pages.
-  /// Typesets content into a structured [PageDisplayList] in pure Dart and calls
-  /// `compile_publisher_folio` on Cloud Functions, streaming WebPs to Storage.
+  /// Compiles a continuous markdown document into multiple 2000x3200 pages.
+  /// Typesets content into a structured [PageDisplayList] in pure Dart, bakes static HTML per page,
+  /// and calls `compile_publisher_folio` on Cloud Functions (streaming WebPs to Storage).
   static Future<List<FanzinePage>> compileAndPublishMultiPage({
     required String fanzineId,
     required String fullText,
     String templateId = 'basic_text',
     int startPageNumber = 1,
+    Map<String, String>? userHandles,
+    Map<String, String>? userNames,
+    Map<String, String>? addressMap,
     void Function(int pageIndex, int totalPages)? onProgress,
   }) async {
     final uid = getCurrentUserId() ?? 'system_web';
@@ -258,12 +295,15 @@ class PublisherCompiler {
       text: fullText,
     );
 
-    // Pre-calculate the multi-page command tree using the pure Dart layout engine
+    // Pre-calculate the multi-page command tree and baked HTML using the pure Dart layout engine
     final displayList = PublisherLayoutEngine.compileToDisplayList(
       fanzineId: fanzineId,
       rawMarkdown: compiledText,
       templateId: templateId,
       startPageNumber: startPageNumber,
+      userHandles: userHandles,
+      userNames: userNames,
+      addressMap: addressMap,
     );
 
     // 1. Primary: Server-side Cloud Function bulk compilation & storage upload
@@ -283,9 +323,34 @@ class PublisherCompiler {
         if (onProgress != null && pagesList.isNotEmpty) {
           onProgress(pagesList.length, pagesList.length);
         }
-        return pagesList.map((p) {
-          final Map<String, dynamic> pMap = Map<String, dynamic>.from(p as Map);
-          return FanzinePage.fromMap(pMap['id']?.toString() ?? '', pMap);
+        return pagesList.asMap().entries.map((entry) {
+          final int idx = entry.key;
+          final Map<String, dynamic> pMap = Map<String, dynamic>.from(entry.value as Map);
+          final sheet = (idx < displayList.pages.length) ? displayList.pages[idx] : null;
+          final sheetText = sheet?.extractedText ?? (pMap['text']?.toString() ?? '');
+          final sheetHtml = (sheet != null && sheet.extractedTextHtml.isNotEmpty)
+              ? sheet.extractedTextHtml
+              : (pMap['text_html'] ?? pMap['textHtml'] ?? (sheetText.isNotEmpty
+              ? TextHtmlRenderer.renderToHtml(
+            sheetText,
+            userHandles: userHandles,
+            userNames: userNames,
+            addressMap: addressMap,
+          )
+              : ''));
+
+          // Backfill baked text_html in Firestore images collection
+          final imgId = pMap['imageId']?.toString();
+          if (imgId != null && imgId.isNotEmpty && sheetHtml.isNotEmpty) {
+            fsUpdateDoc('images/$imgId', jsonEncode({
+              'text_html': sheetHtml,
+            })).catchError((_) => null);
+          }
+
+          return FanzinePage.fromMap(pMap['id']?.toString() ?? '', pMap).copyWith(
+            text: sheetText.isNotEmpty ? sheetText : pMap['text']?.toString(),
+            textHtml: sheetHtml.isNotEmpty ? sheetHtml : null,
+          );
         }).toList();
       }
     } catch (e) {
@@ -314,6 +379,17 @@ class PublisherCompiler {
       final String gridBase64 = pageData['grid'];
       final String pageText = pageData['text'] ?? '';
 
+      final sheet = (i < displayList.pages.length) ? displayList.pages[i] : null;
+      final sheetText = sheet?.extractedText ?? pageText;
+      final sheetHtml = (sheet != null && sheet.extractedTextHtml.isNotEmpty)
+          ? sheet.extractedTextHtml
+          : TextHtmlRenderer.renderToHtml(
+        sheetText,
+        userHandles: userHandles,
+        userNames: userNames,
+        addressMap: addressMap,
+      );
+
       final origBytes = base64Decode(origBase64);
       final listBytes = base64Decode(listBase64);
       final gridBytes = base64Decode(gridBase64);
@@ -338,9 +414,10 @@ class PublisherCompiler {
         'uploaderId': uid,
         'type': 'template',
         'templateId': templateId,
-        'text': pageText,
-        'text_corrected': pageText,
-        'text_linked': pageText,
+        'text': sheetText,
+        'text_corrected': sheetText,
+        'text_linked': sheetText,
+        'text_html': sheetHtml,
         'title': 'Letters Page $pageNum',
         'isGenerated': true,
         'width': templateWidth,
@@ -368,6 +445,8 @@ class PublisherCompiler {
         width: templateWidth,
         height: templateHeight,
         is5x8: true,
+        text: sheetText,
+        textHtml: sheetHtml,
       ));
       pageNum++;
     }

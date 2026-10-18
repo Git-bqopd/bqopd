@@ -14,6 +14,7 @@ import '../utils/web_utils.dart';
 
 /// Top-level coordinator page for public readers, editors, and curators.
 /// Manages real-time data streaming, likes pipeline, and responsive layout delegation.
+/// Preserves pre-baked static HTML across page structures for instant zero-latency reading.
 class FanzineReaderPage extends StatefulComponent {
   final String fanzineId;
   final int? initialPageNumber;
@@ -61,9 +62,31 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     super.initState();
     if (component.preloadedFanzine != null && component.preloadedPages != null) {
       _fanzine = component.preloadedFanzine;
-      _pages = component.preloadedPages!;
+      _pages = component.preloadedPages!.map((p) {
+        final map = Map<String, dynamic>.from(p);
+        if (map['textHtml'] == null && map['text_html'] != null) {
+          map['textHtml'] = map['text_html'];
+        }
+        return map;
+      }).toList();
       _creatorProfiles = component.preloadedCreatorProfiles ?? {};
       _imageStats = component.preloadedImageStats ?? {};
+
+      // Inspect preloaded stats for text_html if page record omitted it
+      for (var page in _pages) {
+        final imgId = page['imageId']?.toString();
+        if (imgId != null && _imageStats.containsKey(imgId)) {
+          final statsData = _imageStats[imgId]!;
+          if (page['textHtml'] == null || page['textHtml'].toString().isEmpty) {
+            final tHtml = statsData['text_html'] ?? statsData['textHtml'];
+            if (tHtml != null && tHtml.toString().isNotEmpty) {
+              page['textHtml'] = tHtml.toString();
+              page['text_html'] = tHtml.toString();
+            }
+          }
+        }
+      }
+
       _loading = false;
       if (kIsWeb) {
         final shortCode = _fanzine?['shortCode'];
@@ -204,6 +227,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               'width': p.width,
               'height': p.height,
               'is5x8': p.is5x8 ?? true,
+              'text': p.text,
+              'textHtml': p.textHtml,
+              'text_html': p.textHtml,
             }).toList();
           });
         }
@@ -216,6 +242,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         final pagesList = decoded.map((d) {
           final data = restoreTimestamps(d['data'] as Map<String, dynamic>);
           data['__id'] = d['id'];
+          if (data['textHtml'] == null && data['text_html'] != null) {
+            data['textHtml'] = data['text_html'];
+          }
           return data;
         }).toList();
         if (mounted) {
@@ -281,6 +310,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           'width': p.width,
           'height': p.height,
           'is5x8': p.is5x8 ?? true,
+          'text': p.text,
+          'textHtml': p.textHtml,
+          'text_html': p.textHtml,
         }).toList();
         _creatorProfiles = {};
         _imageStats = {};
@@ -300,6 +332,9 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         _pages = pagesList.map((p) {
           final data = p['data'] as Map<String, dynamic>;
           data['__id'] = p['id'];
+          if (data['textHtml'] == null && data['text_html'] != null) {
+            data['textHtml'] = data['text_html'];
+          }
           return data;
         }).toList();
         final creators = _fanzine!['masterCreators'] as List? ?? [];
@@ -326,7 +361,23 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
               fsGetDoc('images/$imageId').then((imgRes) {
                 final imgDoc = jsonDecode(imgRes);
                 if (imgDoc['exists']) {
-                  stats[imageId] = imgDoc['data'];
+                  final imgData = imgDoc['data'] as Map<String, dynamic>? ?? {};
+                  stats[imageId] = imgData;
+
+                  // Backfill pre-baked static HTML directly from the images document
+                  if (page['textHtml'] == null || page['textHtml'].toString().isEmpty) {
+                    final tHtml = imgData['text_html'] ?? imgData['textHtml'];
+                    if (tHtml != null && tHtml.toString().isNotEmpty) {
+                      page['textHtml'] = tHtml.toString();
+                      page['text_html'] = tHtml.toString();
+                    }
+                  }
+                  if (page['text'] == null || page['text'].toString().isEmpty) {
+                    final t = imgData['text'] ?? imgData['text_corrected'] ?? imgData['text_linked'];
+                    if (t != null && t.toString().isNotEmpty) {
+                      page['text'] = t.toString();
+                    }
+                  }
                 }
               }),
             );

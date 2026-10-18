@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../models/page_display_list.dart';
+import '../utils/text_html_renderer.dart';
 import 'font_metrics.dart';
 
 /// Enumerates the supported block elements in the publisher markdown syntax.
@@ -42,7 +43,7 @@ class LayoutBlock {
 
 /// Pure Dart layout and typesetting engine for 2000x3200 multi-column publisher pages.
 /// Operates on the strict 42px baseline grid, balances columns across pages,
-/// and produces a deterministic [PageDisplayList] for visual rasterization.
+/// and produces a deterministic [PageDisplayList] with baked HTML for visual rasterization and instant reading.
 class PublisherLayoutEngine {
   /// Physical canvas width in pixels (standard 5:8 publishing plate).
   static const double kPageWidth = 2000.0;
@@ -304,7 +305,8 @@ class PublisherLayoutEngine {
   }
 
   /// Typesets continuous [rawMarkdown] across 2000x3200 3-column physical sheets.
-  /// Enforces line wrapping, baseline grid alignment, and produces a [PageDisplayList].
+  /// Enforces line wrapping, baseline grid alignment, and produces a [PageDisplayList]
+  /// containing both exact [DrawCommand] trees and pre-rendered static HTML.
   static PageDisplayList compileToDisplayList({
     required String fanzineId,
     required String rawMarkdown,
@@ -312,6 +314,11 @@ class PublisherLayoutEngine {
     int startPageNumber = 1,
     bool includeChrome = true,
     Map<String, dynamic> metadata = const {},
+    Map<String, String>? userHandles,
+    Map<String, String>? userNames,
+    Map<String, String>? addressMap,
+    String? Function(String uid)? userHandleResolver,
+    String? Function(String address)? addressResolver,
   }) {
     if (rawMarkdown.trim().isEmpty) {
       return PageDisplayList(
@@ -337,12 +344,23 @@ class PublisherLayoutEngine {
       final pageNum = startPageNumber + pageSequenceIndex;
       final pageExtractedText = currentPageTextParts.join('\n\n').trim();
 
+      // Pre-bake static HTML per page using TextHtmlRenderer
+      final pageExtractedTextHtml = TextHtmlRenderer.renderToHtml(
+        pageExtractedText,
+        userHandles: userHandles,
+        userNames: userNames,
+        addressMap: addressMap,
+        userHandleResolver: userHandleResolver,
+        addressResolver: addressResolver,
+      );
+
       resultPages.add(PageLayoutSheet(
         pageNumber: pageNum,
         width: kPageWidth.toInt(),
         height: kPageHeight.toInt(),
         commands: List<DrawCommand>.from(activeCommands),
         extractedText: pageExtractedText,
+        extractedTextHtml: pageExtractedTextHtml,
         metadata: {
           'columnCount': 3,
           'baselineRowHeight': kRowHeight,
@@ -507,7 +525,6 @@ class PublisherLayoutEngine {
         continue;
       }
 
-      // 4. Text, Headings, and Bullet List Blocks
       double fontSize = 28.0;
       String fontFamily = 'Arimo';
       bool isBold = false;

@@ -20,7 +20,8 @@ import '../panels/terminal_panel.dart';
 
 /// Renders an individual fanzine page container inside the list reading view,
 /// hosting the high-resolution image, social toolbar, and expandable detail panels.
-/// Directly maps bonusRow accordion drawers to specialized RowPanel implementations.
+/// Directly maps bonusRow accordion drawers to specialized RowPanel implementations
+/// and forwards pre-baked static HTML directly to the text reader panel for instant display.
 class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
   final String? shortCode;
@@ -220,14 +221,22 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
     String title = "";
     switch (activePanel) {
       case BonusRowType.textReader:
+        final preloadedHtml = (component.pageData['textHtml'] ?? component.pageData['text_html'])?.toString();
+        final preloadedText = component.pageData['text']?.toString();
         title = "";
-        inner =
-            TextReaderRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = TextReaderRowPanel(
+          imageId: imageId,
+          fanzineId: component.fanzineId,
+          preloadedHtml: preloadedHtml,
+          preloadedText: preloadedText,
+        );
         break;
       case BonusRowType.comments:
         title = "Comments";
-        inner =
-            CommentsRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = CommentsRowPanel(
+          imageId: imageId,
+          fanzineId: component.fanzineId,
+        );
         break;
       case BonusRowType.tags:
         title = "Hashtags & Voting";
@@ -240,13 +249,17 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.editText:
       case BonusRowType.linkedText:
         title = "";
-        inner =
-            EditTextRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = EditTextRowPanel(
+          imageId: imageId,
+          fanzineId: component.fanzineId,
+        );
         break;
       case BonusRowType.entities:
         title = "";
-        inner =
-            EntitiesRowPanel(imageId: imageId, fanzineId: component.fanzineId);
+        inner = EntitiesRowPanel(
+          imageId: imageId,
+          fanzineId: component.fanzineId,
+        );
         break;
       case BonusRowType.indicia:
         title = "Issue Indicia";
@@ -267,7 +280,9 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.newPage:
         title = "New Page Text Editor";
         inner = PublisherTextRowPanel(
-            imageId: imageId, fanzineId: component.fanzineId);
+          imageId: imageId,
+          fanzineId: component.fanzineId,
+        );
         break;
       case BonusRowType.terminal:
         title = "Combat Terminal";

@@ -60,8 +60,7 @@ class AddressRadiusLetters {
 
   /// Parses historical/vintage date strings (e.g. "March 1, 1927", "January, 1971", "1935")
   /// into comparable DateTime objects for chronological ordering.
-  static DateTime parseHistoricalDate(dynamic rawDate,
-      [String? markdownContext]) {
+  static DateTime parseHistoricalDate(dynamic rawDate, [String? markdownContext]) {
     String text = '';
     if (rawDate != null && rawDate.toString().trim().isNotEmpty) {
       text = rawDate.toString().trim();
@@ -168,8 +167,7 @@ class AddressRadiusLetters {
 
   /// Resolves the center target address into geographic coordinates using
   /// the server-verified Cloud Function endpoint with Firestore geocache caching.
-  static Future<Map<String, dynamic>?> _geocodeTarget(
-      String targetAddress) async {
+  static Future<Map<String, dynamic>?> _geocodeTarget(String targetAddress) async {
     final cleanAddr = targetAddress.trim();
     if (cleanAddr.isEmpty) return null;
     final targetGeoJson = await geocodeAddress(cleanAddr);
@@ -196,8 +194,7 @@ class AddressRadiusLetters {
     required int limit,
     double maxRadiusMiles = 5000.0,
   }) async {
-    print(
-        '[AddressRadiusLetters] Requesting $limit closest letters from Cloud Function query_nearest_letters...');
+    print('[AddressRadiusLetters] Requesting $limit closest letters from Cloud Function query_nearest_letters...');
     try {
       final payload = {
         'lat': lat,
@@ -205,20 +202,16 @@ class AddressRadiusLetters {
         'limit': limit,
         'max_radius_miles': maxRadiusMiles,
       };
-      final resStr =
-      await fnCall('query_nearest_letters', jsonEncode(payload));
+      final resStr = await fnCall('query_nearest_letters', jsonEncode(payload));
       final decoded = jsonDecode(resStr);
       if (decoded is Map && decoded['letters'] is List) {
         final List list = decoded['letters'];
-        final letters =
-        list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-        print(
-            '[AddressRadiusLetters] Server returned ${letters.length} candidate letters.');
+        final letters = list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        print('[AddressRadiusLetters] Server returned ${letters.length} candidate letters.');
         return letters;
       }
     } catch (e) {
-      print(
-          '[AddressRadiusLetters] Server callable query_nearest_letters fallback: $e');
+      print('[AddressRadiusLetters] Server callable query_nearest_letters fallback: $e');
     }
     return _fallbackBoundedLetters(lat, lng, limit, maxRadiusMiles);
   }
@@ -229,8 +222,7 @@ class AddressRadiusLetters {
       int limit,
       double maxRadius,
       ) async {
-    print(
-        '[AddressRadiusLetters] Running fallback bounded letters query over pre-indexed geo data...');
+    print('[AddressRadiusLetters] Running fallback bounded letters query over pre-indexed geo data...');
     final commentsRes = await fsQuery(
       'artifacts/bqopd/public/data/comments',
       'sourceType',
@@ -240,8 +232,7 @@ class AddressRadiusLetters {
     );
     List decodedComments = jsonDecode(commentsRes) as List;
     if (decodedComments.isEmpty) {
-      final fallbackRes = await fsQuery(
-          'artifacts/bqopd/public/data/comments', '', '', '', '');
+      final fallbackRes = await fsQuery('artifacts/bqopd/public/data/comments', '', '', '', '');
       decodedComments = jsonDecode(fallbackRes) as List;
     }
     final List<Map<String, dynamic>> matchingLetters = [];
@@ -250,8 +241,7 @@ class AddressRadiusLetters {
       final data = Map<String, dynamic>.from(item['data'] as Map);
       data['_id'] = item['id'];
       final isLetter = data['sourceType'] == 'letter_column' ||
-          (data['location'] != null &&
-              data['location'].toString().trim().isNotEmpty);
+          (data['location'] != null && data['location'].toString().trim().isNotEmpty);
       if (!isLetter) continue;
 
       double? letterLat;
@@ -265,11 +255,9 @@ class AddressRadiusLetters {
       }
 
       if (letterLat != null && letterLng != null) {
-        final dist = calculateDistanceMiles(
-            targetLat, targetLng, letterLat, letterLng);
+        final dist = calculateDistanceMiles(targetLat, targetLng, letterLat, letterLng);
         if (dist <= maxRadius) {
-          data['_calculatedDistanceMiles'] =
-              double.parse(dist.toStringAsFixed(2));
+          data['_calculatedDistanceMiles'] = double.parse(dist.toStringAsFixed(2));
           matchingLetters.add(data);
         }
       }
@@ -300,7 +288,6 @@ class AddressRadiusLetters {
       if (line.startsWith('{{TEMPLATE')) {
         totalHeight += 29.0 * rowHeight; // ~1218px
       } else if (line.startsWith('{{IMAGE')) {
-        // Extract optional dimensions or calculate based on natural 5:8 aspect ratio
         double drawHeight = colWidth / 0.625; // Default ~972.8px
         final dimMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch(line);
         final ratioMatch = RegExp(r'(?:ratio|aspectRatio)=(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(line);
@@ -326,8 +313,7 @@ class AddressRadiusLetters {
       } else if (line.startsWith('# ')) {
         totalHeight += 2.0 * rowHeight; // 84px
       } else {
-        final words =
-        line.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+        final words = line.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
         if (words.isNotEmpty) {
           final lineCount = math.max(1, (words.length / 7.2).ceil());
           totalHeight += (lineCount * rowHeight) + rowHeight;
@@ -339,11 +325,13 @@ class AddressRadiusLetters {
   }
 
   /// Builds a Markdown representation of a historical letter, embedding the
-  /// natural dimensions or aspect ratio for both the fanzine cover and the page scan.
+  /// natural dimensions or aspect ratio for both the fanzine cover and the page scan,
+  /// and resolving author profiles and locations into deterministic Wikilinks.
   static String buildLetterMarkdown(
       HistoricalLetterEntry entry, {
         Map<String, dynamic>? coverMetadata,
         Map<String, dynamic>? pageMetadata,
+        String? authorGeoRef,
       }) {
     final buffer = StringBuffer();
 
@@ -402,7 +390,7 @@ class AddressRadiusLetters {
     buffer.writeln(entry.letterText);
     buffer.writeln();
 
-    // 6. Author and Location sign-off
+    // 6. Pre-Resolved Author and Location sign-off (wrapped into semantic wikilinks)
     final cleanTextLower = entry.letterText.toLowerCase();
     final bool hasAuthor = entry.authorName != null &&
         entry.authorName!.isNotEmpty &&
@@ -412,10 +400,24 @@ class AddressRadiusLetters {
         cleanTextLower.contains(entry.location!.toLowerCase());
 
     if (!hasAuthor && entry.authorName != null && entry.authorName!.isNotEmpty) {
-      buffer.writeln(entry.authorName!);
+      final name = entry.authorName!.trim();
+      final handle = (entry.authorHandle != null && entry.authorHandle!.isNotEmpty)
+          ? entry.authorHandle!.trim().replaceAll('@', '')
+          : name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+      if (handle.isNotEmpty) {
+        buffer.writeln('**[[$name|user:$handle]]**');
+      } else {
+        buffer.writeln('**[[$name]]**');
+      }
     }
+
     if (!hasLocation && entry.location != null && entry.location!.isNotEmpty) {
-      buffer.writeln(entry.location!);
+      final loc = entry.location!.trim();
+      if (authorGeoRef != null && authorGeoRef.isNotEmpty) {
+        buffer.writeln('*[[$loc|address:$authorGeoRef]]*');
+      } else {
+        buffer.writeln('*[[$loc|address:$loc]]*');
+      }
     }
     buffer.writeln();
 
@@ -424,8 +426,7 @@ class AddressRadiusLetters {
 
   /// Evaluates exact canvas page count for a set of letters by testing the layout
   /// in its final chronological publication sequence using pure-Dart PublisherLayoutEngine.
-  static Future<int> _testRenderPageCount(
-      List<_SelectedRadiusLetter> letters) async {
+  static Future<int> _testRenderPageCount(List<_SelectedRadiusLetter> letters) async {
     if (letters.isEmpty) return 0;
     final copy = List<_SelectedRadiusLetter>.from(letters);
     copy.sort((a, b) {
@@ -457,13 +458,10 @@ class AddressRadiusLetters {
     final Set<String> imgIdsToFetch = {};
 
     for (var raw in rawComments) {
-      final contextMap = raw['context'] is Map
-          ? (raw['context'] as Map<String, dynamic>)
-          : {};
+      final contextMap = raw['context'] is Map ? (raw['context'] as Map<String, dynamic>) : {};
       final fzId = (contextMap['fanzineId'] ?? '').toString();
       final imgId = (raw['contentId'] ?? '').toString();
-      if (fzId.isNotEmpty &&
-          !UnsavedFanzineRegistry.fanzines.containsKey(fzId)) {
+      if (fzId.isNotEmpty && !UnsavedFanzineRegistry.fanzines.containsKey(fzId)) {
         fzIdsToFetch.add(fzId);
       }
       if (imgId.isNotEmpty) {
@@ -478,8 +476,7 @@ class AddressRadiusLetters {
           try {
             final doc = jsonDecode(fzRes);
             if (doc['exists'] == true) {
-              fanzineCache[fzId] =
-                  doc['data'] as Map<String, dynamic>? ?? {};
+              fanzineCache[fzId] = doc['data'] as Map<String, dynamic>? ?? {};
             }
           } catch (_) {}
         }),
@@ -495,10 +492,7 @@ class AddressRadiusLetters {
               if (imageMetadataCache != null) {
                 imageMetadataCache[imgId] = d;
               }
-              final url = d['fileUrl'] ??
-                  d['listUrl'] ??
-                  d['gridUrl'] ??
-                  d['imageUrl'];
+              final url = d['fileUrl'] ?? d['listUrl'] ?? d['gridUrl'] ?? d['imageUrl'];
               if (url != null && url.toString().isNotEmpty) {
                 imageCache[imgId] = url.toString();
               }
@@ -514,8 +508,7 @@ class AddressRadiusLetters {
     final List<HistoricalLetterEntry> entries = [];
     for (var raw in rawComments) {
       final dist = (raw['_calculatedDistanceMiles'] as num?)?.toDouble();
-      final entry =
-      HistoricalLetterEntry.fromCommentMap(raw, distanceMiles: dist);
+      final entry = HistoricalLetterEntry.fromCommentMap(raw, distanceMiles: dist);
       String resolvedTitle = entry.fanzineTitle;
       String? resolvedVolume = entry.volume;
       String? resolvedIssue = entry.issue;
@@ -538,8 +531,7 @@ class AddressRadiusLetters {
           resolvedIssue ??= fz.issue;
           resolvedShortCode ??= fz.shortCode;
           resolvedPubDate ??= fz.publishedDate;
-          final pgs =
-              UnsavedFanzineRegistry.pages[entry.fanzineId] ?? [];
+          final pgs = UnsavedFanzineRegistry.pages[entry.fanzineId] ?? [];
           if (pgs.isNotEmpty) {
             resolvedCover ??= pgs.first.gridUrl ?? pgs.first.imageUrl;
           }
@@ -577,7 +569,8 @@ class AddressRadiusLetters {
   }
 
   /// Orchestrates geocoding, candidate spatial querying, parallel metadata resolution,
-  /// two-way convergence layout fitting, chronological sorting, map cover generation, and compiles publisher pages.
+  /// two-way convergence layout fitting, chronological sorting, map cover generation,
+  /// and compiles publisher pages with frozen, pre-baked static HTML ready for zero-latency reading.
   static Future<RadiusFolioResult> buildFolio({
     required String targetAddress,
     int targetPages = 4,
@@ -592,25 +585,19 @@ class AddressRadiusLetters {
       throw Exception('Please enter an address or city.');
     }
 
-    // When hasMapCover is true, exactly 1 page is the map cover; the rest must be letter content.
-    final int contentPagesCount =
-    hasMapCover ? math.max(1, targetPages - 1) : targetPages;
+    final int contentPagesCount = hasMapCover ? math.max(1, targetPages - 1) : targetPages;
 
     // 1. Geocode Target Center Address
-    print(
-        '[AddressRadiusLetters] Step 1: Geocoding center address "$cleanTargetAddr"...');
+    print('[AddressRadiusLetters] Step 1: Geocoding center address "$cleanTargetAddr"...');
     onProgress?.call('Geocoding center address...');
     final targetCoords = await _geocodeTarget(cleanTargetAddr);
     if (targetCoords == null) {
-      throw Exception(
-          'Unable to geocode "$cleanTargetAddr". Please check the address or city name.');
+      throw Exception('Unable to geocode "$cleanTargetAddr". Please check the address or city name.');
     }
     final double targetLat = targetCoords['lat'] as double;
     final double targetLng = targetCoords['lng'] as double;
-    final String formattedCenter =
-        targetCoords['formatted'] as String? ?? cleanTargetAddr;
-    print(
-        '[AddressRadiusLetters] Target coordinates: $targetLat, $targetLng ($formattedCenter)');
+    final String formattedCenter = targetCoords['formatted'] as String? ?? cleanTargetAddr;
+    print('[AddressRadiusLetters] Target coordinates: $targetLat, $targetLng ($formattedCenter)');
 
     // 2. Fetch nearest candidate letters (broad pool to guarantee full page coverage)
     final int candidateLimit = (contentPagesCount * 6).clamp(32, 160);
@@ -622,15 +609,52 @@ class AddressRadiusLetters {
       maxRadiusMiles: radiusMiles?.toDouble() ?? 5000.0,
     );
     if (candidateLetters.isEmpty) {
-      throw Exception(
-          'No historical letters found near $cleanTargetAddr.');
+      throw Exception('No historical letters found near $cleanTargetAddr.');
     }
-    print(
-        '[AddressRadiusLetters] Found ${candidateLetters.length} candidate letters. Resolving metadata in parallel...');
+    print('[AddressRadiusLetters] Found ${candidateLetters.length} candidate letters. Resolving metadata in parallel...');
     onProgress?.call('Resolving letter metadata...');
     final Map<String, Map<String, dynamic>> imageMetadataCache = {};
     final resolvedEntries =
     await _resolveLetterEntriesBatch(candidateLetters, imageMetadataCache: imageMetadataCache);
+
+    // Pre-resolve global identity mappings: userHandles, userNames, and address pins
+    final Map<String, String> userHandlesMap = {};
+    final Map<String, String> userNamesMap = {};
+    final Map<String, String> addressMap = {};
+
+    for (int i = 0; i < resolvedEntries.length; i++) {
+      final entry = resolvedEntries[i];
+      final raw = candidateLetters[i];
+      final authorName = entry.authorName?.trim() ?? '';
+      final authorHandle = (entry.authorHandle?.trim().isNotEmpty == true)
+          ? entry.authorHandle!.trim().replaceAll('@', '')
+          : (authorName.isNotEmpty ? authorName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '') : '');
+      final authorUid = raw['userId']?.toString() ?? '';
+
+      if (authorHandle.isNotEmpty) {
+        if (authorName.isNotEmpty) {
+          userHandlesMap[authorName] = authorHandle;
+          userNamesMap[authorHandle] = authorName;
+        }
+        if (authorUid.isNotEmpty) {
+          userHandlesMap[authorUid] = authorHandle;
+          userNamesMap[authorUid] = authorName.isNotEmpty ? authorName : authorHandle;
+        }
+        userHandlesMap[authorHandle] = authorHandle;
+      }
+
+      final loc = entry.location?.trim() ?? '';
+      final geo = raw['geo'] is Map ? (raw['geo'] as Map) : null;
+      if (loc.isNotEmpty) {
+        if (geo != null && geo['lat'] != null && geo['lng'] != null) {
+          final lat = geo['lat'];
+          final lng = geo['lng'];
+          addressMap[loc] = '$lat,$lng';
+        } else {
+          addressMap[loc] = loc;
+        }
+      }
+    }
 
     // Build complete pool of candidate radius letters ordered by proximity (closest first)
     final List<_SelectedRadiusLetter> allCandidates = [];
@@ -639,18 +663,23 @@ class AddressRadiusLetters {
       final raw = candidateLetters[i];
       final pageMeta = entry.imageId != null ? imageMetadataCache[entry.imageId] : null;
 
-      // Construct markdown preserving natural dimensions and aspect ratios
+      final loc = entry.location?.trim() ?? '';
+      final geo = raw['geo'] is Map ? (raw['geo'] as Map) : null;
+      String? geoRef;
+      if (geo != null && geo['lat'] != null && geo['lng'] != null) {
+        geoRef = '${geo['lat']},${geo['lng']}';
+      } else if (loc.isNotEmpty) {
+        geoRef = loc;
+      }
+
       final letterMd = buildLetterMarkdown(
         entry,
         pageMetadata: pageMeta,
+        authorGeoRef: geoRef,
       );
-      final dist =
-          (raw['_calculatedDistanceMiles'] as num?)?.toDouble() ?? 0.0;
+      final dist = (raw['_calculatedDistanceMiles'] as num?)?.toDouble() ?? 0.0;
       final pubDate = parseHistoricalDate(
-        raw['historicalDate'] ??
-            (raw['context'] is Map
-                ? raw['context']['publishedDate']
-                : null),
+        raw['historicalDate'] ?? (raw['context'] is Map ? raw['context']['publishedDate'] : null),
         letterMd,
       );
       final estHeight = estimateMarkdownHeight(letterMd);
@@ -664,14 +693,11 @@ class AddressRadiusLetters {
       ));
     }
 
-    print(
-        '[AddressRadiusLetters] Successfully resolved ${allCandidates.length} entries. Performing two-way convergence fitting for $contentPagesCount letter ${contentPagesCount == 1 ? "page" : "pages"}...');
-    onProgress?.call(
-        'Fitting letters to $contentPagesCount letter ${contentPagesCount == 1 ? "page" : "pages"}...');
+    print('[AddressRadiusLetters] Successfully resolved ${allCandidates.length} entries. Performing two-way convergence fitting for $contentPagesCount letter ${contentPagesCount == 1 ? "page" : "pages"}...');
+    onProgress?.call('Fitting letters to $contentPagesCount letter ${contentPagesCount == 1 ? "page" : "pages"}...');
 
     // Phase 1: Generous initial estimate to reach full page capacity
-    final double targetCapacityPixels =
-        contentPagesCount * kTotalPageHeight;
+    final double targetCapacityPixels = contentPagesCount * kTotalPageHeight;
     double accumulatedEstPixels = 0.0;
     final List<_SelectedRadiusLetter> selectedLetters = [];
     int candidateIndex = 0;
@@ -692,37 +718,28 @@ class AddressRadiusLetters {
 
     // Phase 2: Exact Two-Way Canvas Convergence
     int renderedPages = await _testRenderPageCount(selectedLetters);
-    print(
-        '[AddressRadiusLetters] Initial measurement test: $renderedPages pages (Target: $contentPagesCount)');
+    print('[AddressRadiusLetters] Initial measurement test: $renderedPages pages (Target: $contentPagesCount)');
 
-    // Part A: Grow upwards if under-packed
-    while (renderedPages < contentPagesCount &&
-        candidateIndex < allCandidates.length) {
+    while (renderedPages < contentPagesCount && candidateIndex < allCandidates.length) {
       selectedLetters.add(allCandidates[candidateIndex]);
       candidateIndex++;
       renderedPages = await _testRenderPageCount(selectedLetters);
-      print(
-          '[AddressRadiusLetters] Grew pool to ${selectedLetters.length} letters -> $renderedPages pages');
+      print('[AddressRadiusLetters] Grew pool to ${selectedLetters.length} letters -> $renderedPages pages');
     }
 
-    // Part B: Trim downwards if over-packed
     while (renderedPages > contentPagesCount && selectedLetters.length > 1) {
       selectedLetters.removeLast();
       renderedPages = await _testRenderPageCount(selectedLetters);
-      print(
-          '[AddressRadiusLetters] Trimmed pool to ${selectedLetters.length} letters -> $renderedPages pages');
+      print('[AddressRadiusLetters] Trimmed pool to ${selectedLetters.length} letters -> $renderedPages pages');
     }
 
-    // Part C: Fine-tuning - If trimming dropped below target, try subsequent smaller candidates
-    if (renderedPages < contentPagesCount &&
-        candidateIndex < allCandidates.length) {
+    if (renderedPages < contentPagesCount && candidateIndex < allCandidates.length) {
       for (int i = candidateIndex; i < allCandidates.length; i++) {
         selectedLetters.add(allCandidates[i]);
         final testCount = await _testRenderPageCount(selectedLetters);
         if (testCount == contentPagesCount) {
           renderedPages = testCount;
-          print(
-              '[AddressRadiusLetters] Fine-tuned exact match: ${selectedLetters.length} letters -> $renderedPages pages');
+          print('[AddressRadiusLetters] Fine-tuned exact match: ${selectedLetters.length} letters -> $renderedPages pages');
           break;
         } else if (testCount > contentPagesCount) {
           selectedLetters.removeLast();
@@ -732,8 +749,7 @@ class AddressRadiusLetters {
       }
     }
 
-    print(
-        '[AddressRadiusLetters] Final letter pool selected: ${selectedLetters.length} letters rendering to $renderedPages pages.');
+    print('[AddressRadiusLetters] Final letter pool selected: ${selectedLetters.length} letters rendering to $renderedPages pages.');
 
     // Phase 3: Final Chronological Ordering (Oldest to Newest)
     selectedLetters.sort((a, b) {
@@ -752,10 +768,12 @@ class AddressRadiusLetters {
     final List<FanzinePage> finalPages = [];
     String? coverImageUrl;
 
-    // 5. Generate Map Cover Page (If enabled)
+    final String folioTitle = targetPages == 24
+        ? 'Letters near $cleanTargetAddr (Full Fanzine)'
+        : 'Letters near $cleanTargetAddr';
+
     if (hasMapCover) {
-      print(
-          '[AddressRadiusLetters] Step 5: Rendering 2000x3200 Google Maps Cover page...');
+      print('[AddressRadiusLetters] Step 5: Rendering 2000x3200 Google Maps Cover page...');
       onProgress?.call('Drawing high-resolution map cover...');
       final List<Map<String, dynamic>> mapLettersPayload = [];
       for (int i = 0; i < selectedLetters.length; i++) {
@@ -768,8 +786,7 @@ class AddressRadiusLetters {
           'displayName': raw['displayName'] ?? 'Reader',
           'location': raw['location'] ?? '',
           'distanceMiles': item.distance,
-          'publicationTitle':
-          context['fanzineTitle'] ?? 'Archival Fanzine',
+          'publicationTitle': context['fanzineTitle'] ?? 'Archival Fanzine',
           'issueDate': raw['historicalDate'] ?? '',
           'lat': geo['lat'],
           'lng': geo['lng'],
@@ -789,32 +806,40 @@ class AddressRadiusLetters {
         'shortCode': shortCode ?? ShortcodeGenerator.generateStandardCode(),
       };
 
+      final String coverText = 'Map Cover: $folioTitle\nCenter: $formattedCenter\nLetters: ${mapLettersPayload.length}';
+      final String coverHtml = '<div class="map-cover-text"><h1 style="font-family: \'Anton\', sans-serif; font-size: 26px; text-transform: uppercase; margin-bottom: 8px;">$folioTitle</h1><p style="font-family: \'Arimo\', sans-serif; font-size: 14px; color: #475569; margin: 0 0 16px 0;"><strong>Center:</strong> $formattedCenter</p><p style="font-family: \'Arimo\', sans-serif; font-size: 13px; color: #64748b; margin: 0;"><strong>Archival Radius:</strong> ${mapLettersPayload.length} historical letters found radiating from this location.</p></div>';
+
       // 5.A: Primary Server-Side Cloud Function Map Cover Compilation
       try {
-        final resStr =
-        await fnCall('compile_map_cover', jsonEncode(mapCoverConfig));
+        final resStr = await fnCall('compile_map_cover', jsonEncode(mapCoverConfig));
         final decoded = jsonDecode(resStr);
-        if (decoded is Map &&
-            decoded['status'] == 'success' &&
-            decoded['coverPage'] is Map) {
+        if (decoded is Map && decoded['status'] == 'success' && decoded['coverPage'] is Map) {
           final cpMap = Map<String, dynamic>.from(decoded['coverPage'] as Map);
           final coverPage = FanzinePage.fromMap(
-              cpMap['id']?.toString() ?? '${fanzineId}_page_1', cpMap);
+            cpMap['id']?.toString() ?? '${fanzineId}_page_1',
+            cpMap,
+          ).copyWith(
+            text: coverText,
+            textHtml: coverHtml,
+          );
           coverImageUrl = coverPage.imageUrl;
           finalPages.add(coverPage);
-          print(
-              '[AddressRadiusLetters] Map cover published server-side as Page 1.');
+          if (coverPage.imageId != null && coverPage.imageId!.isNotEmpty) {
+            fsUpdateDoc('images/${coverPage.imageId}', jsonEncode({
+              'text': coverText,
+              'text_html': coverHtml,
+            })).catchError((_) => null);
+          }
+          print('[AddressRadiusLetters] Map cover published server-side as Page 1.');
         }
       } catch (e) {
-        print(
-            '[AddressRadiusLetters] Server compile_map_cover error, falling back to client: $e');
+        print('[AddressRadiusLetters] Server compile_map_cover error, falling back to client: $e');
       }
 
       // 5.B: Client Fallback if Server Function is offline
       if (finalPages.isEmpty) {
         try {
-          final coverJson =
-          await renderMapCoverPage(jsonEncode(mapCoverConfig));
+          final coverJson = await renderMapCoverPage(jsonEncode(mapCoverConfig));
           final coverData = jsonDecode(coverJson) as Map<String, dynamic>;
           onProgress?.call('Publishing map cover image...');
           final origBytes = base64Decode(coverData['original'] as String);
@@ -822,12 +847,9 @@ class AddressRadiusLetters {
           final gridBytes = base64Decode(coverData['grid'] as String);
 
           final coverUrls = await Future.wait([
-            stUpload(
-                'fanzines/$fanzineId/page_1.webp', origBytes, 'image/webp'),
-            stUpload('fanzines/$fanzineId/page_1_list.webp', listBytes,
-                'image/webp'),
-            stUpload('fanzines/$fanzineId/page_1_grid.webp', gridBytes,
-                'image/webp'),
+            stUpload('fanzines/$fanzineId/page_1.webp', origBytes, 'image/webp'),
+            stUpload('fanzines/$fanzineId/page_1_list.webp', listBytes, 'image/webp'),
+            stUpload('fanzines/$fanzineId/page_1_grid.webp', gridBytes, 'image/webp'),
           ]);
           coverImageUrl = coverUrls[0];
           final coverImageId = 'map_cover_${fanzineId}_1';
@@ -843,16 +865,16 @@ class AddressRadiusLetters {
             'height': 3200,
             'aspectRatio': 0.625,
             'is5x8': true,
-            'shortCode':
-            shortCode ?? ShortcodeGenerator.generateStandardCode(),
+            'shortCode': shortCode ?? ShortcodeGenerator.generateStandardCode(),
             'folioContext': fanzineId,
             'usedInFanzines': [fanzineId],
             'fileUrl': coverUrls[0],
             'listUrl': coverUrls[1],
             'gridUrl': coverUrls[2],
+            'text': coverText,
+            'text_html': coverHtml,
           };
-          await fsSetDoc(
-              'images/$coverImageId', jsonEncode(coverMetadata), true);
+          await fsSetDoc('images/$coverImageId', jsonEncode(coverMetadata), true);
 
           final coverPage = FanzinePage(
             id: '${fanzineId}_page_1',
@@ -866,40 +888,60 @@ class AddressRadiusLetters {
             height: 3200,
             is5x8: true,
             status: 'ready',
+            text: coverText,
+            textHtml: coverHtml,
           );
           finalPages.add(coverPage);
-          print(
-              '[AddressRadiusLetters] Map cover published via client fallback as Page 1.');
+          print('[AddressRadiusLetters] Map cover published via client fallback as Page 1.');
         } catch (e, stack) {
-          print(
-              '[AddressRadiusLetters] Failed client map cover fallback: $e\n$stack');
+          print('[AddressRadiusLetters] Failed client map cover fallback: $e\n$stack');
         }
       }
     }
 
-    // 6. Compile Content Pages via Server-Side Cloud Function
-    print(
-        '[AddressRadiusLetters] Compiling and publishing final folio text pages...');
+    print('[AddressRadiusLetters] Compiling and publishing final folio text pages...');
     onProgress?.call('Compiling publisher text pages...');
     final int startPageNum = hasMapCover && finalPages.isNotEmpty ? 2 : 1;
-    final List<FanzinePage> contentPages =
-    await PublisherCompiler.compileAndPublishMultiPage(
+
+    // Compile content pages with pre-resolved identity tables passed into the layout engine
+    final List<FanzinePage> contentPages = await PublisherCompiler.compileAndPublishMultiPage(
       fanzineId: fanzineId,
       fullText: fullText,
       startPageNumber: startPageNum,
+      userHandles: userHandlesMap,
+      userNames: userNamesMap,
+      addressMap: addressMap,
       onProgress: (current, total) {
-        onProgress?.call(
-            'Compiling publisher text page $current of $total...');
+        onProgress?.call('Compiling publisher text page $current of $total...');
       },
     );
 
     // Hard clamp: Ensure the number of content pages never exceeds contentPagesCount
     final int pageOffset = hasMapCover && finalPages.isNotEmpty ? 1 : 0;
-    final int pagesToTake =
-    math.min(contentPages.length, contentPagesCount);
+    final int pagesToTake = math.min(contentPages.length, contentPagesCount);
+
     for (int i = 0; i < pagesToTake; i++) {
       final cp = contentPages[i];
       final targetPageNum = i + 1 + pageOffset;
+
+      // Ensure pre-baked HTML is populated even if backend service was offline
+      String pageHtml = cp.textHtml ?? '';
+      if (pageHtml.isEmpty && (cp.text != null && cp.text!.isNotEmpty)) {
+        pageHtml = TextHtmlRenderer.renderToHtml(
+          cp.text!,
+          userHandles: userHandlesMap,
+          userNames: userNamesMap,
+          addressMap: addressMap,
+        );
+      }
+
+      // Persist baked text_html in Firestore images collection
+      if (cp.imageId != null && cp.imageId!.isNotEmpty && pageHtml.isNotEmpty) {
+        fsUpdateDoc('images/${cp.imageId}', jsonEncode({
+          'text_html': pageHtml,
+        })).catchError((_) => null);
+      }
+
       finalPages.add(FanzinePage(
         id: '${fanzineId}_page_$targetPageNum',
         pageNumber: targetPageNum,
@@ -912,12 +954,10 @@ class AddressRadiusLetters {
         width: cp.width,
         height: cp.height,
         is5x8: true,
+        text: cp.text,
+        textHtml: pageHtml,
       ));
     }
-
-    final String folioTitle = targetPages == 24
-        ? 'Letters near $cleanTargetAddr (Full Fanzine)'
-        : 'Letters near $cleanTargetAddr';
 
     final newFanzine = Fanzine(
       id: fanzineId,
@@ -933,8 +973,7 @@ class AddressRadiusLetters {
       hasCover: hasMapCover && coverImageUrl != null && finalPages.isNotEmpty,
     );
 
-    print(
-        '[AddressRadiusLetters] Build completed successfully. Generated exactly ${finalPages.length} total pages (Requested: $targetPages).');
+    print('[AddressRadiusLetters] Build completed successfully. Generated exactly ${finalPages.length} total pages (Requested: $targetPages).');
     return RadiusFolioResult(fanzine: newFanzine, pages: finalPages);
   }
 }

@@ -18,7 +18,8 @@ import '../panels/settings_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
 /// Directly maps each active tool to its dedicated ColumnPanel implementation,
-/// forwarding active target highlights and scroll events for synchronized reading.
+/// forwarding active target highlights, scroll events, and pre-rendered static
+/// text HTML for synchronized instant reading.
 class PanelColumnRenderer extends StatelessComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
@@ -121,7 +122,14 @@ class PanelColumnRenderer extends StatelessComponent {
 
     switch (activePanel) {
       case BonusRowType.textReader:
-        return TextReaderColumnPanel(imageId: imageId, fanzineId: fanzineId);
+        final preloadedHtml = (pageData['textHtml'] ?? pageData['text_html'])?.toString();
+        final preloadedText = pageData['text']?.toString();
+        return TextReaderColumnPanel(
+          imageId: imageId,
+          fanzineId: fanzineId,
+          preloadedHtml: preloadedHtml,
+          preloadedText: preloadedText,
+        );
       case BonusRowType.comments:
         return CommentsColumnPanel(imageId: imageId, fanzineId: fanzineId);
       case BonusRowType.editText:

@@ -39,6 +39,7 @@ export 'src/interfaces/i_view_service.dart';
 // Utils
 export 'src/utils/con_week.dart';
 export 'src/utils/shortcode_generator.dart';
+export 'src/utils/text_html_renderer.dart';
 
 // Blocs
 export 'src/blocs/auth/auth_bloc.dart';

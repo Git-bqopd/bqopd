@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
+import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
 import '../../utils/firebase_mocks.dart';
 
-/// Helper to render markdown and wiki-links into styled components with Anton and Arimo.
+/// Fallback helper to render markdown and wiki-links into styled components with Anton and Arimo
+/// for older fanzines that do not have pre-baked static HTML.
 List<Component> renderWikilinkSpans(
     String textContent,
     Map<String, Map<String, dynamic>> loadedProfiles,
@@ -121,14 +123,20 @@ List<Component> renderWikilinkSpans(
 }
 
 /// Dedicated inline drawer (bonusRow) text reader.
-/// Includes A- and A+ font sizing triggers.
+/// Implements zero-latency static rendering: if [preloadedHtml] is passed,
+/// it renders immediately with `RawText` on the very first frame.
+/// Supports dynamic A- and A+ font sizing without re-parsing markdown.
 class TextReaderRowPanel extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
+  final String? preloadedHtml;
+  final String? preloadedText;
 
   const TextReaderRowPanel({
     required this.imageId,
     this.fanzineId,
+    this.preloadedHtml,
+    this.preloadedText,
     super.key,
   });
 
@@ -137,6 +145,7 @@ class TextReaderRowPanel extends StatefulComponent {
 }
 
 class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
+  String? _html;
   String _content = "Loading digitized text...";
   double _fontSize = 16.0;
   bool _loading = true;
@@ -145,7 +154,17 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
+    // 1. Instant check: If pre-baked HTML was already provided, mount it immediately!
+    if (component.preloadedHtml != null && component.preloadedHtml!.trim().isNotEmpty) {
+      _html = component.preloadedHtml!.trim();
+      _loading = false;
+    } else if (component.preloadedText != null && component.preloadedText!.trim().isNotEmpty) {
+      _content = component.preloadedText!.trim();
+      _loading = false;
+      if (kIsWeb) {
+        _loadProfiles(_content);
+      }
+    } else if (kIsWeb) {
       _fetchText();
     }
   }
@@ -153,8 +172,21 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
   @override
   void didUpdateComponent(TextReaderRowPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.imageId != component.imageId && kIsWeb) {
-      _fetchText();
+    if (oldComponent.imageId != component.imageId ||
+        oldComponent.preloadedHtml != component.preloadedHtml ||
+        oldComponent.preloadedText != component.preloadedText) {
+      if (component.preloadedHtml != null && component.preloadedHtml!.trim().isNotEmpty) {
+        _html = component.preloadedHtml!.trim();
+        _loading = false;
+      } else if (component.preloadedText != null && component.preloadedText!.trim().isNotEmpty) {
+        _content = component.preloadedText!.trim();
+        _loading = false;
+        if (kIsWeb) {
+          _loadProfiles(_content);
+        }
+      } else if (kIsWeb) {
+        _fetchText();
+      }
     }
   }
 
@@ -174,6 +206,18 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
       final doc = jsonDecode(res);
       if (doc['exists'] && mounted) {
         final data = doc['data'];
+
+        // Inspect pre-baked HTML directly on the image document
+        final String? textHtml = (data['text_html'] ?? data['textHtml'])?.toString();
+        if (textHtml != null && textHtml.trim().isNotEmpty) {
+          setState(() {
+            _html = textHtml.trim();
+            _loading = false;
+          });
+          return;
+        }
+
+        // Fallback for legacy fanzines without pre-baked static HTML
         final String? textVal = data['text_linked'] ??
             data['text_corrected'] ??
             data['text_raw'] ??
@@ -188,12 +232,17 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
           resolvedText,
         );
 
+        // Pre-bake with TextHtmlRenderer if available
+        final baked = TextHtmlRenderer.renderToHtml(fullyResolvedText);
         setState(() {
+          _html = baked.isNotEmpty ? baked : null;
           _content = fullyResolvedText;
           _loading = false;
         });
 
-        _loadProfiles(fullyResolvedText);
+        if (_html == null) {
+          _loadProfiles(fullyResolvedText);
+        }
       } else {
         setState(() {
           _content = "Image record not found in database.";
@@ -304,6 +353,7 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
         'position: relative; width: 100%; box-sizing: border-box; display: flex; flex-direction: column;'
       },
       [
+        // Sizing buttons (A- and A+)
         div(
           classes: 'flex-row gap-2',
           attributes: const {
@@ -342,6 +392,18 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
                 div(classes: 'skeleton-line shimmer-bg', []),
                 div(classes: 'skeleton-line medium shimmer-bg', []),
               ])
+            else if (_html != null && _html!.isNotEmpty)
+            // Zero-latency instant static injection with dynamic CSS font-scaling rule
+              div(
+                classes: 'text-reader-content',
+                attributes: {
+                  'style': 'width: 100%; font-size: ${_fontSize}px; line-height: 1.6; color: #2D3748; box-sizing: border-box; overflow: visible;',
+                },
+                [
+                  RawText('<style>.text-reader-content p { font-size: ${_fontSize}px !important; line-height: 1.6 !important; } .text-reader-content li { font-size: ${_fontSize}px !important; }</style>'),
+                  RawText(_html!),
+                ],
+              )
             else
               div(
                 _renderLines(_content),
@@ -356,13 +418,18 @@ class _TextReaderRowPanelState extends State<TextReaderRowPanel> {
 
 /// Dedicated desktop 3rd column (bonusColumn) text reader.
 /// Clean card presentation rendered inside MultiPageColumnLayout.
+/// Injects pre-baked static HTML with RawText() immediately on frame 1.
 class TextReaderColumnPanel extends StatefulComponent {
   final String imageId;
   final String? fanzineId;
+  final String? preloadedHtml;
+  final String? preloadedText;
 
   const TextReaderColumnPanel({
     required this.imageId,
     this.fanzineId,
+    this.preloadedHtml,
+    this.preloadedText,
     super.key,
   });
 
@@ -371,6 +438,7 @@ class TextReaderColumnPanel extends StatefulComponent {
 }
 
 class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
+  String? _html;
   String _content = "Loading digitized text...";
   bool _loading = true;
   Map<String, Map<String, dynamic>> _loadedProfiles = {};
@@ -378,7 +446,17 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
+    // 1. Instant check: If pre-baked HTML was already provided, mount it immediately!
+    if (component.preloadedHtml != null && component.preloadedHtml!.trim().isNotEmpty) {
+      _html = component.preloadedHtml!.trim();
+      _loading = false;
+    } else if (component.preloadedText != null && component.preloadedText!.trim().isNotEmpty) {
+      _content = component.preloadedText!.trim();
+      _loading = false;
+      if (kIsWeb) {
+        _loadProfiles(_content);
+      }
+    } else if (kIsWeb) {
       _fetchText();
     }
   }
@@ -386,8 +464,21 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
   @override
   void didUpdateComponent(TextReaderColumnPanel oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.imageId != component.imageId && kIsWeb) {
-      _fetchText();
+    if (oldComponent.imageId != component.imageId ||
+        oldComponent.preloadedHtml != component.preloadedHtml ||
+        oldComponent.preloadedText != component.preloadedText) {
+      if (component.preloadedHtml != null && component.preloadedHtml!.trim().isNotEmpty) {
+        _html = component.preloadedHtml!.trim();
+        _loading = false;
+      } else if (component.preloadedText != null && component.preloadedText!.trim().isNotEmpty) {
+        _content = component.preloadedText!.trim();
+        _loading = false;
+        if (kIsWeb) {
+          _loadProfiles(_content);
+        }
+      } else if (kIsWeb) {
+        _fetchText();
+      }
     }
   }
 
@@ -407,6 +498,18 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
       final doc = jsonDecode(res);
       if (doc['exists'] && mounted) {
         final data = doc['data'];
+
+        // Inspect pre-baked HTML directly on the image document
+        final String? textHtml = (data['text_html'] ?? data['textHtml'])?.toString();
+        if (textHtml != null && textHtml.trim().isNotEmpty) {
+          setState(() {
+            _html = textHtml.trim();
+            _loading = false;
+          });
+          return;
+        }
+
+        // Fallback for legacy fanzines without pre-baked static HTML
         final String? textVal = data['text_linked'] ??
             data['text_corrected'] ??
             data['text_raw'] ??
@@ -421,12 +524,16 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
           resolvedText,
         );
 
+        final baked = TextHtmlRenderer.renderToHtml(fullyResolvedText);
         setState(() {
+          _html = baked.isNotEmpty ? baked : null;
           _content = fullyResolvedText;
           _loading = false;
         });
 
-        _loadProfiles(fullyResolvedText);
+        if (_html == null) {
+          _loadProfiles(fullyResolvedText);
+        }
       } else {
         setState(() {
           _content = "Image record not found in database.";
@@ -492,6 +599,19 @@ class _TextReaderColumnPanelState extends State<TextReaderColumnPanel> {
         div(classes: 'skeleton-line shimmer-bg', []),
         div(classes: 'skeleton-line medium shimmer-bg', []),
       ]);
+    }
+
+    if (_html != null && _html!.isNotEmpty) {
+      // Zero-latency instant static injection with RawText()
+      return div(
+        classes: 'text-reader-column-content',
+        attributes: const {
+          'style': 'width: 100%; box-sizing: border-box; overflow: visible;'
+        },
+        [
+          RawText(_html!),
+        ],
+      );
     }
 
     return div(
