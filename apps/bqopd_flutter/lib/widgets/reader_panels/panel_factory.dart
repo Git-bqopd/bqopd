@@ -19,8 +19,8 @@ class PanelFactory {
     switch (type) {
       case BonusRowType.textReader: return "TEXT READER";
       case BonusRowType.rawText: return "RAW OCR TEXT";
-      case BonusRowType.editText: return "EDIT TEXT"; // FIXED: Uses matching editText enum name
-      case BonusRowType.linkedText: return "EDIT TEXT"; // Backwards compatibility fallback mapping
+      case BonusRowType.editText: return "EDIT TEXT";
+      case BonusRowType.linkedText: return "EDIT TEXT";
       case BonusRowType.tags: return "HASHTAGS & VOTING";
       case BonusRowType.entities: return "PAGE ENTITIES";
       case BonusRowType.comments: return "COMMENTS";
@@ -34,6 +34,7 @@ class PanelFactory {
       case BonusRowType.editDetails: return "EDIT DETAILS";
       case BonusRowType.terminal: return "COMBAT TERMINAL";
       case BonusRowType.newPage: return "PUBLISHER EDITOR";
+      case BonusRowType.publisher: return "PUBLISHER";
     }
   }
 
@@ -46,6 +47,7 @@ class PanelFactory {
       case BonusRowType.shareOptions: return Colors.indigo.withValues(alpha: 0.05);
       case BonusRowType.terminal: return const Color(0xFF0D0D0D);
       case BonusRowType.newPage: return Colors.white;
+      case BonusRowType.publisher: return Colors.white;
       default: return Colors.white;
     }
   }
@@ -64,11 +66,10 @@ class PanelFactory {
         );
       case BonusRowType.rawText:
         return RawTextPanel(text: context.textRaw);
-      case BonusRowType.editText: // FIXED: Map to the editText enum key
-      case BonusRowType.linkedText: // Route link panels straight to the unified master editor!
+      case BonusRowType.editText:
+      case BonusRowType.linkedText:
         return EditTextPanel(
           imageId: context.imageId,
-          // FIXED: Prioritize actualText (which is pre-resolved to textLinked) instead of textCorrected!
           initialText: context.actualText,
           fanzineId: context.fanzineId ?? '',
           templateId: context.templateId,
@@ -80,15 +81,15 @@ class PanelFactory {
         return EntitiesPanel(text: context.actualText);
       case BonusRowType.comments:
         return CommentsPanel(
-            imageId: context.imageId,
-            fanzineId: context.fanzineId,
-            isInline: context.isInline
+          imageId: context.imageId,
+          fanzineId: context.fanzineId,
+          isInline: context.isInline,
         );
       case BonusRowType.views:
       case BonusRowType.analyticsDashboard:
         return ViewsPanel(
-            imageId: context.imageId,
-            viewService: context.viewService as ViewService
+          imageId: context.imageId,
+          viewService: context.viewService as ViewService,
         );
       case BonusRowType.shareOptions:
         return Center(
@@ -107,14 +108,14 @@ class PanelFactory {
             ),
           ),
         );
-      case BonusRowType.credits: // FIXED: Cleaned up the non-existent focusedPanel case reference
+      case BonusRowType.credits:
         return CreditsPanel(imageId: context.imageId);
       case BonusRowType.youtube:
         return YoutubePanel(imageId: context.imageId);
       case BonusRowType.indicia:
         return IndiciaPanel(
-            fanzineId: context.fanzineId ?? '',
-            isEditingMode: context.isEditingMode
+          fanzineId: context.fanzineId ?? '',
+          isEditingMode: context.isEditingMode,
         );
       case BonusRowType.settings:
         return const SettingsPanel();
@@ -129,6 +130,8 @@ class PanelFactory {
           fanzineId: context.fanzineId ?? '',
           templateId: context.templateId,
         );
+      case BonusRowType.publisher:
+        return const SizedBox.shrink();
     }
   }
 }

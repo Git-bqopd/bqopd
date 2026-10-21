@@ -25,6 +25,7 @@ class FanzineLayout extends StatefulComponent {
   final bool hasCover;
   final bool twoPage;
   final int? initialPageNumber;
+  final BonusRowType? initialPanel;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
   final Set<String> likedImageIds;
   final AuthState? authState;
@@ -42,6 +43,7 @@ class FanzineLayout extends StatefulComponent {
     this.hasCover = true,
     this.twoPage = true,
     this.initialPageNumber,
+    this.initialPanel,
     this.preloadedImageStats = const {},
     required this.likedImageIds,
     this.authState,
@@ -81,6 +83,9 @@ class _FanzineLayoutState extends State<FanzineLayout> {
       _panelTargetIndex = component.initialPageNumber!;
       _viewMode = FanzineViewMode.single;
     }
+    if (component.initialPanel != null) {
+      _activeGlobalPanel = component.initialPanel;
+    }
   }
 
   @override
@@ -93,6 +98,12 @@ class _FanzineLayoutState extends State<FanzineLayout> {
         } else {
           _viewMode = FanzineViewMode.grid;
         }
+      });
+    }
+    if (oldComponent.initialPanel != component.initialPanel &&
+        component.initialPanel != null) {
+      setState(() {
+        _activeGlobalPanel = component.initialPanel;
       });
     }
   }

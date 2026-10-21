@@ -70,6 +70,7 @@ enum BonusRowType {
   shareOptions,
   terminal,
   newPage,
+  publisher,
 }
 
 /// Pure Dart data model for a dynamic toolbar button.

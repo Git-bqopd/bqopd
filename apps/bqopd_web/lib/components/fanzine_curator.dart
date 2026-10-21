@@ -60,22 +60,39 @@ class _FanzineCuratorState extends State<FanzineCurator> {
   @override
   void initState() {
     super.initState();
+
+    // Synchronously initialize _blocState if fanzineData is provided (crucial for SSR)
+    if (component.fanzineData != null) {
+      final fz = Fanzine.fromMap(
+        _frefFrefFanzineIdSafe,
+        component.fanzineData!,
+      );
+      final pages = component.pageStructure
+          .map((p) => FanzinePage.fromMap(p['id'] ?? p['__id'] ?? '', p))
+          .toList();
+      _blocState = FanzineEditorLoaded(fanzine: fz, pages: pages);
+    }
+
     _bloc = FanzineEditorBloc(
       repository: createFanzineRepository(),
       pipelineRepository: createPipelineRepository(),
       fanzineId: _frefFrefFanzineIdSafe,
     );
-    _bloc.add(LoadFanzineRequested(_frefFrefFanzineIdSafe));
-    _blocSubscription = _bloc.stream.listen((state) {
-      if (mounted) {
-        setState(() {
-          _blocState = state;
-        });
-        if (state is FanzineEditorLoaded && component.onTwoPageChanged != null) {
-          component.onTwoPageChanged!(state.fanzine.twoPage);
+
+    // CRITICAL SSR GUARD: Only listen and call setState() when running on the browser client (kIsWeb).
+    if (kIsWeb) {
+      _bloc.add(LoadFanzineRequested(_frefFrefFanzineIdSafe));
+      _blocSubscription = _bloc.stream.listen((state) {
+        if (mounted) {
+          setState(() {
+            _blocState = state;
+          });
+          if (state is FanzineEditorLoaded && component.onTwoPageChanged != null) {
+            component.onTwoPageChanged!(state.fanzine.twoPage);
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   String get _frefFrefFanzineIdSafe => component.frefFanzineId;
@@ -120,7 +137,6 @@ class _FanzineCuratorState extends State<FanzineCurator> {
       final fanzine = state.fanzine;
       final pages = state.pages;
       final isProcessing = state.isProcessing;
-
       return div(
         [
           div(
@@ -369,6 +385,7 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
   bool _isAlias = false;
   String? _redirectHandle;
   FirebaseSubscription? _listener;
+
   bool _showAliasInput = false;
   String _targetAliasInputText = '';
 
@@ -423,6 +440,7 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
       final handle = normalizeHandle(component.name);
       final String profileId = 'profile_managed_${handle}_${DateTime.now().millisecondsSinceEpoch}';
       final uid = getCurrentUserId() ?? 'system';
+
       String firstName = component.name;
       String lastName = "";
       if (component.name.contains(' ')) {
@@ -461,6 +479,7 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
         'displayCode': handle,
         'createdAt': WebFieldValue.serverTimestamp()
       }), true);
+
     } catch (e) {
       print("Error creating entity profile: $e");
     } finally {
@@ -471,10 +490,12 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
   Future<void> _submitAliasRedirect() async {
     final cleanTarget = normalizeHandle(_targetAliasInputText);
     if (cleanTarget.isEmpty) return;
+
     setState(() => _loading = true);
     try {
       final aliasHandle = normalizeHandle(component.name);
       final uid = getCurrentUserId() ?? 'system';
+
       final checkRes = await fsGetDoc('usernames/$cleanTarget');
       final targetDoc = jsonDecode(checkRes);
 
@@ -497,6 +518,7 @@ class _OcrWorkspaceEntityRowState extends State<OcrWorkspaceEntityRow> {
         _showAliasInput = false;
         _targetAliasInputText = '';
       });
+
     } catch (_) {
     } finally {
       if (mounted) setState(() => _loading = false);

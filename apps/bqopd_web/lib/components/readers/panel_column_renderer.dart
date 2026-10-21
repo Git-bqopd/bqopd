@@ -12,6 +12,7 @@ import '../panels/credits_panel.dart';
 import '../panels/youtube_panel.dart';
 import '../panels/analytics_panel.dart';
 import '../panels/publisher_text_panel.dart';
+import '../panels/publisher_panel.dart';
 import '../panels/terminal_panel.dart';
 import '../panels/hashtag_panel.dart';
 import '../panels/settings_panel.dart';
@@ -57,11 +58,13 @@ class PanelColumnRenderer extends StatelessComponent {
     if (activePanel == BonusRowType.settings) title = "Toolbar Settings";
     if (activePanel == BonusRowType.newPage) title = "New Page Layout Editor";
     if (activePanel == BonusRowType.terminal) title = "Combat Terminal";
+    if (activePanel == BonusRowType.publisher) title = "Publisher";
 
     final bool isSingleton = activePanel == BonusRowType.settings ||
         activePanel == BonusRowType.youtube ||
         activePanel == BonusRowType.terminal ||
-        activePanel == BonusRowType.analyticsDashboard;
+        activePanel == BonusRowType.analyticsDashboard ||
+        activePanel == BonusRowType.publisher;
 
     if (isSingleton) {
       final firstPageData = pages.isNotEmpty ? pages.first : <String, dynamic>{};
@@ -111,6 +114,8 @@ class PanelColumnRenderer extends StatelessComponent {
         return TerminalColumnPanel(imageId: imageId);
       case BonusRowType.settings:
         return const SettingsColumnPanel();
+      case BonusRowType.publisher:
+        return const PublisherColumnPanel();
       default:
         return div([Component.text('Singleton panel type not configured.')]);
     }

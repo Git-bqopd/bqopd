@@ -48,22 +48,43 @@ class _FanzineEditorState extends State<FanzineEditor> {
   @override
   void initState() {
     super.initState();
+
+    // Synchronously initialize _blocState if fanzineData is provided.
+    // This allows the server (SSR) to render the full editor UI on frame 1
+    // without awaiting asynchronous database or BLoC stream emissions.
+    if (component.fanzineData != null) {
+      final fz = Fanzine.fromMap(
+        _frefFrefFanzineIdSafe,
+        component.fanzineData!,
+      );
+      final pages = component.pageStructure
+          .map((p) => FanzinePage.fromMap(p['id'] ?? p['__id'] ?? '', p))
+          .toList();
+      _blocState = FanzineEditorLoaded(fanzine: fz, pages: pages);
+    }
+
     _bloc = FanzineEditorBloc(
       repository: createFanzineRepository(),
       pipelineRepository: createPipelineRepository(),
       fanzineId: _frefFrefFanzineIdSafe,
     );
-    _bloc.add(LoadFanzineRequested(_frefFrefFanzineIdSafe));
-    _blocSubscription = _bloc.stream.listen((state) {
-      if (mounted) {
-        setState(() {
-          _blocState = state;
-        });
-        if (state is FanzineEditorLoaded && component.onTwoPageChanged != null) {
-          component.onTwoPageChanged!(state.fanzine.twoPage);
+
+    // CRITICAL SSR GUARD: Only listen and call setState() when running on the browser client (kIsWeb).
+    // In Jaspr server rendering, calling setState() asynchronously throws
+    // "Scheduling a frame is not supported on the server, and should never happen."
+    if (kIsWeb) {
+      _bloc.add(LoadFanzineRequested(_frefFrefFanzineIdSafe));
+      _blocSubscription = _bloc.stream.listen((state) {
+        if (mounted) {
+          setState(() {
+            _blocState = state;
+          });
+          if (state is FanzineEditorLoaded && component.onTwoPageChanged != null) {
+            component.onTwoPageChanged!(state.fanzine.twoPage);
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   String get _frefFrefFanzineIdSafe => component.frefFanzineId;
@@ -108,7 +129,6 @@ class _FanzineEditorState extends State<FanzineEditor> {
       final fanzine = state.fanzine;
       final pages = state.pages;
       final isProcessing = state.isProcessing;
-
       return div(
         [
           div(

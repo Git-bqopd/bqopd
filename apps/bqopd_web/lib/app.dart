@@ -13,6 +13,7 @@ import 'pages/profile_page.dart';
 import 'pages/edit_info_page.dart';
 import 'pages/fanzine_reader_page.dart';
 import 'pages/short_link_page.dart';
+import 'pages/publisher_page.dart';
 
 /// Client and Server-side master routing configuration.
 class App extends StatefulComponent {
@@ -158,6 +159,17 @@ class _AppState extends State<App> {
               isEditingMode: true,
               authState: authState,
               authBloc: authBloc,
+            ),
+          ),
+          // DEDICATED PUBLISHER PRODUCTION DESK ROUTE
+          // Placed ahead of wildcard matchers to prevent interception as a shortcode
+          Route(
+            path: '/publisher',
+            builder: (context, state) => PublisherPage(
+              authState: authState,
+              authBloc: authBloc,
+              userRepository: userRepository,
+              engagementRepository: engagementRepository,
             ),
           ),
           // Shortlink matcher
