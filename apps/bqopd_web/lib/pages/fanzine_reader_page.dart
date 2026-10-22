@@ -6,6 +6,7 @@ import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/unsaved_fanzine_registry.dart';
 import '../components/fanzine_header.dart';
+import '../components/fanzine_reader.dart';
 import '../components/fanzine_editor.dart';
 import '../components/fanzine_curator.dart';
 import '../components/fanzine_layout.dart';
@@ -72,7 +73,6 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
       _creatorProfiles = component.preloadedCreatorProfiles ?? {};
       _imageStats = component.preloadedImageStats ?? {};
 
-      // Inspect preloaded stats for text_html if page record omitted it
       for (var page in _pages) {
         final imgId = page['imageId']?.toString();
         if (imgId != null && _imageStats.containsKey(imgId)) {
@@ -460,7 +460,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
         },
       );
     } else {
-      listHeader = FanzineHeader(
+      listHeader = FanzineReader(
         fanzineId: component.fanzineId,
         shortCode: shortCode,
         fanzineData: _fanzine,
@@ -473,13 +473,11 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
     }
 
     final Component gridHeader = FanzineHeader(
-      fanzineId: component.fanzineId,
-      shortCode: shortCode,
-      fanzineData: _fanzine,
-      creatorProfiles: _creatorProfiles,
-      imageStats: _imageStats,
-      pageStructure: _pages,
-      isStickerOnly: effectiveScope != ToolScope.reader,
+      authState: component.authState,
+      authBloc: component.authBloc,
+    );
+
+    final Component gridStickyHeader = FanzineStickyHeader(
       authState: component.authState,
       authBloc: component.authBloc,
     );
@@ -501,6 +499,7 @@ class _FanzineReaderPageState extends State<FanzineReaderPage> {
           isEditingMode: effectiveScope != ToolScope.reader,
           activeScope: effectiveScope,
           gridHeader: gridHeader,
+          gridStickyHeader: gridStickyHeader,
           listHeader: listHeader,
         )
       ],

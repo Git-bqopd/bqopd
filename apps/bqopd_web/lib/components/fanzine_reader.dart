@@ -1,0 +1,619 @@
+import 'dart:convert';
+import 'package:jaspr/jaspr.dart';
+import 'package:jaspr/dom.dart';
+import 'package:jaspr_router/jaspr_router.dart';
+import 'package:bqopd_core/bqopd_core.dart';
+import '../utils/web_utils.dart';
+import 'stats_table.dart';
+
+/// The dedicated Column 2 (List View) header card for readers.
+/// Displays publication indicia, contributors/creators, and view analytics.
+/// Includes a persistent 50px bottom row displaying the publication title
+/// (and URL vanity pill if Column 1 is closed) that seamlessly stays behind
+/// as a pinned sticky bar when the card scrolls out of the visible viewport.
+class FanzineReader extends StatefulComponent {
+  final String? fanzineId;
+  final String? shortCode;
+  final Map<String, dynamic>? fanzineData;
+  final Map<String, Map<String, dynamic>> creatorProfiles;
+  final Map<String, Map<String, dynamic>> imageStats;
+  final List<Map<String, dynamic>> pageStructure;
+  final AuthState? authState;
+  final AuthBloc? authBloc;
+  final bool isColumn1Open;
+  final bool showBottomBar;
+
+  const FanzineReader({
+    this.fanzineId,
+    this.shortCode,
+    this.fanzineData,
+    this.creatorProfiles = const {},
+    this.imageStats = const {},
+    this.pageStructure = const [],
+    this.authState,
+    this.authBloc,
+    this.isColumn1Open = false,
+    this.showBottomBar = true,
+    super.key,
+  });
+
+  @override
+  State<FanzineReader> createState() => _FanzineReaderState();
+}
+
+class _FanzineReaderState extends State<FanzineReader> {
+  int _activeTab = 0; // 0: indicia, 1: creators, 2: stats
+  String _displayUrl = 'login / register';
+  String? _username;
+
+  bool _showLogin = false;
+  bool _showRegister = false;
+  String _email = '';
+  String _password = '';
+  String _usernameInput = '';
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveDisplayUrl();
+  }
+
+  @override
+  void didUpdateComponent(FanzineReader oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.authState != component.authState) {
+      _resolveDisplayUrl();
+    }
+  }
+
+  Future<void> _resolveDisplayUrl() async {
+    if (!kIsWeb) return;
+    final uid = getCurrentUserId();
+    if (uid == null) {
+      if (mounted) {
+        setState(() {
+          _displayUrl = 'login / register';
+          _username = null;
+        });
+      } else {
+        _displayUrl = 'login / register';
+        _username = null;
+      }
+    } else {
+      try {
+        final res = await fsGetDoc('profiles/$uid');
+        final data = jsonDecode(res);
+        if (data['exists'] == true) {
+          final String handle = data['data']['username'] ?? 'archival';
+          final resolvedUrl = 'bqopd.com/@$handle';
+          if (mounted) {
+            setState(() {
+              _displayUrl = resolvedUrl;
+              _username = handle;
+            });
+          } else {
+            _displayUrl = resolvedUrl;
+            _username = handle;
+          }
+        }
+      } catch (e) {
+        print("Error resolving display URL: $e");
+      }
+    }
+  }
+
+  @override
+  Component build(BuildContext context) {
+    final isLoggedIn = component.authState?.status == AuthStatus.authenticated;
+    if (isLoggedIn) {
+      _showLogin = false;
+      _showRegister = false;
+    }
+
+    final String titleText =
+    (component.fanzineData?['title'] as String?)?.trim().isNotEmpty == true
+        ? (component.fanzineData!['title'] as String).trim()
+        : 'fanzine';
+
+    final bottomTitlePill = button(
+      classes: 'nav-pill title-pill',
+      attributes: {
+        'style':
+        "margin-bottom: 0; max-width: ${component.isColumn1Open ? '320px' : '220px'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700;",
+        'title': titleText,
+      },
+      events: {
+        'click': (e) {
+          scrollContainerToTop('fanzine-list-area', smooth: true);
+        }
+      },
+      [Component.text(titleText)],
+    );
+
+    final bottomUrlPill = button(
+      classes: 'nav-pill',
+      attributes: const {'style': 'margin-bottom: 0; white-space: nowrap;'},
+      events: {
+        'click': (e) {
+          final uid = getCurrentUserId();
+          if (uid == null) {
+            setState(() {
+              _showLogin = true;
+              _showRegister = false;
+              _error = null;
+            });
+          } else {
+            if (_username != null && _username!.isNotEmpty) {
+              Router.of(context).push('/@$_username');
+            } else {
+              Router.of(context).push('/profile');
+            }
+          }
+        }
+      },
+      [Component.text(_displayUrl)],
+    );
+
+    final indiciaText =
+        component.fanzineData?['masterIndicia'] ?? "© 2026 BQOPD Collective.";
+    final creators = component.fanzineData?['masterCreators'] as List? ?? [];
+
+    return div(
+      classes: 'flex-col items-center justify-between w-full h-full p-2',
+      attributes: const {
+        'style': 'position: relative; box-sizing: border-box;'
+      },
+      [
+        div(
+          classes: 'flex-col items-center w-full flex-1 min-h-0',
+          [
+            if (_showLogin)
+              _buildLocalLogin()
+            else if (_showRegister)
+              _buildLocalRegister()
+            else
+              div(
+                classes: 'white-sticker-compact w-full flex-1 min-h-0',
+                attributes: const {
+                  'style': 'height: 100%;'
+                },
+                [
+                  div(
+                    classes: 'flex-row justify-center items-center py-2 bg-gray-100',
+                    [
+                      _buildTab('indicia', 0),
+                      span(classes: 'px-4 text-gray text-xs', [Component.text('|')]),
+                      _buildTab('creators', 1),
+                      span(classes: 'px-4 text-gray text-xs', [Component.text('|')]),
+                      _buildTab('stats', 2),
+                    ],
+                  ),
+                  div(
+                    classes: 'flex-col flex-1 p-4 overflow-y-auto',
+                    [
+                      div(
+                        classes: _activeTab == 0 ? '' : 'hidden',
+                        [
+                          if (component.fanzineData?['publishedDate'] != null &&
+                              component.fanzineData!['publishedDate']
+                                  .toString()
+                                  .isNotEmpty)
+                            p(
+                              classes: 'text-xs font-bold mb-2',
+                              attributes: const {
+                                'style':
+                                'font-family: Georgia; line-height: 1.5; color: #666; text-align: left;'
+                              },
+                              [
+                                Component.text(
+                                    'published date: ${component.fanzineData!['publishedDate']}')
+                              ],
+                            ),
+                          p(
+                            classes: 'text-xs text-justify',
+                            attributes: const {
+                              'style': 'font-family: Georgia; line-height: 1.5;'
+                            },
+                            [Component.text(indiciaText)],
+                          ),
+                        ],
+                      ),
+                      div(
+                        classes: _activeTab == 1 ? '' : 'hidden',
+                        [
+                          _buildCreatorsTab(creators),
+                        ],
+                      ),
+                      div(
+                        classes: _activeTab == 2 ? '' : 'hidden',
+                        [
+                          if (component.fanzineId != null)
+                            StatsTable(
+                              contentId: component.fanzineId!,
+                              isFanzine: true,
+                              preloadedPages: component.pageStructure,
+                              preloadedStats: component.imageStats,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+          ],
+        ),
+        if (component.showBottomBar)
+          div(
+            classes: 'flex-row items-center justify-center gap-2 w-full',
+            attributes: const {
+              'style':
+              'height: 50px; min-height: 50px; max-height: 50px; box-sizing: border-box;'
+            },
+            [
+              if (component.isColumn1Open)
+                span(classes: 'hidden-on-desktop flex-row items-center', [bottomUrlPill])
+              else
+                bottomUrlPill,
+              bottomTitlePill,
+            ],
+          ),
+      ],
+    );
+  }
+
+  Component _buildTab(String label, int index) {
+    final isActive = _activeTab == index;
+    return span(
+      classes: "text-xs cursor-pointer ${isActive ? 'font-bold' : 'text-gray'}",
+      events: {'click': (e) => setState(() => _activeTab = index)},
+      [Component.text(label)],
+    );
+  }
+
+  Component _buildCreatorsTab(List creators) {
+    if (creators.isEmpty) {
+      return p(
+        classes: 'text-xs text-center text-gray',
+        [Component.text('No creators listed.')],
+      );
+    }
+    return div(classes: 'creator-list', [
+      div(
+        attributes: const {
+          'style':
+          'display: inline-flex; flex-direction: column; align-items: flex-start;'
+        },
+        [
+          for (var c in creators)
+            div(
+              classes: 'creator-row',
+              attributes: const {'style': 'width: auto;'},
+              [
+                span(classes: 'creator-role', [Component.text('${c['role']}')]),
+                span(classes: 'creator-divider', [Component.text('|')]),
+                div(
+                  classes: 'creator-identity',
+                  [
+                    UserTile(
+                      profile: component.creatorProfiles[c['uid']],
+                      fallbackName: c['name'] ?? 'Unknown',
+                    ),
+                  ],
+                ),
+              ],
+            )
+        ],
+      )
+    ]);
+  }
+
+  Component _buildLocalLogin() {
+    return div(
+      key: const ValueKey('reader_login'),
+      classes: 'white-sticker',
+      attributes: const {
+        'style':
+        'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
+      },
+      [
+        button(
+          classes: 'close-btn',
+          attributes: const {
+            'style':
+            'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 24px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none;'
+          },
+          events: {
+            'click': (e) => setState(() {
+              _showLogin = false;
+              _showRegister = false;
+              _error = null;
+            })
+          },
+          [Component.text('×')],
+        ),
+        img(
+          src: 'assets/logo200.gif',
+          attributes: const {
+            'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
+          },
+        ),
+        div(
+          attributes: const {
+            'style':
+            'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
+          },
+          [Component.text('bqopd')],
+        ),
+        div(
+          classes: 'flex-col w-full',
+          attributes: const {
+            'style': 'display: flex; flex-direction: column; width: 100%; gap: 10px;'
+          },
+          [
+            input(
+              attributes: {
+                'type': 'email',
+                'placeholder': 'email',
+                'value': _email,
+                'style':
+                'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+              },
+              events: {'input': (e) => _email = getInputValue(e)},
+            ),
+            input(
+              attributes: {
+                'type': 'password',
+                'placeholder': 'password',
+                'value': _password,
+                'style':
+                'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+              },
+              events: {'input': (e) => _password = getInputValue(e)},
+            ),
+            button(
+              classes: 'btn-primary',
+              attributes: const {
+                'style':
+                'width: 100%; padding: 12px; background-color: #8e8e8e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; margin-top: 4px;'
+              },
+              events: {
+                'click': (e) async {
+                  if (_email.trim().isEmpty || _password.isEmpty) {
+                    setState(() => _error = "Please fill all fields.");
+                    return;
+                  }
+                  setState(() => _loading = true);
+                  try {
+                    await loginWithFirebase(_email.trim(), _password);
+                    setState(() {
+                      _showLogin = false;
+                      _loading = false;
+                      _error = null;
+                    });
+                    _resolveDisplayUrl();
+                  } catch (e) {
+                    setState(() {
+                      _error = e.toString().replaceAll('Exception:', '').trim();
+                      _loading = false;
+                    });
+                  }
+                }
+              },
+              [Component.text(_loading ? 'loading...' : 'login')],
+            ),
+          ],
+        ),
+        if (_error != null)
+          p(
+            classes: 'error-msg',
+            attributes: const {
+              'style':
+              'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
+            },
+            [Component.text(_error!)],
+          ),
+        div(
+          attributes: const {
+            'style':
+            'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
+          },
+          [
+            Component.text('not cool yet? '),
+            span(
+              attributes: const {
+                'style':
+                'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
+              },
+              events: {
+                'click': (e) => setState(() {
+                  _showLogin = false;
+                  _showRegister = true;
+                  _error = null;
+                })
+              },
+              [Component.text('register here.')],
+            )
+          ],
+        )
+      ],
+    );
+  }
+
+  Component _buildLocalRegister() {
+    return div(
+      key: const ValueKey('reader_register'),
+      classes: 'white-sticker',
+      attributes: const {
+        'style':
+        'padding: 24px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 85%; height: 80%;'
+      },
+      [
+        button(
+          classes: 'close-btn',
+          attributes: const {
+            'style':
+            'position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 24px; font-weight: bold; cursor: pointer; color: #555; line-height: 1; transition: color 0.15s; outline: none;'
+          },
+          events: {
+            'click': (e) => setState(() {
+              _showLogin = false;
+              _showRegister = false;
+              _error = null;
+            })
+          },
+          [Component.text('×')],
+        ),
+        img(
+          src: 'assets/logo200.gif',
+          attributes: const {
+            'style': 'width: 80px; height: auto; display: block; margin-bottom: 8px;'
+          },
+        ),
+        div(
+          attributes: const {
+            'style':
+            'font-size: 16px; font-weight: 500; color: #222; margin-bottom: 24px; font-family: inherit; letter-spacing: 0.5px;'
+          },
+          [Component.text('bqopd')],
+        ),
+        div(
+          classes: 'flex-col w-full',
+          attributes: const {
+            'style': 'display: flex; flex-direction: column; width: 100%; gap: 10px;'
+          },
+          [
+            input(
+              attributes: {
+                'type': 'text',
+                'placeholder': 'username',
+                'value': _usernameInput,
+                'style':
+                'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+              },
+              events: {'input': (e) => _usernameInput = getInputValue(e)},
+            ),
+            input(
+              attributes: {
+                'type': 'email',
+                'placeholder': 'email',
+                'value': _email,
+                'style':
+                'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+              },
+              events: {'input': (e) => _email = getInputValue(e)},
+            ),
+            input(
+              attributes: {
+                'type': 'password',
+                'placeholder': 'password',
+                'value': _password,
+                'style':
+                'width: 100%; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin: 0; outline: none; background: white;'
+              },
+              events: {'input': (e) => _password = getInputValue(e)},
+            ),
+            button(
+              classes: 'btn-primary',
+              attributes: const {
+                'style':
+                'width: 100%; padding: 12px; background-color: #8e8e8e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; margin-top: 4px;'
+              },
+              events: {
+                'click': (e) async {
+                  if (_usernameInput.trim().isEmpty ||
+                      _email.trim().isEmpty ||
+                      _password.isEmpty) {
+                    setState(() => _error = "Please fill all fields.");
+                    return;
+                  }
+                  setState(() => _loading = true);
+                  try {
+                    await registerWithFirebase(
+                        _email.trim(), _password, _usernameInput.trim());
+                    setState(() {
+                      _showRegister = false;
+                      _loading = false;
+                      _error = null;
+                    });
+                    _resolveDisplayUrl();
+                  } catch (e) {
+                    setState(() {
+                      _error = e.toString().replaceAll('Exception:', '').trim();
+                      _loading = false;
+                    });
+                  }
+                }
+              },
+              [Component.text(_loading ? 'loading...' : 'register')],
+            ),
+          ],
+        ),
+        if (_error != null)
+          p(
+            classes: 'error-msg',
+            attributes: const {
+              'style':
+              'color: #d9534f; font-size: 12px; margin-top: 8px; text-align: center;'
+            },
+            [Component.text(_error!)],
+          ),
+        div(
+          attributes: const {
+            'style':
+            'margin-top: 24px; font-size: 11px; color: #555; text-align: center;'
+          },
+          [
+            Component.text('already cool? '),
+            span(
+              attributes: const {
+                'style':
+                'text-decoration: underline; cursor: pointer; font-weight: bold; color: #000;'
+              },
+              events: {
+                'click': (e) => setState(() {
+                  _showRegister = false;
+                  _showLogin = true;
+                  _error = null;
+                })
+              },
+              [Component.text('login here.')],
+            )
+          ],
+        )
+      ],
+    );
+  }
+}
+
+class UserTile extends StatelessComponent {
+  final Map<String, dynamic>? profile;
+  final String fallbackName;
+
+  const UserTile({this.profile, required this.fallbackName, super.key});
+
+  @override
+  Component build(BuildContext context) {
+    final String displayName = profile?['displayName'] ?? fallbackName;
+    final String? username = profile?['username'];
+    final String? photoUrl = profile?['photoUrl'];
+
+    return div(classes: 'user-tile', [
+      div(classes: 'user-avatar-container', [
+        if (photoUrl != null && photoUrl.isNotEmpty)
+          img(classes: 'user-avatar', src: photoUrl)
+        else
+          div(classes: 'user-avatar-placeholder', [
+            Component.text(
+                displayName.isNotEmpty ? displayName[0].toUpperCase() : '?')
+          ])
+      ]),
+      div(classes: 'user-info', [
+        div(classes: 'user-display-name', [Component.text(displayName)]),
+        if (username != null)
+          div(classes: 'user-handle', [Component.text('@$username')])
+      ])
+    ]);
+  }
+}

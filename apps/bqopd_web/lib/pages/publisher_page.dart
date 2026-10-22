@@ -362,13 +362,11 @@ class _PublisherPageState extends State<PublisherPage> {
     );
 
     final gridHeader = FanzineHeader(
-      fanzineId: _activeFanzineId,
-      shortCode: _fanzineData?['shortCode'],
-      fanzineData: _fanzineData,
-      creatorProfiles: _creatorProfiles,
-      imageStats: _imageStats,
-      pageStructure: _pages,
-      isStickerOnly: true,
+      authState: component.authState,
+      authBloc: component.authBloc,
+    );
+
+    final gridStickyHeader = FanzineStickyHeader(
       authState: component.authState,
       authBloc: component.authBloc,
     );
@@ -391,6 +389,7 @@ class _PublisherPageState extends State<PublisherPage> {
           activeScope: ToolScope.editor,
           initialPanel: BonusRowType.publisher,
           gridHeader: gridHeader,
+          gridStickyHeader: gridStickyHeader,
           listHeader: listHeader,
         )
       ],

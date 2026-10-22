@@ -66,15 +66,20 @@ int getSpreadIndexForListIndex({
   return currentSpread;
 }
 
+/// Grid renderer for Column 1 (`#fanzine-grid-area`).
+/// Mounts the persistent pinned [stickyHeaderWidget] at the very top of the scroll container,
+/// followed by all two-page publication spreads scrolling underneath.
 class FanzineGridRenderer extends StatelessComponent {
   final List<Map<String, dynamic>> pages;
   final Component headerWidget;
+  final Component? stickyHeaderWidget;
   final bool hasCover;
   final Function(int) onPageTap;
 
   const FanzineGridRenderer({
     required this.pages,
     required this.headerWidget,
+    this.stickyHeaderWidget,
     this.hasCover = true,
     required this.onPageTap,
     super.key,
@@ -141,18 +146,25 @@ class FanzineGridRenderer extends StatelessComponent {
       spreads.add(currentSpread);
     }
 
-    return div(classes: 'flex-col items-center w-full pb-8', [
-      for (int sIndex = 0; sIndex < spreads.length; sIndex++)
-        FanzineSpreadTile(
-          id: 'grid-spread-$sIndex',
-          leftWidget: spreads[sIndex].leftWidget,
-          leftPageData: spreads[sIndex].leftPage,
-          rightPageData: spreads[sIndex].rightPage,
-          leftIndex: spreads[sIndex].leftListIndex,
-          rightIndex: spreads[sIndex].rightListIndex,
-          onPageTap: onPageTap,
-          key: ValueKey('grid_spread_$sIndex'),
-        )
-    ]);
+    return div(
+      classes: 'fanzine-grid-scroll-tree flex-col items-center w-full pb-8',
+      attributes: const {
+        'style': 'position: relative; width: 100%; box-sizing: border-box;'
+      },
+      [
+        if (stickyHeaderWidget != null) stickyHeaderWidget!,
+        for (int sIndex = 0; sIndex < spreads.length; sIndex++)
+          FanzineSpreadTile(
+            id: 'grid-spread-$sIndex',
+            leftWidget: spreads[sIndex].leftWidget,
+            leftPageData: spreads[sIndex].leftPage,
+            rightPageData: spreads[sIndex].rightPage,
+            leftIndex: spreads[sIndex].leftListIndex,
+            rightIndex: spreads[sIndex].rightListIndex,
+            onPageTap: onPageTap,
+            key: ValueKey('grid_spread_$sIndex'),
+          )
+      ],
+    );
   }
 }

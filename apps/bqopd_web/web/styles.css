@@ -325,7 +325,7 @@ padding-bottom: 8px;
 /* STREAMING_CHUNK:Defining CSS layout and typography utility helpers... */
 .flex { display: flex; }
 .flex-col { display: flex; flex-direction: column; }
-.flex-row { display: flex; flex-row: row; }
+.flex-row { display: flex; flex-direction: row; }
 .flex-wrap { flex-wrap: wrap; }
 .items-center { align-items: center; }
 .justify-center { justify-content: center; }
@@ -654,16 +654,85 @@ overflow: hidden;
 background-color: #e5e5e5;
 }
 
+/* STREAMING_CHUNK:Styling the pinned sticky header bar for Column 1... */
 .grid-area {
 background-color: transparent;
 overflow-y: auto;
-padding: 24px;
+padding: 0 24px 24px 24px;
 box-sizing: border-box;
 flex: 1;
 }
 
+/* Default state: constrained to max-width: 1000px and centered when in grid-only mode */
+.grid-sticky-header {
+position: sticky;
+top: 0;
+z-index: 30;
+background-color: var(--envelope-yellow, #F1B255);
+display: flex;
+justify-content: center;
+align-items: center;
+padding: 8px 16px;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+width: 100%;
+max-width: 1000px;
+margin-left: auto;
+margin-right: auto;
+box-sizing: border-box;
+}
+
+/* When split layout has Column 2 (.list-area) open alongside Column 1 */
+.reader-split-layout.has-list-area .grid-sticky-header,
+.reader-split-layout:has(.list-area) .grid-sticky-header {
+margin-left: -24px;
+margin-right: -24px;
+width: calc(100% + 48px);
+max-width: none;
+}
+
+/* Completely hides the sticky sliver bar with zero footprint while at the top */
+.grid-sticky-header.hidden {
+display: none !important;
+}
+
+.grid-sticky-header .nav-pill {
+margin-bottom: 0 !important;
+}
+
 .reader-split-layout:has(.list-area) .grid-area {
 flex: 0 0 450px;
+}
+
+/* STREAMING_CHUNK:Styling the pinned sticky header bar for Column 2... */
+.list-sticky-header {
+position: sticky;
+top: 0;
+z-index: 30;
+width: 100%;
+height: 50px;
+min-height: 50px;
+max-height: 50px;
+background-color: var(--envelope-yellow, #F1B255);
+display: flex;
+align-items: center;
+justify-content: center;
+box-sizing: border-box;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.list-sticky-header.hidden {
+display: none !important;
+}
+
+.list-sticky-header .nav-pill {
+margin-bottom: 0 !important;
+}
+
+.title-pill {
+font-weight: 700;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
 }
 
 .list-area {
@@ -838,11 +907,6 @@ max-width: 100%;
 box-sizing: border-box;
 }
 }
-
-.fh-sticker-view { display: none; }
-.fh-full-view { display: flex; }
-.reader-split-layout:has(.list-area) .grid-area .fh-full-view { display: none !important; }
-.reader-split-layout:has(.list-area) .grid-area .fh-sticker-view { display: flex !important; }
 
 /* STREAMING_CHUNK:Configuring animations and profile cards without drop shadows... */
 @keyframes slideDownFadeIn {
