@@ -26,7 +26,7 @@ class SingleWindowColumnLayout extends StatelessComponent {
         'display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background-color: #e5e5e5;'
       },
       [
-        // Column Header
+// Column Header
         div(
           classes: 'p-4 bg-white flex-row justify-between items-center',
           attributes: const {
@@ -53,7 +53,7 @@ class SingleWindowColumnLayout extends StatelessComponent {
             )
           ],
         ),
-        // Body area (Grey background #e5e5e5)
+// Body area (Grey background #e5e5e5)
         div(
           id: 'panel-singleton-scroll-area',
           classes: 'flex-1 overflow-y-auto p-4',
@@ -70,8 +70,10 @@ class SingleWindowColumnLayout extends StatelessComponent {
 
 /// Template layout for per-page panels that iterate through each page in the fanzine
 /// (e.g. Comments, Text Reader, OCR Text, Entities, Credits).
-/// Implements a physical horizontal target line indicator that glides between
-/// widget midpoints and the vertical viewport center line.
+///
+/// Features a native, unconstrained list scroll feed where scrolling in this column
+/// does not trigger or hijack scrolling in Columns 1 and 2.
+/// Visually highlights the active target card and switches the target upon clicking.
 class MultiPageColumnLayout extends StatefulComponent {
   final String title;
   final List<Map<String, dynamic>> pages;
@@ -83,6 +85,7 @@ class MultiPageColumnLayout extends StatefulComponent {
   final Function(int pageIndex)? onTargetChanged;
   final VoidCallback? onScroll;
   final VoidCallback? onUserScrollStart;
+  final bool simpleScroll;
 
   const MultiPageColumnLayout({
     required this.title,
@@ -95,45 +98,54 @@ class MultiPageColumnLayout extends StatefulComponent {
     this.onTargetChanged,
     this.onScroll,
     this.onUserScrollStart,
+    this.simpleScroll = true,
     super.key,
   });
 
   @override
-  State<MultiPageColumnLayout> createState() => _MultiPageColumnLayoutState();
+  State createState() => _MultiPageColumnLayoutState();
 }
 
-class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
+class _MultiPageColumnLayoutState extends State {
+  @override
+  MultiPageColumnLayout get component => super.component as MultiPageColumnLayout;
+
   int _currentTargetIndex = 0;
-  late final PanelColumnIndicatorCoordinator _indicatorCoordinator;
+  PanelColumnIndicatorCoordinator? _indicatorCoordinator;
 
   @override
   void initState() {
     super.initState();
     _currentTargetIndex = component.targetPageIndex ?? 0;
-    _indicatorCoordinator = PanelColumnIndicatorCoordinator(
-      scrollAreaId: 'panel-column-scroll-area',
-      lineId: 'panel-target-indicator-line',
-      cardPrefix: 'panel-page-',
-      totalPages: () => component.pages.length,
-      getCurrentTargetIndex: () => _currentTargetIndex,
-      onTargetChanged: (newIdx) {
-        _currentTargetIndex = newIdx;
-        if (component.onTargetChanged != null) {
-          component.onTargetChanged!(newIdx);
-        }
-      },
-      onUserScrollStart: () {
-        if (component.onUserScrollStart != null) {
-          component.onUserScrollStart!();
-        }
-      },
-    );
 
-    if (kIsWeb) {
-      Future.microtask(() {
-        _indicatorCoordinator.init();
-      });
+    if (!component.simpleScroll) {
+      _indicatorCoordinator = PanelColumnIndicatorCoordinator(
+        scrollAreaId: 'panel-column-scroll-area',
+        lineId: 'panel-target-indicator-line',
+        cardPrefix: 'panel-page-',
+        totalPages: () => component.pages.length,
+        getCurrentTargetIndex: () => _currentTargetIndex,
+        onTargetChanged: (newIdx) {
+          _currentTargetIndex = newIdx;
+          if (component.onTargetChanged != null) {
+            component.onTargetChanged!(newIdx);
+          }
+        },
+        onUserScrollStart: () {
+          if (component.onUserScrollStart != null) {
+            component.onUserScrollStart!();
+          }
+        },
+      );
+
+      if (kIsWeb) {
+        Future.microtask(() {
+          _indicatorCoordinator?.init();
+        });
+      }
     }
+
+
   }
 
   @override
@@ -142,10 +154,12 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
     if (oldComponent.targetPageIndex != component.targetPageIndex &&
         component.targetPageIndex != null) {
       if (component.targetPageIndex != _currentTargetIndex) {
-        _currentTargetIndex = component.targetPageIndex!;
-        if (kIsWeb) {
+        setState(() {
+          _currentTargetIndex = component.targetPageIndex!;
+        });
+        if (!component.simpleScroll && kIsWeb) {
           Future.microtask(() {
-            _indicatorCoordinator.syncLineWithTarget();
+            _indicatorCoordinator?.syncLineWithTarget();
           });
         }
       }
@@ -154,7 +168,7 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
 
   @override
   void dispose() {
-    _indicatorCoordinator.dispose();
+    _indicatorCoordinator?.dispose();
     super.dispose();
   }
 
@@ -162,14 +176,22 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
     if (component.onScroll != null) {
       component.onScroll!();
     }
-    _indicatorCoordinator.handleScroll();
+    if (!component.simpleScroll) {
+      _indicatorCoordinator?.handleScroll();
+    }
   }
 
   void _handleCardTap(int i) {
-    _currentTargetIndex = i;
-    _indicatorCoordinator.handleCardTap(i);
-    if (component.onPageCardTap != null) {
-      component.onPageCardTap!(i);
+    if (_currentTargetIndex != i) {
+      setState(() {
+        _currentTargetIndex = i;
+      });
+      if (!component.simpleScroll) {
+        _indicatorCoordinator?.handleCardTap(i);
+      }
+      if (component.onPageCardTap != null) {
+        component.onPageCardTap!(i);
+      }
     }
   }
 
@@ -182,7 +204,7 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
         'display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background-color: #e5e5e5;'
       },
       [
-        // Column Header
+// Column Header
         div(
           classes: 'p-4 bg-white flex-row justify-between items-center',
           attributes: const {
@@ -209,7 +231,7 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
             )
           ],
         ),
-        // Relative Viewport Wrapper hosting Scroll Area and Absolute Reticle Line
+// Relative Viewport Wrapper hosting Scroll Area
         div(
           id: 'panel-column-viewport-wrapper',
           attributes: const {
@@ -217,32 +239,34 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
             'position: relative; flex: 1; width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column;'
           },
           [
-            // The Horizontal Target Indicator Line
-            div(
-              id: 'panel-target-indicator-line',
-              classes: 'panel-target-indicator-line',
-              attributes: const {
-                'style': 'top: 0px; display: none;'
-              },
-              [],
-            ),
-            // Scrollable Feed List (#e5e5e5 backdrop with bottom padding buffer)
+// The Horizontal Target Indicator Line (rendered only when using synchronized coordinator)
+            if (!component.simpleScroll)
+              div(
+                id: 'panel-target-indicator-line',
+                classes: 'panel-target-indicator-line',
+                attributes: const {
+                  'style': 'top: 0px; display: none;'
+                },
+                [],
+              ),
+// Scrollable Feed List
             div(
               id: 'panel-column-scroll-area',
               classes: 'flex-1 overflow-y-auto p-4',
-              attributes: const {
-                'style':
-                'flex: 1; overflow-y: auto; padding: 16px; padding-bottom: calc(100vh - 180px); background-color: #e5e5e5;'
+              attributes: {
+                'style': component.simpleScroll
+                    ? 'flex: 1; overflow-y: auto; padding: 16px; background-color: #e5e5e5; -webkit-overflow-scrolling: touch;'
+                    : 'flex: 1; overflow-y: auto; padding: 16px; padding-bottom: calc(100vh - 180px); background-color: #e5e5e5;'
               },
               events: {
-                'scroll': (e) => _handleScroll(),
-                if (component.onUserScrollStart != null)
+                if (!component.simpleScroll) 'scroll': (e) => _handleScroll(),
+                if (!component.simpleScroll && component.onUserScrollStart != null)
                   'touchstart': (e) => component.onUserScrollStart!(),
-                if (component.onUserScrollStart != null)
+                if (!component.simpleScroll && component.onUserScrollStart != null)
                   'pointerdown': (e) => component.onUserScrollStart!(),
               },
               [
-                // Optional Top Column Widget (e.g. EntitiesColumnPanelHeader map)
+// Optional Top Column Widget (e.g. EntitiesColumnPanelHeader map)
                 if (component.headerWidget != null) component.headerWidget!,
                 for (int i = 0; i < component.pages.length; i++) ...[
                       () {
@@ -253,9 +277,9 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
                       id: 'panel-page-$i',
                       classes:
                       'panel-page-card bg-white rounded-lg border shadow-md p-5 mb-5 ${isTarget ? "target" : "non-target"}',
-                      attributes: const {
+                      attributes: {
                         'style':
-                        'background-color: #ffffff; border-radius: 8px; padding: 20px; margin-bottom: 20px;'
+                        'background-color: #ffffff; border-radius: 8px; padding: 20px; margin-bottom: 20px; cursor: pointer; transition: all 0.2s ease; ${isTarget ? "border: 2px solid #6750A4; box-shadow: 0 4px 16px rgba(103, 80, 164, 0.16);" : "border: 1px solid #cbd5e1;"}',
                       },
                       events: {
                         'click': (e) => _handleCardTap(i),
@@ -285,13 +309,13 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
                                   classes: 'text-xs font-bold',
                                   attributes: const {
                                     'style':
-                                    'font-size: 10px; color: #6750A4; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase;',
+                                    'font-size: 10px; color: #6750A4; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase; background-color: #E8DEF8; padding: 2px 8px; border-radius: 10px;',
                                   },
                                   [Component.text('ACTIVE')],
                                 ),
                             ],
                           ),
-                        // Page Widget Content with padding around comments/info
+                        // Page Widget Content
                         div(
                           attributes: const {'style': 'padding: 4px;'},
                           [component.pageBuilder(page)],
@@ -306,5 +330,7 @@ class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
         )
       ],
     );
+
+
   }
 }

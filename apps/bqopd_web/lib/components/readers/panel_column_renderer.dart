@@ -76,7 +76,7 @@ class PanelColumnRenderer extends StatelessComponent {
       );
     }
 
-    // Top Header Widget: Display the unified Issue Place Map above the per-page cards
+// Top Header Widget: Display the unified Issue Place Map above the per-page cards
     final Component? headerWidget = (activePanel == BonusRowType.entities)
         ? EntitiesColumnPanelHeader(fanzineId: fanzineId, pages: pages)
         : null;
@@ -84,6 +84,8 @@ class PanelColumnRenderer extends StatelessComponent {
     final int? targetPageIndex = (targetIndex > 0 && targetIndex <= pages.length)
         ? targetIndex - 1
         : null;
+
+    final bool isSimpleScroll = activePanel == BonusRowType.comments;
 
     return MultiPageColumnLayout(
       title: title,
@@ -95,8 +97,11 @@ class PanelColumnRenderer extends StatelessComponent {
       onTargetChanged: onTargetChanged,
       onScroll: onScroll,
       onUserScrollStart: onUserScrollStart,
+      simpleScroll: isSimpleScroll,
       pageBuilder: (pageData) => _buildPagePanel(pageData),
     );
+
+
   }
 
   Component _buildSingletonWidget(String imageId) {
@@ -155,5 +160,7 @@ class PanelColumnRenderer extends StatelessComponent {
       default:
         return div([Component.text('Panel type not implemented in column view.')]);
     }
+
+
   }
 }
