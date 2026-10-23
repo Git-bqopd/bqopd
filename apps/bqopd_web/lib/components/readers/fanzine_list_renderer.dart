@@ -21,6 +21,7 @@ class FanzineListRenderer extends StatefulComponent {
   final VoidCallback? onOpenGrid;
   final BonusRowType? activeGlobalPanel;
   final void Function(BonusRowType type, int pageIndex)? onTogglePanel;
+  final void Function(int pageIndex)? onPageImageTap;
   final int initialIndex;
   final Map<String, Map<String, dynamic>> preloadedImageStats;
   final Set<String> likedImageIds;
@@ -41,6 +42,7 @@ class FanzineListRenderer extends StatefulComponent {
     this.onOpenGrid,
     this.activeGlobalPanel,
     this.onTogglePanel,
+    this.onPageImageTap,
     this.initialIndex = 0,
     this.preloadedImageStats = const {},
     required this.likedImageIds,
@@ -131,6 +133,7 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
                     onOpenGrid: component.onOpenGrid,
                     activeGlobalPanel: component.activeGlobalPanel,
                     onTogglePanel: component.onTogglePanel,
+                    onPageImageTap: component.onPageImageTap,
                     likedImageIds: component.likedImageIds,
                     initialImageStats: component
                         .preloadedImageStats[component.pages[i]['imageId']],

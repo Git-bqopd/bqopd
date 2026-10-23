@@ -272,6 +272,37 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     _syncColumn1(listIndex, totalItems);
   }
 
+  void _handlePageImageTap(int pageIndex) {
+    if (_activeGlobalPanel == null) return;
+    final listIndex = pageIndex + 1;
+    _lastFullyInFrameIndex = listIndex;
+
+    _isProgrammaticScrolling = true;
+    _activeScrollSource = 3;
+    _programmaticScrollTimer?.cancel();
+    _programmaticScrollTimer = Timer(const Duration(milliseconds: 650), () {
+      _isProgrammaticScrolling = false;
+      _activeScrollSource = 0;
+    });
+
+    setState(() {
+      _listTargetIndex = listIndex;
+      _panelTargetIndex = listIndex;
+    });
+
+    centerElementInContainer(
+      'panel-column-scroll-area',
+      'panel-page-$pageIndex',
+      smooth: true,
+    );
+
+    final String targetId = 'reader-page-$pageIndex';
+    scrollToElement(targetId, block: 'center', smooth: true);
+
+    final totalItems = component.pages.length + 1;
+    _syncColumn1(listIndex, totalItems);
+  }
+
   void _handlePanelCardTap(int pageIndex) {
     final listIndex = pageIndex + 1;
     _lastFullyInFrameIndex = listIndex;
@@ -462,6 +493,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 headerWidget: activeListHeader,
                 activeGlobalPanel: _activeGlobalPanel,
                 onTogglePanel: _handleTogglePanel,
+                onPageImageTap: _activeGlobalPanel != null ? _handlePageImageTap : null,
                 onOpenGrid: enableTwoPage ? _switchToGrid : null,
                 initialIndex: _listTargetIndex,
                 preloadedImageStats: component.preloadedImageStats,

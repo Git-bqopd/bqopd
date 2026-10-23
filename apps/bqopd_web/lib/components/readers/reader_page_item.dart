@@ -37,6 +37,7 @@ class ReaderPageItem extends StatefulComponent {
   final ToolScope? activeScope;
   final BonusRowType? activeGlobalPanel;
   final void Function(BonusRowType type, int pageIndex)? onTogglePanel;
+  final void Function(int pageIndex)? onPageImageTap;
 
   const ReaderPageItem({
     required this.fanzineId,
@@ -53,6 +54,7 @@ class ReaderPageItem extends StatefulComponent {
     this.activeScope,
     this.activeGlobalPanel,
     this.onTogglePanel,
+    this.onPageImageTap,
     super.key,
   });
 
@@ -136,7 +138,14 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
           'aspect-5-8 bg-gray-100 flex-col items-center justify-center border-b border-gray-200 w-full',
           attributes: const {
             'style':
-            'aspect-ratio: 5 / 8; background-color: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #e2e8f0; width: 100%;'
+            'aspect-ratio: 5 / 8; background-color: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #e2e8f0; width: 100%; cursor: pointer;'
+          },
+          events: {
+            'click': (e) {
+              if (component.onPageImageTap != null) {
+                component.onPageImageTap!(component.pageIndex);
+              }
+            }
           },
           [
             if (url != null && url.isNotEmpty)
@@ -145,7 +154,7 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
                 classes: 'w-full h-full',
                 attributes: const {
                   'style':
-                  'width: 100%; height: 100%; object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none;',
+                  'width: 100%; height: 100%; object-fit: contain; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;',
                   'draggable': 'false',
                   'loading': 'lazy',
                 },
