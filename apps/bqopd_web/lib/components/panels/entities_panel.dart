@@ -6,6 +6,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_utils.dart';
 import '../../repositories/repositories.dart';
+import '../profile/profile_mini_card.dart';
 
 class EntityLink {
   final String label; // The Canonical Name/Display Address
@@ -468,93 +469,19 @@ class _EntitiesRowPanelState extends State<EntitiesRowPanel> {
     uid != null ? _loadedProfiles[uid] : null;
 
     final bool isLinked = profile != null || isAddress;
-    final String labelText =
-    profile != null ? (profile['displayName'] ?? entity.label) : entity.label;
-    final String? subtitleText = isAddress
-        ? normalizedAddress
-        : (profile != null ? '@${profile['username']}' : null);
+    final String labelText = profile != null ? (profile['displayName'] ?? '') : '';
+    final String? handleText = profile != null && profile['username'] != null 
+        ? '@${profile['username']}' 
+        : (isAddress ? normalizedAddress : entity.label);
     final String? photoUrl = profile != null ? profile['photoUrl'] : null;
 
-    return div(
-      [
-        div(
-          [
-            div(
-              [
-                if (isAddress)
-                  span(
-                    [Component.text('pin_drop')],
-                    classes: 'material-symbols-outlined text-indigo-600',
-                    attributes: const {'style': 'font-size: 18px;'},
-                  )
-                else if (photoUrl != null && photoUrl.isNotEmpty)
-                  img(classes: 'user-avatar', src: photoUrl)
-                else
-                  div(
-                    classes: 'user-avatar-placeholder',
-                    [
-                      Component.text(
-                        labelText.isNotEmpty
-                            ? labelText[0].toUpperCase()
-                            : '?',
-                      )
-                    ],
-                  )
-              ],
-              classes: 'user-avatar-container',
-              attributes: const {
-                'style':
-                'width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background-color: #f1f1f1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.05);'
-              },
-            ),
-            div(
-              [
-                div(
-                  [Component.text(labelText)],
-                  classes: 'user-display-name',
-                  attributes: const {
-                    'style':
-                    'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'
-                  },
-                ),
-                if (subtitleText != null)
-                  div(
-                    [Component.text(subtitleText)],
-                    classes: 'text-xs text-gray',
-                    attributes: const {
-                      'style':
-                      'color: #555555; font-size: 11px; font-weight: 500; margin-top: 2px; text-align: left;'
-                    },
-                  )
-              ],
-              classes: 'user-info',
-              attributes: const {
-                'style': 'display: flex; flex-direction: column; justify-content: center;'
-              },
-            )
-          ],
-          classes: 'user-tile',
-          attributes: const {
-            'style': 'display: flex; flex-direction: row; align-items: center; gap: 12px;'
-          },
-        ),
-        if (isLinked)
-          span(
-            classes: 'material-symbols-outlined text-indigo-600',
-            attributes: const {'style': 'font-size: 18px; color: #6750A4;'},
-            [
-              Component.text(isAddress ? 'open_in_new' : 'arrow_forward_ios')
-            ],
-          )
-      ],
-      classes: 'hover:shadow-md transition-all',
-      attributes: const {
-        'style':
-        'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; margin-bottom: 8px; cursor: pointer; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); width: 100%; box-sizing: border-box;'
-      },
-      events: {
-        'click': (e) => _onTap(entity),
-      },
+    return ProfileMiniCard(
+      title: labelText.isNotEmpty ? labelText : entity.label,
+      subtitle: labelText.isNotEmpty ? handleText : null,
+      photoUrl: photoUrl,
+      isAddress: isAddress,
+      isLinked: isLinked,
+      onTap: () => _onTap(entity),
     );
   }
 }

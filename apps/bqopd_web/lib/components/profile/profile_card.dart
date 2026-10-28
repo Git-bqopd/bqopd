@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
+import 'profile_mini_card.dart';
 import '../../utils/web_utils.dart';
 
 /// Squared presentation profile card with no drop shadows on the envelope and white sticker cards.
@@ -796,67 +798,20 @@ class _FollowersFollowingModalState extends State<_FollowersFollowingModal> {
 
   Component _buildUserRow(String uid) {
     final profile = _profiles[uid];
-    final displayName = profile?['displayName'] ?? profile?['username'] ?? 'User';
+    final displayName = profile?['displayName'] ?? '';
     final username = profile?['username'] ?? uid;
     final photoUrl = profile?['photoUrl'] ?? '';
 
-    return a(
-      href: '/@$username',
-      classes: 'hover:bg-gray-50 transition-colors',
-      attributes: const {
-        'style': 'display: flex; align-items: center; gap: 12px; padding: 8px; border-bottom: 1px solid #f5f5f5; text-decoration: none;'
+    return ProfileMiniCard(
+      title: displayName.isNotEmpty ? displayName : '@$username',
+      subtitle: displayName.isNotEmpty ? '@$username' : null,
+      photoUrl: photoUrl.isNotEmpty ? photoUrl : null,
+      isAddress: false,
+      isLinked: true,
+      onTap: () {
+        component.onClose();
+        Router.of(context).push('/@$username');
       },
-      events: {
-        'click': (e) {
-          component.onClose();
-        }
-      },
-      [
-        div(
-          [
-            if (photoUrl.isNotEmpty)
-              img(
-                src: photoUrl,
-                attributes: const {
-                  'style': 'width: 100%; height: 100%; object-fit: cover; display: block;'
-                },
-              )
-            else
-              span(
-                [
-                  Component.text(
-                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                  )
-                ],
-                attributes: const {
-                  'style': 'font-size: 14px; font-weight: bold; color: #888;'
-                },
-              )
-          ],
-          attributes: const {
-            'style': 'width: 36px; height: 36px; border-radius: 50%; background-color: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0;'
-          },
-        ),
-        div(
-          [
-            span(
-              [Component.text(displayName)],
-              attributes: const {
-                'style': 'font-size: 13px; font-weight: bold; color: black; line-height: 1.2; text-align: left;'
-              },
-            ),
-            span(
-              [Component.text('@$username')],
-              attributes: const {
-                'style': 'font-size: 11px; color: #666; margin-top: 2px; text-align: left;'
-              },
-            )
-          ],
-          attributes: const {
-            'style': 'display: flex; flex-direction: column; justify-content: center; flex: 1; overflow: hidden;'
-          },
-        )
-      ],
     );
   }
 }

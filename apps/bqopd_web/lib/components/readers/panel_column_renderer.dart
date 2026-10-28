@@ -97,7 +97,7 @@ class PanelColumnRenderer extends StatelessComponent {
       onTargetChanged: onTargetChanged,
       onScroll: onScroll,
       onUserScrollStart: onUserScrollStart,
-      simpleScroll: isSimpleScroll,
+      simpleScroll: true,
       pageBuilder: (pageData) => _buildPagePanel(pageData),
     );
 

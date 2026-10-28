@@ -106,46 +106,13 @@ class MultiPageColumnLayout extends StatefulComponent {
   State createState() => _MultiPageColumnLayoutState();
 }
 
-class _MultiPageColumnLayoutState extends State {
-  @override
-  MultiPageColumnLayout get component => super.component as MultiPageColumnLayout;
-
+class _MultiPageColumnLayoutState extends State<MultiPageColumnLayout> {
   int _currentTargetIndex = 0;
-  PanelColumnIndicatorCoordinator? _indicatorCoordinator;
 
   @override
   void initState() {
     super.initState();
     _currentTargetIndex = component.targetPageIndex ?? 0;
-
-    if (!component.simpleScroll) {
-      _indicatorCoordinator = PanelColumnIndicatorCoordinator(
-        scrollAreaId: 'panel-column-scroll-area',
-        lineId: 'panel-target-indicator-line',
-        cardPrefix: 'panel-page-',
-        totalPages: () => component.pages.length,
-        getCurrentTargetIndex: () => _currentTargetIndex,
-        onTargetChanged: (newIdx) {
-          _currentTargetIndex = newIdx;
-          if (component.onTargetChanged != null) {
-            component.onTargetChanged!(newIdx);
-          }
-        },
-        onUserScrollStart: () {
-          if (component.onUserScrollStart != null) {
-            component.onUserScrollStart!();
-          }
-        },
-      );
-
-      if (kIsWeb) {
-        Future.microtask(() {
-          _indicatorCoordinator?.init();
-        });
-      }
-    }
-
-
   }
 
   @override
@@ -157,27 +124,13 @@ class _MultiPageColumnLayoutState extends State {
         setState(() {
           _currentTargetIndex = component.targetPageIndex!;
         });
-        if (!component.simpleScroll && kIsWeb) {
-          Future.microtask(() {
-            _indicatorCoordinator?.syncLineWithTarget();
-          });
-        }
       }
     }
-  }
-
-  @override
-  void dispose() {
-    _indicatorCoordinator?.dispose();
-    super.dispose();
   }
 
   void _handleScroll() {
     if (component.onScroll != null) {
       component.onScroll!();
-    }
-    if (!component.simpleScroll) {
-      _indicatorCoordinator?.handleScroll();
     }
   }
 
@@ -186,9 +139,6 @@ class _MultiPageColumnLayoutState extends State {
       setState(() {
         _currentTargetIndex = i;
       });
-      if (!component.simpleScroll) {
-        _indicatorCoordinator?.handleCardTap(i);
-      }
       if (component.onPageCardTap != null) {
         component.onPageCardTap!(i);
       }
@@ -239,31 +189,16 @@ class _MultiPageColumnLayoutState extends State {
             'position: relative; flex: 1; width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column;'
           },
           [
-// The Horizontal Target Indicator Line (rendered only when using synchronized coordinator)
-            if (!component.simpleScroll)
-              div(
-                id: 'panel-target-indicator-line',
-                classes: 'panel-target-indicator-line',
-                attributes: const {
-                  'style': 'top: 0px; display: none;'
-                },
-                [],
-              ),
 // Scrollable Feed List
             div(
               id: 'panel-column-scroll-area',
               classes: 'flex-1 overflow-y-auto p-4',
-              attributes: {
-                'style': component.simpleScroll
-                    ? 'flex: 1; overflow-y: auto; padding: 16px; background-color: #e5e5e5; -webkit-overflow-scrolling: touch;'
-                    : 'flex: 1; overflow-y: auto; padding: 16px; padding-bottom: calc(100vh - 180px); background-color: #e5e5e5;'
+              attributes: const {
+                'style':
+                'flex: 1; overflow-y: auto; padding: 16px; background-color: #e5e5e5; -webkit-overflow-scrolling: touch;'
               },
               events: {
-                if (!component.simpleScroll) 'scroll': (e) => _handleScroll(),
-                if (!component.simpleScroll && component.onUserScrollStart != null)
-                  'touchstart': (e) => component.onUserScrollStart!(),
-                if (!component.simpleScroll && component.onUserScrollStart != null)
-                  'pointerdown': (e) => component.onUserScrollStart!(),
+                'scroll': (e) => _handleScroll(),
               },
               [
 // Optional Top Column Widget (e.g. EntitiesColumnPanelHeader map)
@@ -330,7 +265,5 @@ class _MultiPageColumnLayoutState extends State {
         )
       ],
     );
-
-
   }
 }
