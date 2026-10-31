@@ -19,8 +19,8 @@ import '../panels/settings_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
 /// Directly maps each active tool to its dedicated ColumnPanel implementation,
-/// forwarding active target highlights, scroll events, and pre-rendered static
-/// text HTML for synchronized instant reading.
+/// forwarding active target highlights and pre-rendered static text HTML
+/// for synchronized instant reading.
 class PanelColumnRenderer extends StatelessComponent {
   final String fanzineId;
   final List<Map<String, dynamic>> pages;
@@ -28,10 +28,7 @@ class PanelColumnRenderer extends StatelessComponent {
   final bool isEditingMode;
   final VoidCallback onClose;
   final int targetIndex;
-  final Function(int pageIndex)? onPageCardTap;
-  final Function(int pageIndex)? onTargetChanged;
-  final VoidCallback? onScroll;
-  final VoidCallback? onUserScrollStart;
+  final void Function(int pageIndex)? onPageCardTap;
 
   const PanelColumnRenderer({
     required this.fanzineId,
@@ -41,9 +38,6 @@ class PanelColumnRenderer extends StatelessComponent {
     required this.onClose,
     this.targetIndex = 0,
     this.onPageCardTap,
-    this.onTargetChanged,
-    this.onScroll,
-    this.onUserScrollStart,
     super.key,
   });
 
@@ -81,11 +75,8 @@ class PanelColumnRenderer extends StatelessComponent {
         ? EntitiesColumnPanelHeader(fanzineId: fanzineId, pages: pages)
         : null;
 
-    final int? targetPageIndex = (targetIndex > 0 && targetIndex <= pages.length)
-        ? targetIndex - 1
-        : null;
-
-    final bool isSimpleScroll = activePanel == BonusRowType.comments;
+    final int targetPageIndex =
+        (targetIndex > 0 && targetIndex <= pages.length) ? targetIndex - 1 : 0;
 
     return MultiPageColumnLayout(
       title: title,
@@ -94,10 +85,6 @@ class PanelColumnRenderer extends StatelessComponent {
       onClose: onClose,
       targetPageIndex: targetPageIndex,
       onPageCardTap: onPageCardTap,
-      onTargetChanged: onTargetChanged,
-      onScroll: onScroll,
-      onUserScrollStart: onUserScrollStart,
-      simpleScroll: true,
       pageBuilder: (pageData) => _buildPagePanel(pageData),
     );
 

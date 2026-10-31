@@ -115,7 +115,10 @@ window.renderMapCoverPage = async (configJson) => {
 
     let mapLoaded = false;
     try {
-        const fnResult = await functions.httpsCallable('fetch_static_map')({
+        const fns = typeof window.ensureFirebaseFunctions === 'function'
+            ? await window.ensureFirebaseFunctions()
+            : functions;
+        const fnResult = await fns.httpsCallable('fetch_static_map')({
             markers: allCoords.map(c => ({ lat: c.lat, lng: c.lng, isCenter: c.isCenter })),
             center: `${centerLat},${centerLng}`,
             zoom: zoom,

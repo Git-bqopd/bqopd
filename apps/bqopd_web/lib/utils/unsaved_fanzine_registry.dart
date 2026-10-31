@@ -9,6 +9,22 @@ class UnsavedFanzineRegistry {
   static final Map<String, StreamController<Fanzine>> fanzineControllers = {};
   static final Map<String, StreamController<List<FanzinePage>>> pagesControllers = {};
 
+  static String? activePublisherFanzineId;
+  static final StreamController<String> _activePublisherFanzineController =
+      StreamController<String>.broadcast();
+
+  /// Notifies the `/publisher` workspace to display the given fanzine/blueprint in Columns 1 & 2.
+  static void setActivePublisherFanzine(String fanzineId) {
+    activePublisherFanzineId = fanzineId;
+    if (!_activePublisherFanzineController.isClosed) {
+      _activePublisherFanzineController.add(fanzineId);
+    }
+  }
+
+  /// Stream of active fanzine IDs selected inside the `/publisher` panel.
+  static Stream<String> watchActivePublisherFanzine() =>
+      _activePublisherFanzineController.stream;
+
   /// Checks if an in-memory temporary fanzine holds the given shortcode.
   static bool hasCode(String code) {
     final codeUpper = code.toUpperCase();

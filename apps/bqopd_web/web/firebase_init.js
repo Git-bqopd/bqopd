@@ -14,8 +14,115 @@ if (!firebase.apps.length) {
 }
 
 var db = firebase.firestore();
-var storage = firebase.storage();
-var functions = firebase.functions();
+var storage = null;
+var functions = null;
+
+var _lazyScriptPromises = {};
+function _loadExternalScriptOnce(id, src) {
+    if (_lazyScriptPromises[id]) return _lazyScriptPromises[id];
+    var existing = document.getElementById(id) || document.querySelector('script[src="' + src + '"]');
+    if (existing && existing.getAttribute('data-loaded') === 'true') {
+        return Promise.resolve();
+    }
+    _lazyScriptPromises[id] = new Promise(function(resolve, reject) {
+        var script = existing || document.createElement('script');
+        script.id = id;
+        script.async = true;
+        script.onload = function() {
+            script.setAttribute('data-loaded', 'true');
+            resolve();
+        };
+        script.onerror = function(err) {
+            delete _lazyScriptPromises[id];
+            if (script.parentNode) script.parentNode.removeChild(script);
+            reject(new Error('Failed to lazy-load script: ' + src));
+        };
+        if (!existing) {
+            script.src = src;
+            (document.head || document.documentElement).appendChild(script);
+        }
+    });
+    return _lazyScriptPromises[id];
+}
+
+window.ensureFirebaseStorage = function() {
+    if (storage) return Promise.resolve(storage);
+    if (typeof firebase !== 'undefined' && typeof firebase.storage === 'function') {
+        storage = firebase.storage();
+        window.storage = storage;
+        return Promise.resolve(storage);
+    }
+    return _loadExternalScriptOnce(
+        'lazy-firebase-storage-sdk',
+        'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js'
+    ).then(function() {
+        storage = firebase.storage();
+        window.storage = storage;
+        return storage;
+    });
+};
+
+window.ensureFirebaseFunctions = function() {
+    if (functions) return Promise.resolve(functions);
+    if (typeof firebase !== 'undefined' && typeof firebase.functions === 'function') {
+        functions = firebase.functions();
+        window.functions = functions;
+        return Promise.resolve(functions);
+    }
+    return _loadExternalScriptOnce(
+        'lazy-firebase-functions-sdk',
+        'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js'
+    ).then(function() {
+        functions = firebase.functions();
+        window.functions = functions;
+        return functions;
+    });
+};
+
+var _googleMapsPromise = null;
+window.ensureGoogleMapsPlaces = function() {
+    if (typeof google !== 'undefined' && google.maps && google.maps.places && google.maps.Map) {
+        return Promise.resolve();
+    }
+    if (_googleMapsPromise) return _googleMapsPromise;
+    var apiKey = (window.firebaseConfig && window.firebaseConfig.apiKey) || 'AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g';
+    var cbName = '__bqopdGoogleMapsReady';
+    _googleMapsPromise = new Promise(function(resolve, reject) {
+        var settled = false;
+        function finish() {
+            if (settled) return;
+            settled = true;
+            resolve();
+        }
+        window[cbName] = function() {
+            if (typeof google !== 'undefined' && google.maps && typeof google.maps.importLibrary === 'function') {
+                Promise.all([
+                    google.maps.importLibrary('maps'),
+                    google.maps.importLibrary('places'),
+                    google.maps.importLibrary('geocoding')
+                ]).then(finish).catch(finish);
+            } else {
+                finish();
+            }
+        };
+        var src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(apiKey) +
+            '&libraries=places&loading=async&callback=' + cbName;
+        var script = document.getElementById('lazy-google-maps-places-sdk');
+        if (!script) {
+            script = document.createElement('script');
+            script.id = 'lazy-google-maps-places-sdk';
+            script.src = src;
+            script.async = true;
+            script.onerror = function() {
+                _googleMapsPromise = null;
+                if (script.parentNode) script.parentNode.removeChild(script);
+                reject(new Error('Failed to lazy-load Google Maps Places SDK'));
+            };
+            (document.head || document.documentElement).appendChild(script);
+        }
+    });
+    return _googleMapsPromise;
+};
 
 window.loginWithFirebase = function(email, password) {
     return firebase.auth().signInWithEmailAndPassword(email, password);
@@ -182,7 +289,9 @@ window.fsQuery = function(path, field, op, valueJson, orderBy) {
 };
 
 window.fnCall = function(name, dataStr) {
-    return functions.httpsCallable(name, { timeout: 300000 })(JSON.parse(dataStr)).then(function(r) {
+    return window.ensureFirebaseFunctions().then(function(fns) {
+        return fns.httpsCallable(name, { timeout: 300000 })(JSON.parse(dataStr));
+    }).then(function(r) {
         return JSON.stringify(r.data);
     }).catch(function(err) {
         console.error("fnCall error on " + name + ":", err);
@@ -191,7 +300,9 @@ window.fnCall = function(name, dataStr) {
 };
 
 window.stUpload = function(path, bytes, contentType) {
-    return storage.ref(path).put(bytes, {contentType: contentType}).then(function(s) {
+    return window.ensureFirebaseStorage().then(function(st) {
+        return st.ref(path).put(bytes, {contentType: contentType});
+    }).then(function(s) {
         return s.ref.getDownloadURL();
     }).catch(function(err) {
         console.error("stUpload error:", err);
@@ -873,7 +984,8 @@ window.renderMapCoverPage = async (configJson) => {
         if (apiKey) {
             fnPayload.api_key = apiKey;
         }
-        const fnResult = await functions.httpsCallable('fetch_static_map', { timeout: 60000 })(fnPayload);
+        const fns = await window.ensureFirebaseFunctions();
+        const fnResult = await fns.httpsCallable('fetch_static_map', { timeout: 60000 })(fnPayload);
         if (fnResult && fnResult.data && fnResult.data.status === 'success' && fnResult.data.data_url) {
             await new Promise((resolve) => {
                 const img = new Image();
@@ -999,7 +1111,7 @@ window.renderMapCoverPage = async (configJson) => {
 globalThis.renderMapCoverPage = window.renderMapCoverPage;
 
 window.getPlacePredictions = (input) => {
-    return new Promise((resolve) => {
+    return window.ensureGoogleMapsPlaces().then(() => new Promise((resolve) => {
         if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
             resolve(JSON.stringify([]));
             return;
@@ -1022,6 +1134,9 @@ window.getPlacePredictions = (input) => {
             return;
         }
         _legacyGetPlacePredictions(input, resolve);
+    })).catch((err) => {
+        console.warn('[getPlacePredictions] Maps SDK load failed:', err);
+        return JSON.stringify([]);
     });
 };
 
@@ -1048,7 +1163,11 @@ window.initAddressAutocomplete = (inputId, callback) => {
     const input = document.getElementById(inputId);
     if (!input) return;
     if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-        setTimeout(() => window.initAddressAutocomplete(inputId, callback), 150);
+        window.ensureGoogleMapsPlaces().then(() => {
+            window.initAddressAutocomplete(inputId, callback);
+        }).catch((err) => {
+            console.warn('[initAddressAutocomplete] Failed to lazy-load Google Maps Places SDK:', err);
+        });
         return;
     }
     if (input._autocompleteBound) return;
@@ -1112,12 +1231,19 @@ window.geocodeAddress = async (address) => {
     const cleanAddress = address.trim();
 
     try {
-        const result = await functions.httpsCallable('geocode_address', { timeout: 60000 })({ address: cleanAddress });
+        const fns = await window.ensureFirebaseFunctions();
+        const result = await fns.httpsCallable('geocode_address', { timeout: 60000 })({ address: cleanAddress });
         if (result && result.data && result.data.status === 'success') {
             return JSON.stringify(result.data);
         }
     } catch (e) {
         console.warn('[geocodeAddress] Server callable geocode_address failed:', e);
+    }
+
+    try {
+        await window.ensureGoogleMapsPlaces();
+    } catch (e) {
+        console.warn('[geocodeAddress] Failed to lazy-load Maps SDK for client fallback:', e);
     }
 
     if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
@@ -1144,7 +1270,14 @@ window.geocodeAddress = async (address) => {
 };
 
 window.renderEntityMap = (containerId, markersJson) => {
-    if (typeof google === 'undefined' || !google.maps) return;
+    if (typeof google === 'undefined' || !google.maps || !google.maps.Map) {
+        window.ensureGoogleMapsPlaces().then(() => {
+            window.renderEntityMap(containerId, markersJson);
+        }).catch((err) => {
+            console.error('[renderEntityMap] Failed to lazy-load Google Maps SDK:', err);
+        });
+        return;
+    }
     const container = document.getElementById(containerId);
     if (!container) return;
     let markersData = [];

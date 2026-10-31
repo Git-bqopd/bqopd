@@ -2,7 +2,6 @@ import 'package:web/web.dart' as web;
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 
@@ -389,8 +388,12 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
     }
   }
 
-  // 2. Direct Places SDK initialization
+  // 2. Direct Places SDK initialization (trigger lazy load if available)
   if (!jsWindow.has('google')) {
+    if (jsWindow.has('ensureGoogleMapsPlaces')) {
+      final ensureFn = jsWindow['ensureGoogleMapsPlaces'] as JSFunction?;
+      ensureFn?.callAsFunction();
+    }
     web.window.setTimeout((() {
       initAddressAutocomplete(inputId, callback);
     }).toJS, 150.toJS);

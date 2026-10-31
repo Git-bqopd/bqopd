@@ -6,7 +6,7 @@ environment:
   sdk: ^3.11.0
 
 jaspr:
-  mode: server
+  mode: client
 
 dependencies:
   jaspr: ^0.23.3

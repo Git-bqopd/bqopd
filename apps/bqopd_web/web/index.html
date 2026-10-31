@@ -24,15 +24,10 @@
         }
     </style>
 
-    <!-- Firebase SDK Compat libraries (Web) -->
+    <!-- Core Firebase SDK Compat libraries (Storage, Functions & Google Maps Places are lazy-loaded on demand) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-
-    <!-- Google Maps Places SDK (Client Key restricted via HTTP Referrers in Google Cloud Console) -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g&libraries=places&loading=async"></script>
 
     <!-- Initialize Firebase and assign configuration directly to window namespace -->
     <script>
@@ -48,10 +43,8 @@
           firebase.initializeApp(window.firebaseConfig);
         }
         window.db = firebase.firestore();
-        window.storage = firebase.storage();
-        window.functions = firebase.functions();
     </script>
-    <!-- Import central JavaScript initialize script containing multi-page canvas compilation -->
+    <!-- Import central JavaScript initialize script containing lazy SDK loaders & multi-page canvas compilation -->
     <script src="firebase_init.js"></script>
     <script src="main.dart.js" defer></script>
 </head>

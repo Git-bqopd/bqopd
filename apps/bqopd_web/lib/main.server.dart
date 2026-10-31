@@ -18,10 +18,7 @@ void main() {
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js'),
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js'),
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js'),
-      script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js'),
-      script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js'),
-      // Load Google Places SDK on server pre-renders as well
-      script(src: 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAKrrl8l8A-3RDzaI04qgp99-vpeMLMR_g&libraries=places&loading=async'),
+      // Firebase Storage, Cloud Functions, and Google Maps Places SDKs are lazy-loaded on demand via firebase_init.js
       // Pull in central JS initialization script
       script(src: 'firebase_init.js'),
       // Load the compiled Dart app so it takes over from the pre-rendered shell

@@ -15,8 +15,8 @@ enum FanzineViewMode { grid, single }
 /// vertical list views, and collapsible desktop bonus panels.
 /// Enforces directional scroll relationships:
 /// 1. Scrolling in Column 1 never changes Column 2 or Column 3.
-/// 2. Scrolling in Column 2 keeps Column 1 centered vertically, but never touches Column 3.
-/// 3. Scrolling in Column 3 auto-centers both Column 1 and Column 2 to their matching widgets.
+/// 2. Scrolling in Column 2 keeps Column 1 centered vertically, without hijacking Column 3.
+/// 3. Scrolling in Column 3 is a native independent feed; clicking a page card (or page image) syncs Columns 1, 2, and 3.
 class FanzineLayout extends StatefulComponent {
   final String frefFanzineId;
   final String? shortCode;
@@ -245,17 +245,9 @@ class _FanzineLayoutState extends State<FanzineLayout> {
     }
   }
 
-  void _updateTargetFromColumn3(int pageIndex) {
+  void _focusPageAcrossColumns(int pageIndex) {
     final listIndex = pageIndex + 1;
-    if (_lastFullyInFrameIndex == listIndex && _activeScrollSource == 3) {
-      return;
-    }
     _lastFullyInFrameIndex = listIndex;
-
-    setState(() {
-      _listTargetIndex = listIndex;
-      _panelTargetIndex = listIndex;
-    });
 
     _isProgrammaticScrolling = true;
     _activeScrollSource = 3;
@@ -265,8 +257,18 @@ class _FanzineLayoutState extends State<FanzineLayout> {
       _activeScrollSource = 0;
     });
 
-    final String targetId = 'reader-page-$pageIndex';
-    scrollToElement(targetId, block: 'center', smooth: true);
+    setState(() {
+      _listTargetIndex = listIndex;
+      _panelTargetIndex = listIndex;
+    });
+
+    centerElementInContainer(
+      'panel-column-scroll-area',
+      'panel-page-$pageIndex',
+      smooth: true,
+    );
+
+    scrollToElement('reader-page-$pageIndex', block: 'center', smooth: true);
 
     final totalItems = component.pages.length + 1;
     _syncColumn1(listIndex, totalItems);
@@ -274,63 +276,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
 
   void _handlePageImageTap(int pageIndex) {
     if (_activeGlobalPanel == null) return;
-    final listIndex = pageIndex + 1;
-    _lastFullyInFrameIndex = listIndex;
-
-    _isProgrammaticScrolling = true;
-    _activeScrollSource = 3;
-    _programmaticScrollTimer?.cancel();
-    _programmaticScrollTimer = Timer(const Duration(milliseconds: 650), () {
-      _isProgrammaticScrolling = false;
-      _activeScrollSource = 0;
-    });
-
-    setState(() {
-      _listTargetIndex = listIndex;
-      _panelTargetIndex = listIndex;
-    });
-
-    centerElementInContainer(
-      'panel-column-scroll-area',
-      'panel-page-$pageIndex',
-      smooth: true,
-    );
-
-    final String targetId = 'reader-page-$pageIndex';
-    scrollToElement(targetId, block: 'center', smooth: true);
-
-    final totalItems = component.pages.length + 1;
-    _syncColumn1(listIndex, totalItems);
-  }
-
-  void _handlePanelCardTap(int pageIndex) {
-    final listIndex = pageIndex + 1;
-    _lastFullyInFrameIndex = listIndex;
-
-    _isProgrammaticScrolling = true;
-    _activeScrollSource = 3;
-    _programmaticScrollTimer?.cancel();
-    _programmaticScrollTimer = Timer(const Duration(milliseconds: 650), () {
-      _isProgrammaticScrolling = false;
-      _activeScrollSource = 0;
-    });
-
-    setState(() {
-      _listTargetIndex = listIndex;
-      _panelTargetIndex = listIndex;
-    });
-
-    centerElementInContainer(
-      'panel-column-scroll-area',
-      'panel-page-$pageIndex',
-      smooth: true,
-    );
-
-    final String targetId = 'reader-page-$pageIndex';
-    scrollToElement(targetId, block: 'center', smooth: true);
-
-    final totalItems = component.pages.length + 1;
-    _syncColumn1(listIndex, totalItems);
+    _focusPageAcrossColumns(pageIndex);
   }
 
   void _syncColumn1(int itemIndex, int totalItems) {
@@ -519,13 +465,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 activePanel: _activeGlobalPanel!,
                 isEditingMode: component.isEditingMode,
                 targetIndex: _panelTargetIndex,
-                onPageCardTap: _handlePanelCardTap,
-                onTargetChanged: _updateTargetFromColumn3,
-                onScroll: () {},
-                onUserScrollStart: () {
-                  _cancelProgrammaticScroll();
-                  _activeScrollSource = 3;
-                },
+                onPageCardTap: _focusPageAcrossColumns,
                 onClose: () => setState(() => _activeGlobalPanel = null),
               )
             ],

@@ -811,33 +811,6 @@ border-color: #6750A4 !important;
 box-shadow: 0 4px 16px rgba(103, 80, 164, 0.12) !important;
 }
 
-/* STREAMING_CHUNK:Configuring Column 3 horizontal target indicator line styling... */
-.panel-target-indicator-line {
-position: absolute;
-left: 0;
-right: 0;
-height: 2px;
-background-color: var(--m3-primary, #6750A4);
-box-shadow: 0 0 8px rgba(103, 80, 164, 0.4), 0 1px 3px rgba(103, 80, 164, 0.25);
-pointer-events: none;
-z-index: 60;
-box-sizing: border-box;
-display: flex;
-align-items: center;
-justify-content: space-between;
-padding: 0 8px;
-}
-
-.panel-target-indicator-line::before,
-.panel-target-indicator-line::after {
-content: '';
-width: 6px;
-height: 6px;
-border-radius: 50%;
-background-color: var(--m3-primary, #6750A4);
-box-shadow: 0 0 6px rgba(103, 80, 164, 0.6);
-}
-
 /* STREAMING_CHUNK:Configuring header and container widths... */
 .stats-table th {
 font-size: 11px;

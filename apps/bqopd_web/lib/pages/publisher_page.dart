@@ -45,16 +45,23 @@ class _PublisherPageState extends State<PublisherPage> {
   dynamic _likesUnsub;
   dynamic _fanzineUnsub;
   dynamic _pagesUnsub;
+  StreamSubscription<String>? _activeBlueprintSub;
 
   @override
   void initState() {
     super.initState();
     _initBlankFolioSession();
     _setupLikesPipeline();
+    _activeBlueprintSub = UnsavedFanzineRegistry.watchActivePublisherFanzine().listen((fanzineId) {
+      if (mounted && fanzineId.isNotEmpty) {
+        loadFanzine(fanzineId);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _activeBlueprintSub?.cancel();
     _cancelSubscription(_likesUnsub);
     _cancelSubscription(_fanzineUnsub);
     _cancelSubscription(_pagesUnsub);
