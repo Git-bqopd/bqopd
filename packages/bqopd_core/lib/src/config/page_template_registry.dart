@@ -80,6 +80,26 @@ class PageTemplateRegistry {
       requiredFields: ['url', 'caption'],
       optionalFields: ['row', 'width', 'height', 'aspectRatio', 'ratio'],
     ),
+
+    // Terminal QR / WebAR Anchor Stamp
+    'terminal_qr_anchor': PageBlockDefinition(
+      id: 'terminal_qr_anchor',
+      name: 'Terminal QR & WebAR Fiducial Stamp',
+      description: 'Scannable shortcode QR + high-contrast fiducial frame for evergreen Digital Twin lookup and Smartphone WebAR tracking.',
+      syntaxExample: '{{TERMINAL_QR: shortCode=7GWH01 | mode=anchor}}',
+      requiredFields: ['shortCode'],
+      optionalFields: ['mode', 'roomId'],
+    ),
+
+    // Terminal Stat / Contraband Table
+    'terminal_stat_table': PageBlockDefinition(
+      id: 'terminal_stat_table',
+      name: 'Terminal Stat & Contraband Ledger',
+      description: 'Monospace TTRPG stat block, weapon chart, or black-market price list.',
+      syntaxExample: '{{TERMINAL_STATS: entityId=thug_7g_01}}',
+      requiredFields: ['entityId'],
+      optionalFields: ['showInventory', 'showPrices'],
+    ),
   };
 
   // ---------------------------------------------------------------------------
@@ -174,6 +194,120 @@ class PageTemplateRegistry {
         'spreadSide': 'right',
       },
     ),
+
+    // -------------------------------------------------------------------------
+    // `terminal` Cyberpunk TTRPG & WebAR Page Templates (2000x3200 / 5:8)
+    // -------------------------------------------------------------------------
+
+    // 1. Overhead Tactical Grid Map (1 Positional WebAR Anchor)
+    'terminal_grid_map': PageTemplateDefinition(
+      id: 'terminal_grid_map',
+      name: 'Terminal Overhead Tactical Grid Map',
+      description: 'A 2000x3200 top-down Kenney 2D blueprint grid of an Apartment, HQ, or Rented Warehouse with a positional WebAR fiducial anchor.',
+      width: 2000,
+      height: 3200,
+      aspectRatio: 0.625,
+      isMultiPageSource: false,
+      supportedFanzineTypes: {
+        FanzineType.folio,
+      },
+      allowedBlockIds: [
+        'h1',
+        'h2',
+        'text',
+        'terminal_qr_anchor',
+        'terminal_stat_table',
+      ],
+      metadata: {
+        'isTerminalPage': true,
+        'supportsPositionalWebAr': true,
+        'preferredSide': 'left',
+        'defaultGridColumns': 8,
+        'defaultGridRows': 10,
+      },
+    ),
+
+    // 2. Character / Crew Dossier & Turn Order Sheet (Scan-Once +5 QR Participant)
+    'terminal_dossier': PageTemplateDefinition(
+      id: 'terminal_dossier',
+      name: 'Terminal Persona Dossier & Weekly Orders',
+      description: 'A 2000x3200 facing character/turf ledger showing stats, gear, weekly incident logs, and scannable QR participant badge.',
+      width: 2000,
+      height: 3200,
+      aspectRatio: 0.625,
+      isMultiPageSource: false,
+      supportedFanzineTypes: {
+        FanzineType.folio,
+      },
+      allowedBlockIds: [
+        'h1',
+        'h2',
+        'h3',
+        'text',
+        'bullet',
+        'terminal_qr_anchor',
+        'terminal_stat_table',
+      ],
+      metadata: {
+        'isTerminalPage': true,
+        'supportsScanOnceIngest': true,
+        'preferredSide': 'right',
+      },
+    ),
+
+    // 3. Cyberpunk Screamsheet (Canonical World News & Bounties)
+    'terminal_screamsheet': PageTemplateDefinition(
+      id: 'terminal_screamsheet',
+      name: 'Terminal Street Screamsheet',
+      description: 'A 2000x3200 sensationalist street newspaper auto-typeset from canonical WorldEvent history, turf wars, and active bounties.',
+      width: 2000,
+      height: 3200,
+      aspectRatio: 0.625,
+      isMultiPageSource: false,
+      supportedFanzineTypes: {
+        FanzineType.folio,
+      },
+      allowedBlockIds: [
+        'h1',
+        'h2',
+        'h3',
+        'text',
+        'bullet',
+        'column_break',
+        'terminal_qr_anchor',
+      ],
+      metadata: {
+        'isTerminalPage': true,
+        'columnCount': 3,
+      },
+    ),
+
+    // 4. 1-Page Drama Advertisement (Contextual Encounter Mini-Game)
+    'terminal_drama_ad': PageTemplateDefinition(
+      id: 'terminal_drama_ad',
+      name: 'Terminal 1-Page Encounter Advertisement',
+      description: 'A 2000x3200 1-page contraband/gang ad engineered to spark reader-driven drama via the terminal social button and QR scan.',
+      width: 2000,
+      height: 3200,
+      aspectRatio: 0.625,
+      isMultiPageSource: false,
+      supportedFanzineTypes: {
+        FanzineType.folio,
+      },
+      allowedBlockIds: [
+        'h1',
+        'h2',
+        'text',
+        'image',
+        'terminal_qr_anchor',
+        'terminal_stat_table',
+      ],
+      metadata: {
+        'isTerminalPage': true,
+        'supportsScanOnceIngest': true,
+        'isBackfillEligible': true,
+      },
+    ),
   };
 
   // ---------------------------------------------------------------------------
@@ -194,6 +328,13 @@ class PageTemplateRegistry {
   /// Returns all registered page templates.
   static List<PageTemplateDefinition> getAllTemplates() {
     return templates.values.toList();
+  }
+
+  /// Returns all registered `terminal` TTRPG page templates.
+  static List<PageTemplateDefinition> getTerminalTemplates() {
+    return templates.values
+        .where((tmpl) => tmpl.metadata['isTerminalPage'] == true)
+        .toList();
   }
 
   /// Returns all registered block elements.

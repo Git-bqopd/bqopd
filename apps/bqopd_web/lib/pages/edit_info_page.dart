@@ -89,6 +89,14 @@ class _EditInfoPageState extends State<EditInfoPage> {
   String _githubHandle = '';
   bool _isManaged = false;
 
+  // Profile Type ('person' | 'business') & Public Business Hours
+  String _profileType = 'person';
+  bool _isOpenToPublic = false;
+  Map<String, BusinessDayHours> _businessHours = createDefaultBusinessHours();
+  final Map<String, int> _dayResetVersion = {
+    for (final day in kBusinessDaysOfWeek) day: 0,
+  };
+
   // Managed Profile Managers State
   List<String> _managers = [];
   bool _managerDropdownOpen = false;
@@ -220,6 +228,19 @@ class _EditInfoPageState extends State<EditInfoPage> {
               _addressVisibility = 'city';
             }
 
+            if (data.containsKey('profileType') || data.containsKey('isBusiness')) {
+              _profileType = (data['profileType']?.toString() == 'business' ||
+                      data['isBusiness'] == true)
+                  ? 'business'
+                  : 'person';
+            }
+            if (data.containsKey('isOpenToPublic')) {
+              _isOpenToPublic = data['isOpenToPublic'] == true;
+            }
+            if (data['businessHours'] is Map) {
+              _businessHours = parseBusinessHours(data['businessHours']);
+            }
+
             if (_street1.isEmpty && data['street1'] != null) _street1 = data['street1'].toString();
             if (_street2.isEmpty && data['street2'] != null) _street2 = data['street2'].toString();
             if (_city.isEmpty && data['city'] != null) _city = data['city'].toString();
@@ -279,6 +300,11 @@ class _EditInfoPageState extends State<EditInfoPage> {
           _githubHandle = profile.githubHandle ?? '';
           _isManaged = profile.isManaged;
           _managers = List<String>.from(profile.managers);
+          _profileType = profile.profileType;
+          _isOpenToPublic = profile.isOpenToPublic;
+          _businessHours = profile.businessHours.isNotEmpty
+              ? Map<String, BusinessDayHours>.from(profile.businessHours)
+              : createDefaultBusinessHours();
           _isAuthorized = hasPermission;
           _loading = false;
         });
@@ -370,11 +396,19 @@ class _EditInfoPageState extends State<EditInfoPage> {
         }
       }
 
+      final bool isBusiness = _profileType == 'business';
+      final bool effectiveOpenToPublic = isBusiness && _isOpenToPublic;
+      final serializedBusinessHours = serializeBusinessHours(_businessHours);
+
       // 1. Update public profile fields with selected geographic precision
       final publicData = <String, dynamic>{
         'displayName': _displayName.trim(),
         'bio': _bio.trim(),
         'photoUrl': _photoUrl.trim(),
+        'profileType': _profileType,
+        'isBusiness': isBusiness,
+        'isOpenToPublic': effectiveOpenToPublic,
+        'businessHours': serializedBusinessHours,
         'xHandle': _cleanHandle(_xHandle),
         'instagramHandle': _cleanHandle(_instagramHandle),
         'githubHandle': _cleanHandle(_githubHandle),
@@ -382,24 +416,6 @@ class _EditInfoPageState extends State<EditInfoPage> {
         'isAddressPublic': _addressVisibility != 'private',
         'updatedAt': WebFieldValue.serverTimestamp(),
       };
-
-      if (geoMeta != null) {
-        publicData['geo'] = geoMeta;
-      }
-
-      final locParts = [
-        if (_city.trim().isNotEmpty) _city.trim(),
-        if (_state.trim().isNotEmpty) _state.trim(),
-      ];
-      if (locParts.isNotEmpty) {
-        publicData['location'] = locParts.join(', ');
-      }
-
-      if (_isManaged) {
-        publicData['managers'] = _managers;
-        publicData['firstName'] = _firstName.trim();
-        publicData['lastName'] = _lastName.trim();
-      }
 
       switch (_addressVisibility) {
         case 'address':
@@ -409,6 +425,9 @@ class _EditInfoPageState extends State<EditInfoPage> {
           publicData['state'] = _state.trim();
           publicData['zipCode'] = _zipCode.trim();
           publicData['country'] = _country.trim();
+          if (geoMeta != null) {
+            publicData['geo'] = geoMeta;
+          }
           break;
         case 'city':
           publicData['street1'] = '';
@@ -417,6 +436,24 @@ class _EditInfoPageState extends State<EditInfoPage> {
           publicData['state'] = _state.trim();
           publicData['zipCode'] = '';
           publicData['country'] = _country.trim();
+          if (geoMeta != null) {
+            // Coarse city-level geohash / centroid; suppress exact lat/lng and street formatted address
+            final String gh3 = geoMeta['geohash_3']?.toString() ?? (geoMeta['geohash']?.toString().substring(0, 3) ?? '');
+            final String gh2 = geoMeta['geohash_2']?.toString() ?? (geoMeta['geohash']?.toString().substring(0, 2) ?? '');
+            final String cityStateFormatted = [
+              if (_city.trim().isNotEmpty) _city.trim(),
+              if (_state.trim().isNotEmpty) _state.trim(),
+              if (_country.trim().isNotEmpty) _country.trim(),
+            ].join(', ');
+            publicData['geo'] = {
+              'geohash_3': gh3,
+              'geohash_2': gh2,
+              'formatted': cityStateFormatted,
+              'city': _city.trim(),
+              'state': _state.trim(),
+              'country': _country.trim(),
+            };
+          }
           break;
         case 'state':
           publicData['street1'] = '';
@@ -425,6 +462,20 @@ class _EditInfoPageState extends State<EditInfoPage> {
           publicData['state'] = _state.trim();
           publicData['zipCode'] = '';
           publicData['country'] = _country.trim();
+          if (geoMeta != null) {
+            // Coarse state-level geohash / centroid; suppress city and street
+            final String gh2 = geoMeta['geohash_2']?.toString() ?? (geoMeta['geohash']?.toString().substring(0, 2) ?? '');
+            final String stateFormatted = [
+              if (_state.trim().isNotEmpty) _state.trim(),
+              if (_country.trim().isNotEmpty) _country.trim(),
+            ].join(', ');
+            publicData['geo'] = {
+              'geohash_2': gh2,
+              'formatted': stateFormatted,
+              'state': _state.trim(),
+              'country': _country.trim(),
+            };
+          }
           break;
         case 'private':
         default:
@@ -434,7 +485,26 @@ class _EditInfoPageState extends State<EditInfoPage> {
           publicData['state'] = '';
           publicData['zipCode'] = '';
           publicData['country'] = '';
+          publicData['location'] = '';
+          // Explicitly delete/blank geo from public profile
+          publicData['geo'] = WebFieldValue.delete();
           break;
+      }
+
+      if (_addressVisibility != 'private') {
+        final locParts = [
+          if (_city.trim().isNotEmpty && _addressVisibility != 'state') _city.trim(),
+          if (_state.trim().isNotEmpty) _state.trim(),
+        ];
+        if (locParts.isNotEmpty) {
+          publicData['location'] = locParts.join(', ');
+        }
+      }
+
+      if (_isManaged) {
+        publicData['managers'] = _managers;
+        publicData['firstName'] = _firstName.trim();
+        publicData['lastName'] = _lastName.trim();
       }
 
       if (finalUsername.isNotEmpty) {
@@ -457,6 +527,9 @@ class _EditInfoPageState extends State<EditInfoPage> {
           'isAddressPublic': _addressVisibility != 'private',
           'preferences.addressVisibility': _addressVisibility,
           'preferences.isAddressPublic': _addressVisibility != 'private',
+          'profileType': _profileType,
+          'isBusiness': isBusiness,
+          'isOpenToPublic': effectiveOpenToPublic,
           if (geoMeta != null) 'geo': geoMeta,
           'updatedAt': WebFieldValue.serverTimestamp(),
         };
@@ -588,12 +661,49 @@ class _EditInfoPageState extends State<EditInfoPage> {
                   attributes: const {'style': 'width: 100%; padding: 24px; box-sizing: border-box; background: white; border-radius: 8px;'},
                   [
                     // --- SECTION 1: PUBLIC PROFILE DETAILS ---
-                    h2([Component.text('PUBLIC PROFILE')], classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0'),
+                    div(
+                      classes: 'flex-row justify-between items-center mb-3 mt-0',
+                      attributes: const {
+                        'style': 'display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 8px;'
+                      },
+                      [
+                        h2(
+                          [
+                            Component.text(
+                              _profileType == 'business'
+                                  ? 'PUBLIC PROFILE - BUSINESS'
+                                  : 'PUBLIC PROFILE - PERSON',
+                            )
+                          ],
+                          classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-0 mt-0',
+                          attributes: const {'style': 'margin: 0;'},
+                        ),
+                        SegmentedButton<String>(
+                          segments: const ['person', 'business'],
+                          selected: _profileType,
+                          labelBuilder: (val) => val,
+                          showSelectedCheckmark: true,
+                          onSelectionChanged: (val) {
+                            setState(() {
+                              _profileType = val;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
                     div(classes: 'flex-col gap-3 w-full mb-6', [
                       div([
-                        span([Component.text('Display Name')], classes: 'text-xs font-bold text-gray-600 block mb-1'),
+                        span(
+                          [Component.text(_profileType == 'business' ? 'Business / Display Name' : 'Display Name')],
+                          classes: 'text-xs font-bold text-gray-600 block mb-1',
+                        ),
                         input(
-                          attributes: {'type': 'text', 'placeholder': 'Jane Doe', 'value': _displayName, 'style': 'margin-bottom: 0; background: white;'},
+                          attributes: {
+                            'type': 'text',
+                            'placeholder': _profileType == 'business' ? 'Acme Zine Shop' : 'Jane Doe',
+                            'value': _displayName,
+                            'style': 'margin-bottom: 0; background: white;',
+                          },
                           events: {'input': (e) => setState(() => _displayName = getInputValue(e))},
                         )
                       ]),
@@ -609,7 +719,9 @@ class _EditInfoPageState extends State<EditInfoPage> {
                         textarea(
                             classes: 'border border-gray-300 rounded-md',
                             attributes: {
-                              'placeholder': 'Tell the community about yourself...',
+                              'placeholder': _profileType == 'business'
+                                  ? 'Tell the community about your business...'
+                                  : 'Tell the community about yourself...',
                               'style': 'width: 100%; min-height: 70px; font-size: 13px; background: white; margin-bottom: 0;',
                             },
                             events: {'input': (e) => setState(() => _bio = getInputValue(e))},
@@ -625,6 +737,12 @@ class _EditInfoPageState extends State<EditInfoPage> {
                       ]),
                     ]),
                     div([], attributes: const {'style': 'height: 1px; background: #eee; margin: 16px 0;'}),
+
+                    // --- SECTION 1B: BUSINESS PUBLIC ACCESS & HOURS ---
+                    if (_profileType == 'business') ...[
+                      _buildBusinessHoursSection(),
+                      div([], attributes: const {'style': 'height: 1px; background: #eee; margin: 16px 0;'}),
+                    ],
 
                     // --- SECTION 2: PROFILE MANAGERS (MANAGED PROFILES ONLY) ---
                     if (_isManaged) ...[
@@ -1042,6 +1160,213 @@ class _EditInfoPageState extends State<EditInfoPage> {
             'style': 'font-size: 18px; color: ${isSelected ? "#6750A4" : "#ccc"};'
           },
           [Component.text(isSelected ? 'check_box' : 'check_box_outline_blank')],
+        ),
+      ],
+    );
+  }
+
+  Component _buildBusinessHoursSection() {
+    return div(
+      classes: 'flex-col w-full mb-2',
+      attributes: const {'style': 'width: 100%; box-sizing: border-box;'},
+      [
+        h2(
+          [Component.text('BUSINESS ACCESS & HOURS')],
+          classes: 'text-xs font-bold text-gray uppercase tracking-wider mb-3 mt-0',
+        ),
+        div(
+          attributes: {
+            'style':
+                'display: flex; align-items: center; gap: 8px; padding: 10px 12px; '
+                'border: 1px solid ${_isOpenToPublic ? "#D0BCFF" : "#e5e7eb"}; '
+                'border-radius: 8px; '
+                'background-color: ${_isOpenToPublic ? "rgba(232, 222, 248, 0.25)" : "#fafafa"}; '
+                'margin-bottom: ${_isOpenToPublic ? "14px" : "0"}; '
+                'box-sizing: border-box;',
+          },
+          [
+            input(
+              key: ValueKey('open-to-public-check-$_isOpenToPublic'),
+              type: InputType.checkbox,
+              attributes: {
+                'id': 'edit-info-open-to-public-checkbox',
+                if (_isOpenToPublic) 'checked': 'true',
+                'style':
+                    'width: 16px; height: 16px; margin: 0; padding: 0; cursor: pointer; accent-color: #6750A4; flex-shrink: 0;',
+              },
+              events: {
+                'change': (e) {
+                  setState(() {
+                    _isOpenToPublic = !_isOpenToPublic;
+                  });
+                },
+              },
+            ),
+            label(
+              attributes: const {
+                'for': 'edit-info-open-to-public-checkbox',
+                'style':
+                    'font-size: 13px; font-weight: 600; color: #1D192B; cursor: pointer; user-select: none;',
+              },
+              [Component.text('Open to the public')],
+            ),
+          ],
+        ),
+        if (_isOpenToPublic)
+          div(
+            attributes: const {
+              'style':
+                  'border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background-color: #fafafa; box-sizing: border-box; width: 100%;',
+            },
+            [
+              div(
+                attributes: const {
+                  'style':
+                      'display: grid; grid-template-columns: minmax(115px, 1.2fr) 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 8px; padding: 0 2px;',
+                },
+                [
+                  span(
+                    [Component.text('DAY')],
+                    attributes: const {
+                      'style':
+                          'font-size: 10px; font-weight: bold; color: #666; letter-spacing: 0.5px;',
+                    },
+                  ),
+                  span(
+                    [Component.text('OPEN')],
+                    attributes: const {
+                      'style':
+                          'font-size: 10px; font-weight: bold; color: #666; letter-spacing: 0.5px;',
+                    },
+                  ),
+                  span(
+                    [Component.text('CLOSE')],
+                    attributes: const {
+                      'style':
+                          'font-size: 10px; font-weight: bold; color: #666; letter-spacing: 0.5px;',
+                    },
+                  ),
+                ],
+              ),
+              div(
+                attributes: const {
+                  'style': 'display: flex; flex-direction: column; gap: 8px;',
+                },
+                [
+                  for (final day in kBusinessDaysOfWeek)
+                    _buildBusinessDayRow(day),
+                ],
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Component _buildBusinessDayRow(String day) {
+    final dayHours = _businessHours[day] ?? const BusinessDayHours();
+    final dayLabel = kBusinessDayLabels[day] ?? day;
+    final resetVer = _dayResetVersion[day] ?? 0;
+    final checkboxId = 'biz-hours-day-$day';
+
+    return div(
+      attributes: const {
+        'style':
+            'display: grid; grid-template-columns: minmax(115px, 1.2fr) 1fr 1fr; gap: 8px; align-items: center;',
+      },
+      [
+        div(
+          attributes: const {
+            'style': 'display: flex; align-items: center; gap: 8px;',
+          },
+          [
+            input(
+              key: ValueKey('biz-day-check-$day-${dayHours.isOpen}'),
+              type: InputType.checkbox,
+              attributes: {
+                'id': checkboxId,
+                if (dayHours.isOpen) 'checked': 'true',
+                'style':
+                    'width: 15px; height: 15px; margin: 0; padding: 0; cursor: pointer; accent-color: #6750A4; flex-shrink: 0;',
+              },
+              events: {
+                'change': (e) {
+                  setState(() {
+                    final nextOpen = !dayHours.isOpen;
+                    if (!nextOpen) {
+                      _businessHours[day] = const BusinessDayHours(
+                        isOpen: false,
+                        open: '',
+                        close: '',
+                      );
+                      _dayResetVersion[day] = resetVer + 1;
+                    } else {
+                      _businessHours[day] = dayHours.copyWith(isOpen: true);
+                    }
+                  });
+                },
+              },
+            ),
+            label(
+              attributes: {
+                'for': checkboxId,
+                'style':
+                    'font-size: 12px; font-weight: ${dayHours.isOpen ? "600" : "500"}; '
+                    'color: ${dayHours.isOpen ? "#1D192B" : "#6b7280"}; cursor: pointer; user-select: none;',
+              },
+              [Component.text(dayLabel)],
+            ),
+          ],
+        ),
+        input(
+          key: ValueKey('biz-day-open-$day-$resetVer'),
+          attributes: {
+            'type': 'text',
+            'placeholder': dayHours.isOpen ? '9:00 AM' : 'Closed',
+            'value': dayHours.open,
+            'style':
+                'width: 100%; padding: 7px 10px; margin-bottom: 0; font-size: 12px; border-radius: 6px; '
+                'border: 1px solid ${dayHours.isOpen ? "#ccc" : "#e5e7eb"}; '
+                'background-color: ${dayHours.isOpen ? "white" : "#f3f4f6"}; '
+                'color: ${dayHours.isOpen ? "#111827" : "#6b7280"}; box-sizing: border-box;',
+          },
+          events: {
+            'input': (e) {
+              final val = getInputValue(e);
+              setState(() {
+                final current = _businessHours[day] ?? const BusinessDayHours();
+                _businessHours[day] = current.copyWith(
+                  open: val,
+                  isOpen: current.isOpen || val.trim().isNotEmpty,
+                );
+              });
+            },
+          },
+        ),
+        input(
+          key: ValueKey('biz-day-close-$day-$resetVer'),
+          attributes: {
+            'type': 'text',
+            'placeholder': dayHours.isOpen ? '5:00 PM' : 'Closed',
+            'value': dayHours.close,
+            'style':
+                'width: 100%; padding: 7px 10px; margin-bottom: 0; font-size: 12px; border-radius: 6px; '
+                'border: 1px solid ${dayHours.isOpen ? "#ccc" : "#e5e7eb"}; '
+                'background-color: ${dayHours.isOpen ? "white" : "#f3f4f6"}; '
+                'color: ${dayHours.isOpen ? "#111827" : "#6b7280"}; box-sizing: border-box;',
+          },
+          events: {
+            'input': (e) {
+              final val = getInputValue(e);
+              setState(() {
+                final current = _businessHours[day] ?? const BusinessDayHours();
+                _businessHours[day] = current.copyWith(
+                  close: val,
+                  isOpen: current.isOpen || val.trim().isNotEmpty,
+                );
+              });
+            },
+          },
         ),
       ],
     );

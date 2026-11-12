@@ -69,6 +69,7 @@ enum BonusRowType {
   analyticsDashboard,
   shareOptions,
   terminal,
+  terminalAdmin,
   newPage,
   publisher,
 }

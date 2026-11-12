@@ -75,7 +75,9 @@ class SingleWindowColumnLayout extends StatelessComponent {
 class MultiPageColumnLayout extends StatelessComponent {
   final String title;
   final List<Map<String, dynamic>> pages;
-  final Component Function(Map<String, dynamic> pageData) pageBuilder;
+  final Component Function(Map<String, dynamic> pageData)? pageBuilder;
+  final Component Function(int index, Map<String, dynamic> pageData)?
+      indexedPageBuilder;
   final VoidCallback onClose;
   final Component? headerWidget;
   final int targetPageIndex;
@@ -84,7 +86,8 @@ class MultiPageColumnLayout extends StatelessComponent {
   const MultiPageColumnLayout({
     required this.title,
     required this.pages,
-    required this.pageBuilder,
+    this.pageBuilder,
+    this.indexedPageBuilder,
     required this.onClose,
     this.headerWidget,
     this.targetPageIndex = 0,
@@ -198,7 +201,12 @@ class MultiPageColumnLayout extends StatelessComponent {
         // Page Widget Content
         div(
           attributes: const {'style': 'padding: 4px;'},
-          [pageBuilder(page)],
+          [
+            if (indexedPageBuilder != null)
+              indexedPageBuilder!(index, page)
+            else if (pageBuilder != null)
+              pageBuilder!(page),
+          ],
         ),
       ],
     );

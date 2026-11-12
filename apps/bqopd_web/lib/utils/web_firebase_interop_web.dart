@@ -1148,6 +1148,17 @@ void renderEntityMap(String containerId, String markersJson) {
   }
 }
 
+Future<Map<String, dynamic>?> callSetUserRoles(String uid, Map<String, bool> roles) async {
+  try {
+    final payload = jsonEncode({'uid': uid, 'roles': roles});
+    final resStr = await fnCall('set_user_roles', payload);
+    return jsonDecode(resStr) as Map<String, dynamic>?;
+  } catch (e) {
+    print('[callSetUserRoles error] $e');
+    rethrow;
+  }
+}
+
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
   static Map<String, dynamic> increment(num val) => {

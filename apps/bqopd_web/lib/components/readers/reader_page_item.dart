@@ -17,6 +17,7 @@ import '../panels/youtube_panel.dart';
 import '../panels/analytics_panel.dart';
 import '../panels/publisher_text_panel.dart';
 import '../panels/terminal_panel.dart';
+import '../panels/share_panel.dart';
 
 /// Renders an individual fanzine page container inside the list reading view,
 /// hosting the high-resolution image, social toolbar, and expandable detail panels.
@@ -26,8 +27,16 @@ class ReaderPageItem extends StatefulComponent {
   final String fanzineId;
   final String? shortCode;
   final String? fanzineType;
+  final String? fanzineTitle;
+  final String? masterIndicia;
+  final int? startMonth;
+  final int? startYear;
+  final bool hasCover;
+  final List<Map<String, dynamic>> allPages;
+  final Map<String, Map<String, dynamic>> preloadedImageStats;
   final Map<String, dynamic> pageData;
   final int pageIndex;
+  final bool isPanelTarget;
   final VoidCallback? onOpenGrid;
   final Map<String, dynamic>? initialImageStats;
   final Set<String> likedImageIds;
@@ -43,8 +52,16 @@ class ReaderPageItem extends StatefulComponent {
     required this.fanzineId,
     this.shortCode,
     this.fanzineType,
+    this.fanzineTitle,
+    this.masterIndicia,
+    this.startMonth,
+    this.startYear,
+    this.hasCover = true,
+    this.allPages = const [],
+    this.preloadedImageStats = const {},
     required this.pageData,
     required this.pageIndex,
+    this.isPanelTarget = false,
     this.onOpenGrid,
     this.initialImageStats,
     required this.likedImageIds,
@@ -207,6 +224,12 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
               onToggleBonusRow: _handleTogglePanel,
               likedImageIds: component.likedImageIds,
               initialImageStats: component.initialImageStats,
+              isGame: (component.pageData['isGame'] == true) ||
+                  (component.initialImageStats?['isGame'] == true) ||
+                  (component.pageData['templateId']
+                          ?.toString()
+                          .startsWith('terminal_') ??
+                      false),
               authState: component.authState,
               authBloc: component.authBloc,
               isEditingMode: component.isEditingMode,
@@ -296,6 +319,25 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
       case BonusRowType.terminal:
         title = "Combat Terminal";
         inner = TerminalRowPanel(imageId: imageId);
+        break;
+      case BonusRowType.shareOptions:
+        title = "Share & Print Spread";
+        inner = ShareRowPanel(
+          fanzineId: component.fanzineId,
+          shortCode: component.shortCode,
+          fanzineTitle: component.fanzineTitle,
+          masterIndicia: component.masterIndicia,
+          startMonth: component.startMonth,
+          startYear: component.startYear,
+          hasCover: component.hasCover,
+          pages: component.allPages.isNotEmpty
+              ? component.allPages
+              : [component.pageData],
+          pageData: component.pageData,
+          pageIndex: component.pageIndex,
+          preloadedImageStats: component.preloadedImageStats,
+          isTarget: component.isPanelTarget,
+        );
         break;
       default:
         return div([]);

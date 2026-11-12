@@ -101,9 +101,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   bool _isUploadingPdf = false;
   final _loginZineController = TextEditingController();
   final _registerZineController = TextEditingController();
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _bioController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  final _usernameController = TextEditingController();
 
   @override
   void initState() {
@@ -121,9 +120,8 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   void dispose() {
     _loginZineController.dispose();
     _registerZineController.dispose();
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _bioController.dispose();
+    _displayNameController.dispose();
+    _usernameController.dispose();
     super.dispose();
   }
 
@@ -358,15 +356,17 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
   }
 
   Future<void> _handleCreateManagedProfile() async {
-    if (_firstNameController.text.isEmpty || _lastNameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a First and Last Name')));
+    if (_displayNameController.text.trim().isEmpty || _usernameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Display Name and Username / Handle are required')));
       return;
     }
     try {
-      await createManagedProfile(firstName: _firstNameController.text, lastName: _lastNameController.text, bio: _bioController.text);
-      _firstNameController.clear();
-      _lastNameController.clear();
-      _bioController.clear();
+      await createManagedProfile(
+        displayName: _displayNameController.text.trim(),
+        explicitHandle: _usernameController.text.trim(),
+      );
+      _displayNameController.clear();
+      _usernameController.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Managed Profile Created!')));
       }
@@ -386,13 +386,11 @@ class _ProfilePageViewState extends State<_ProfilePageView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("Create a profile for a historical figure or estate that you will manage."),
+              const Text("Create a managed profile using a Display Name and Username / Handle."),
               const SizedBox(height: 16),
-              TextField(controller: _firstNameController, decoration: const InputDecoration(labelText: "First Name", border: OutlineInputBorder())),
+              TextField(controller: _displayNameController, decoration: const InputDecoration(labelText: "Display Name", border: OutlineInputBorder())),
               const SizedBox(height: 8),
-              TextField(controller: _lastNameController, decoration: const InputDecoration(labelText: "Last Name", border: OutlineInputBorder())),
-              const SizedBox(height: 8),
-              TextField(controller: _bioController, decoration: const InputDecoration(labelText: "Bio (Optional)", border: OutlineInputBorder()), maxLines: 2),
+              TextField(controller: _usernameController, decoration: const InputDecoration(labelText: "Username / Handle", border: OutlineInputBorder())),
             ],
           ),
         ),

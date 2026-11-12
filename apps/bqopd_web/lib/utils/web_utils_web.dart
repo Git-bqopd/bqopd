@@ -443,3 +443,70 @@ String getCurrentPath() {
     return '';
   }
 }
+
+/// Mounts the Smartphone WebAR Tabletop viewport (camera + Three.js `.glb` grid).
+void mountTerminalWebAr({
+  required String containerId,
+  required String sceneJson,
+  required void Function(String qrCode) onQrDetected,
+  required void Function(int x, int y) onTileTapped,
+}) {
+  void attempt(int retriesLeft) {
+    final el = web.document.getElementById(containerId);
+    final jsWin = web.window as JSObject;
+    if (el != null && jsWin.has('mountTerminalWebAr')) {
+      final fn = jsWin['mountTerminalWebAr'] as JSFunction?;
+      fn?.callAsFunction(
+        null,
+        containerId.toJS,
+        sceneJson.toJS,
+        ((JSString qr) => onQrDetected(qr.toDart)).toJS,
+        ((JSNumber x, JSNumber y) =>
+                onTileTapped(x.toDartInt, y.toDartInt))
+            .toJS,
+      );
+      return;
+    }
+    if (retriesLeft > 0) {
+      web.window.setTimeout((() => attempt(retriesLeft - 1)).toJS, 60.toJS);
+    }
+  }
+
+  attempt(6);
+}
+
+/// Updates unit positions, dead/alive states, and props in the live WebAR scene.
+void updateTerminalWebArScene(String containerId, String sceneJson) {
+  final jsWin = web.window as JSObject;
+  if (jsWin.has('updateTerminalWebArScene')) {
+    final fn = jsWin['updateTerminalWebArScene'] as JSFunction?;
+    fn?.callAsFunction(null, containerId.toJS, sceneJson.toJS);
+  }
+}
+
+/// Toggles the camera's one-shot `"Scan-Once (+5 QR)"` participant scanner reticle.
+void setTerminalWebArScanMode(String containerId, bool enabled) {
+  final jsWin = web.window as JSObject;
+  if (jsWin.has('setTerminalWebArScanMode')) {
+    final fn = jsWin['setTerminalWebArScanMode'] as JSFunction?;
+    fn?.callAsFunction(null, containerId.toJS, enabled.toJS);
+  }
+}
+
+/// Releases camera tracks and WebGL contexts for [containerId].
+void disposeTerminalWebAr(String containerId) {
+  final jsWin = web.window as JSObject;
+  if (jsWin.has('disposeTerminalWebAr')) {
+    final fn = jsWin['disposeTerminalWebAr'] as JSFunction?;
+    fn?.callAsFunction(null, containerId.toJS);
+  }
+}
+
+/// Plays or stops the Web Audio synth-punk loop for Razor's mixtape.
+void playTerminalMixtapeSynth(bool play) {
+  final jsWin = web.window as JSObject;
+  if (jsWin.has('playTerminalMixtapeSynth')) {
+    final fn = jsWin['playTerminalMixtapeSynth'] as JSFunction?;
+    fn?.callAsFunction(null, play.toJS);
+  }
+}

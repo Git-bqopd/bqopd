@@ -4,6 +4,8 @@ library bqopd_core;
 // Config
 export 'src/config/reader_tools_config.dart';
 export 'src/config/page_template_registry.dart';
+export 'src/config/kenney_asset_catalog.dart';
+export 'src/config/kenney_2d_tile_data_uris.dart';
 
 // Models
 export 'src/models/article.dart';
@@ -20,6 +22,11 @@ export 'src/models/user_account.dart';
 export 'src/models/user_profile.dart';
 export 'src/models/page_display_list.dart';
 export 'src/models/publisher_models.dart';
+
+// Game & Single-World Engine
+export 'src/game/terminal_world_engine.dart';
+export 'src/game/terminal_admin_engine.dart';
+export 'src/game/kenney_glb_synthesizer.dart';
 
 // Layout & Typography
 export 'src/layout/font_metrics.dart';

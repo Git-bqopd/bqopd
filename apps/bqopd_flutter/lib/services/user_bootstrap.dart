@@ -51,9 +51,10 @@ Future<void> ensureUserDocument() async {
 }
 
 Future<String?> createManagedProfile({
-  required String firstName,
-  required String lastName,
-  required String bio,
+  String firstName = '',
+  String lastName = '',
+  String bio = '',
+  String? displayName,
   String? explicitHandle,
 }) async {
   final currentUser = FirebaseAuth.instance.currentUser;
@@ -62,12 +63,22 @@ Future<String?> createManagedProfile({
   }
   final db = FirebaseFirestore.instance;
   final profileRef = db.collection('profiles').doc();
-  final fullName = "$firstName $lastName".trim();
+  final resolvedDisplayName = (displayName != null && displayName.trim().isNotEmpty)
+      ? displayName.trim()
+      : "$firstName $lastName".trim();
 
-  // ignore: deprecated_member_use
-  String baseHandle = explicitHandle ??
+  final String normalizedExplicit = (explicitHandle ?? '')
+      .trim()
+      .toLowerCase()
+      .replaceAll('@', '')
+      .replaceAll(' ', '-')
       // ignore: deprecated_member_use
-      fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+      .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+
+  String baseHandle = normalizedExplicit.isNotEmpty
+      ? normalizedExplicit
+      // ignore: deprecated_member_use
+      : resolvedDisplayName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
   if (baseHandle.isEmpty) {
     baseHandle = 'entity-${DateTime.now().millisecondsSinceEpoch}';
   }
@@ -75,9 +86,9 @@ Future<String?> createManagedProfile({
   final profileData = {
     'uid': profileRef.id,
     'username': baseHandle,
-    'displayName': fullName,
-    'firstName': firstName.trim(),
-    'lastName': lastName.trim(),
+    'displayName': resolvedDisplayName,
+    if (firstName.trim().isNotEmpty) 'firstName': firstName.trim(),
+    if (lastName.trim().isNotEmpty) 'lastName': lastName.trim(),
     'bio': bio,
     'photoUrl': '',
     'isManaged': true,

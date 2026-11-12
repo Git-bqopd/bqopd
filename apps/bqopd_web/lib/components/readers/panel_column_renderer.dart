@@ -14,8 +14,10 @@ import '../panels/analytics_panel.dart';
 import '../panels/publisher_text_panel.dart';
 import '../panels/publisher_panel.dart';
 import '../panels/terminal_panel.dart';
+import '../panels/terminal_admin_panel.dart';
 import '../panels/hashtag_panel.dart';
 import '../panels/settings_panel.dart';
+import '../panels/share_panel.dart';
 
 /// Renders the third column for Desktop view in Jaspr.
 /// Directly maps each active tool to its dedicated ColumnPanel implementation,
@@ -23,7 +25,14 @@ import '../panels/settings_panel.dart';
 /// for synchronized instant reading.
 class PanelColumnRenderer extends StatelessComponent {
   final String fanzineId;
+  final String? shortCode;
+  final String? fanzineTitle;
+  final String? masterIndicia;
+  final int? startMonth;
+  final int? startYear;
+  final bool hasCover;
   final List<Map<String, dynamic>> pages;
+  final Map<String, Map<String, dynamic>> preloadedImageStats;
   final BonusRowType activePanel;
   final bool isEditingMode;
   final VoidCallback onClose;
@@ -32,7 +41,14 @@ class PanelColumnRenderer extends StatelessComponent {
 
   const PanelColumnRenderer({
     required this.fanzineId,
+    this.shortCode,
+    this.fanzineTitle,
+    this.masterIndicia,
+    this.startMonth,
+    this.startYear,
+    this.hasCover = true,
     required this.pages,
+    this.preloadedImageStats = const {},
     required this.activePanel,
     this.isEditingMode = false,
     required this.onClose,
@@ -52,17 +68,23 @@ class PanelColumnRenderer extends StatelessComponent {
     if (activePanel == BonusRowType.settings) title = "Toolbar Settings";
     if (activePanel == BonusRowType.newPage) title = "New Page Layout Editor";
     if (activePanel == BonusRowType.terminal) title = "Combat Terminal";
+    if (activePanel == BonusRowType.terminalAdmin) title = "Terminal Game Admin";
     if (activePanel == BonusRowType.publisher) title = "Publisher";
+    if (activePanel == BonusRowType.shareOptions) title = "Share & Print Spread";
 
     final bool isSingleton = activePanel == BonusRowType.settings ||
         activePanel == BonusRowType.youtube ||
         activePanel == BonusRowType.terminal ||
+        activePanel == BonusRowType.terminalAdmin ||
         activePanel == BonusRowType.analyticsDashboard ||
         activePanel == BonusRowType.publisher;
 
     if (isSingleton) {
-      final firstPageData = pages.isNotEmpty ? pages.first : <String, dynamic>{};
-      final imageId = firstPageData['imageId'] ?? '';
+      final int activePageIdx =
+          (targetIndex > 0 && targetIndex <= pages.length) ? targetIndex - 1 : 0;
+      final activePageData =
+          pages.isNotEmpty ? pages[activePageIdx] : <String, dynamic>{};
+      final imageId = activePageData['imageId']?.toString() ?? '';
       return SingleWindowColumnLayout(
         title: title,
         onClose: onClose,
@@ -70,7 +92,7 @@ class PanelColumnRenderer extends StatelessComponent {
       );
     }
 
-// Top Header Widget: Display the unified Issue Place Map above the per-page cards
+    // Top Header Widget: Display the unified Issue Place Map above the per-page cards
     final Component? headerWidget = (activePanel == BonusRowType.entities)
         ? EntitiesColumnPanelHeader(fanzineId: fanzineId, pages: pages)
         : null;
@@ -85,10 +107,9 @@ class PanelColumnRenderer extends StatelessComponent {
       onClose: onClose,
       targetPageIndex: targetPageIndex,
       onPageCardTap: onPageCardTap,
-      pageBuilder: (pageData) => _buildPagePanel(pageData),
+      indexedPageBuilder: (pageIndex, pageData) =>
+          _buildPagePanel(pageIndex, pageData, targetPageIndex),
     );
-
-
   }
 
   Component _buildSingletonWidget(String imageId) {
@@ -104,6 +125,8 @@ class PanelColumnRenderer extends StatelessComponent {
         );
       case BonusRowType.terminal:
         return TerminalColumnPanel(imageId: imageId);
+      case BonusRowType.terminalAdmin:
+        return const TerminalAdminColumnPanel();
       case BonusRowType.settings:
         return const SettingsColumnPanel();
       case BonusRowType.publisher:
@@ -113,13 +136,35 @@ class PanelColumnRenderer extends StatelessComponent {
     }
   }
 
-  Component _buildPagePanel(Map<String, dynamic> pageData) {
+  Component _buildPagePanel(
+    int pageIndex,
+    Map<String, dynamic> pageData,
+    int targetPageIndex,
+  ) {
     final imageId = pageData['imageId'] ?? '';
+    if (activePanel == BonusRowType.shareOptions) {
+      return ShareColumnPanel(
+        fanzineId: fanzineId,
+        shortCode: shortCode,
+        fanzineTitle: fanzineTitle,
+        masterIndicia: masterIndicia,
+        startMonth: startMonth,
+        startYear: startYear,
+        hasCover: hasCover,
+        pages: pages,
+        pageData: pageData,
+        pageIndex: pageIndex,
+        preloadedImageStats: preloadedImageStats,
+        isTarget: pageIndex == targetPageIndex,
+      );
+    }
+
     if (imageId.isEmpty) return div([]);
 
     switch (activePanel) {
       case BonusRowType.textReader:
-        final preloadedHtml = (pageData['textHtml'] ?? pageData['text_html'])?.toString();
+        final preloadedHtml =
+            (pageData['textHtml'] ?? pageData['text_html'])?.toString();
         final preloadedText = pageData['text']?.toString();
         return TextReaderColumnPanel(
           imageId: imageId,
@@ -139,7 +184,10 @@ class PanelColumnRenderer extends StatelessComponent {
       case BonusRowType.rawText:
         return RawTextColumnPanel(imageId: imageId);
       case BonusRowType.indicia:
-        return IndiciaColumnPanel(fanzineId: fanzineId, isEditingMode: isEditingMode);
+        return IndiciaColumnPanel(
+          fanzineId: fanzineId,
+          isEditingMode: isEditingMode,
+        );
       case BonusRowType.credits:
         return CreditsColumnPanel(imageId: imageId);
       case BonusRowType.newPage:
@@ -147,7 +195,5 @@ class PanelColumnRenderer extends StatelessComponent {
       default:
         return div([Component.text('Panel type not implemented in column view.')]);
     }
-
-
   }
 }

@@ -33,6 +33,7 @@ class PanelFactory {
       case BonusRowType.settings: return "SETTINGS";
       case BonusRowType.editDetails: return "EDIT DETAILS";
       case BonusRowType.terminal: return "COMBAT TERMINAL";
+      case BonusRowType.terminalAdmin: return "TERMINAL GAME ADMIN";
       case BonusRowType.newPage: return "PUBLISHER EDITOR";
       case BonusRowType.publisher: return "PUBLISHER";
     }
@@ -46,6 +47,7 @@ class PanelFactory {
       case BonusRowType.youtube: return Colors.black;
       case BonusRowType.shareOptions: return Colors.indigo.withValues(alpha: 0.05);
       case BonusRowType.terminal: return const Color(0xFF0D0D0D);
+      case BonusRowType.terminalAdmin: return Colors.white;
       case BonusRowType.newPage: return Colors.white;
       case BonusRowType.publisher: return Colors.white;
       default: return Colors.white;
@@ -131,6 +133,7 @@ class PanelFactory {
           templateId: context.templateId,
         );
       case BonusRowType.publisher:
+      case BonusRowType.terminalAdmin:
         return const SizedBox.shrink();
     }
   }

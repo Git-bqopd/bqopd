@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../utils/web_firebase_interop.dart';
 import '../utils/firebase_mocks.dart';
@@ -47,9 +48,14 @@ class _PublisherPageState extends State<PublisherPage> {
   dynamic _pagesUnsub;
   StreamSubscription<String>? _activeBlueprintSub;
 
+  bool _authorized = false;
+  bool _authCheckCompleted = false;
+  StreamSubscription<UserAccount?>? _viewerAccountSub;
+
   @override
   void initState() {
     super.initState();
+    _checkAuthorization();
     _initBlankFolioSession();
     _setupLikesPipeline();
     _activeBlueprintSub = UnsavedFanzineRegistry.watchActivePublisherFanzine().listen((fanzineId) {
@@ -59,8 +65,26 @@ class _PublisherPageState extends State<PublisherPage> {
     });
   }
 
+  void _checkAuthorization() {
+    final uid = component.authState?.user?.uid ?? getCurrentUserId();
+    if (uid == null || component.userRepository == null) {
+      if (mounted) setState(() => _authCheckCompleted = true);
+      return;
+    }
+    _viewerAccountSub = component.userRepository!.watchUserAccount(uid).listen((account) {
+      if (mounted) {
+        final bool canAccess = account != null && (account.isAdmin || account.isModerator);
+        setState(() {
+          _authorized = canAccess;
+          _authCheckCompleted = true;
+        });
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _viewerAccountSub?.cancel();
     _activeBlueprintSub?.cancel();
     _cancelSubscription(_likesUnsub);
     _cancelSubscription(_fanzineUnsub);
@@ -343,11 +367,33 @@ class _PublisherPageState extends State<PublisherPage> {
 
   @override
   Component build(BuildContext context) {
-    if (_loading) {
+    if (!_authCheckCompleted || _loading) {
       return div(
         classes: 'flex-col items-center justify-center w-full',
         attributes: const {'style': 'min-height: 100vh;'},
         [p([Component.text('Loading publisher session...')])],
+      );
+    }
+
+    if (!_authorized) {
+      return div(
+        classes: 'flex-col items-center justify-center w-full p-8',
+        attributes: const {'style': 'min-height: 100vh; text-align: center;'},
+        [
+          h2([Component.text('Publisher Desk Access Restricted')], classes: 'font-bold text-lg text-black mb-2'),
+          p([Component.text('The /publisher workspace is restricted to Admins and Moderators.')], classes: 'text-sm text-gray mb-4'),
+          a(
+            href: '/',
+            classes: 'text-sm font-bold text-black border border-black px-4 py-2 rounded-md',
+            events: {
+              'click': (e) {
+                e.preventDefault();
+                Router.of(context).push('/');
+              }
+            },
+            [Component.text('Return Home')],
+          ),
+        ],
       );
     }
 

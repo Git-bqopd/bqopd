@@ -39,7 +39,20 @@ class WebUserRepository implements IUserRepository {
 
   @override
   Future<void> updateProfile(String uid, Map<String, dynamic> data) async {
-    final publicFields = ['username', 'displayName', 'bio', 'photoUrl', 'xHandle', 'instagramHandle', 'githubHandle', 'updatedAt'];
+    final publicFields = [
+      'username',
+      'displayName',
+      'bio',
+      'photoUrl',
+      'profileType',
+      'isBusiness',
+      'isOpenToPublic',
+      'businessHours',
+      'xHandle',
+      'instagramHandle',
+      'githubHandle',
+      'updatedAt',
+    ];
     final Map<String, dynamic> publicData = {};
     final Map<String, dynamic> privateData = {};
     data.forEach((key, value) {

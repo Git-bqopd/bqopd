@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 
 import firebase_admin
-from firebase_admin import firestore, storage
+from firebase_admin import auth, firestore, storage
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_functions.params import SecretParam
@@ -1818,4 +1818,93 @@ def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "status": "success",
       "fanzineId": fanzine_id,
       "coverPage": cover_page,
+  }
+
+
+ALLOWED_ROLES = {"admin", "moderator", "curator", "terminalGM"}
+
+
+@https_fn.on_call()
+def set_user_roles(req: https_fn.CallableRequest) -> Dict[str, Any]:
+  """Assigns independent capability roles to a user via Auth Custom Claims.
+
+  Requires caller to possess admin custom claim (`req.auth.token['admin'] == True`).
+  Updates:
+    1. Firebase Auth custom claims on the target user
+    2. The `roles/{uid}` Firestore document mirror (for Settings UI display)
+    3. The append-only `audit_log` collection
+  """
+  if not req.auth:
+    raise https_fn.HttpsError(
+        code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+        message="Authentication required.",
+    )
+
+  caller_token = req.auth.token or {}
+  if not caller_token.get("admin"):
+    raise https_fn.HttpsError(
+        code=https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+        message="Caller must possess the admin role.",
+    )
+
+  data = req.data or {}
+  target_uid = (data.get("uid") or "").strip()
+  if not target_uid:
+    raise https_fn.HttpsError(
+        code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+        message="Target uid is required.",
+    )
+
+  raw_roles = data.get("roles")
+  if not isinstance(raw_roles, dict):
+    raise https_fn.HttpsError(
+        code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+        message="'roles' must be a map of role_name -> boolean.",
+    )
+
+  # Fetch existing claims so we don't accidentally wipe unrelated claims
+  try:
+    user = auth.get_user(target_uid)
+  except Exception as e:
+    raise https_fn.HttpsError(
+        code=https_fn.FunctionsErrorCode.NOT_FOUND,
+        message=f"User '{target_uid}' not found in Firebase Auth: {e}",
+    )
+
+  existing_claims = dict(user.custom_claims or {})
+  new_claims = dict(existing_claims)
+
+  roles_mirror_update: Dict[str, Any] = {}
+  for role_name, enabled in raw_roles.items():
+    if role_name not in ALLOWED_ROLES:
+      continue
+    is_active = bool(enabled)
+    new_claims[role_name] = is_active
+    roles_mirror_update[role_name] = is_active
+
+  # 1. Update Auth Custom Claims
+  auth.set_custom_user_claims(target_uid, new_claims)
+
+  # 2. Update roles/{uid} mirror in Firestore
+  db = firestore.client()
+  roles_mirror_update["updatedAt"] = firestore.SERVER_TIMESTAMP
+  roles_mirror_update["updatedBy"] = req.auth.uid
+  db.collection("roles").document(target_uid).set(
+      roles_mirror_update, merge=True
+  )
+
+  # 3. Write append-only audit log
+  db.collection("audit_log").add({
+      "action": "set_user_roles",
+      "actor": req.auth.uid,
+      "target": target_uid,
+      "roleUpdates": raw_roles,
+      "resultingClaims": {k: new_claims.get(k, False) for k in ALLOWED_ROLES},
+      "timestamp": firestore.SERVER_TIMESTAMP,
+  })
+
+  return {
+      "status": "success",
+      "uid": target_uid,
+      "roles": {k: new_claims.get(k, False) for k in ALLOWED_ROLES},
   }

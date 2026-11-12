@@ -115,6 +115,8 @@ Future<String> getPlacePredictions(String input) async => '[]';
 
 void renderEntityMap(String containerId, String markersJson) {}
 
+Future<Map<String, dynamic>?> callSetUserRoles(String uid, Map<String, bool> roles) async => null;
+
 class WebFieldValue {
   static Map<String, dynamic> serverTimestamp() => {'__op': 'serverTimestamp'};
   static Map<String, dynamic> increment(num val) => {

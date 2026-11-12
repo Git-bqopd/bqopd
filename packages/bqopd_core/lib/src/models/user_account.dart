@@ -15,6 +15,12 @@ class UserAccount {
   final List<String> roles;
   final bool isCurator;
 
+  // Discrete capability switches sourced from Auth Custom Claims
+  final bool isAdmin;
+  final bool isModerator;
+  final bool isCuratorRole;
+  final bool isTerminalGM;
+
   final String firstName;
   final String lastName;
   final String? street1;
@@ -34,6 +40,10 @@ class UserAccount {
     this.role = 'user',
     this.roles = const [],
     this.isCurator = false,
+    this.isAdmin = false,
+    this.isModerator = false,
+    this.isCuratorRole = false,
+    this.isTerminalGM = false,
     this.firstName = '',
     this.lastName = '',
     this.street1,
@@ -48,12 +58,40 @@ class UserAccount {
   });
 
   factory UserAccount.fromMap(String id, Map<String, dynamic> data) {
+    final rawRoles = List<String>.from(data['roles'] ?? []);
+    final r = (data['role'] ?? 'user').toString();
+
+    // Check both explicit boolean flags, the legacy role string, and roles list
+    final bool adminClaim = data['isAdmin'] == true ||
+        data['admin'] == true ||
+        r == 'admin' ||
+        rawRoles.contains('admin');
+
+    final bool modClaim = data['isModerator'] == true ||
+        data['moderator'] == true ||
+        r == 'moderator' ||
+        rawRoles.contains('moderator');
+
+    final bool curatorClaim = data['isCuratorRole'] == true ||
+        data['isCurator'] == true ||
+        data['curator'] == true ||
+        r == 'curator' ||
+        rawRoles.contains('curator');
+
+    final bool gmClaim = data['isTerminalGM'] == true ||
+        data['terminalGM'] == true ||
+        rawRoles.contains('terminalGM');
+
     return UserAccount(
       uid: id,
       email: data['email'] ?? '',
-      role: data['role'] ?? 'user',
-      roles: List<String>.from(data['roles'] ?? []),
-      isCurator: data['isCurator'] ?? false,
+      role: r,
+      roles: rawRoles,
+      isCurator: curatorClaim,
+      isAdmin: adminClaim,
+      isModerator: modClaim,
+      isCuratorRole: curatorClaim,
+      isTerminalGM: gmClaim,
       firstName: data['firstName'] ?? '',
       lastName: data['lastName'] ?? '',
       street1: data['street1'],

@@ -212,18 +212,17 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     List<String> tabs = [];
 
-    if (isMe) {
+    // 'settings' tab: Site-wide admin console, visible on OWN profile ONLY and ONLY if viewer is Admin
+    if (isMe && event.isViewerAdmin) {
       tabs.add('settings');
     }
 
-    final bool viewerHasAccess =
-        event.isViewerCurator || event.isViewerModerator || event.isViewerAdmin;
+    // 'curator' tab: Visible to Curators on own profile AND on other Curators' profiles
     final bool ownerIsCurator = profile.isCurator;
-
-    if (isMe && viewerHasAccess) {
-      tabs.add('curator');
-    } else if (!isMe && viewerHasAccess && ownerIsCurator) {
-      tabs.add('curator');
+    if (event.isViewerCurator) {
+      if (isMe || ownerIsCurator) {
+        tabs.add('curator');
+      }
     }
 
     tabs.add('maker');

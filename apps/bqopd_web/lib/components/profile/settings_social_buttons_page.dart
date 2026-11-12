@@ -123,6 +123,12 @@ class _SettingsSocialButtonsPageState extends State<SettingsSocialButtonsPage> {
       return _buildPillBadge('grid view', '#eff6ff', '#1e40af', '#bfdbfe');
     }
     if (tool.action == ToolAction.copyShareLink) {
+      final BonusRowType? sharePanel = (_layoutMode == MatrixLayoutMode.bonusColumn)
+          ? tool.getBonusColumnForScope(scope)
+          : tool.getBonusRowForScope(scope);
+      if (sharePanel != null) {
+        return _buildPillBadge('copy link + share panel', '#eff6ff', '#1e40af', '#bfdbfe');
+      }
       return _buildPillBadge('copy link', '#eff6ff', '#1e40af', '#bfdbfe');
     }
     if (tool.action == ToolAction.toggleLike) {

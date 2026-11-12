@@ -68,4 +68,130 @@ class GameService implements IGameService {
       _publicCollection('game_characters').doc(log.attackerId).update({'losses': FieldValue.increment(1)});
     }
   }
+
+  WorldStateSnapshot _canonicalCache = TerminalWorldEngine.seedSector7G();
+
+  @override
+  Stream<WorldStateSnapshot> watchCanonicalWorld() =>
+      Stream.value(_canonicalCache);
+
+  @override
+  Stream<PageEncounter?> watchPageEncounter(String imageId) =>
+      Stream.value(TerminalWorldEngine.findEncounter(_canonicalCache, imageId));
+
+  @override
+  Stream<WorldRoom?> watchWorldRoom(String roomId) =>
+      Stream.value(_canonicalCache.rooms[roomId]);
+
+  @override
+  Stream<List<WorldEvent>> watchRoomEvents(String roomId) => Stream.value(
+        _canonicalCache.events.where((e) => e.roomId == roomId).toList(),
+      );
+
+  @override
+  Future<List<String>> executePageAction({
+    required String imageId,
+    required String actorEntityId,
+    required String actionId,
+    String? inputCode,
+  }) async {
+    final seeded = TerminalWorldEngine.ensureActorEntity(
+      _canonicalCache,
+      actorEntityId: actorEntityId,
+      ownerUserId: actorEntityId,
+      handle: actorEntityId,
+    );
+    final res = TerminalWorldEngine.executePageAction(
+      state: seeded,
+      imageId: imageId,
+      actorEntityId: actorEntityId,
+      actionId: actionId,
+      inputCode: inputCode,
+    );
+    _canonicalCache = res.state;
+    return res.outputLines;
+  }
+
+  @override
+  Future<List<String>> executeTerminalCommand({
+    required String actorEntityId,
+    required String rawCommand,
+  }) async {
+    final seeded = TerminalWorldEngine.ensureActorEntity(
+      _canonicalCache,
+      actorEntityId: actorEntityId,
+      ownerUserId: actorEntityId,
+      handle: actorEntityId,
+    );
+    final res = TerminalWorldEngine.executeCommand(
+      state: seeded,
+      actorEntityId: actorEntityId,
+      rawCommand: rawCommand,
+    );
+    _canonicalCache = res.state;
+    return res.outputLines;
+  }
+
+  @override
+  Stream<TabletopArSession?> watchTabletopSession(String sessionId) =>
+      Stream.value(_canonicalCache.arSessions[sessionId]);
+
+  @override
+  Future<List<String>> startTabletopArSession({
+    required String anchorPageId,
+    required String hostUserId,
+    String? sessionId,
+  }) async {
+    final res = TerminalWorldEngine.startTabletopArSession(
+      state: _canonicalCache,
+      anchorPageId: anchorPageId,
+      hostUserId: hostUserId,
+      sessionId: sessionId,
+    );
+    _canonicalCache = res.state;
+    return res.outputLines;
+  }
+
+  @override
+  Future<List<String>> ingestQrIntoTabletopSession({
+    required String sessionId,
+    required String scannedQrCode,
+    String? fallbackHandle,
+  }) async {
+    final res = TerminalWorldEngine.ingestQrIntoArSession(
+      state: _canonicalCache,
+      sessionId: sessionId,
+      scannedQrCode: scannedQrCode,
+      fallbackEntityHandle: fallbackHandle,
+    );
+    _canonicalCache = res.state;
+    return res.outputLines;
+  }
+
+  @override
+  Future<List<String>> moveTabletopUnit({
+    required String sessionId,
+    required String entityId,
+    required GridCoordinate targetCoord,
+  }) async {
+    final res = TerminalWorldEngine.moveTabletopUnit(
+      state: _canonicalCache,
+      sessionId: sessionId,
+      entityId: entityId,
+      targetCoord: targetCoord,
+    );
+    _canonicalCache = res.state;
+    return res.outputLines;
+  }
+
+  @override
+  Future<void> saveCanonicalWorld(WorldStateSnapshot snapshot) async {
+    _canonicalCache = snapshot;
+  }
+
+  @override
+  Future<WorldStateSnapshot> resetCanonicalWorldToSeed() async {
+    _canonicalCache = TerminalWorldEngine.seedSector7G();
+    return _canonicalCache;
+  }
 }

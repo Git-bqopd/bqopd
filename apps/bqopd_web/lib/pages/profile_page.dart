@@ -150,13 +150,9 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     final currentUid = component.authState?.user?.uid;
-    final bool isViewerAdmin = _viewerAccount?.role == 'admin' ||
-        (_viewerAccount?.roles.contains('admin') ?? false);
-    final bool isViewerModerator = _viewerAccount?.role == 'moderator' ||
-        (_viewerAccount?.roles.contains('moderator') ?? false);
-    final bool isViewerCurator = _viewerAccount?.role == 'curator' ||
-        (_viewerAccount?.roles.contains('curator') ?? false) ||
-        (_viewerAccount?.isCurator ?? false);
+    final bool isViewerAdmin = _viewerAccount?.isAdmin ?? false;
+    final bool isViewerModerator = _viewerAccount?.isModerator ?? false;
+    final bool isViewerCurator = _viewerAccount?.isCuratorRole ?? (_viewerAccount?.isCurator ?? false);
 
     // CLIENT REDIRECTION: If viewing my own profile without a vanity URL, resolve and redirect
     if (component.userId == null && currentUid != null) {
@@ -294,13 +290,9 @@ class _ProfilePageState extends State<ProfilePage> {
               setState(() {
                 _viewerAccount = account;
               });
-              final isViewerAdmin =
-                  account.role == 'admin' || account.roles.contains('admin');
-              final isViewerModerator = account.role == 'moderator' ||
-                  account.roles.contains('moderator');
-              final isViewerCurator = account.role == 'curator' ||
-                  account.roles.contains('curator') ||
-                  account.isCurator;
+              final isViewerAdmin = account.isAdmin;
+              final isViewerModerator = account.isModerator;
+              final isViewerCurator = account.isCuratorRole || account.isCurator;
 
               // Preserve active tab state during viewer account stream emissions
               String? activeTab;
@@ -401,14 +393,8 @@ class _ProfilePageState extends State<ProfilePage> {
         return ProfileMakerTab(
           targetUserId: _targetUid,
           isMe: _isMe,
-          canSeeDrafts: _isMe ||
-              (_viewerAccount?.role == 'admin' ||
-                  (_viewerAccount?.roles.contains('admin') ?? false)) ||
-              (_viewerAccount?.role == 'moderator' ||
-                  (_viewerAccount?.roles.contains('moderator') ?? false)) ||
-              (_viewerAccount?.role == 'curator' ||
-                  (_viewerAccount?.roles.contains('curator') ?? false) ||
-                  (_viewerAccount?.isCurator ?? false)),
+          canSeeDrafts: _isMe || (_viewerAccount?.isModerator ?? false),
+          isTerminalGM: _viewerAccount?.isTerminalGM ?? false,
           userRepository: component.userRepository,
           authState: component.authState,
           initialSubTab: _activeSubTabName,

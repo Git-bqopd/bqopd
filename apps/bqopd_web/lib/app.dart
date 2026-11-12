@@ -14,6 +14,7 @@ import 'pages/edit_info_page.dart';
 import 'pages/fanzine_reader_page.dart';
 import 'pages/short_link_page.dart';
 import 'pages/publisher_page.dart';
+import 'pages/terminal_admin_page.dart';
 
 /// Client and Server-side master routing configuration.
 class App extends StatefulComponent {
@@ -166,6 +167,16 @@ class _AppState extends State<App> {
           Route(
             path: '/publisher',
             builder: (context, state) => PublisherPage(
+              authState: authState,
+              authBloc: authBloc,
+              userRepository: userRepository,
+              engagementRepository: engagementRepository,
+            ),
+          ),
+          // DEDICATED TERMINAL GAME ADMINISTRATION PORTAL ROUTE
+          Route(
+            path: '/terminal',
+            builder: (context, state) => TerminalAdminPage(
               authState: authState,
               authBloc: authBloc,
               userRepository: userRepository,

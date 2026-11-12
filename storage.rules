@@ -4,7 +4,7 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     // ---------------------------------------------------------------------------
-    // Helper Functions
+    // Helper Functions — Sourced directly from Auth Custom Claims
     // ---------------------------------------------------------------------------
 
     function isAuthenticated() {
@@ -15,11 +15,20 @@ service firebase.storage {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isEditor() {
-      return isAuthenticated() &&
-        firestore.exists(/databases/(default)/documents/Users/$(request.auth.uid)) &&
-        (firestore.get(/databases/(default)/documents/Users/$(request.auth.uid)).data.get('Editor', false) == true ||
-         firestore.get(/databases/(default)/documents/Users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'moderator', 'curator']);
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.get('admin', false) == true;
+    }
+
+    function isModerator() {
+      return isAuthenticated() && request.auth.token.get('moderator', false) == true;
+    }
+
+    function isCurator() {
+      return isAuthenticated() && request.auth.token.get('curator', false) == true;
+    }
+
+    function isStaff() {
+      return isAdmin() || isModerator() || isCurator();
     }
 
     function isValidImage() {
@@ -39,26 +48,26 @@ service firebase.storage {
       // Prevent public reads if the userId parameter matches the raw_pdfs pipeline
       allow read: if userId != 'raw_pdfs';
       allow create, update: if isOwner(userId) && isValidImage();
-      allow delete: if isOwner(userId) || isEditor();
+      allow delete: if isOwner(userId) || isModerator() || isAdmin();
     }
 
     // ---------------------------------------------------------------------------
     // 2. Curator PDF Ingest Pipeline
     // ---------------------------------------------------------------------------
     match /uploads/raw_pdfs/{allPaths=**} {
-      allow read: if isEditor();
-      allow create, update: if isEditor() && isValidPdf();
-      allow delete: if isEditor();
+      allow read: if isStaff();
+      allow create, update: if (isCurator() || isModerator() || isAdmin()) && isValidPdf();
+      allow delete: if isCurator() || isModerator() || isAdmin();
     }
 
     // ---------------------------------------------------------------------------
     // 3. Compiled Fanzine Static Pages & Map Covers
+    // Static compiled spreads are publicly readable; writes restricted to staff / owners
     // ---------------------------------------------------------------------------
     match /fanzines/{fanzineId}/{allPaths=**} {
       allow read: if true;
-      // Client-side fallback writes require authentication and image constraints
-      allow create, update: if isAuthenticated() && isValidImage();
-      allow delete: if isEditor();
+      allow create, update: if (isStaff() || isAuthenticated()) && isValidImage();
+      allow delete: if isModerator() || isAdmin();
     }
 
     // ---------------------------------------------------------------------------

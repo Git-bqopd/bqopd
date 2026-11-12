@@ -17,6 +17,7 @@ class ProfileMakerTab extends StatefulComponent {
   final String targetUserId;
   final bool isMe;
   final bool canSeeDrafts;
+  final bool isTerminalGM;
   final IUserRepository userRepository;
   final AuthState? authState;
   final String? initialSubTab;
@@ -26,6 +27,7 @@ class ProfileMakerTab extends StatefulComponent {
     required this.targetUserId,
     required this.isMe,
     required this.canSeeDrafts,
+    this.isTerminalGM = false,
     required this.userRepository,
     this.authState,
     this.initialSubTab,
@@ -955,6 +957,26 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
                         : 'text-xs text-gray cursor-pointer',
                     events: {'click': (e) => _selectDraftMode(true)},
                   ),
+                  if (component.isMe && component.isTerminalGM) ...[
+                    span([Component.text('|')],
+                        classes: 'text-xs text-gray',
+                        attributes: const {'style': 'display: inline-block; margin: 0 8px;'}),
+                    a(
+                      href: '/terminal',
+                      classes: 'text-xs text-gray cursor-pointer',
+                      attributes: const {
+                        'style': 'text-decoration: none;',
+                        'title': 'Open Terminal Game Administration Portal',
+                      },
+                      events: {
+                        'click': (e) {
+                          e.preventDefault();
+                          Router.of(context).push('/terminal');
+                        },
+                      },
+                      [Component.text("terminal")],
+                    ),
+                  ],
                 ]
               ],
               attributes: const {

@@ -84,3 +84,23 @@ void initAddressAutocomplete(String inputId, void Function(String) callback) {
 
 /// Server VM stub for retrieving the current browser location path.
 String getCurrentPath() => '';
+
+/// Server VM stub for mounting the Smartphone WebAR Tabletop viewport.
+void mountTerminalWebAr({
+  required String containerId,
+  required String sceneJson,
+  required void Function(String qrCode) onQrDetected,
+  required void Function(int x, int y) onTileTapped,
+}) {}
+
+/// Server VM stub for updating the Smartphone WebAR Tabletop scene.
+void updateTerminalWebArScene(String containerId, String sceneJson) {}
+
+/// Server VM stub for toggling one-shot QR participant scan mode.
+void setTerminalWebArScanMode(String containerId, bool enabled) {}
+
+/// Server VM stub for disposing Smartphone WebAR camera & WebGL resources.
+void disposeTerminalWebAr(String containerId) {}
+
+/// Server VM stub for playing Razor's cyberpunk mixtape Web Audio loop.
+void playTerminalMixtapeSynth(bool play) {}

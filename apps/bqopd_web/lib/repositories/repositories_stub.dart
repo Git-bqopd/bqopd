@@ -133,6 +133,53 @@ class StubGameService implements IGameService {
   Future<void> updateCharacter(GameCharacter char) async {}
   @override
   Future<void> saveBattleLog(BattleLog log) async {}
+  @override
+  Stream<WorldStateSnapshot> watchCanonicalWorld() =>
+      Stream.value(TerminalWorldEngine.seedSector7G());
+  @override
+  Stream<PageEncounter?> watchPageEncounter(String imageId) => Stream.value(null);
+  @override
+  Stream<WorldRoom?> watchWorldRoom(String roomId) => Stream.value(null);
+  @override
+  Stream<List<WorldEvent>> watchRoomEvents(String roomId) => Stream.value(const []);
+  @override
+  Future<List<String>> executePageAction({
+    required String imageId,
+    required String actorEntityId,
+    required String actionId,
+    String? inputCode,
+  }) async => const [];
+  @override
+  Future<List<String>> executeTerminalCommand({
+    required String actorEntityId,
+    required String rawCommand,
+  }) async => const [];
+  @override
+  Stream<TabletopArSession?> watchTabletopSession(String sessionId) =>
+      Stream.value(null);
+  @override
+  Future<List<String>> startTabletopArSession({
+    required String anchorPageId,
+    required String hostUserId,
+    String? sessionId,
+  }) async => const [];
+  @override
+  Future<List<String>> ingestQrIntoTabletopSession({
+    required String sessionId,
+    required String scannedQrCode,
+    String? fallbackHandle,
+  }) async => const [];
+  @override
+  Future<List<String>> moveTabletopUnit({
+    required String sessionId,
+    required String entityId,
+    required GridCoordinate targetCoord,
+  }) async => const [];
+  @override
+  Future<void> saveCanonicalWorld(WorldStateSnapshot snapshot) async {}
+  @override
+  Future<WorldStateSnapshot> resetCanonicalWorldToSeed() async =>
+      TerminalWorldEngine.seedSector7G();
 }
 
 IAuthRepository createAuthRepository() => StubAuthRepository();

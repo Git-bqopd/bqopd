@@ -48,9 +48,9 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   int _activeSubTab = 0; // 0: shortcodes, 1: managed profiles, 2: permissions, 3: social buttons
 
   // Create Managed Profile Inputs
-  String _newManagedFirstName = '';
-  String _newManagedLastName = '';
-  String _newManagedBio = '';
+  String _newManagedDisplayName = '';
+  String _newManagedUsername = '';
+  int _managedFormResetVersion = 0;
   bool _isCreatingManagedProfile = false;
   String? _managedProfileFeedback;
   bool _isManagedProfileError = false;
@@ -274,9 +274,11 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   Future<void> _createManagedProfile() async {
-    if (_newManagedFirstName.trim().isEmpty || _newManagedLastName.trim().isEmpty) {
+    final String cleanDisplayName = _newManagedDisplayName.trim();
+    final String baseHandle = normalizeHandle(_newManagedUsername);
+    if (cleanDisplayName.isEmpty || baseHandle.isEmpty) {
       setState(() {
-        _managedProfileFeedback = "First name and Last name are required.";
+        _managedProfileFeedback = "Display Name and Username / Handle are required.";
         _isManagedProfileError = true;
       });
       return;
@@ -287,13 +289,18 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       _isManagedProfileError = false;
     });
     try {
-      final String baseHandle = normalizeHandle("${_newManagedFirstName.trim()} ${_newManagedLastName.trim()}");
+      final checkRes = await fsGetDoc('usernames/$baseHandle');
+      final checkDoc = jsonDecode(checkRes);
+      if (checkDoc['exists'] == true) {
+        throw Exception('Username @$baseHandle is already taken.');
+      }
+
       final String uniqueId = 'managed_${DateTime.now().millisecondsSinceEpoch}';
       final publicData = {
         'uid': uniqueId,
         'username': baseHandle,
-        'displayName': "${_newManagedFirstName.trim()} ${_newManagedLastName.trim()}",
-        'bio': _newManagedBio.trim(),
+        'displayName': cleanDisplayName,
+        'bio': '',
         'photoUrl': '',
         'isManaged': true,
         'isCurator': false,
@@ -317,9 +324,9 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       }), true);
       if (!mounted) return;
       setState(() {
-        _newManagedFirstName = '';
-        _newManagedLastName = '';
-        _newManagedBio = '';
+        _newManagedDisplayName = '';
+        _newManagedUsername = '';
+        _managedFormResetVersion++;
         _isCreatingManagedProfile = false;
         _managedProfileFeedback = "Managed profile @$baseHandle initialized successfully!";
         _isManagedProfileError = false;
@@ -329,7 +336,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
       if (!mounted) return;
       setState(() {
         _isCreatingManagedProfile = false;
-        _managedProfileFeedback = "Failed to initialize: ${e.toString()}";
+        _managedProfileFeedback = "Failed to initialize: ${e.toString().replaceAll('Exception:', '').trim()}";
         _isManagedProfileError = true;
       });
     }
@@ -371,21 +378,23 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     if (!mounted) return;
     setState(() {
       _permissionFeedbackUid = uid;
-      _permissionFeedback = "Updating access levels...";
+      _permissionFeedback = "Updating access levels via Auth Custom Claims...";
     });
     try {
-      final bool isCurator = newRole == 'curator' || newRole == 'admin' || newRole == 'moderator';
-      await fsUpdateDoc('Users/$uid', jsonEncode({
-        'role': newRole,
-        'isCurator': isCurator
-      }));
-      await fsUpdateDoc('profiles/$uid', jsonEncode({
-        'isCurator': isCurator,
-        'isAdmin': newRole == 'admin'
-      }));
+      // Map discrete roles to boolean capability switches
+      final rolesPayload = <String, bool>{
+        'admin': newRole == 'admin',
+        'moderator': newRole == 'moderator',
+        'curator': newRole == 'curator',
+        'terminalGM': newRole == 'terminalGM',
+      };
+
+      // Call the privileged set_user_roles Cloud Function (updates Custom Claims + roles mirror + audit log)
+      await callSetUserRoles(uid, rolesPayload);
+
       if (!mounted) return;
       setState(() {
-        _permissionFeedback = "Access privileges saved!";
+        _permissionFeedback = "Access privileges saved via Custom Claims!";
       });
     } catch (e) {
       if (!mounted) return;
@@ -403,14 +412,47 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
             h3([Component.text("Create Managed Identity (Human or Estate)")], classes: 'font-bold text-sm text-black', attributes: const {'style': 'margin-top: 0;'}),
             p([Component.text("Initialize dedicated gallery portfolios representing historical creators or archives you manage.")], classes: 'text-xs text-gray italic mb-2', attributes: const {'style': 'margin: 0 0 8px 0;'}),
             div(
+              classes: 'flex-col gap-3 w-full',
+              attributes: const {'style': 'display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;'},
               [
-                input(attributes: {'placeholder': 'First Name', 'value': _newManagedFirstName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedFirstName = getInputValue(e)}),
-                span([], attributes: const {'style': 'display: inline-block; width: 12px;'}),
-                input(attributes: {'placeholder': 'Last Name', 'value': _newManagedLastName, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedLastName = getInputValue(e)}),
+                div([
+                  span(
+                    [Component.text('Display Name')],
+                    classes: 'text-xs font-bold text-gray-600 block mb-1',
+                  ),
+                  input(
+                    key: ValueKey('new-managed-display-name-$_managedFormResetVersion'),
+                    attributes: {
+                      'type': 'text',
+                      'placeholder': 'Jane Doe',
+                      'value': _newManagedDisplayName,
+                      'style': 'margin-bottom: 0; background: white;',
+                    },
+                    events: {
+                      'input': (e) => setState(() => _newManagedDisplayName = getInputValue(e)),
+                    },
+                  ),
+                ]),
+                div([
+                  span(
+                    [Component.text('Username / Handle')],
+                    classes: 'text-xs font-bold text-gray-600 block mb-1',
+                  ),
+                  input(
+                    key: ValueKey('new-managed-username-$_managedFormResetVersion'),
+                    attributes: {
+                      'type': 'text',
+                      'placeholder': 'janedoe',
+                      'value': _newManagedUsername,
+                      'style': 'margin-bottom: 0; background: white;',
+                    },
+                    events: {
+                      'input': (e) => setState(() => _newManagedUsername = getInputValue(e)),
+                    },
+                  ),
+                ]),
               ],
-              attributes: const {'style': 'display: flex; gap: 12px; width: 100%; box-sizing: border-box;'},
             ),
-            input(attributes: {'placeholder': 'Identity Biography / Historical Context', 'value': _newManagedBio, 'style': 'margin-bottom: 0; background: white;'}, events: {'input': (e) => _newManagedBio = getInputValue(e)}),
             if (_managedProfileFeedback != null)
               p([Component.text(_managedProfileFeedback!)], attributes: {
                 'style': 'font-size: 12px; font-weight: bold; margin: 4px 0; color: ${_isManagedProfileError ? "#ef4444" : "#16a34a"}'
@@ -679,6 +721,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
             span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
             _buildRoleBadgeSelector(uid, "curator", currentRole),
             span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
+            _buildRoleBadgeSelector(uid, "terminalGM", currentRole),
+            span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
             _buildRoleBadgeSelector(uid, "user", currentRole),
           ],
           attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'},
@@ -705,7 +749,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
   @override
   Component build(BuildContext context) {
-    final bool isViewerAdmin = component.viewerAccount?.role == 'admin' || (component.viewerAccount?.roles.contains('admin') ?? false);
+    final bool isViewerAdmin = component.viewerAccount?.isAdmin ?? false;
     final List<Component> subTabs = [];
 
     // 1. Shortcodes segment

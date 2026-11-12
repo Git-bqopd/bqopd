@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:equatable/equatable.dart';
+import '../game/terminal_world_engine.dart';
 import '../models/fanzine_page.dart';
 import '../models/publisher_models.dart';
 import '../utils/text_html_renderer.dart';
@@ -732,50 +733,26 @@ class FanzineBlueprintEngine {
     final String userState = recipient?.state.trim().isNotEmpty == true
         ? recipient!.state.trim()
         : 'WI';
-    final String playerName = recipient?.displayName ?? 'Commander';
+    final String playerName = recipient?.displayName ?? 'ZeroCool';
+    final String playerUserId = recipient?.userId ?? 'user_crew_lead';
+
+    final seededWorld = TerminalWorldEngine.seedSector7G(
+      ownerUserId: playerUserId,
+      ownerHandle: playerName,
+    );
+    final turnPacket = TerminalWorldEngine.compileWeeklyTurnPacket(
+      state: seededWorld,
+      userId: playerUserId,
+      playerName: playerName,
+    );
+    final terminalCandidates = TerminalWorldEngine.toBlueprintCandidates(
+      turnPacket,
+      creatorName: 'Terminal Engine ($playerName)',
+    );
 
     return [
-      // Combat Terminal Turn Pages (4 pages = Pages 7..10 when player is active)
-      BlueprintCandidateItem(
-        id: 'term_turn_1',
-        title: 'COMBAT TERMINAL · TURN FRAME 1/3',
-        creatorName: 'Terminal Engine ($playerName)',
-        sourceType: BlueprintSlotSource.terminalTurn,
-        hashtags: const ['combat-terminal', 'scifi'],
-        likeCount: 42,
-        bodyMarkdown:
-            'Tactical telemetry for **$playerName** (Frame 1 of 3 this week). Fleet vector locked at Sector 7G; shield harmonics at 84%.',
-      ),
-      BlueprintCandidateItem(
-        id: 'term_turn_2',
-        title: 'COMBAT TERMINAL · TURN FRAME 2/3',
-        creatorName: 'Terminal Engine ($playerName)',
-        sourceType: BlueprintSlotSource.terminalTurn,
-        hashtags: const ['combat-terminal', 'scifi'],
-        likeCount: 39,
-        bodyMarkdown:
-            'Orbital intercept resolution (Frame 2 of 3). Opposing cruiser sustained hull breach along starboard battery.',
-      ),
-      BlueprintCandidateItem(
-        id: 'term_turn_3',
-        title: 'COMBAT TERMINAL · TURN FRAME 3/3',
-        creatorName: 'Terminal Engine ($playerName)',
-        sourceType: BlueprintSlotSource.terminalTurn,
-        hashtags: const ['combat-terminal', 'scifi'],
-        likeCount: 51,
-        bodyMarkdown:
-            'End-of-week command prompt (Frame 3 of 3). Submit next week\'s maneuver orders via `/terminal` before Sunday 23:59.',
-      ),
-      BlueprintCandidateItem(
-        id: 'term_turn_4',
-        title: 'SECTOR STANDINGS & COMBAT LOG',
-        creatorName: 'Terminal Adjudicator',
-        sourceType: BlueprintSlotSource.terminalTurn,
-        hashtags: const ['combat-terminal'],
-        likeCount: 28,
-        bodyMarkdown:
-            'Weekly leaderboard and casualty ledger across active fanzine correspondents.',
-      ),
+      // Canonical `terminal` Weekly Turn Pages + Spin-Off 1p Gang Drama Ad
+      ...terminalCandidates,
 
       // Global UGC Folios (Includes 1-page and 2-page spread Maker submissions)
       const BlueprintCandidateItem(

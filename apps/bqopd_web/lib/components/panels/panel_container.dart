@@ -20,12 +20,14 @@ class PanelContainer extends StatelessComponent {
     String bgColor = '#ffffff';
     if (type == BonusRowType.textReader) bgColor = '#FDFBF7';
     if (type == BonusRowType.comments) bgColor = '#ffffff';
+    if (type == BonusRowType.shareOptions) bgColor = '#F8FAFC';
 
     // Text editors and readers should grow dynamically to arbitrary lengths without any transition-induced clipping.
     // For these panels, we omit 'panel-container-animate' to bypass CSS max-height caps completely.
     final bool isUnlimitedHeight = type == BonusRowType.textReader ||
         type == BonusRowType.editText ||
-        type == BonusRowType.linkedText;
+        type == BonusRowType.linkedText ||
+        type == BonusRowType.shareOptions;
 
     final String classesStr = isUnlimitedHeight
         ? 'p-4 mt-2'

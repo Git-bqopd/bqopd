@@ -106,7 +106,9 @@ class _SocialToolbarState extends State<SocialToolbar> {
   }
 
   bool get _hasTerminalContent {
-    return _imageData['isGame'] == true || component.isGame == true;
+    return _imageData['isGame'] == true ||
+        component.isGame == true ||
+        component.initialImageStats?['isGame'] == true;
   }
 
   @override
@@ -365,8 +367,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
       count = _viewCount;
       action = () => component.onToggleBonusRow(BonusRowType.analyticsDashboard);
     } else if (tool.id == 'Share' || tool.action == ToolAction.copyShareLink) {
-      isActive = _justCopiedShare;
-      action = _handleCopyShareLink;
+      isActive = _justCopiedShare || component.activeBonusRow == BonusRowType.shareOptions;
+      action = () {
+        _handleCopyShareLink();
+        component.onToggleBonusRow(BonusRowType.shareOptions);
+      };
     } else if (tool.id == 'Settings') {
       isActive = component.activeBonusRow == BonusRowType.settings;
       action = () {

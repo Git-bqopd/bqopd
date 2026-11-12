@@ -14,12 +14,17 @@ class FanzineListRenderer extends StatefulComponent {
   final String? shortCode;
   final String? fanzineType;
   final String? fanzineTitle;
+  final String? masterIndicia;
+  final int? startMonth;
+  final int? startYear;
+  final bool hasCover;
   final bool isColumn1Open;
   final Component? stickyHeaderWidget;
   final List<Map<String, dynamic>> pages;
   final Component headerWidget;
   final VoidCallback? onOpenGrid;
   final BonusRowType? activeGlobalPanel;
+  final int? panelTargetPageIndex;
   final void Function(BonusRowType type, int pageIndex)? onTogglePanel;
   final void Function(int pageIndex)? onPageImageTap;
   final int initialIndex;
@@ -35,12 +40,17 @@ class FanzineListRenderer extends StatefulComponent {
     this.shortCode,
     this.fanzineType,
     this.fanzineTitle,
+    this.masterIndicia,
+    this.startMonth,
+    this.startYear,
+    this.hasCover = true,
     this.isColumn1Open = false,
     this.stickyHeaderWidget,
     required this.pages,
     required this.headerWidget,
     this.onOpenGrid,
     this.activeGlobalPanel,
+    this.panelTargetPageIndex,
     this.onTogglePanel,
     this.onPageImageTap,
     this.initialIndex = 0,
@@ -128,8 +138,16 @@ class _FanzineListRendererState extends State<FanzineListRenderer> {
                     fanzineId: component.fanzineId,
                     shortCode: component.shortCode,
                     fanzineType: component.fanzineType,
+                    fanzineTitle: component.fanzineTitle,
+                    masterIndicia: component.masterIndicia,
+                    startMonth: component.startMonth,
+                    startYear: component.startYear,
+                    hasCover: component.hasCover,
+                    allPages: component.pages,
+                    preloadedImageStats: component.preloadedImageStats,
                     pageData: component.pages[i],
                     pageIndex: i,
+                    isPanelTarget: component.panelTargetPageIndex == i,
                     onOpenGrid: component.onOpenGrid,
                     activeGlobalPanel: component.activeGlobalPanel,
                     onTogglePanel: component.onTogglePanel,

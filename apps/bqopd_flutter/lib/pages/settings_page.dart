@@ -17,9 +17,8 @@ class _SettingsPageState extends State<SettingsPage> {
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _bioController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  final _usernameController = TextEditingController();
 
   bool _isCreatingProfile = false;
   int _activeSubTab = 0; // 0: Shortcodes, 1: Managed Profiles, 2: Permissions, 3: Social Buttons
@@ -34,9 +33,8 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _loginZineController.dispose();
     _registerZineController.dispose();
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _bioController.dispose();
+    _displayNameController.dispose();
+    _usernameController.dispose();
     super.dispose();
   }
 
@@ -77,9 +75,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _handleCreateProfile() async {
-    if (_firstNameController.text.isEmpty || _lastNameController.text.isEmpty) {
+    if (_displayNameController.text.trim().isEmpty ||
+        _usernameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a First and Last Name')),
+        const SnackBar(
+          content: Text('Display Name and Username / Handle are required'),
+        ),
       );
       return;
     }
@@ -93,14 +94,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
     try {
       await createManagedProfile(
-        firstName: _firstNameController.text,
-        lastName: _lastNameController.text,
-        bio: _bioController.text,
+        displayName: _displayNameController.text.trim(),
+        explicitHandle: _usernameController.text.trim(),
       );
 
-      _firstNameController.clear();
-      _lastNameController.clear();
-      _bioController.clear();
+      _displayNameController.clear();
+      _usernameController.clear();
 
       messenger.showSnackBar(
         const SnackBar(content: Text('Managed Profile Created!')),
@@ -129,25 +128,19 @@ class _SettingsPageState extends State<SettingsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                  "Create a profile for a historical figure or estate that you will manage."),
+                  "Create a managed profile using a Display Name and Username / Handle."),
               const SizedBox(height: 16),
               TextField(
-                controller: _firstNameController,
+                controller: _displayNameController,
                 decoration: const InputDecoration(
-                    labelText: "First Name", border: OutlineInputBorder()),
+                    labelText: "Display Name", border: OutlineInputBorder()),
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: _lastNameController,
+                controller: _usernameController,
                 decoration: const InputDecoration(
-                    labelText: "Last Name", border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _bioController,
-                decoration: const InputDecoration(
-                    labelText: "Bio (Optional)", border: OutlineInputBorder()),
-                maxLines: 2,
+                    labelText: "Username / Handle",
+                    border: OutlineInputBorder()),
               ),
             ],
           ),

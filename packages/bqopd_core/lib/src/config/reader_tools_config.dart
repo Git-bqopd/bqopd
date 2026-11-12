@@ -210,10 +210,16 @@ class ReaderToolsConfig {
     ReaderTool(
       id: 'Share',
       label: 'share',
-      description: 'Copy a deep-link to this specific page.',
+      description: 'Copy a deep-link to this page and download printable two-page spread sheets.',
       defaultIcon: 'assets/social_toolbar/share.svg',
       scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       action: ToolAction.copyShareLink,
+      readerBonusRow: BonusRowType.shareOptions,
+      editorBonusRow: BonusRowType.shareOptions,
+      curatorBonusRow: BonusRowType.shareOptions,
+      readerBonusColumn: BonusRowType.shareOptions,
+      editorBonusColumn: BonusRowType.shareOptions,
+      curatorBonusColumn: BonusRowType.shareOptions,
     ),
     // 15. Settings (buttons)
     ReaderTool(
