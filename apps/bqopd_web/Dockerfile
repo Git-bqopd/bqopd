@@ -1,7 +1,7 @@
 # ==========================================
 # STAGE 1: Build the Jaspr Application
 # ==========================================
-FROM dart:stable AS build
+FROM dart:3.11-sdk AS build
 
 # Activate the Jaspr CLI globally to enable compilation
 RUN dart pub global activate jaspr_cli
@@ -19,9 +19,9 @@ RUN rm -rf .dart_tool apps/bqopd_web/.dart_tool packages/bqopd_core/.dart_tool a
 WORKDIR /app/packages/bqopd_core
 RUN dart pub get
 
-# Navigate into the Web App, resolve packages, and upgrade build daemon dependencies
+# Navigate into the Web App, resolve packages, and build
 WORKDIR /app/apps/bqopd_web
-RUN dart pub get && dart pub upgrade build_daemon build_runner
+RUN dart pub get
 RUN dart pub global run jaspr_cli:jaspr build --verbose
 
 # ==========================================

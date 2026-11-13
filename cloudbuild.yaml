@@ -9,7 +9,13 @@ steps:
       - 'apps/bqopd_web/Dockerfile'
       - '.'
 
-  # Step 2: Deploy the container image to Google Cloud Run with performance optimization flags
+  # Step 2: Push the freshly built image so Cloud Run receives this exact build
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/bqopd-9ce06/bqopd-web:latest'
+
+  # Step 3: Deploy the container image to Google Cloud Run with performance optimization flags
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:

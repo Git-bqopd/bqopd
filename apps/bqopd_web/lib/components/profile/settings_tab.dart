@@ -76,8 +76,10 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
   // Real-time User Accounts list
   List<Map<String, dynamic>> _allSystemUsers = [];
+  Map<String, Map<String, dynamic>> _userRolesMap = {};
   bool _loadingUsers = true;
   FirebaseSubscription? _usersSub;
+  FirebaseSubscription? _rolesSub;
 
   // Notification feedbacks for operations
   String? _permissionFeedback;
@@ -165,6 +167,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   void dispose() {
     _managedSub?.callAsFunction();
     _usersSub?.callAsFunction();
+    _rolesSub?.callAsFunction();
     super.dispose();
   }
 
@@ -221,15 +224,50 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   void _listenToSystemUsers() {
     _usersSub?.callAsFunction();
     _usersSub = null;
+    _rolesSub?.callAsFunction();
+    _rolesSub = null;
     setState(() => _loadingUsers = true);
-    _usersSub = fsListenQuery('Users', '', '', '', '', false, (String jsonStr) {
+
+    _rolesSub = fsListenQuery('roles', '', '', '', '', false, (String jsonStr) {
       try {
         final List decoded = jsonDecode(jsonStr);
-        final users = decoded.map((d) {
-          final data = d['data'] as Map<String, dynamic>;
-          data['id'] = d['id'];
-          return data;
-        }).toList();
+        final map = <String, Map<String, dynamic>>{};
+        for (var item in decoded) {
+          final id = item['id']?.toString() ?? '';
+          if (id.isNotEmpty) {
+            map[id] = item['data'] as Map<String, dynamic>? ?? {};
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _userRolesMap = map;
+          });
+        }
+      } catch (e) {
+        print("Error loading roles mirror: $e");
+      }
+    });
+
+    _usersSub = fsListenQuery('profiles', '', '', '', '', false, (String jsonStr) {
+      try {
+        final List decoded = jsonDecode(jsonStr);
+        final users = decoded
+            .where((d) {
+              final data = d['data'] as Map<String, dynamic>? ?? {};
+              return data['isManaged'] != true;
+            })
+            .map((d) {
+              final data = d['data'] as Map<String, dynamic>;
+              data['id'] = d['id'];
+              data['uid'] = d['id'];
+              return data;
+            })
+            .toList();
+        users.sort((a, b) {
+          final uA = (a['username'] ?? a['displayName'] ?? '').toString().toLowerCase();
+          final uB = (b['username'] ?? b['displayName'] ?? '').toString().toLowerCase();
+          return uA.compareTo(uB);
+        });
         if (mounted) {
           setState(() {
             _allSystemUsers = users;
@@ -374,31 +412,44 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     }
   }
 
-  Future<void> _updateUserPermission(String uid, String newRole) async {
+  Future<void> _updateUserPermission(String uid, String roleKey) async {
     if (!mounted) return;
     setState(() {
       _permissionFeedbackUid = uid;
       _permissionFeedback = "Updating access levels via Auth Custom Claims...";
     });
     try {
-      // Map discrete roles to boolean capability switches
+      final existingRoles = Map<String, dynamic>.from(_userRolesMap[uid] ?? {});
+      final bool currentVal = existingRoles[roleKey] == true;
       final rolesPayload = <String, bool>{
-        'admin': newRole == 'admin',
-        'moderator': newRole == 'moderator',
-        'curator': newRole == 'curator',
-        'terminalGM': newRole == 'terminalGM',
+        'admin': existingRoles['admin'] == true,
+        'moderator': existingRoles['moderator'] == true,
+        'curator': existingRoles['curator'] == true,
+        'terminalGM': existingRoles['terminalGM'] == true,
       };
+      rolesPayload[roleKey] = !currentVal;
+
+      // Optimistically update _userRolesMap immediately so the UI chip toggles instantly
+      setState(() {
+        final updated = Map<String, dynamic>.from(existingRoles);
+        updated[roleKey] = !currentVal;
+        _userRolesMap[uid] = updated;
+      });
 
       // Call the privileged set_user_roles Cloud Function (updates Custom Claims + roles mirror + audit log)
       await callSetUserRoles(uid, rolesPayload);
 
       if (!mounted) return;
       setState(() {
-        _permissionFeedback = "Access privileges saved via Custom Claims!";
+        _permissionFeedback = "Capability '$roleKey' ${!currentVal ? 'granted' : 'revoked'}!";
       });
     } catch (e) {
       if (!mounted) return;
+      // Revert optimistic update on failure
       setState(() {
+        final existingRoles = Map<String, dynamic>.from(_userRolesMap[uid] ?? {});
+        existingRoles[roleKey] = !(existingRoles[roleKey] == true);
+        _userRolesMap[uid] = existingRoles;
         _permissionFeedback = "Update failed: ${e.toString()}";
       });
     }
@@ -697,16 +748,22 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
   Component _buildUserPermissionManagerRow(Map<String, dynamic> u) {
     final String uid = u['uid'] ?? u['id'] ?? '';
-    final String email = u['email'] ?? 'guest';
-    final String currentRole = u['role'] ?? 'user';
+    final String displayName = (u['displayName'] ?? '').toString().trim();
+    final String username = (u['username'] ?? '').toString().trim();
+    final String email = (u['email'] ?? '').toString().trim();
+    final String primaryTitle = username.isNotEmpty
+        ? '@$username${displayName.isNotEmpty && displayName != username ? " ($displayName)" : ""}'
+        : (displayName.isNotEmpty ? displayName : (email.isNotEmpty ? email : 'User'));
+    final String subTitle = email.isNotEmpty ? "$email | UID: $uid" : "UID: $uid";
+    final Map<String, dynamic> roles = _userRolesMap[uid] ?? {};
     final bool isUserActiveInPerm = _permissionFeedbackUid == uid;
 
     return div(
       [
         div(
           [
-            span([Component.text(email)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
-            span([Component.text("UID: $uid")], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'}),
+            span([Component.text(primaryTitle)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: black;'}),
+            span([Component.text(subTitle)], attributes: const {'style': 'font-size: 10px; color: #888; font-family: monospace;'}),
             if (isUserActiveInPerm && _permissionFeedback != null)
               span([Component.text(_permissionFeedback!)], attributes: const {'style': 'font-size: 11px; font-weight: bold; color: #6750A4; margin-top: 2px;'}),
           ],
@@ -715,15 +772,13 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         ),
         div(
           [
-            _buildRoleBadgeSelector(uid, "admin", currentRole),
+            _buildRoleBadgeSelector(uid, "admin", roles['admin'] == true),
             span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
-            _buildRoleBadgeSelector(uid, "moderator", currentRole),
+            _buildRoleBadgeSelector(uid, "moderator", roles['moderator'] == true),
             span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
-            _buildRoleBadgeSelector(uid, "curator", currentRole),
+            _buildRoleBadgeSelector(uid, "curator", roles['curator'] == true),
             span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
-            _buildRoleBadgeSelector(uid, "terminalGM", currentRole),
-            span([], attributes: const {'style': 'display: inline-block; width: 4px;'}),
-            _buildRoleBadgeSelector(uid, "user", currentRole),
+            _buildRoleBadgeSelector(uid, "terminalGM", roles['terminalGM'] == true),
           ],
           attributes: const {'style': 'display: flex; gap: 4px; align-items: center;'},
         )
@@ -735,15 +790,16 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
     );
   }
 
-  Component _buildRoleBadgeSelector(String uid, String role, String activeRole) {
-    final bool isSelected = activeRole == role;
+  Component _buildRoleBadgeSelector(String uid, String roleKey, bool isSelected) {
     return button(
-      [Component.text(role)],
+      [Component.text(roleKey)],
       classes: isSelected ? 'active m3-chip' : 'm3-chip',
-      attributes: const {
-        'style': 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: none; text-transform: uppercase;'
+      attributes: {
+        'style': isSelected
+            ? 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: none; text-transform: uppercase; background-color: #6750A4; color: white;'
+            : 'height: 28px; padding: 0 10px; font-size: 10px; font-weight: bold; border-radius: 50px; cursor: pointer; border: 1px solid #ddd; text-transform: uppercase; background: #f0f0f0; color: #555;',
       },
-      events: {'click': (e) => _updateUserPermission(uid, role)},
+      events: {'click': (e) => _updateUserPermission(uid, roleKey)},
     );
   }
 

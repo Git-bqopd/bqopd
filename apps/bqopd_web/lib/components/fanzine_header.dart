@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:js_interop';
-import 'package:web/web.dart' as web;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
@@ -31,8 +29,7 @@ class _FanzineStickyHeaderState extends State<FanzineStickyHeader> {
   String _displayUrl = 'login / register';
   String? _username;
   bool _isScrolled = false;
-  web.Element? _gridElement;
-  JSFunction? _scrollHandler;
+  void Function()? _scrollCleanup;
 
   @override
   void initState() {
@@ -45,26 +42,17 @@ class _FanzineStickyHeaderState extends State<FanzineStickyHeader> {
 
   void _attachScrollListener([int retries = 5]) {
     if (!kIsWeb || !mounted) return;
-    final gridEl = web.document.getElementById('fanzine-grid-area');
-    if (gridEl != null) {
-      _gridElement = gridEl;
-
-      void checkScroll() {
-        // Appears the moment FanzineHeader on Spread 0 touches the top of the visible column
-        final bool isNowScrolled = gridEl.scrollTop > 20;
+    _scrollCleanup?.call();
+    _scrollCleanup = listenScrollThreshold(
+      containerId: 'fanzine-grid-area',
+      threshold: 20,
+      onScroll: (isNowScrolled) {
         if (isNowScrolled != _isScrolled && mounted) {
           setState(() => _isScrolled = isNowScrolled);
         }
-      }
-
-      final handler = ((web.Event e) {
-        checkScroll();
-      }).toJS;
-      _scrollHandler = handler;
-      gridEl.addEventListener('scroll', handler);
-      // Run once immediately on mount to establish state
-      checkScroll();
-    } else if (retries > 0) {
+      },
+    );
+    if (_scrollCleanup == null && retries > 0) {
       Future.delayed(const Duration(milliseconds: 50), () {
         if (mounted) _attachScrollListener(retries - 1);
       });
@@ -81,11 +69,8 @@ class _FanzineStickyHeaderState extends State<FanzineStickyHeader> {
 
   @override
   void dispose() {
-    if (_gridElement != null && _scrollHandler != null) {
-      _gridElement!.removeEventListener('scroll', _scrollHandler!);
-      _scrollHandler = null;
-      _gridElement = null;
-    }
+    _scrollCleanup?.call();
+    _scrollCleanup = null;
     super.dispose();
   }
 

@@ -361,8 +361,13 @@ class ServerFirestoreClient {
           }
         }
       } else {
-        final scRes = await fsGetDoc('shortcodes/$codeUpper');
-        final Map<String, dynamic> scDoc = jsonDecode(scRes);
+        // First try exact case shortcode (e.g. "QrNsbYA"), then fall back to uppercase (e.g. "QRNSBYA")
+        var scRes = await fsGetDoc('shortcodes/$cleanCode');
+        var scDoc = jsonDecode(scRes) as Map<String, dynamic>;
+        if (scDoc['exists'] != true && cleanCode != codeUpper) {
+          scRes = await fsGetDoc('shortcodes/$codeUpper');
+          scDoc = jsonDecode(scRes) as Map<String, dynamic>;
+        }
         if (scDoc['exists'] == true) {
           final data = scDoc['data'] as Map<String, dynamic>? ?? {};
           if (data['type'] == 'fanzine') {
@@ -500,7 +505,11 @@ class ServerFirestoreClient {
           }
         }
       } else {
-        final scDoc = await getDocument('shortcodes/$codeUpper');
+        // First try exact case shortcode (e.g. "QrNsbYA"), then fall back to uppercase (e.g. "QRNSBYA")
+        var scDoc = await getDocument('shortcodes/$cleanCode');
+        if (scDoc == null && cleanCode != codeUpper) {
+          scDoc = await getDocument('shortcodes/$codeUpper');
+        }
         if (scDoc != null) {
           final type = scDoc['type'] ?? 'fanzine';
           if (type == 'user') {

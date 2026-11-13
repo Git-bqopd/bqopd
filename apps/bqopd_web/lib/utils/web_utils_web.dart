@@ -510,3 +510,60 @@ void playTerminalMixtapeSynth(bool play) {
     fn?.callAsFunction(null, play.toJS);
   }
 }
+
+/// Sets up a scroll listener on [containerId] that reports whether scrollTop exceeds [threshold].
+/// Returns a cleanup callback to remove the listener.
+void Function()? listenScrollThreshold({
+  required String containerId,
+  required double threshold,
+  required void Function(bool isExceeded) onScroll,
+}) {
+  final container = web.document.getElementById(containerId);
+  if (container == null) return null;
+
+  void check() {
+    onScroll(container.scrollTop > threshold);
+  }
+
+  final handler = ((web.Event e) {
+    check();
+  }).toJS;
+
+  container.addEventListener('scroll', handler);
+  check();
+
+  return () {
+    container.removeEventListener('scroll', handler);
+  };
+}
+
+/// Sets up a scroll listener for FanzineListStickyHeader where threshold is (headerElement.height - 50.0).
+/// Returns a cleanup callback to remove the listener.
+void Function()? listenStickyHeaderScroll({
+  required String containerId,
+  required String headerId,
+  required void Function(bool isScrolled) onScroll,
+}) {
+  final container = web.document.getElementById(containerId);
+  if (container == null) return null;
+
+  void check() {
+    final headerEl = web.document.getElementById(headerId);
+    final double headerHeight = headerEl != null
+        ? headerEl.getBoundingClientRect().height.toDouble()
+        : 430.0;
+    final double threshold = (headerHeight - 50.0).clamp(0.0, double.infinity);
+    onScroll(container.scrollTop >= threshold);
+  }
+
+  final handler = ((web.Event e) {
+    check();
+  }).toJS;
+
+  container.addEventListener('scroll', handler);
+  check();
+
+  return () {
+    container.removeEventListener('scroll', handler);
+  };
+}

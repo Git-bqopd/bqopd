@@ -228,11 +228,11 @@ class _ShortLinkPageState extends State<ShortLinkPage>
       final ownerId = _fanzineData?['ownerId'] ?? _fanzineData?['editorId'] ?? '';
       final editors = (_fanzineData?['editors'] as List?)?.map((e) => e.toString()).toList() ?? [];
       final bool isOwnerOrEditor = currentUid != null && (currentUid == ownerId || editors.contains(currentUid));
-      final bool isViewerAdmin = _viewerAccount?.role == 'admin' || (_viewerAccount?.roles.contains('admin') ?? false);
-      final bool isViewerModerator = _viewerAccount?.role == 'moderator' || (_viewerAccount?.roles.contains('moderator') ?? false);
-      final bool isViewerCurator = _viewerAccount?.role == 'curator' || (_viewerAccount?.roles.contains('curator') ?? false) || (_viewerAccount?.isCurator ?? false);
+      final bool isViewerAdmin = _viewerAccount?.isAdmin ?? false;
+      final bool isViewerModerator = _viewerAccount?.isModerator ?? false;
+      final bool isViewerCurator = _viewerAccount?.isCuratorRole ?? (_viewerAccount?.isCurator ?? false);
       final bool canEdit = isOwnerOrEditor || isViewerAdmin || isViewerModerator || isViewerCurator;
-      final bool isDraft = _fanzineData?['isLive'] != true;
+      final bool isDraft = _fanzineData?['isLive'] != true && _fanzineData?['status'] != 'live';
 
       if (isDraft && !canEdit && !isUnsavedTemp) {
         return div(

@@ -104,3 +104,17 @@ void disposeTerminalWebAr(String containerId) {}
 
 /// Server VM stub for playing Razor's cyberpunk mixtape Web Audio loop.
 void playTerminalMixtapeSynth(bool play) {}
+
+/// Server VM stub for listening to scroll threshold.
+void Function()? listenScrollThreshold({
+  required String containerId,
+  required double threshold,
+  required void Function(bool isExceeded) onScroll,
+}) => null;
+
+/// Server VM stub for listening to sticky header scroll.
+void Function()? listenStickyHeaderScroll({
+  required String containerId,
+  required String headerId,
+  required void Function(bool isScrolled) onScroll,
+}) => null;

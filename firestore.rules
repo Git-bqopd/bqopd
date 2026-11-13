@@ -41,12 +41,10 @@ match /Users/{userDocId}/{allPaths=**} {
 
 // ===========================================================================
 // Profiles — Public Identity & Directory
-// Single profile reads are public; collection-wide scraping/listing is blocked.
 // ===========================================================================
 match /profiles/{profileId} {
-  // 1. Read: Individual get is public; bulk list is disallowed
-  allow get: if true;
-  allow list: if false;
+  // 1. Read: Public identity directory is readable and queryable
+  allow read: if true;
 
   // 2. Full Write: Profile owner, assigned managers (managed profiles), or Admin
   allow write: if isSignedIn() && (
@@ -62,13 +60,11 @@ match /profiles/{profileId} {
 
   // 4. Followers/Following Subcollections
   match /followers/{followerId} {
-    allow get: if true;
-    allow list: if false;
+    allow read: if true;
     allow write: if isSignedIn() && request.auth.uid == followerId;
   }
   match /following/{targetId} {
-    allow get: if true;
-    allow list: if false;
+    allow read: if true;
     allow write: if isSignedIn() && request.auth.uid == profileId;
   }
 }
@@ -77,8 +73,7 @@ match /profiles/{profileId} {
 // Roles Mirror & Audit Log (Settings Console)
 // ===========================================================================
 match /roles/{userId} {
-  allow get: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-  allow list: if isAdmin();
+  allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
   // Writes are strictly performed by the set_user_roles Cloud Function (Admin SDK)
   allow write: if false;
 }
@@ -92,10 +87,12 @@ match /audit_log/{logId} {
 // Images / UGC Pool
 // ===========================================================================
 match /images/{id} {
-  // Public reads allowed for published items; draft items restricted to owner & moderators
-  allow get: if resource.data.get('status', 'draft') == 'published' ||
-                (isSignedIn() && (resource.data.uploaderId == request.auth.uid || isModerator()));
-  allow list: if false;
+  // Public reads allowed for published items; draft items accessible by uploader & staff
+  allow read: if resource.data.get('status', 'draft') == 'published' ||
+                 (isSignedIn() && (
+                   resource.data.uploaderId == request.auth.uid ||
+                   isStaff()
+                 ));
 
   // Create: Must be signed in and must be the uploader
   allow create: if isSignedIn() && request.resource.data.uploaderId == request.auth.uid;
@@ -103,9 +100,7 @@ match /images/{id} {
   // Update: Uploader, Moderator, Curator (curated items), or Admin
   allow update: if isSignedIn() && (
     resource.data.uploaderId == request.auth.uid ||
-    isModerator() ||
-    isAdmin() ||
-    (isCurator() && resource.data.get('isCurated', false) == true) ||
+    isStaff() ||
     // Allow bounded engagement counter updates from any authenticated user
     request.resource.data.diff(resource.data).affectedKeys().hasOnly([
       'usedInFanzines', 'likeCount', 'commentCount',
@@ -128,26 +123,27 @@ match /fanzines/{id} {
   function isFanzineEditor() {
     return isSignedIn() && (
       (isModerator() && request.auth.uid in resource.data.get('editors', [])) ||
-      resource.data.get('editorId', '') == request.auth.uid
+      resource.data.get('editorId', '') == request.auth.uid ||
+      request.auth.uid in resource.data.get('editors', [])
     );
   }
   function isFanzineCurator() {
     return isSignedIn() && isCurator() && request.auth.uid in resource.data.get('curators', []);
   }
 
-  // Published fanzines are public; drafts are limited to owner, editors, curators, or moderators
-  allow get: if resource.data.get('isLive', false) == true ||
-                isFanzineOwner() || isFanzineEditor() || isFanzineCurator() || isModerator();
-  allow list: if false;
+  // Published fanzines are public (isLive == true or status == 'live');
+  // drafts are accessible by owner, editors, curators, or staff
+  allow read: if resource.data.get('isLive', false) == true ||
+                 resource.data.get('status', '') == 'live' ||
+                 isFanzineOwner() || isFanzineEditor() || isFanzineCurator() || isStaff();
 
   allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-  allow update: if isFanzineOwner() || isFanzineEditor() || isFanzineCurator() || isModerator() || isAdmin();
+  allow update: if isFanzineOwner() || isFanzineEditor() || isFanzineCurator() || isStaff();
   allow delete: if isFanzineOwner() || isAdmin();
 
   match /pages/{pageId} {
-    allow get: if true;
-    allow list: if true;
-    allow write: if isFanzineOwner() || isFanzineEditor() || isFanzineCurator() || isModerator() || isAdmin();
+    allow read: if true;
+    allow write: if isFanzineOwner() || isFanzineEditor() || isFanzineCurator() || isStaff();
   }
 }
 
@@ -155,16 +151,13 @@ match /fanzines/{id} {
 // Shortcodes & Usernames — Immutable once registered, Admin can manage
 // ===========================================================================
 match /shortcodes/{id} {
-  allow get: if true;
-  allow list: if false;
-  // Create only if not already existing
+  allow read: if true;
   allow create: if isSignedIn() && !exists(/databases/$(database)/documents/shortcodes/$(id));
   allow update, delete: if isAdmin();
 }
 
 match /usernames/{handle} {
-  allow get: if true;
-  allow list: if false;
+  allow read: if true;
   allow create: if isSignedIn()
                 && !exists(/databases/$(database)/documents/usernames/$(handle))
                 && !exists(/databases/$(database)/documents/shortcodes/$(handle));
@@ -181,8 +174,7 @@ match /usernames/{handle} {
 // Series
 // ===========================================================================
 match /series/{seriesId} {
-  allow get: if true;
-  allow list: if true;
+  allow read: if true;
   allow write: if isStaff();
 }
 
@@ -222,10 +214,10 @@ match /artifacts/{appId}/public/data/comments/{commentId} {
   allow read: if true;
   allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
   allow update: if isSignedIn() && (
-    resource.data.authorUid == request.auth.uid || isModerator() || isAdmin()
+    resource.data.authorUid == request.auth.uid || isStaff()
   );
   allow delete: if isSignedIn() && (
-    resource.data.authorUid == request.auth.uid || isModerator() || isAdmin()
+    resource.data.authorUid == request.auth.uid || isStaff()
   );
 }
 

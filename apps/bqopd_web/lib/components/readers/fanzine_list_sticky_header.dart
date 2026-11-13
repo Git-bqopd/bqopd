@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:js_interop';
-import 'package:web/web.dart' as web;
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_router/jaspr_router.dart';
@@ -38,8 +36,7 @@ class _FanzineListStickyHeaderState extends State<FanzineListStickyHeader> {
   String _displayUrl = 'login / register';
   String? _username;
   bool _isScrolled = false;
-  web.Element? _listElement;
-  JSFunction? _scrollHandler;
+  void Function()? _scrollCleanup;
 
   @override
   void initState() {
@@ -60,40 +57,24 @@ class _FanzineListStickyHeaderState extends State<FanzineListStickyHeader> {
 
   @override
   void dispose() {
-    if (_listElement != null && _scrollHandler != null) {
-      _listElement!.removeEventListener('scroll', _scrollHandler!);
-      _scrollHandler = null;
-      _listElement = null;
-    }
+    _scrollCleanup?.call();
+    _scrollCleanup = null;
     super.dispose();
   }
 
   void _attachScrollListener([int retries = 5]) {
     if (!kIsWeb || !mounted) return;
-    final listEl = web.document.getElementById('fanzine-list-area');
-    if (listEl != null) {
-      _listElement = listEl;
-
-      void checkScroll() {
-        final headerEl = web.document.getElementById('fanzine-header');
-        // Measures bounding rectangle height directly from Element to avoid platform type-cast issues
-        final double headerHeight = headerEl != null
-            ? headerEl.getBoundingClientRect().height.toDouble()
-            : 430.0;
-        final double threshold = (headerHeight - 50.0).clamp(0.0, double.infinity);
-        final bool isNowScrolled = listEl.scrollTop >= threshold;
+    _scrollCleanup?.call();
+    _scrollCleanup = listenStickyHeaderScroll(
+      containerId: 'fanzine-list-area',
+      headerId: 'fanzine-header',
+      onScroll: (isNowScrolled) {
         if (isNowScrolled != _isScrolled && mounted) {
           setState(() => _isScrolled = isNowScrolled);
         }
-      }
-
-      final handler = ((web.Event e) {
-        checkScroll();
-      }).toJS;
-      _scrollHandler = handler;
-      listEl.addEventListener('scroll', handler);
-      checkScroll();
-    } else if (retries > 0) {
+      },
+    );
+    if (_scrollCleanup == null && retries > 0) {
       Future.delayed(const Duration(milliseconds: 50), () {
         if (mounted) _attachScrollListener(retries - 1);
       });
