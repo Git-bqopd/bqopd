@@ -14,8 +14,10 @@ if (!firebase.apps.length) {
 }
 
 var db = firebase.firestore();
-var storage = null;
-var functions = null;
+var storage = (typeof firebase.storage === 'function') ? firebase.storage() : null;
+var functions = (typeof firebase.functions === 'function') ? firebase.functions() : null;
+if (storage) window.storage = storage;
+if (functions) window.functions = functions;
 
 var _lazyScriptPromises = {};
 function _loadExternalScriptOnce(id, src) {
@@ -28,11 +30,23 @@ function _loadExternalScriptOnce(id, src) {
         var script = existing || document.createElement('script');
         script.id = id;
         script.async = true;
+        // Temporarily mask AMD `window.define` (injected by DDC require.js in `jaspr serve`)
+        // so UMD bundles like firebase-storage-compat.js and firebase-functions-compat.js
+        // attach directly to `window.firebase` instead of registering as dormant AMD modules.
+        var savedDefine = window.define;
+        try { window.define = undefined; } catch (_) {}
+        function restoreDefine() {
+            if (savedDefine !== undefined) {
+                try { window.define = savedDefine; } catch (_) {}
+            }
+        }
         script.onload = function() {
+            restoreDefine();
             script.setAttribute('data-loaded', 'true');
             resolve();
         };
         script.onerror = function(err) {
+            restoreDefine();
             delete _lazyScriptPromises[id];
             if (script.parentNode) script.parentNode.removeChild(script);
             reject(new Error('Failed to lazy-load script: ' + src));

@@ -18,7 +18,8 @@ void main() {
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js'),
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js'),
       script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js'),
-      // Firebase Storage, Cloud Functions, and Google Maps Places SDKs are lazy-loaded on demand via firebase_init.js
+      script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js'),
+      script(src: 'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js'),
       // Pull in central JS initialization script
       script(src: 'firebase_init.js'),
       // Load the compiled Dart app so it takes over from the pre-rendered shell
