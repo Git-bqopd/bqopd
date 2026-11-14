@@ -909,6 +909,7 @@ window.renderMapCoverPage = async (configJson) => {
     const center = config.center || { lat: 43.8396, lng: -91.2436, address: "La Crosse, WI" };
     const letters = Array.isArray(config.letters) ? config.letters : [];
     const folioTitle = config.title || `Letters near ${center.address}`;
+    const shortCode = (config.shortCode || "").toString().trim();
     const apiKey = (window.firebaseConfig && window.firebaseConfig.apiKey) || "";
 
     const canvas = document.createElement('canvas');
@@ -1098,6 +1099,53 @@ window.renderMapCoverPage = async (configJson) => {
     if (centerCoord) {
         const pt = projectToWorld(centerCoord.lat, centerCoord.lng, zoom);
         drawPin(pt.x - originX, pt.y - originY, true);
+    }
+
+    // Draw bottom-left QR code overlay linking to https://bqopd.com/<shortCode>
+    if (shortCode) {
+        try {
+            await _loadExternalScriptOnce(
+                'lazy-qrcode-generator',
+                'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js'
+            );
+            if (typeof window.qrcode === 'function') {
+                const qr = window.qrcode(0, 'M');
+                qr.addData(`https://bqopd.com/${shortCode}`);
+                qr.make();
+
+                const qrMargin = 48;
+                const quietZoneSize = 300;
+                const quietZonePad = 30;
+                const matrixSize = quietZoneSize - (quietZonePad * 2); // 240px
+
+                const boxX = qrMargin;
+                const boxY = 3200 - qrMargin - quietZoneSize; // 2852px
+                const matrixX = boxX + quietZonePad; // 78px
+                const matrixY = boxY + quietZonePad; // 2882px
+
+                // Solid white quiet-zone background
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(boxX, boxY, quietZoneSize, quietZoneSize);
+
+                // Crisp black QR modules
+                const moduleCount = qr.getModuleCount();
+                const cellSize = matrixSize / moduleCount;
+                ctx.fillStyle = '#000000';
+                for (let row = 0; row < moduleCount; row++) {
+                    for (let col = 0; col < moduleCount; col++) {
+                        if (qr.isDark(row, col)) {
+                            const x1 = Math.floor(matrixX + col * cellSize);
+                            const y1 = Math.floor(matrixY + row * cellSize);
+                            const x2 = Math.ceil(matrixX + (col + 1) * cellSize);
+                            const y2 = Math.ceil(matrixY + (row + 1) * cellSize);
+                            ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+                        }
+                    }
+                }
+            }
+        } catch (qrErr) {
+            console.warn('[renderMapCoverPage] QR overlay skipped:', qrErr);
+        }
     }
 
     function getScaledBase64(targetWidth, targetHeight) {

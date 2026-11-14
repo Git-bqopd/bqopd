@@ -585,6 +585,11 @@ class AddressRadiusLetters {
       throw Exception('Please enter an address or city.');
     }
 
+    final String resolvedShortCode =
+    (shortCode != null && shortCode.trim().isNotEmpty)
+        ? shortCode.trim()
+        : ShortcodeGenerator.generateStandardCode();
+
     final int contentPagesCount = hasMapCover ? math.max(1, targetPages - 1) : targetPages;
 
     // 1. Geocode Target Center Address
@@ -803,7 +808,7 @@ class AddressRadiusLetters {
           'lng': targetLng,
         },
         'letters': mapLettersPayload,
-        'shortCode': shortCode ?? ShortcodeGenerator.generateStandardCode(),
+        'shortCode': resolvedShortCode,
       };
 
       final String coverText = 'Map Cover: $folioTitle\nCenter: $formattedCenter\nLetters: ${mapLettersPayload.length}';
@@ -865,7 +870,7 @@ class AddressRadiusLetters {
             'height': 3200,
             'aspectRatio': 0.625,
             'is5x8': true,
-            'shortCode': shortCode ?? ShortcodeGenerator.generateStandardCode(),
+            'shortCode': resolvedShortCode,
             'folioContext': fanzineId,
             'usedInFanzines': [fanzineId],
             'fileUrl': coverUrls[0],
@@ -968,7 +973,7 @@ class AddressRadiusLetters {
       type: FanzineType.folio,
       isLive: false,
       processingStatus: 'complete',
-      shortCode: shortCode,
+      shortCode: resolvedShortCode,
       twoPage: true,
       hasCover: hasMapCover && coverImageUrl != null && finalPages.isNotEmpty,
     );

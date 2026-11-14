@@ -28,12 +28,14 @@ from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_functions.params import SecretParam
 from PIL import Image, ImageDraw, ImageFont
+import qrcode
 
 # Keep max instances controlled to prevent unexpected compute costs
 set_global_options(max_instances=10)
 
 # Secret parameter for Google Maps API key (managed via Secret Manager)
 MAPS_API_KEY = SecretParam("MAPS_API_KEY")
+
 
 def get_maps_api_key(override_key: Optional[str] = None) -> str:
   """Resolves the Google Maps API key from override, SecretParam, or environment."""
@@ -65,6 +67,12 @@ COL_WIDTH = 608
 USABLE_COL_HEIGHT = 3087
 STANDARD_ASPECT_RATIO = 0.625
 
+# Cover QR Code Overlay Geometry (Bottom-Left Corner on 2000x3200 Plate)
+COVER_QR_MARGIN = 48
+COVER_QR_QUIET_ZONE_SIZE = 300
+COVER_QR_QUIET_ZONE_PAD = 30
+COVER_QR_MATRIX_SIZE = COVER_QR_QUIET_ZONE_SIZE - (COVER_QR_QUIET_ZONE_PAD * 2)
+
 # Directory for bundled project TrueType fonts
 FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
@@ -74,6 +82,7 @@ FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
 BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 DECODE_MAP = {c: i for i, c in enumerate(BASE32)}
+
 
 def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
   """Encodes (lat, lng) into a standard Base32 geohash string."""
@@ -108,6 +117,7 @@ def encode_geohash(lat: float, lng: float, precision: int = 6) -> str:
       bit = 0
       ch = 0
   return "".join(geohash)
+
 
 def decode_geohash(geohash: str) -> Tuple[float, float, float, float]:
   """Decodes a geohash string into (lat, lng, lat_error, lng_error)."""
@@ -159,6 +169,7 @@ def get_geohash_neighbors(geohash: str) -> List[str]:
 
   return list(dict.fromkeys(neighbors))
 
+
 def haversine_miles(
     lat1: float, lon1: float, lat2: float, lon2: float
 ) -> float:
@@ -208,6 +219,7 @@ def generate_shortcode() -> str:
   """Generates a standard Base36 7-character alphanumeric shortcode."""
   chars = string.ascii_uppercase + string.digits
   return "".join(random.choices(chars, k=7))
+
 
 def resolve_or_cache_geocode(
     address: str,
@@ -326,6 +338,7 @@ def resolve_or_cache_geocode(
           f" '{clean_loc}': {e}"
       )
 
+  # 3. Fallback to Nominatim if Google Geocoding was unavailable
   if not resolved:
     try:
       encoded = urllib.parse.quote(clean_loc)
@@ -402,6 +415,7 @@ def geocode_location_http(location_str: str) -> Optional[Dict[str, Any]]:
 _font_cache: Dict[Tuple[str, int, bool, bool], ImageFont.ImageFont] = {}
 _font_resolved_sources: Dict[Tuple[str, int, bool, bool], str] = {}
 
+
 def get_font_path_candidates(
     font_family: str, bold: bool = False, italic: bool = False
 ) -> List[str]:
@@ -461,6 +475,7 @@ def get_font_path_candidates(
     ])
 
   return candidates
+
 
 def get_font(
     font_family: str, size: int, bold: bool = False, italic: bool = False
@@ -566,6 +581,7 @@ def hex_to_rgb(
       return default
   return default
 
+
 def init_page_canvas() -> Tuple[Image.Image, ImageDraw.ImageDraw]:
   """Initializes a blank 2000x3200 page canvas with outer border and column dividers."""
   canvas = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), color=(255, 255, 255))
@@ -619,6 +635,51 @@ def calculate_image_draw_height(
     return int(round(COL_WIDTH * (img_obj.height / float(img_obj.width))))
   return int(round(COL_WIDTH / fallback_aspect_ratio))
 
+
+def draw_cover_qr_overlay(canvas: Image.Image, short_code: str) -> None:
+  """Draws a bottom-left QR code linking to https://bqopd.com/<short_code> with a white quiet zone."""
+  clean_code = (short_code or "").strip()
+  if not clean_code:
+    return
+
+  target_url = f"https://bqopd.com/{clean_code}"
+  qr = qrcode.QRCode(
+      version=None,
+      error_correction=qrcode.constants.ERROR_CORRECT_M,
+      box_size=10,
+      border=0,
+  )
+  qr.add_data(target_url)
+  qr.make(fit=True)
+
+  qr_img = qr.make_image(fill_color="#000000", back_color="#FFFFFF").convert(
+      "RGB"
+  )
+  qr_resized = qr_img.resize(
+      (COVER_QR_MATRIX_SIZE, COVER_QR_MATRIX_SIZE),
+      Image.Resampling.NEAREST,
+  )
+
+  box_x = COVER_QR_MARGIN
+  box_y = PAGE_HEIGHT - COVER_QR_MARGIN - COVER_QR_QUIET_ZONE_SIZE
+
+  draw = ImageDraw.Draw(canvas)
+  draw.rectangle(
+      [
+          box_x,
+          box_y,
+          box_x + COVER_QR_QUIET_ZONE_SIZE,
+          box_y + COVER_QR_QUIET_ZONE_SIZE,
+      ],
+      fill=(255, 255, 255),
+  )
+
+  canvas.paste(
+      qr_resized,
+      (box_x + COVER_QR_QUIET_ZONE_PAD, box_y + COVER_QR_QUIET_ZONE_PAD),
+  )
+
+
 def upload_three_webp_scales(
     canvas: Image.Image,
     bucket: Any,
@@ -662,6 +723,7 @@ def upload_three_webp_scales(
   list_url = _upload("list.webp", list_bytes)
   grid_url = _upload("grid.webp", grid_bytes)
   return orig_url, list_url, grid_url
+
 
 def rasterize_display_sheet(sheet: Dict[str, Any]) -> Tuple[Image.Image, str, str]:
   """Executes pre-calculated DrawCommands on a 2000x3200 canvas without making layout decisions.
@@ -794,6 +856,7 @@ def rasterize_display_list(
       canvas, page_text, page_html = rasterize_display_sheet(page_dict)
       results.append((canvas, page_text, page_html))
   return results
+
 
 def _extract_image_dimensions(raw_params: str) -> Dict[str, Optional[float]]:
   """Extracts optional width, height, and aspect ratio from image parameter tokens."""
@@ -949,6 +1012,7 @@ def parse_markdown_to_blocks(raw_text: str) -> List[Dict[str, Any]]:
   commit_paragraph()
   return blocks
 
+
 def render_publisher_pages_internal(
     raw_text: str,
 ) -> List[Tuple[Image.Image, str]]:
@@ -1031,7 +1095,9 @@ def render_publisher_pages_internal(
         )
 
       current_y += float(total_image_block_height)
-      current_page_text_parts.append(block.get("raw") or f"{{{{IMAGE: {target_url}}}}}")
+      current_page_text_parts.append(
+          block.get("raw") or f"{{{{IMAGE: {target_url}}}}}"
+      )
 
     elif b_type == "template_block" and block.get("templateNum") == 1:
       target_url = block.get("url", "")
@@ -1205,9 +1271,11 @@ def render_publisher_pages_internal(
 
   return pages_results
 
+
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Diagnostics, Geocoding, Search, and Map Cover
 # ---------------------------------------------------------------------------
+
 
 @https_fn.on_call()
 def check_server_fonts(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1275,6 +1343,7 @@ def geocode_address(req: https_fn.CallableRequest) -> Dict[str, Any]:
           f"Could not resolve geographic coordinates for '{raw_address}'."
       ),
   }
+
 
 @https_fn.on_call()
 def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1396,6 +1465,7 @@ def query_nearest_letters(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "letters": results,
   }
 
+
 @https_fn.on_call(secrets=[MAPS_API_KEY])
 def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Fetches an official Google Maps Static API image server-side."""
@@ -1447,9 +1517,11 @@ def fetch_static_map(req: https_fn.CallableRequest) -> Dict[str, Any]:
         "fallback_url": url,
     }
 
+
 # ---------------------------------------------------------------------------
 # Cloud Functions Callables: Heavy Server-Side Layout & WebP Compilation
 # ---------------------------------------------------------------------------
+
 
 @https_fn.on_call(memory=2048, timeout_sec=300, cpu=2)
 def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
@@ -1588,6 +1660,7 @@ def compile_publisher_folio(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "pages": output_pages,
   }
 
+
 @https_fn.on_call(memory=512, timeout_sec=120)
 def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
   """Re-compiles a single 2000x3200 page from display commands or markdown and uploads WebP scales."""
@@ -1675,9 +1748,10 @@ def compile_publisher_page(req: https_fn.CallableRequest) -> Dict[str, Any]:
       "text_html": page_html,
   }
 
+
 @https_fn.on_call(memory=512, timeout_sec=120, secrets=[MAPS_API_KEY])
 def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
-  """Generates an illustrated 2000x3200 Google Maps cover page with radial markers.
+  """Generates an illustrated 2000x3200 Google Maps cover page with radial markers and QR code.
 
   Uploads 3 WebP sizes directly to Cloud Storage and registers the image record.
   """
@@ -1751,6 +1825,9 @@ def compile_map_cover(req: https_fn.CallableRequest) -> Dict[str, Any]:
   cover_ctx.rectangle(
       [5, 5, PAGE_WIDTH - 6, PAGE_HEIGHT - 6], outline=(0, 0, 0), width=11
   )
+
+  # Render bottom-left QR code overlay pointing to https://bqopd.com/<short_code>
+  draw_cover_qr_overlay(cover_canvas, short_code)
 
   cover_image_id = f"map_cover_{fanzine_id}_1"
   storage_prefix = f"fanzines/{fanzine_id}"
