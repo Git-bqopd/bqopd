@@ -192,8 +192,16 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
     return null;
   }
 
+  /// Excludes curator-ingested fanzines (`type == 'ingested'` or `sourceFile != null`)
+  /// so archival ingests stay strictly in the Curator workspace.
+  bool _isMakerWork(Map<String, dynamic> w) {
+    return w['type'] != 'ingested' && w['sourceFile'] == null;
+  }
+
   List<Map<String, dynamic>> get _publishedWorks {
-    final list = _userWorks.where((w) => w['isLive'] == true).toList();
+    final list = _userWorks
+        .where((w) => _isMakerWork(w) && w['isLive'] == true)
+        .toList();
     list.sort((a, b) {
       final aTime = _parseDateValue(a['publishedAt'] ??
           a['updatedAt'] ??
@@ -212,7 +220,9 @@ class _ProfileMakerTabState extends State<ProfileMakerTab> {
   }
 
   List<Map<String, dynamic>> get _draftWorks {
-    final list = _userWorks.where((w) => w['isLive'] != true).toList();
+    final list = _userWorks
+        .where((w) => _isMakerWork(w) && w['isLive'] != true)
+        .toList();
     list.sort((a, b) {
       final aTime = _parseDateValue(
           a['updatedAt'] ?? a['creationDate'] ?? a['timestamp']);

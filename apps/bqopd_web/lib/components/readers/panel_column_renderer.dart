@@ -26,6 +26,7 @@ import '../panels/share_panel.dart';
 class PanelColumnRenderer extends StatelessComponent {
   final String fanzineId;
   final String? shortCode;
+  final String? fanzineType;
   final String? fanzineTitle;
   final String? masterIndicia;
   final int? startMonth;
@@ -35,6 +36,7 @@ class PanelColumnRenderer extends StatelessComponent {
   final Map<String, Map<String, dynamic>> preloadedImageStats;
   final BonusRowType activePanel;
   final bool isEditingMode;
+  final ToolScope? activeScope;
   final VoidCallback onClose;
   final int targetIndex;
   final void Function(int pageIndex)? onPageCardTap;
@@ -42,6 +44,7 @@ class PanelColumnRenderer extends StatelessComponent {
   const PanelColumnRenderer({
     required this.fanzineId,
     this.shortCode,
+    this.fanzineType,
     this.fanzineTitle,
     this.masterIndicia,
     this.startMonth,
@@ -51,11 +54,21 @@ class PanelColumnRenderer extends StatelessComponent {
     this.preloadedImageStats = const {},
     required this.activePanel,
     this.isEditingMode = false,
+    this.activeScope,
     required this.onClose,
     this.targetIndex = 0,
     this.onPageCardTap,
     super.key,
   });
+
+  ToolScope get _effectiveScope {
+    if (activeScope != null) return activeScope!;
+    if (!isEditingMode) return ToolScope.reader;
+    if (fanzineType == 'folio' || fanzineType == 'calendar') {
+      return ToolScope.editor;
+    }
+    return ToolScope.curator;
+  }
 
   @override
   Component build(BuildContext context) {
@@ -81,9 +94,9 @@ class PanelColumnRenderer extends StatelessComponent {
 
     if (isSingleton) {
       final int activePageIdx =
-          (targetIndex > 0 && targetIndex <= pages.length) ? targetIndex - 1 : 0;
+      (targetIndex > 0 && targetIndex <= pages.length) ? targetIndex - 1 : 0;
       final activePageData =
-          pages.isNotEmpty ? pages[activePageIdx] : <String, dynamic>{};
+      pages.isNotEmpty ? pages[activePageIdx] : <String, dynamic>{};
       final imageId = activePageData['imageId']?.toString() ?? '';
       return SingleWindowColumnLayout(
         title: title,
@@ -98,7 +111,7 @@ class PanelColumnRenderer extends StatelessComponent {
         : null;
 
     final int targetPageIndex =
-        (targetIndex > 0 && targetIndex <= pages.length) ? targetIndex - 1 : 0;
+    (targetIndex > 0 && targetIndex <= pages.length) ? targetIndex - 1 : 0;
 
     return MultiPageColumnLayout(
       title: title,
@@ -128,7 +141,10 @@ class PanelColumnRenderer extends StatelessComponent {
       case BonusRowType.terminalAdmin:
         return const TerminalAdminColumnPanel();
       case BonusRowType.settings:
-        return const SettingsColumnPanel();
+        return SettingsColumnPanel(
+          activeScope: _effectiveScope,
+          fanzineType: fanzineType,
+        );
       case BonusRowType.publisher:
         return const PublisherColumnPanel();
       default:
@@ -137,10 +153,10 @@ class PanelColumnRenderer extends StatelessComponent {
   }
 
   Component _buildPagePanel(
-    int pageIndex,
-    Map<String, dynamic> pageData,
-    int targetPageIndex,
-  ) {
+      int pageIndex,
+      Map<String, dynamic> pageData,
+      int targetPageIndex,
+      ) {
     final imageId = pageData['imageId'] ?? '';
     if (activePanel == BonusRowType.shareOptions) {
       return ShareColumnPanel(
@@ -164,7 +180,7 @@ class PanelColumnRenderer extends StatelessComponent {
     switch (activePanel) {
       case BonusRowType.textReader:
         final preloadedHtml =
-            (pageData['textHtml'] ?? pageData['text_html'])?.toString();
+        (pageData['textHtml'] ?? pageData['text_html'])?.toString();
         final preloadedText = pageData['text']?.toString();
         return TextReaderColumnPanel(
           imageId: imageId,
@@ -178,7 +194,12 @@ class PanelColumnRenderer extends StatelessComponent {
       case BonusRowType.linkedText:
         return EditTextColumnPanel(imageId: imageId, fanzineId: fanzineId);
       case BonusRowType.entities:
-        return EntitiesColumnPanel(imageId: imageId, fanzineId: fanzineId);
+        return EntitiesColumnPanel(
+          imageId: imageId,
+          fanzineId: fanzineId,
+          isEditingMode: isEditingMode,
+          activeScope: _effectiveScope,
+        );
       case BonusRowType.tags:
         return HashtagColumnPanel(imageId: imageId);
       case BonusRowType.rawText:

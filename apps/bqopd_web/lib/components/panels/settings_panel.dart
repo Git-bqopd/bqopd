@@ -3,11 +3,40 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:bqopd_core/bqopd_core.dart';
 import '../../utils/web_firebase_interop.dart';
-import '../../utils/icon_utils.dart';
+
+/// Returns all toolbar tools available for [scope] (excluding the `buttons` toggle itself).
+List<ReaderTool> _toolsForScope(ToolScope scope, String? fanzineType) {
+  return ReaderToolsConfig.tools.where((t) {
+    if (t.id == 'Settings') return false;
+    if (!t.scopes.contains(scope)) return false;
+    if (t.condition == ToolCondition.requiresOcrPipeline &&
+        (fanzineType == 'folio' || fanzineType == 'calendar')) {
+      return false;
+    }
+    return true;
+  }).toList();
+}
+
+/// Resolves the secondary muted label suffix shown next to a button name
+/// (e.g., `(cannot be hidden)` for locked tools, `(only on some pages)` for
+/// page-level conditional tools added in editor/curator scopes).
+String? _disclaimerForTool(ReaderTool tool, {required bool isLocked}) {
+  if (isLocked) {
+    return '(cannot be hidden)';
+  }
+  return ReaderToolsConfig.getConditionDisclaimer(tool);
+}
 
 /// Dedicated inline drawer (bonusRow) view for toolbar button customization.
 class SettingsRowPanel extends StatefulComponent {
-  const SettingsRowPanel({super.key});
+  final ToolScope activeScope;
+  final String? fanzineType;
+
+  const SettingsRowPanel({
+    this.activeScope = ToolScope.reader,
+    this.fanzineType,
+    super.key,
+  });
 
   @override
   State<SettingsRowPanel> createState() => _SettingsRowPanelState();
@@ -52,7 +81,7 @@ class _SettingsRowPanelState extends State<SettingsRowPanel> {
   }
 
   Future<void> _toggle(String toolId) async {
-    if (_uid == null) return;
+    if (_uid == null || toolId == 'Grid' || toolId == 'Like') return;
     final current = _visibility[toolId] ?? true;
     final next = !current;
     setState(() {
@@ -77,45 +106,110 @@ class _SettingsRowPanelState extends State<SettingsRowPanel> {
       ]);
     }
 
-    final togglableTools = ReaderToolsConfig.tools
-        .where((t) => t.id != 'Settings' && t.scopes.contains(ToolScope.reader))
-        .toList();
+    final scopeTools = _toolsForScope(component.activeScope, component.fanzineType);
 
     return div(classes: 'flex-col gap-2 py-4', [
-      for (var tool in togglableTools)
+      for (var tool in scopeTools)
         _buildToggleRow(tool)
     ]);
   }
 
   Component _buildToggleRow(ReaderTool tool) {
-    final bool isVisible = _visibility[tool.id] ?? true;
-    final resolvedIcon = cleanIconName(tool.defaultIcon);
+    final bool isLocked = tool.id == 'Grid' || tool.id == 'Like';
+    final bool isVisible = isLocked ? true : (_visibility[tool.id] ?? true);
+    final String? disclaimer = _disclaimerForTool(tool, isLocked: isLocked);
 
     return div(
-        classes: 'flex-row items-center justify-between p-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors',
-        events: {'click': (e) => _toggle(tool.id)},
-        [
-          div(classes: 'flex-row items-center gap-3', [
-            span(classes: 'material-symbols-outlined text-gray-500', [Component.text(resolvedIcon)]),
-            span(classes: 'text-sm font-medium', [Component.text(tool.label)]),
-          ]),
-          div(
-              classes: 'w-10 h-6 rounded-full relative transition-colors ${isVisible ? 'bg-indigo-600' : 'bg-gray-300'}',
+      classes: 'flex-row items-center justify-between p-3 border-b border-gray-50 ${isLocked ? "" : "hover:bg-gray-50 cursor-pointer"} transition-colors',
+      attributes: {
+        if (isLocked) 'style': 'cursor: not-allowed;',
+      },
+      events: {
+        if (!isLocked) 'click': (e) => _toggle(tool.id),
+      },
+      [
+        div(
+          attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px; padding-right: 12px;'},
+          [
+            div(
+              attributes: const {'style': 'display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;'},
               [
-                div(
-                    classes: 'absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isVisible ? 'left-5' : 'left-1'}',
-                    []
-                )
-              ]
-          )
-        ]
+                span(
+                  attributes: const {'style': 'font-size: 13px; font-weight: bold; color: #1e293b;'},
+                  [Component.text(tool.label)],
+                ),
+                if (disclaimer != null)
+                  span(
+                    attributes: const {'style': 'font-size: 11px; color: #94a3b8; font-weight: normal;'},
+                    [Component.text(disclaimer)],
+                  ),
+              ],
+            ),
+            span(
+              attributes: const {'style': 'font-size: 11px; color: #64748b; line-height: 1.3;'},
+              [Component.text(tool.description)],
+            ),
+          ],
+        ),
+        _buildSvgSwitch(tool: tool, isVisible: isVisible, isLocked: isLocked),
+      ],
     );
   }
 }
 
+/// Renders a pill switch with the button's `.svg` centered inside the sliding circular thumb.
+Component _buildSvgSwitch({
+  required ReaderTool tool,
+  required bool isVisible,
+  required bool isLocked,
+}) {
+  final String trackColor = isLocked
+      ? 'rgba(103, 80, 164, 0.55)'
+      : (isVisible ? '#6750A4' : '#cbd5e1');
+
+  return div(
+    attributes: {
+      'style':
+      'width: 52px; height: 28px; border-radius: 28px; position: relative; '
+          'transition: background-color 0.2s; background-color: $trackColor; '
+          'flex-shrink: 0; ${isLocked ? "cursor: not-allowed;" : "cursor: pointer;"}',
+    },
+    [
+      div(
+        attributes: {
+          'style':
+          'position: absolute; top: 3px; width: 22px; height: 22px; '
+              'background-color: #ffffff; border-radius: 50%; transition: left 0.2s; '
+              'box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); display: flex; '
+              'align-items: center; justify-content: center; '
+              'left: ${isVisible ? "27px" : "3px"};',
+        },
+        [
+          img(
+            src: tool.defaultIcon,
+            attributes: {
+              'alt': tool.label,
+              'style':
+              'width: 14px; height: 14px; object-fit: contain; display: block; '
+                  'opacity: ${isVisible ? "1.0" : "0.45"};',
+            },
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 /// Dedicated desktop 3rd column (bonusColumn) single-window view for toolbar configuration.
 class SettingsColumnPanel extends StatefulComponent {
-  const SettingsColumnPanel({super.key});
+  final ToolScope activeScope;
+  final String? fanzineType;
+
+  const SettingsColumnPanel({
+    this.activeScope = ToolScope.reader,
+    this.fanzineType,
+    super.key,
+  });
 
   @override
   State<SettingsColumnPanel> createState() => _SettingsColumnPanelState();
@@ -160,7 +254,7 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
   }
 
   Future<void> _toggle(String toolId) async {
-    if (_uid == null) return;
+    if (_uid == null || toolId == 'Grid' || toolId == 'Like') return;
     final current = _visibility[toolId] ?? true;
     final next = !current;
     setState(() {
@@ -197,9 +291,7 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
       );
     }
 
-    final togglableTools = ReaderToolsConfig.tools
-        .where((t) => t.id != 'Settings' && t.scopes.contains(ToolScope.reader))
-        .toList();
+    final scopeTools = _toolsForScope(component.activeScope, component.fanzineType);
 
     return div(
       [
@@ -218,7 +310,7 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
         ),
         div(
             [
-              for (var tool in togglableTools)
+              for (var tool in scopeTools)
                 _buildColumnToggleItem(tool),
             ],
             classes: 'flex-col gap-2',
@@ -233,43 +325,48 @@ class _SettingsColumnPanelState extends State<SettingsColumnPanel> {
   }
 
   Component _buildColumnToggleItem(ReaderTool tool) {
-    final bool isVisible = _visibility[tool.id] ?? true;
-    final resolvedIcon = cleanIconName(tool.defaultIcon);
+    final bool isLocked = tool.id == 'Grid' || tool.id == 'Like';
+    final bool isVisible = isLocked ? true : (_visibility[tool.id] ?? true);
+    final String? disclaimer = _disclaimerForTool(tool, isLocked: isLocked);
 
     return div(
-        classes: 'hover:bg-gray-50 transition-colors',
-        attributes: const {
-          'style': 'display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; background: white;'
-        },
-        events: {'click': (e) => _toggle(tool.id)},
-        [
-          div(
+      classes: isLocked ? 'transition-colors' : 'hover:bg-gray-50 transition-colors',
+      attributes: {
+        'style':
+        'display: flex; flex-direction: row; align-items: center; justify-content: space-between; '
+            'gap: 12px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px; '
+            'background: ${isLocked ? "#f8fafc" : "#ffffff"}; '
+            '${isLocked ? "cursor: not-allowed;" : "cursor: pointer;"}',
+      },
+      events: {
+        if (!isLocked) 'click': (e) => _toggle(tool.id),
+      },
+      [
+        div(
+          attributes: const {'style': 'display: flex; flex-direction: column; gap: 2px; min-width: 0;'},
+          [
+            div(
+              attributes: const {'style': 'display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;'},
               [
-                span([Component.text(resolvedIcon)], classes: 'material-symbols-outlined text-gray-500', attributes: const {'style': 'font-size: 20px;'}),
-                div(
-                    [
-                      span([Component.text(tool.label)], attributes: const {'style': 'font-size: 13px; font-weight: bold; color: #1e293b;'}),
-                      span([Component.text(tool.description)], attributes: const {'style': 'font-size: 11px; color: #64748b; margin-top: 2px; line-height: 1.3;'}),
-                    ],
-                    attributes: const {'style': 'display: flex; flex-direction: column; gap: 1px;'}
-                )
+                span(
+                  attributes: const {'style': 'font-size: 13px; font-weight: bold; color: #1e293b;'},
+                  [Component.text(tool.label)],
+                ),
+                if (disclaimer != null)
+                  span(
+                    attributes: const {'style': 'font-size: 11px; font-weight: normal; color: #94a3b8;'},
+                    [Component.text(disclaimer)],
+                  ),
               ],
-              attributes: const {'style': 'display: flex; align-items: center; gap: 12px;'}
-          ),
-          div(
-              [
-                div(
-                    [],
-                    attributes: {
-                      'style': 'position: absolute; top: 2px; width: 16px; height: 16px; background-color: white; border-radius: 50%; transition: left 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); left: ${isVisible ? "22px" : "2px"};'
-                    }
-                )
-              ],
-              attributes: {
-                'style': 'width: 40px; height: 20px; border-radius: 20px; position: relative; transition: background-color 0.2s; background-color: ${isVisible ? "#6750A4" : "#cbd5e1"}; flex-shrink: 0;'
-              }
-          )
-        ]
+            ),
+            span(
+              attributes: const {'style': 'font-size: 11px; color: #64748b; margin-top: 2px; line-height: 1.3;'},
+              [Component.text(tool.description)],
+            ),
+          ],
+        ),
+        _buildSvgSwitch(tool: tool, isVisible: isVisible, isLocked: isLocked),
+      ],
     );
   }
 }

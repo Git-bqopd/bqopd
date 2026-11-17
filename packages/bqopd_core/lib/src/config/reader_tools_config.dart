@@ -1,6 +1,30 @@
 import '../models/reader_tool.dart';
 
+/// Central configuration and visibility rules for all social toolbar buttons.
+///
+/// Page-conditional tools (`Indicia`, `YouTube`, and `Terminal`) are authored or
+/// attached to specific pages by creators and curators inside [ToolScope.editor]
+/// and [ToolScope.curator] (by setting `isIndiciaPage`, `youtubeId`, or `isGame`
+/// / a `terminal_*` template on the page). Because they only appear on pages
+/// flagged with that content, Toolbar Settings displays `(only on some pages)`
+/// alongside them.
 class ReaderToolsConfig {
+  /// Returns true when a tool only surfaces on pages flagged with specific
+  /// creator/curator content (`isIndiciaPage`, `youtubeId`, or `isGame`).
+  static bool isPageConditional(ReaderTool tool) {
+    return tool.condition == ToolCondition.requiresIndicia ||
+        tool.condition == ToolCondition.requiresYouTube ||
+        tool.condition == ToolCondition.requiresGame;
+  }
+
+  /// Returns the UI disclaimer shown in Toolbar Settings for conditional tools.
+  static String? getConditionDisclaimer(ReaderTool tool) {
+    if (isPageConditional(tool)) {
+      return '(only on some pages)';
+    }
+    return null;
+  }
+
   static bool isToolVisibleInContext({
     required ReaderTool tool,
     required ToolScope activeScope,
@@ -37,7 +61,7 @@ class ReaderToolsConfig {
   }
 
   static const List<ReaderTool> tools = [
-    // 1. Grid (open)
+    // 1. Grid (open) — always visible when returning to grid view is available
     ReaderTool(
       id: 'Grid',
       label: 'open',
@@ -47,7 +71,7 @@ class ReaderToolsConfig {
       action: ToolAction.switchToGridView,
       condition: ToolCondition.hideOnDesktopSplit,
     ),
-    // 2. Like (like)
+    // 2. Like (like) — always visible
     ReaderTool(
       id: 'Like',
       label: 'like',
@@ -86,16 +110,14 @@ class ReaderToolsConfig {
       editorBonusColumn: BonusRowType.textReader,
       curatorBonusColumn: BonusRowType.textReader,
     ),
-    // 5. Raw (raw)
+    // 5. Raw (raw) — curator pipeline only
     ReaderTool(
       id: 'Raw',
       label: 'raw',
       description: 'View the raw OCR output.',
       defaultIcon: 'assets/social_toolbar/raw.svg',
-      scopes: const {ToolScope.editor, ToolScope.curator},
-      editorBonusRow: BonusRowType.rawText,
+      scopes: const {ToolScope.curator},
       curatorBonusRow: BonusRowType.rawText,
-      editorBonusColumn: BonusRowType.rawText,
       curatorBonusColumn: BonusRowType.rawText,
     ),
     // 6. Master (edit text)
@@ -110,17 +132,18 @@ class ReaderToolsConfig {
       editorBonusColumn: BonusRowType.editText,
       curatorBonusColumn: BonusRowType.editText,
     ),
-    // 7. Entities (entities)
+    // 7. Entities (entities) — available in reader, editor (maker), and curator
     ReaderTool(
       id: 'Entities',
       label: 'entities',
       description: 'Link detected names to internal profiles.',
       defaultIcon: 'assets/social_toolbar/entities.svg',
-      scopes: const {ToolScope.reader, ToolScope.curator},
-      condition: ToolCondition.requiresOcrPipeline,
+      scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       readerBonusRow: BonusRowType.entities,
+      editorBonusRow: BonusRowType.entities,
       curatorBonusRow: BonusRowType.entities,
       readerBonusColumn: BonusRowType.entities,
+      editorBonusColumn: BonusRowType.entities,
       curatorBonusColumn: BonusRowType.entities,
     ),
     // 8. Tags (tags)
@@ -137,11 +160,11 @@ class ReaderToolsConfig {
       editorBonusColumn: BonusRowType.tags,
       curatorBonusColumn: BonusRowType.tags,
     ),
-    // 9. Indicia (indicia)
+    // 9. Indicia (indicia) — added/compiled by creators & curators in editor/curator scope on indicia pages
     ReaderTool(
       id: 'Indicia',
       label: 'indicia',
-      description: 'View publication information and copyright details.',
+      description: 'View or edit compiled publication indicia on pages marked as indicia.',
       defaultIcon: 'assets/social_toolbar/indicia.svg',
       scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       condition: ToolCondition.requiresIndicia,
@@ -176,11 +199,11 @@ class ReaderToolsConfig {
       editorBonusColumn: BonusRowType.analyticsDashboard,
       curatorBonusColumn: BonusRowType.analyticsDashboard,
     ),
-    // 12. YouTube (YouTube)
+    // 12. YouTube (YouTube) — linked by creators & curators in editor/curator scope on pages with video
     ReaderTool(
       id: 'YouTube',
       label: 'YouTube',
-      description: 'Watch the video associated with this page.',
+      description: 'Watch the video attached to this page by its creator or curator.',
       defaultIcon: 'assets/social_toolbar/YouTube.svg',
       scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       condition: ToolCondition.requiresYouTube,
@@ -191,11 +214,11 @@ class ReaderToolsConfig {
       editorBonusColumn: BonusRowType.youtube,
       curatorBonusColumn: BonusRowType.youtube,
     ),
-    // 13. Terminal (Terminal)
+    // 13. Terminal (Terminal) — bound by creators/GMs in editor/curator scope on terminal game pages
     ReaderTool(
       id: 'Terminal',
       label: 'terminal',
-      description: 'Enter the terminal.',
+      description: 'Enter the terminal on pages linked to the terminal game.',
       defaultIcon: 'assets/social_toolbar/terminal.svg',
       scopes: const {ToolScope.reader, ToolScope.editor, ToolScope.curator},
       condition: ToolCondition.requiresGame,

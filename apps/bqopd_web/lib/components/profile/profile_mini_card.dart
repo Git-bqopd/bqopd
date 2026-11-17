@@ -1,11 +1,13 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 
-/// A reusable mini card component representing a user profile or place entity,
-/// mirroring the clean card layout previously used in the entities panel.
+/// A reusable mini card component representing a user profile, place entity,
+/// or combined profile-with-mailing-address entity (up to 3 rows of text:
+/// Row 1: Display Name / Street, Row 2: Street / City-State-ZIP, Row 3: City-State-ZIP).
 class ProfileMiniCard extends StatelessComponent {
   final String title;
   final String? subtitle;
+  final String? subtitleLine2;
   final String? photoUrl;
   final bool isAddress;
   final bool isLinked;
@@ -14,6 +16,7 @@ class ProfileMiniCard extends StatelessComponent {
   const ProfileMiniCard({
     required this.title,
     this.subtitle,
+    this.subtitleLine2,
     this.photoUrl,
     this.isAddress = false,
     this.isLinked = true,
@@ -71,17 +74,17 @@ class ProfileMiniCard extends StatelessComponent {
                   )
                 ],
               ),
-            // Text Info
+            // Stacked Text Rows (Row 1: title, Row 2: subtitle, Row 3: subtitleLine2)
             div(
               attributes: const {
                 'style':
-                'display: flex; flex-direction: column; overflow: hidden;'
+                'display: flex; flex-direction: column; overflow: hidden; text-align: left;'
               },
               [
                 span(
                   attributes: const {
                     'style':
-                    'font-weight: 600; font-size: 14px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+                    'font-weight: 600; font-size: 14px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;'
                   },
                   [Component.text(title)],
                 ),
@@ -89,9 +92,17 @@ class ProfileMiniCard extends StatelessComponent {
                   span(
                     attributes: const {
                       'style':
-                      'font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+                      'font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; margin-top: 2px;'
                     },
                     [Component.text(subtitle!)],
+                  ),
+                if (subtitleLine2 != null && subtitleLine2!.isNotEmpty)
+                  span(
+                    attributes: const {
+                      'style':
+                      'font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; margin-top: 1px;'
+                    },
+                    [Component.text(subtitleLine2!)],
                   ),
               ],
             ),
@@ -101,7 +112,7 @@ class ProfileMiniCard extends StatelessComponent {
           span(
             classes: 'material-symbols-outlined',
             attributes: const {
-              'style': 'font-size: 18px; color: #94a3b8;'
+              'style': 'font-size: 18px; color: #94a3b8; flex-shrink: 0;'
             },
             [Component.text(isAddress ? 'open_in_new' : 'chevron_right')],
           ),

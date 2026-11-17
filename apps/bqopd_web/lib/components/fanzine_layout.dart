@@ -330,11 +330,11 @@ class _FanzineLayoutState extends State<FanzineLayout> {
       }
     }
     final String? resolvedIndicia =
-        headerFanzineData?['masterIndicia'] as String?;
+    headerFanzineData?['masterIndicia'] as String?;
     final int? resolvedStartMonth =
-        (headerFanzineData?['startMonth'] as num?)?.toInt();
+    (headerFanzineData?['startMonth'] as num?)?.toInt();
     final int? resolvedStartYear =
-        (headerFanzineData?['startYear'] as num?)?.toInt();
+    (headerFanzineData?['startYear'] as num?)?.toInt();
 
     Component activeListHeader = component.listHeader;
     if (activeListHeader is FanzineReader) {
@@ -459,7 +459,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 headerWidget: activeListHeader,
                 activeGlobalPanel: _activeGlobalPanel,
                 panelTargetPageIndex:
-                    _panelTargetIndex > 0 ? _panelTargetIndex - 1 : 0,
+                _panelTargetIndex > 0 ? _panelTargetIndex - 1 : 0,
                 onTogglePanel: _handleTogglePanel,
                 onPageImageTap: _activeGlobalPanel != null ? _handlePageImageTap : null,
                 onOpenGrid: enableTwoPage ? _switchToGrid : null,
@@ -484,6 +484,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
               PanelColumnRenderer(
                 fanzineId: component.frefFanzineId,
                 shortCode: component.shortCode,
+                fanzineType: component.fanzineType,
                 fanzineTitle: resolvedTitle,
                 masterIndicia: resolvedIndicia,
                 startMonth: resolvedStartMonth,
@@ -493,6 +494,7 @@ class _FanzineLayoutState extends State<FanzineLayout> {
                 preloadedImageStats: component.preloadedImageStats,
                 activePanel: _activeGlobalPanel!,
                 isEditingMode: component.isEditingMode,
+                activeScope: component.activeScope,
                 targetIndex: _panelTargetIndex,
                 onPageCardTap: _focusPageAcrossColumns,
                 onClose: () => setState(() => _activeGlobalPanel = null),

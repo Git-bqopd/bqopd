@@ -211,7 +211,12 @@ class _ProfilePageState extends State<ProfilePage> {
             if (mounted) {
               setState(() {
                 _userWorks = works;
-                _publicWorksCount = works.where((w) => w['isLive'] == true).length;
+                _publicWorksCount = works
+                    .where((w) =>
+                w['isLive'] == true &&
+                    w['type'] != 'ingested' &&
+                    w['sourceFile'] == null)
+                    .length;
               });
             }
           });

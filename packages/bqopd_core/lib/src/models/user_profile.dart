@@ -124,6 +124,16 @@ class UserProfile {
   final bool isOpenToPublic;
   final Map<String, BusinessDayHours> businessHours;
 
+  // Public mailing / location fields (populated according to addressVisibility)
+  final String street1;
+  final String street2;
+  final String city;
+  final String state;
+  final String zipCode;
+  final String country;
+  final String location;
+  final String addressVisibility;
+
   final String? xHandle;
   final String? instagramHandle;
   final String? githubHandle;
@@ -131,6 +141,27 @@ class UserProfile {
   final DateTime? updatedAt;
 
   bool get isBusiness => profileType == 'business';
+
+  /// Formats the profile's public mailing address into a single comma-separated string.
+  String get formattedPublicAddress {
+    final streetPart = [
+      if (street1.trim().isNotEmpty) street1.trim(),
+      if (street2.trim().isNotEmpty) street2.trim(),
+    ].join(', ');
+    final cityState = [
+      if (city.trim().isNotEmpty) city.trim(),
+      if (state.trim().isNotEmpty) state.trim(),
+    ].join(', ');
+    final cityStateZip = zipCode.trim().isNotEmpty
+        ? (cityState.isNotEmpty ? '$cityState ${zipCode.trim()}' : zipCode.trim())
+        : cityState;
+    final parts = [
+      if (streetPart.isNotEmpty) streetPart,
+      if (cityStateZip.isNotEmpty) cityStateZip,
+    ];
+    if (parts.isNotEmpty) return parts.join(', ');
+    return location.trim();
+  }
 
   UserProfile({
     required this.uid,
@@ -147,6 +178,14 @@ class UserProfile {
     this.profileType = 'person',
     this.isOpenToPublic = false,
     this.businessHours = const {},
+    this.street1 = '',
+    this.street2 = '',
+    this.city = '',
+    this.state = '',
+    this.zipCode = '',
+    this.country = '',
+    this.location = '',
+    this.addressVisibility = 'private',
     this.xHandle,
     this.instagramHandle,
     this.githubHandle,
@@ -155,10 +194,10 @@ class UserProfile {
 
   factory UserProfile.fromMap(String id, Map<String, dynamic> data) {
     final String resolvedType =
-        (data['profileType']?.toString() == 'business' ||
-                data['isBusiness'] == true)
-            ? 'business'
-            : 'person';
+    (data['profileType']?.toString() == 'business' ||
+        data['isBusiness'] == true)
+        ? 'business'
+        : 'person';
     return UserProfile(
       uid: id,
       username: data['username'] ?? '',
@@ -174,6 +213,14 @@ class UserProfile {
       profileType: resolvedType,
       isOpenToPublic: data['isOpenToPublic'] == true,
       businessHours: parseBusinessHours(data['businessHours']),
+      street1: (data['street1'] ?? '').toString(),
+      street2: (data['street2'] ?? '').toString(),
+      city: (data['city'] ?? '').toString(),
+      state: (data['state'] ?? '').toString(),
+      zipCode: (data['zipCode'] ?? '').toString(),
+      country: (data['country'] ?? '').toString(),
+      location: (data['location'] ?? '').toString(),
+      addressVisibility: (data['addressVisibility'] ?? 'private').toString(),
       xHandle: data['xHandle'],
       instagramHandle: data['instagramHandle'],
       githubHandle: data['githubHandle'],
@@ -198,6 +245,14 @@ class UserProfile {
       'isBusiness': isBusiness,
       'isOpenToPublic': isOpenToPublic,
       'businessHours': serializeBusinessHours(businessHours),
+      'street1': street1,
+      'street2': street2,
+      'city': city,
+      'state': state,
+      'zipCode': zipCode,
+      'country': country,
+      'location': location,
+      'addressVisibility': addressVisibility,
       'xHandle': xHandle,
       'instagramHandle': instagramHandle,
       'githubHandle': githubHandle,

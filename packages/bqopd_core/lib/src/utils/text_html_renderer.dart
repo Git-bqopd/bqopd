@@ -14,14 +14,6 @@ class TextHtmlRenderer {
   static const String kHeadingFontFamily = "'Anton', sans-serif";
 
   /// Renders continuous [markdown] into pre-baked semantic HTML.
-  ///
-  /// - [userHandles]: Map of user UIDs or normalized names to handles (e.g. `{'uid1': 'handle'}`).
-  /// - [userNames]: Optional map of user UIDs to verified display names.
-  /// - [addressMap]: Optional map of raw location strings to normalized addresses or coordinates.
-  /// - [userHandleResolver]: Optional callback resolving a user UID to a handle.
-  /// - [addressResolver]: Optional callback resolving address strings to query parameters.
-  /// - [includeWrapper]: If true, wraps the result in a styled container `<div>`.
-  /// - [baseFontSize]: Font size in pixels for base paragraphs (default 15.0).
   static String renderToHtml(
       String markdown, {
         Map<String, String>? userHandles,
@@ -264,6 +256,9 @@ class TextHtmlRenderer {
   }
 
   /// Transforms a single wikilink `[[Content]]` into an active semantic anchor or badge.
+  /// Supports standalone person links (`[[Name|user:UID]]`), standalone address links
+  /// (`[[Location|address:Address]]`), and combined person+address links
+  /// (`[[Name|user:UID|address:Address]]`), where user profile navigation takes priority.
   static String _renderWikilink(
       String content, {
         Map<String, String>? userHandles,
@@ -273,43 +268,36 @@ class TextHtmlRenderer {
         String? Function(String address)? addressResolver,
       }) {
     final parts = content.split('|');
-    String display = '';
-    String? ref;
+    final List<String> labelParts = [];
+    String? userRef;
+    String? addressRef;
 
-    if (parts.length == 1) {
-      display = parts[0].trim();
-    } else if (parts.length == 2) {
-      if (parts[1].contains(':')) {
-        display = parts[0].trim();
-        ref = parts[1].trim();
+    for (final rawPart in parts) {
+      final p = rawPart.trim();
+      if (p.isEmpty) continue;
+      if (p.startsWith('user:')) {
+        userRef = p;
+      } else if (p.startsWith('address:')) {
+        addressRef = p;
       } else {
-        display = parts[1].trim();
+        labelParts.add(p);
       }
-    } else if (parts.length >= 3) {
-      display = parts[1].trim();
-      ref = parts[2].trim();
+    }
+
+    String display = '';
+    if (labelParts.length == 1) {
+      display = labelParts[0];
+    } else if (labelParts.length >= 2) {
+      // Legacy [[Canonical|DisplayAlias|...]] form
+      display = labelParts[1];
     }
 
     final escapedDisplay = htmlEscape.convert(display);
 
-    // 1. Explicit Address Reference: [[Location|address:43.83,-91.24]]
-    if (ref != null && ref.startsWith('address:')) {
-      final rawAddress = ref.substring(8).trim();
-      final resolvedAddress = addressResolver?.call(rawAddress) ??
-          addressMap?[rawAddress] ??
-          rawAddress;
-      final encodedQuery = Uri.encodeComponent(resolvedAddress);
-      final mapsUrl = 'https://www.google.com/maps/search/?api=1&query=$encodedQuery';
-
-      return '<a href="$mapsUrl" target="_blank" rel="noopener noreferrer" class="wikilink-address" '
-          'style="font-family: $kHeadingFontFamily; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: baseline; gap: 2px;">'
-          '<span style="font-size: 0.9em; vertical-align: middle;">📍</span>$escapedDisplay'
-          '</a>';
-    }
-
-    // 2. Explicit User Reference: [[Name|user:UID]]
-    if (ref != null && ref.startsWith('user:')) {
-      final uid = ref.substring(5).trim();
+    // 1. User Reference (including combined [[Name|user:UID|address:...]]):
+    // Always navigates to the user's profile `/@handle`.
+    if (userRef != null && userRef.startsWith('user:')) {
+      final uid = userRef.substring(5).trim();
       final handle = userHandleResolver?.call(uid) ??
           userHandles?[uid] ??
           _lookupHandleByName(display, userHandles);
@@ -327,6 +315,21 @@ class TextHtmlRenderer {
           'style="font-family: $kHeadingFontFamily; font-weight: normal; text-decoration: none; color: #111827;">'
           '$escapedDisplay'
           '</span>';
+    }
+
+    // 2. Standalone Address Reference: [[Location|address:123 Main Street, City, St 12345]]
+    if (addressRef != null && addressRef.startsWith('address:')) {
+      final rawAddress = addressRef.substring(8).trim();
+      final resolvedAddress = addressResolver?.call(rawAddress) ??
+          addressMap?[rawAddress] ??
+          rawAddress;
+      final encodedQuery = Uri.encodeComponent(resolvedAddress);
+      final mapsUrl = 'https://www.google.com/maps/search/?api=1&query=$encodedQuery';
+
+      return '<a href="$mapsUrl" target="_blank" rel="noopener noreferrer" class="wikilink-address" '
+          'style="font-family: $kHeadingFontFamily; font-weight: normal; text-decoration: underline; color: #16a34a; cursor: pointer; display: inline-flex; align-items: baseline; gap: 2px;">'
+          '<span style="font-size: 0.9em; vertical-align: middle;">📍</span>$escapedDisplay'
+          '</a>';
     }
 
     // 3. Shorthand Handle: [[@username]]

@@ -348,10 +348,11 @@ class _ProfileCuratorTabState extends State<ProfileCuratorTab> {
         isVanity: useVanity,
       ) ??
           ShortcodeGenerator.generateStandardCode();
+      // Do NOT set 'editorId': uid so archival image ingests stay exclusively in
+      // the Curator workspace and never appear under Maker -> Drafts.
       final data = {
         'title': 'New Archival Ingest',
         'ownerId': uid,
-        'editorId': uid,
         'editors': [],
         'curators': [uid],
         'collections': [uid],

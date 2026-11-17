@@ -17,10 +17,28 @@ class RadiusFolioResult {
   });
 }
 
+/// Resolved Firestore profile identity + mailing address for a historical letter writer.
+class _ResolvedAuthorIdentity {
+  final String? uid;
+  final String? username;
+  final String displayName;
+  final String fullMailingAddress;
+
+  const _ResolvedAuthorIdentity({
+    this.uid,
+    this.username,
+    required this.displayName,
+    this.fullMailingAddress = '',
+  });
+
+  bool get isLinked => uid != null && uid!.isNotEmpty;
+}
+
 /// Internal helper bundle holding a selected letter along with its distance, parsed date, and precalculated height.
 class _SelectedRadiusLetter {
   final HistoricalLetterEntry entry;
   final Map<String, dynamic> raw;
+  final _ResolvedAuthorIdentity author;
   final String markdown;
   final double distance;
   final DateTime publishedDate;
@@ -29,6 +47,7 @@ class _SelectedRadiusLetter {
   _SelectedRadiusLetter({
     required this.entry,
     required this.raw,
+    required this.author,
     required this.markdown,
     required this.distance,
     required this.publishedDate,
@@ -57,6 +76,68 @@ class AddressRadiusLetters {
 
   /// Total theoretical vertical pixels available per page across all columns (3 * 3087 = 9,261 px).
   static double get kTotalPageHeight => kColumnHeight * kColumnsPerPage;
+
+  /// Normalizes a display name or handle into a lowercase underscore-delimited handle
+  /// (e.g. `"Phil Seuling"` -> `"phil_seuling"`).
+  static String _normalizeUnderscoreHandle(String input) {
+    return input
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'[^a-z0-9_-]'), '')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+  }
+
+  /// Normalizes a display name or handle into a hyphenated handle candidate
+  /// (e.g. `"Phil Seuling"` -> `"phil-seuling"`).
+  static String _normalizeHyphenHandle(String input) {
+    return input
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '-')
+        .replaceAll(RegExp(r'[^a-z0-9_-]'), '')
+        .replaceAll(RegExp(r'-+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+  }
+
+  /// Normalizes a display name or handle into a compact alphanumeric handle
+  /// (e.g. `"Phil Seuling"` -> `"philseuling"`).
+  static String _normalizeCompactHandle(String input) {
+    return input.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  /// Generates all plausible handle candidates for a writer's name or handle,
+  /// covering underscore (`phil_seuling`), hyphen (`phil-seuling`), compact (`philseuling`),
+  /// and first+last variants when middle names/initials are present.
+  static Set<String> _handleCandidatesForName(String input) {
+    final clean = input.trim().replaceAll('@', '');
+    if (clean.isEmpty) return const {};
+
+    final candidates = <String>{};
+    final u = _normalizeUnderscoreHandle(clean);
+    final h = _normalizeHyphenHandle(clean);
+    final c = _normalizeCompactHandle(clean);
+    if (u.isNotEmpty) candidates.add(u);
+    if (h.isNotEmpty) candidates.add(h);
+    if (c.isNotEmpty) candidates.add(c);
+
+    final words = clean
+        .split(RegExp(r'\s+'))
+        .map((w) => w.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toLowerCase())
+        .where((w) => w.isNotEmpty)
+        .toList();
+
+    if (words.length >= 3) {
+      final firstLast = '${words.first} ${words.last}';
+      candidates.add(_normalizeUnderscoreHandle(firstLast));
+      candidates.add(_normalizeHyphenHandle(firstLast));
+      candidates.add(_normalizeCompactHandle(firstLast));
+    }
+
+    candidates.removeWhere((s) => s.isEmpty);
+    return candidates;
+  }
 
   /// Parses historical/vintage date strings (e.g. "March 1, 1927", "January, 1971", "1935")
   /// into comparable DateTime objects for chronological ordering.
@@ -163,6 +244,67 @@ class AddressRadiusLetters {
       }
     }
     return loc;
+  }
+
+  /// Extracts whatever mailing address parts are stored on a `/profiles/{uid}` document
+  /// (`street1`, `street2`, `city`, `state`, `zipCode`, `geo.formatted`, `location`),
+  /// falling back to the letter's cleaned location metadata if the profile has no address.
+  static String _extractMailingAddressFromProfile(
+      Map<String, dynamic>? profileData,
+      HistoricalLetterEntry entry,
+      Map<String, dynamic> rawComment,
+      ) {
+    if (profileData != null) {
+      final street1 = (profileData['street1'] ?? '').toString().trim();
+      final street2 = (profileData['street2'] ?? '').toString().trim();
+      final city = (profileData['city'] ?? '').toString().trim();
+      final state = (profileData['state'] ?? '').toString().trim();
+      final zipCode = (profileData['zipCode'] ?? '').toString().trim();
+      final location = (profileData['location'] ?? '').toString().trim();
+      final geo = profileData['geo'] is Map ? (profileData['geo'] as Map) : null;
+      final geoFormatted = geo?['formatted']?.toString().trim() ?? '';
+
+      final streetPart = [
+        if (street1.isNotEmpty) street1,
+        if (street2.isNotEmpty) street2,
+      ].join(', ');
+
+      final cityState = [
+        if (city.isNotEmpty) city,
+        if (state.isNotEmpty) state,
+      ].join(', ');
+
+      final cityStateZip = zipCode.isNotEmpty
+          ? (cityState.isNotEmpty ? '$cityState $zipCode' : zipCode)
+          : cityState;
+
+      final fullParts = [
+        if (streetPart.isNotEmpty) streetPart,
+        if (cityStateZip.isNotEmpty) cityStateZip,
+      ];
+
+      if (fullParts.isNotEmpty) {
+        return fullParts.join(', ');
+      }
+      if (geoFormatted.isNotEmpty) {
+        return geoFormatted;
+      }
+      if (location.isNotEmpty) {
+        return cleanLocation(location);
+      }
+    }
+
+    // Fallback to letter comment metadata if profile has no address fields yet
+    final commentGeo = rawComment['geo'] is Map ? (rawComment['geo'] as Map) : null;
+    final commentGeoFormatted = commentGeo?['formatted']?.toString().trim() ?? '';
+    if (commentGeoFormatted.isNotEmpty) {
+      return commentGeoFormatted;
+    }
+    final rawLoc = entry.location?.trim() ?? '';
+    if (rawLoc.isNotEmpty) {
+      return cleanLocation(rawLoc);
+    }
+    return '';
   }
 
   /// Resolves the center target address into geographic coordinates using
@@ -324,14 +466,60 @@ class AddressRadiusLetters {
     return totalHeight;
   }
 
+  /// Replaces the first plain-text occurrence of [targetPhrase] outside existing
+  /// `[[...]]` blocks with [replacement], returning the updated string and whether
+  /// a replacement occurred.
+  static ({String text, bool replaced}) _replacePlainTextOutsideWikilinks(
+      String source,
+      String targetPhrase,
+      String replacement,
+      ) {
+    final cleanPhrase = targetPhrase.trim();
+    if (cleanPhrase.isEmpty) {
+      return (text: source, replaced: false);
+    }
+
+    final pattern = RegExp(
+      '(?<![\\w])${RegExp.escape(cleanPhrase)}(?![\\w])',
+      caseSensitive: false,
+    );
+
+    final parts = source.split(RegExp(r'(\[\[.*?\]\])'));
+    final matches = RegExp(r'\[\[.*?\]\]').allMatches(source).toList();
+    final buffer = StringBuffer();
+    bool replaced = false;
+
+    for (int i = 0; i < parts.length; i++) {
+      String segment = parts[i];
+      if (!replaced) {
+        final m = pattern.firstMatch(segment);
+        if (m != null) {
+          segment = segment.replaceRange(m.start, m.end, replacement);
+          replaced = true;
+        }
+      }
+      buffer.write(segment);
+      if (i < matches.length) {
+        buffer.write(matches[i].group(0));
+      }
+    }
+
+    return (text: buffer.toString(), replaced: replaced);
+  }
+
   /// Builds a Markdown representation of a historical letter, embedding the
   /// natural dimensions or aspect ratio for both the fanzine cover and the page scan,
-  /// and resolving author profiles and locations into deterministic Wikilinks.
+  /// and encoding ONE combined `[[Display Name|user:<uid>|address:<profileAddress>]]`
+  /// wikilink per letter writer so each letter produces a single 3-row entity card
+  /// (`Name` / `Street` / `City, State ZIP`) that links to the writer's profile
+  /// and plots a pin on the Entities column header map.
   static String buildLetterMarkdown(
       HistoricalLetterEntry entry, {
         Map<String, dynamic>? coverMetadata,
         Map<String, dynamic>? pageMetadata,
-        String? authorGeoRef,
+        String? resolvedAuthorUid,
+        String? resolvedAuthorDisplayName,
+        String? profileMailingAddress,
       }) {
     final buffer = StringBuffer();
 
@@ -386,40 +574,107 @@ class AddressRadiusLetters {
       buffer.writeln();
     }
 
-    // 5. Letter Content
-    buffer.writeln(entry.letterText);
-    buffer.writeln();
+    // 5. Consolidate writer + profile mailing address into ONE single combined wikilink
+    // so there is only 1 entity card per letter writer (displaying Full Name + Address).
+    String bodyText = entry.letterText;
+    final String rawAuthorName = entry.authorName?.trim() ?? '';
+    final String effectiveAuthorName = (resolvedAuthorDisplayName != null &&
+        resolvedAuthorDisplayName.trim().isNotEmpty)
+        ? resolvedAuthorDisplayName.trim()
+        : rawAuthorName;
+    final String? uid =
+    (resolvedAuthorUid != null && resolvedAuthorUid.trim().isNotEmpty)
+        ? resolvedAuthorUid.trim()
+        : null;
+    final String mailingAddress = (profileMailingAddress ?? '').trim();
 
-    // 6. Pre-Resolved Author and Location sign-off (wrapped into semantic wikilinks)
-    final cleanTextLower = entry.letterText.toLowerCase();
-    final bool hasAuthor = entry.authorName != null &&
-        entry.authorName!.isNotEmpty &&
-        cleanTextLower.contains(entry.authorName!.toLowerCase());
-    final bool hasLocation = entry.location != null &&
-        entry.location!.isNotEmpty &&
-        cleanTextLower.contains(entry.location!.toLowerCase());
+    final String rawLoc = entry.location?.trim() ?? '';
+    final String cleanedLoc = rawLoc.isNotEmpty ? cleanLocation(rawLoc) : '';
+    final Set<String> locationLabelsToUnwrap = {
+      if (rawLoc.isNotEmpty) rawLoc.toLowerCase(),
+      if (cleanedLoc.isNotEmpty) cleanedLoc.toLowerCase(),
+    };
 
-    if (!hasAuthor && entry.authorName != null && entry.authorName!.isNotEmpty) {
-      final name = entry.authorName!.trim();
-      final handle = (entry.authorHandle != null && entry.authorHandle!.isNotEmpty)
-          ? entry.authorHandle!.trim().replaceAll('@', '')
-          : name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
-      if (handle.isNotEmpty) {
-        buffer.writeln('**[[$name|user:$handle]]**');
-      } else {
-        buffer.writeln('**[[$name]]**');
+    // Unwrap any standalone location-only wikilinks inside the letter text so we don't
+    // emit duplicate address-only cards alongside the writer's combined entity card.
+    bodyText = bodyText.replaceAllMapped(RegExp(r'\[\[(.*?)\]\]'), (m) {
+      final content = m.group(1) ?? '';
+      final parts = content.split('|');
+      final firstLabel = parts.isNotEmpty ? parts[0].trim() : '';
+      final hasUser = parts.any((p) => p.trim().startsWith('user:'));
+      final hasAddr = parts.any((p) => p.trim().startsWith('address:'));
+      if (!hasUser &&
+          (hasAddr || locationLabelsToUnwrap.contains(firstLabel.toLowerCase()))) {
+        return firstLabel;
       }
-    }
+      return m.group(0)!;
+    });
 
-    if (!hasLocation && entry.location != null && entry.location!.isNotEmpty) {
-      final loc = entry.location!.trim();
-      if (authorGeoRef != null && authorGeoRef.isNotEmpty) {
-        buffer.writeln('*[[$loc|address:$authorGeoRef]]*');
-      } else {
-        buffer.writeln('*[[$loc|address:$loc]]*');
+    final String entityLabel = effectiveAuthorName.isNotEmpty
+        ? effectiveAuthorName
+        : (mailingAddress.isNotEmpty ? mailingAddress : '');
+
+    if (entityLabel.isNotEmpty) {
+      final tagParts = <String>[entityLabel];
+      if (uid != null) {
+        tagParts.add('user:$uid');
       }
+      if (mailingAddress.isNotEmpty) {
+        tagParts.add('address:$mailingAddress');
+      }
+      final String combinedWikilink = '[[${tagParts.join('|')}]]';
+
+      final candidateAuthorLabels = <String>{
+        if (effectiveAuthorName.isNotEmpty) effectiveAuthorName.toLowerCase(),
+        if (rawAuthorName.isNotEmpty) rawAuthorName.toLowerCase(),
+      };
+
+      // Upgrade any existing author wikilink in the body to the combined tag
+      bool upgradedExisting = false;
+      bodyText = bodyText.replaceAllMapped(RegExp(r'\[\[(.*?)\]\]'), (m) {
+        final content = m.group(1) ?? '';
+        final parts = content.split('|');
+        final firstLabel = parts.isNotEmpty ? parts[0].trim().toLowerCase() : '';
+        final hasMatchingUid = uid != null &&
+            parts.any((p) => p.trim().toLowerCase() == 'user:${uid.toLowerCase()}');
+        if (!upgradedExisting &&
+            (hasMatchingUid || candidateAuthorLabels.contains(firstLabel))) {
+          upgradedExisting = true;
+          return combinedWikilink;
+        }
+        return m.group(0)!;
+      });
+
+      bool insertedInBody = upgradedExisting;
+      if (!insertedInBody) {
+        for (final labelCand in [
+          if (rawAuthorName.isNotEmpty) rawAuthorName,
+          if (effectiveAuthorName.isNotEmpty) effectiveAuthorName,
+        ]) {
+          final res = _replacePlainTextOutsideWikilinks(
+            bodyText,
+            labelCand,
+            combinedWikilink,
+          );
+          if (res.replaced) {
+            bodyText = res.text;
+            insertedInBody = true;
+            break;
+          }
+        }
+      }
+
+      buffer.writeln(bodyText);
+      buffer.writeln();
+
+      if (!insertedInBody) {
+        buffer.writeln('**$combinedWikilink**');
+        buffer.writeln();
+      }
+    } else {
+      buffer.writeln(bodyText);
+      buffer.writeln();
     }
-    buffer.writeln();
 
     return buffer.toString();
   }
@@ -445,6 +700,329 @@ class AddressRadiusLetters {
         return 0;
       }
     }
+  }
+
+  /// Resolves real Firestore profiles and their full mailing addresses in batch
+  /// for candidate letters by checking embedded wikilink UIDs, explicit handles,
+  /// `usernames/{handle}`, `shortcodes/{HANDLE}`, verified `userId`/`authorUid`
+  /// records, and case-insensitive `profiles` lookups.
+  static Future<List<_ResolvedAuthorIdentity>> _resolveAuthorIdentitiesBatch(
+      List<HistoricalLetterEntry> entries,
+      List<Map<String, dynamic>> rawComments,
+      ) async {
+    final Set<String> uidsToFetch = {};
+    final Set<String> handlesToFetch = {};
+    final List<String?> embeddedUids = List<String?>.filled(entries.length, null);
+
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final raw = rawComments[i];
+
+      // Check if comment text already contains an embedded `[[...|user:<uid>]]` link
+      final embeddedMatch =
+      RegExp(r'\[\[[^|\]]+\|user:([^|\]]+)').firstMatch(entry.letterText);
+      if (embeddedMatch != null) {
+        final embUid = embeddedMatch.group(1)?.trim() ?? '';
+        if (embUid.isNotEmpty) {
+          embeddedUids[i] = embUid;
+          uidsToFetch.add(embUid);
+        }
+      }
+
+      for (final uidKey in ['authorUid', 'profileId', 'userId']) {
+        final candidateUid = raw[uidKey]?.toString().trim() ?? '';
+        if (candidateUid.isNotEmpty && candidateUid != 'system') {
+          uidsToFetch.add(candidateUid);
+        }
+      }
+
+      final rawHandle = (entry.authorHandle ??
+          raw['authorHandle'] ??
+          raw['handle'] ??
+          '')
+          .toString()
+          .trim()
+          .replaceAll('@', '');
+      if (rawHandle.isNotEmpty) {
+        handlesToFetch.addAll(_handleCandidatesForName(rawHandle));
+      }
+
+      final authorName = (entry.authorName ??
+          raw['authorName'] ??
+          raw['author'] ??
+          '')
+          .toString()
+          .trim();
+      if (authorName.isNotEmpty) {
+        handlesToFetch.addAll(_handleCandidatesForName(authorName));
+      }
+    }
+
+    final Map<String, Map<String, dynamic>> profilesByUid = {};
+    final Map<String, Map<String, dynamic>> usernameDocs = {};
+    final Map<String, String> uidByShortcode = {};
+
+    final List<Future<void>> initialFetches = [];
+    for (final uid in uidsToFetch) {
+      initialFetches.add(
+        fsGetDoc('profiles/$uid').then((res) {
+          try {
+            final doc = jsonDecode(res);
+            if (doc['exists'] == true && doc['data'] is Map) {
+              profilesByUid[uid] = Map<String, dynamic>.from(doc['data'] as Map);
+            }
+          } catch (_) {}
+        }).catchError((_) {}),
+      );
+    }
+    for (final handle in handlesToFetch) {
+      initialFetches.add(
+        fsGetDoc('usernames/$handle').then((res) {
+          try {
+            final doc = jsonDecode(res);
+            if (doc['exists'] == true && doc['data'] is Map) {
+              usernameDocs[handle] = Map<String, dynamic>.from(doc['data'] as Map);
+            }
+          } catch (_) {}
+        }).catchError((_) {}),
+      );
+      initialFetches.add(
+        fsGetDoc('shortcodes/${handle.toUpperCase()}').then((res) {
+          try {
+            final doc = jsonDecode(res);
+            if (doc['exists'] == true && doc['data'] is Map) {
+              final data = doc['data'] as Map;
+              if (data['type'] == 'user' && data['contentId'] != null) {
+                final cid = data['contentId'].toString().trim();
+                if (cid.isNotEmpty) {
+                  uidByShortcode[handle] = cid;
+                }
+              }
+            }
+          } catch (_) {}
+        }).catchError((_) {}),
+      );
+    }
+    if (initialFetches.isNotEmpty) {
+      await Future.wait(initialFetches);
+    }
+
+    // Follow any alias redirects in `usernames`
+    final Set<String> redirectHandles = {};
+    for (final uDoc in usernameDocs.values) {
+      if (uDoc['isAlias'] == true && uDoc['redirect'] != null) {
+        final target = uDoc['redirect'].toString().trim().toLowerCase();
+        if (target.isNotEmpty && !usernameDocs.containsKey(target)) {
+          redirectHandles.add(target);
+        }
+      }
+    }
+    if (redirectHandles.isNotEmpty) {
+      await Future.wait(
+        redirectHandles.map((handle) => fsGetDoc('usernames/$handle').then((res) {
+          try {
+            final doc = jsonDecode(res);
+            if (doc['exists'] == true && doc['data'] is Map) {
+              usernameDocs[handle] =
+              Map<String, dynamic>.from(doc['data'] as Map);
+            }
+          } catch (_) {}
+        }).catchError((_) {})),
+      );
+    }
+
+    // Fetch missing profiles discovered via `usernames` or `shortcodes` lookups
+    final Set<String> additionalUids = {};
+    for (final uDoc in usernameDocs.values) {
+      final uid = uDoc['uid']?.toString().trim() ?? '';
+      if (uid.isNotEmpty && !profilesByUid.containsKey(uid)) {
+        additionalUids.add(uid);
+      }
+    }
+    for (final uid in uidByShortcode.values) {
+      if (uid.isNotEmpty && !profilesByUid.containsKey(uid)) {
+        additionalUids.add(uid);
+      }
+    }
+    if (additionalUids.isNotEmpty) {
+      await Future.wait(
+        additionalUids.map((uid) => fsGetDoc('profiles/$uid').then((res) {
+          try {
+            final doc = jsonDecode(res);
+            if (doc['exists'] == true && doc['data'] is Map) {
+              profilesByUid[uid] =
+              Map<String, dynamic>.from(doc['data'] as Map);
+            }
+          } catch (_) {}
+        }).catchError((_) {})),
+      );
+    }
+
+    String? lookupUidByHandle(String rawHandle) {
+      for (final h in _handleCandidatesForName(rawHandle)) {
+        Map<String, dynamic>? doc = usernameDocs[h];
+        if (doc != null && doc['isAlias'] == true && doc['redirect'] != null) {
+          final redir = doc['redirect'].toString().trim().toLowerCase();
+          doc = usernameDocs[redir] ?? doc;
+        }
+        final uid = doc?['uid']?.toString().trim() ?? '';
+        if (uid.isNotEmpty) return uid;
+
+        final scUid = uidByShortcode[h];
+        if (scUid != null && scUid.isNotEmpty) return scUid;
+      }
+      return null;
+    }
+
+    // Check if any candidate authors remain unresolved; if so, load managed profiles
+    // once so we can match case-insensitively by displayName, username, or first+last name.
+    bool hasUnresolvedAuthors = false;
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final raw = rawComments[i];
+      final authorName = (entry.authorName ?? raw['authorName'] ?? '').toString().trim();
+      final rawHandle = (entry.authorHandle ?? raw['authorHandle'] ?? '').toString().trim();
+      final embUid = embeddedUids[i];
+      if (embUid == null &&
+          (rawHandle.isEmpty || lookupUidByHandle(rawHandle) == null) &&
+          (authorName.isEmpty || lookupUidByHandle(authorName) == null)) {
+        hasUnresolvedAuthors = true;
+        break;
+      }
+    }
+
+    final Map<String, String> uidByNormalizedDisplayName = {};
+    if (hasUnresolvedAuthors) {
+      try {
+        final managedRes = await fsQuery(
+          'profiles',
+          'isManaged',
+          '==',
+          'true',
+          '',
+        );
+        final List decodedManaged = jsonDecode(managedRes);
+        for (final item in decodedManaged) {
+          final id = item['id']?.toString().trim() ?? '';
+          if (id.isEmpty || item['data'] is! Map) continue;
+          final data = Map<String, dynamic>.from(item['data'] as Map);
+          profilesByUid[id] ??= data;
+
+          final dName = (data['displayName'] ?? '').toString().trim().toLowerCase();
+          if (dName.isNotEmpty) {
+            uidByNormalizedDisplayName[dName] = id;
+          }
+          final first = (data['firstName'] ?? '').toString().trim().toLowerCase();
+          final last = (data['lastName'] ?? '').toString().trim().toLowerCase();
+          if (first.isNotEmpty && last.isNotEmpty) {
+            uidByNormalizedDisplayName['$first $last'] = id;
+          }
+          final uName = (data['username'] ?? '').toString().trim();
+          if (uName.isNotEmpty) {
+            for (final c in _handleCandidatesForName(uName)) {
+              uidByShortcode.putIfAbsent(c, () => id);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    final List<_ResolvedAuthorIdentity> results = [];
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final raw = rawComments[i];
+      final String authorName = (entry.authorName ??
+          raw['authorName'] ??
+          raw['author'] ??
+          '')
+          .toString()
+          .trim();
+      final String rawHandle = (entry.authorHandle ??
+          raw['authorHandle'] ??
+          raw['handle'] ??
+          '')
+          .toString()
+          .trim()
+          .replaceAll('@', '');
+      final String explicitAuthorUid =
+      (raw['authorUid'] ?? raw['profileId'] ?? '').toString().trim();
+      final String rawUid = raw['userId']?.toString().trim() ?? '';
+      final String? embUid = embeddedUids[i];
+
+      String? matchedUid;
+
+      // 1. Embedded `[[...|user:<uid>]]` inside comment text
+      if (embUid != null && embUid.isNotEmpty) {
+        matchedUid = embUid;
+      }
+
+      // 2. Explicit authorUid / profileId field on comment
+      if (matchedUid == null &&
+          explicitAuthorUid.isNotEmpty &&
+          profilesByUid.containsKey(explicitAuthorUid)) {
+        matchedUid = explicitAuthorUid;
+      }
+
+      // 3. Explicit handle on the letter entry
+      if (matchedUid == null && rawHandle.isNotEmpty) {
+        matchedUid = lookupUidByHandle(rawHandle);
+      }
+
+      // 4. Verified `userId` on the comment (matching author name or managed profile)
+      if (matchedUid == null &&
+          rawUid.isNotEmpty &&
+          rawUid != 'system' &&
+          profilesByUid.containsKey(rawUid)) {
+        final p = profilesByUid[rawUid]!;
+        final pDisplay = (p['displayName'] ?? '').toString().trim().toLowerCase();
+        final pUser = (p['username'] ?? '').toString().trim().toLowerCase();
+        final bool isManaged = p['isManaged'] == true;
+        final String authorLower = authorName.toLowerCase();
+        final authorCands = _handleCandidatesForName(authorName);
+
+        if (authorName.isEmpty ||
+            isManaged ||
+            pDisplay == authorLower ||
+            authorCands.contains(pUser)) {
+          matchedUid = rawUid;
+        }
+      }
+
+      // 5. Name-based handle, shortcode, or displayName lookup against `usernames` / `profiles`
+      if (matchedUid == null && authorName.isNotEmpty) {
+        matchedUid = lookupUidByHandle(authorName) ??
+            uidByNormalizedDisplayName[authorName.toLowerCase()];
+      }
+
+      final Map<String, dynamic>? profileData =
+      matchedUid != null ? profilesByUid[matchedUid] : null;
+      final String fullAddress =
+      _extractMailingAddressFromProfile(profileData, entry, raw);
+
+      if (matchedUid != null) {
+        final String resolvedUsername =
+        (profileData?['username'] ?? rawHandle).toString().trim();
+        final String resolvedDisplay =
+        (profileData?['displayName']?.toString().trim().isNotEmpty == true)
+            ? profileData!['displayName'].toString().trim()
+            : (authorName.isNotEmpty ? authorName : resolvedUsername);
+        results.add(_ResolvedAuthorIdentity(
+          uid: matchedUid,
+          username: resolvedUsername,
+          displayName: resolvedDisplay,
+          fullMailingAddress: fullAddress,
+        ));
+      } else {
+        results.add(_ResolvedAuthorIdentity(
+          uid: null,
+          username: null,
+          displayName: authorName,
+          fullMailingAddress: fullAddress,
+        ));
+      }
+    }
+
+    return results;
   }
 
   /// Resolves all candidate letter metadata and dimension metadata with internal caching for fanzines and image assets.
@@ -616,47 +1194,45 @@ class AddressRadiusLetters {
     if (candidateLetters.isEmpty) {
       throw Exception('No historical letters found near $cleanTargetAddr.');
     }
-    print('[AddressRadiusLetters] Found ${candidateLetters.length} candidate letters. Resolving metadata in parallel...');
-    onProgress?.call('Resolving letter metadata...');
+    print('[AddressRadiusLetters] Found ${candidateLetters.length} candidate letters. Resolving metadata & profiles in parallel...');
+    onProgress?.call('Resolving letter metadata & profiles...');
     final Map<String, Map<String, dynamic>> imageMetadataCache = {};
     final resolvedEntries =
     await _resolveLetterEntriesBatch(candidateLetters, imageMetadataCache: imageMetadataCache);
+    final resolvedAuthors =
+    await _resolveAuthorIdentitiesBatch(resolvedEntries, candidateLetters);
 
-    // Pre-resolve global identity mappings: userHandles, userNames, and address pins
+    // Pre-resolve global identity mappings: userHandles, userNames, and profile mailing addresses
     final Map<String, String> userHandlesMap = {};
     final Map<String, String> userNamesMap = {};
     final Map<String, String> addressMap = {};
 
     for (int i = 0; i < resolvedEntries.length; i++) {
       final entry = resolvedEntries[i];
-      final raw = candidateLetters[i];
-      final authorName = entry.authorName?.trim() ?? '';
-      final authorHandle = (entry.authorHandle?.trim().isNotEmpty == true)
-          ? entry.authorHandle!.trim().replaceAll('@', '')
-          : (authorName.isNotEmpty ? authorName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '') : '');
-      final authorUid = raw['userId']?.toString() ?? '';
+      final author = resolvedAuthors[i];
 
-      if (authorHandle.isNotEmpty) {
-        if (authorName.isNotEmpty) {
-          userHandlesMap[authorName] = authorHandle;
-          userNamesMap[authorHandle] = authorName;
+      if (author.isLinked && author.uid != null) {
+        final uid = author.uid!;
+        final handle = (author.username != null && author.username!.isNotEmpty)
+            ? author.username!
+            : uid;
+        userHandlesMap[uid] = handle;
+        userNamesMap[uid] = author.displayName.isNotEmpty ? author.displayName : handle;
+        if (author.username != null && author.username!.isNotEmpty) {
+          userHandlesMap[author.username!] = author.username!;
+          userNamesMap[author.username!] =
+          author.displayName.isNotEmpty ? author.displayName : author.username!;
         }
-        if (authorUid.isNotEmpty) {
-          userHandlesMap[authorUid] = authorHandle;
-          userNamesMap[authorUid] = authorName.isNotEmpty ? authorName : authorHandle;
+        if (author.displayName.isNotEmpty) {
+          userHandlesMap[author.displayName] = handle;
         }
-        userHandlesMap[authorHandle] = authorHandle;
       }
 
-      final loc = entry.location?.trim() ?? '';
-      final geo = raw['geo'] is Map ? (raw['geo'] as Map) : null;
-      if (loc.isNotEmpty) {
-        if (geo != null && geo['lat'] != null && geo['lng'] != null) {
-          final lat = geo['lat'];
-          final lng = geo['lng'];
-          addressMap[loc] = '$lat,$lng';
-        } else {
-          addressMap[loc] = loc;
+      if (author.fullMailingAddress.isNotEmpty) {
+        addressMap[author.fullMailingAddress] = author.fullMailingAddress;
+        final rawLoc = entry.location?.trim() ?? '';
+        if (rawLoc.isNotEmpty) {
+          addressMap[rawLoc] = author.fullMailingAddress;
         }
       }
     }
@@ -666,21 +1242,15 @@ class AddressRadiusLetters {
     for (int i = 0; i < resolvedEntries.length; i++) {
       final entry = resolvedEntries[i];
       final raw = candidateLetters[i];
+      final author = resolvedAuthors[i];
       final pageMeta = entry.imageId != null ? imageMetadataCache[entry.imageId] : null;
-
-      final loc = entry.location?.trim() ?? '';
-      final geo = raw['geo'] is Map ? (raw['geo'] as Map) : null;
-      String? geoRef;
-      if (geo != null && geo['lat'] != null && geo['lng'] != null) {
-        geoRef = '${geo['lat']},${geo['lng']}';
-      } else if (loc.isNotEmpty) {
-        geoRef = loc;
-      }
 
       final letterMd = buildLetterMarkdown(
         entry,
         pageMetadata: pageMeta,
-        authorGeoRef: geoRef,
+        resolvedAuthorUid: author.uid,
+        resolvedAuthorDisplayName: author.displayName,
+        profileMailingAddress: author.fullMailingAddress,
       );
       final dist = (raw['_calculatedDistanceMiles'] as num?)?.toDouble() ?? 0.0;
       final pubDate = parseHistoricalDate(
@@ -691,6 +1261,7 @@ class AddressRadiusLetters {
       allCandidates.add(_SelectedRadiusLetter(
         entry: entry,
         raw: raw,
+        author: author,
         markdown: letterMd,
         distance: dist,
         publishedDate: pubDate,
@@ -788,8 +1359,12 @@ class AddressRadiusLetters {
         final context = raw['context'] is Map ? (raw['context'] as Map) : {};
         mapLettersPayload.add({
           'index': i + 1,
-          'displayName': raw['displayName'] ?? 'Reader',
-          'location': raw['location'] ?? '',
+          'displayName': item.author.displayName.isNotEmpty
+              ? item.author.displayName
+              : (raw['displayName'] ?? 'Reader'),
+          'location': item.author.fullMailingAddress.isNotEmpty
+              ? item.author.fullMailingAddress
+              : (raw['location'] ?? ''),
           'distanceMiles': item.distance,
           'publicationTitle': context['fanzineTitle'] ?? 'Archival Fanzine',
           'issueDate': raw['historicalDate'] ?? '',

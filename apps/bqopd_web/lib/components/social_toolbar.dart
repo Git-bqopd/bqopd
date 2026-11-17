@@ -92,14 +92,6 @@ class _SocialToolbarState extends State<SocialToolbar> {
     return hasList || hasBrackets;
   }
 
-  bool get _hasCreditsContent {
-    if (_isPreview) return true;
-    final cr = _imageData['creators'];
-    final ind = _imageData['indicia'] ?? '';
-    final hasCreators = cr is List && cr.isNotEmpty;
-    return hasCreators || ind.toString().trim().isNotEmpty;
-  }
-
   bool get _hasYoutubeContent {
     final yt = _imageData['youtubeId'] ?? component.youtubeId ?? '';
     return yt.toString().trim().isNotEmpty;
@@ -333,12 +325,7 @@ class _SocialToolbarState extends State<SocialToolbar> {
         div(
           classes: 'hidden-on-desktop w-full',
           [
-            _buildSettingsToggleRow(
-              hasYoutube: hasYoutube,
-              isGame: isGame,
-              isIndiciaPage: isIndiciaPage,
-              canOpenGrid: canOpenGrid,
-            ),
+            _buildSettingsToggleRow(),
           ],
         ),
     ]);
@@ -415,23 +402,15 @@ class _SocialToolbarState extends State<SocialToolbar> {
     );
   }
 
-  Component _buildSettingsToggleRow({
-    required bool hasYoutube,
-    required bool isGame,
-    required bool isIndiciaPage,
-    required bool canOpenGrid,
-  }) {
-    final togglableTools = ReaderToolsConfig.tools.where((tool) {
-      if (tool.id == 'Grid' || tool.id == 'Like' || tool.id == 'Settings') return false;
-      return ReaderToolsConfig.isToolVisibleInContext(
-        tool: tool,
-        activeScope: effectiveScope,
-        fanzineType: component.fanzineType,
-        hasYoutube: hasYoutube,
-        isGame: isGame,
-        isIndiciaPage: isIndiciaPage,
-        canOpenGrid: canOpenGrid,
-      );
+  Component _buildSettingsToggleRow() {
+    final scopeTools = ReaderToolsConfig.tools.where((tool) {
+      if (tool.id == 'Settings') return false;
+      if (!tool.scopes.contains(effectiveScope)) return false;
+      if (tool.condition == ToolCondition.requiresOcrPipeline &&
+          (component.fanzineType == 'folio' || component.fanzineType == 'calendar')) {
+        return false;
+      }
+      return true;
     }).toList();
 
     return div(
@@ -440,35 +419,21 @@ class _SocialToolbarState extends State<SocialToolbar> {
         'style': 'background-color: #f9f9f9; border-top: 1px solid #eee; border-bottom: 1px solid #eee; width: 100%; box-sizing: border-box;'
       },
       [
-        for (var tool in togglableTools)
+        for (var tool in scopeTools)
           _buildSettingsToggleButton(tool)
       ],
     );
   }
 
   Component _buildSettingsToggleButton(ReaderTool tool) {
-    bool hasContent = true;
-    if (!_isPreview) {
-      if (tool.id == 'Text') {
-        hasContent = _hasTextContent;
-      } else if (tool.id == 'Entities') {
-        hasContent = _hasEntitiesContent;
-      } else if (tool.id == 'Credits') {
-        hasContent = _hasCreditsContent;
-      } else if (tool.id == 'YouTube') {
-        hasContent = _hasYoutubeContent;
-      } else if (tool.id == 'Terminal') {
-        hasContent = _hasTerminalContent;
-      }
-    }
-
-    final bool isVisible = hasContent ? (_socialButtonVisibility[tool.id] ?? true) : false;
+    final bool isLocked = tool.id == 'Grid' || tool.id == 'Like';
+    final bool isVisible = isLocked ? true : (_socialButtonVisibility[tool.id] ?? true);
     final bool isToolActive = tool.bonusRow != null && component.activeBonusRow == tool.bonusRow;
     final btnClasses = 'toolbar-btn ${isToolActive ? 'active' : ''}';
     final iconPath = isToolActive ? (tool.activeIcon ?? tool.defaultIcon) : tool.defaultIcon;
     String extraStyle = '';
-    if (!hasContent) {
-      extraStyle = 'opacity: 0.25; filter: grayscale(100%); cursor: not-allowed;';
+    if (isLocked) {
+      extraStyle = 'opacity: 0.65; cursor: not-allowed;';
     } else if (!isVisible) {
       extraStyle = 'opacity: 0.35; filter: grayscale(100%);';
     }
@@ -476,11 +441,12 @@ class _SocialToolbarState extends State<SocialToolbar> {
     return button(
       classes: btnClasses,
       attributes: {
+        if (isLocked) 'title': '${tool.label} (cannot be hidden)',
         'style': 'display: flex; flex-direction: column; align-items: center; transition: all 0.2s; $extraStyle'
       },
       events: {
         'click': (e) {
-          if (hasContent) {
+          if (!isLocked) {
             _toggleButtonVisibility(tool.id);
           }
         }
@@ -496,7 +462,11 @@ class _SocialToolbarState extends State<SocialToolbar> {
         ]),
         span(classes: 'toolbar-label', [
           Component.text(tool.label),
-          if (!hasContent) span([Component.text(' (empty)')], attributes: const {'style': 'font-size: 8px; display: block;'})
+          if (isLocked)
+            span(
+              [Component.text(' (locked)')],
+              attributes: const {'style': 'font-size: 8px; display: block; color: #757575;'},
+            ),
         ])
       ],
     );

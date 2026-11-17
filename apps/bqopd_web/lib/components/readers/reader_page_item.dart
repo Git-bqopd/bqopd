@@ -141,6 +141,12 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         component.pageData['imageUrl'];
     final int resolvedPageNumber =
         component.pageData['pageNumber'] ?? (component.pageIndex + 1);
+    final String? youtubeId =
+    (component.pageData['youtubeId'] ?? component.initialImageStats?['youtubeId'])
+        ?.toString();
+    final bool isIndiciaPage = (component.pageData['isIndiciaPage'] == true) ||
+        (component.initialImageStats?['isIndiciaPage'] == true) ||
+        (component.pageData['templateId']?.toString() == 'indicia');
 
     return div(
       classes:
@@ -224,11 +230,13 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
               onToggleBonusRow: _handleTogglePanel,
               likedImageIds: component.likedImageIds,
               initialImageStats: component.initialImageStats,
+              youtubeId: youtubeId,
+              isIndiciaPage: isIndiciaPage,
               isGame: (component.pageData['isGame'] == true) ||
                   (component.initialImageStats?['isGame'] == true) ||
                   (component.pageData['templateId']
-                          ?.toString()
-                          .startsWith('terminal_') ??
+                      ?.toString()
+                      .startsWith('terminal_') ??
                       false),
               authState: component.authState,
               authBloc: component.authBloc,
@@ -291,6 +299,8 @@ class _ReaderPageItemState extends State<ReaderPageItem> {
         inner = EntitiesRowPanel(
           imageId: imageId,
           fanzineId: component.fanzineId,
+          isEditingMode: component.isEditingMode,
+          activeScope: component.activeScope,
         );
         break;
       case BonusRowType.indicia:
