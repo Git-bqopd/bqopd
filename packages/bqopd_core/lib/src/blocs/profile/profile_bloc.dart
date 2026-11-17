@@ -212,8 +212,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
     List<String> tabs = [];
 
-    // 'settings' tab: Site-wide admin console, visible on OWN profile ONLY and ONLY if viewer is Admin
-    if (isMe && event.isViewerAdmin) {
+    // 'settings' tab: Visible on OWN profile ONLY (regular users see Managed Profiles; Admins see full admin console)
+    if (isMe) {
       tabs.add('settings');
     }
 

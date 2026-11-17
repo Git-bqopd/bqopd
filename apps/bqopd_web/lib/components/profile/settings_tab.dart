@@ -17,7 +17,9 @@ String normalizeHandle(String input) {
       .replaceAll(RegExp(r'[^a-z0-9_-]'), '');
 }
 
-/// Customizable toolbar configurations, managed profiles form, global default shortcodes, and administrator role parameters.
+/// Settings tab on user profiles.
+/// Regular users manage their own Managed Profiles here; Admin users also access
+/// global shortcodes, capability permissions, and the live social buttons matrix.
 class ProfileSettingsTab extends StatefulComponent {
   final UserAccount? viewerAccount;
   final String targetUserId;
@@ -45,7 +47,7 @@ class ProfileSettingsTab extends StatefulComponent {
 }
 
 class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
-  int _activeSubTab = 0; // 0: shortcodes, 1: managed profiles, 2: permissions, 3: social buttons
+  int _activeSubTab = 1; // 0: shortcodes (admin), 1: managed profiles, 2: permissions (admin), 3: social buttons (admin)
 
   // Create Managed Profile Inputs
   String _newManagedDisplayName = '';
@@ -85,23 +87,33 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   String? _permissionFeedback;
   String? _permissionFeedbackUid;
 
+  bool get _isViewerAdmin => component.viewerAccount?.isAdmin ?? false;
+
   @override
   void initState() {
     super.initState();
     _resolveActiveSubTab();
-    _loadGlobalSettings();
     if (kIsWeb) {
       Future.microtask(() {
         if (mounted) {
           _listenToManagedProfiles();
-          _listenToSystemUsers();
+          if (_isViewerAdmin) {
+            _loadGlobalSettings();
+            _listenToSystemUsers();
+          }
         }
       });
     }
   }
 
   void _resolveActiveSubTab() {
-    if (component.initialSubTabName != null) {
+    if (!_isViewerAdmin) {
+      _activeSubTab = 1;
+      return;
+    }
+
+    if (component.initialSubTabName != null &&
+        component.initialSubTabName!.isNotEmpty) {
       switch (component.initialSubTabName) {
         case 'shortcodes':
           _activeSubTab = 0;
@@ -142,6 +154,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   void _selectSubTab(int index) {
+    if (!_isViewerAdmin && index != 1) return;
     setState(() => _activeSubTab = index);
     if (component.onSubTabChanged != null) {
       component.onSubTabChanged!(index);
@@ -154,12 +167,23 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   @override
   void didUpdateComponent(ProfileSettingsTab oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.initialSubTab != component.initialSubTab || oldComponent.initialSubTabName != component.initialSubTabName) {
+    final bool wasAdmin = oldComponent.viewerAccount?.isAdmin ?? false;
+    final bool isAdminNow = _isViewerAdmin;
+
+    if (oldComponent.initialSubTab != component.initialSubTab ||
+        oldComponent.initialSubTabName != component.initialSubTabName ||
+        wasAdmin != isAdminNow) {
       _resolveActiveSubTab();
     }
-    if (oldComponent.targetUserId != component.targetUserId && kIsWeb) {
-      _listenToManagedProfiles();
-      _listenToSystemUsers();
+
+    if (kIsWeb) {
+      if (oldComponent.targetUserId != component.targetUserId) {
+        _listenToManagedProfiles();
+      }
+      if (!wasAdmin && isAdminNow) {
+        _loadGlobalSettings();
+        _listenToSystemUsers();
+      }
     }
   }
 
@@ -253,15 +277,15 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
         final List decoded = jsonDecode(jsonStr);
         final users = decoded
             .where((d) {
-              final data = d['data'] as Map<String, dynamic>? ?? {};
-              return data['isManaged'] != true;
-            })
+          final data = d['data'] as Map<String, dynamic>? ?? {};
+          return data['isManaged'] != true;
+        })
             .map((d) {
-              final data = d['data'] as Map<String, dynamic>;
-              data['id'] = d['id'];
-              data['uid'] = d['id'];
-              return data;
-            })
+          final data = d['data'] as Map<String, dynamic>;
+          data['id'] = d['id'];
+          data['uid'] = d['id'];
+          return data;
+        })
             .toList();
         users.sort((a, b) {
           final uA = (a['username'] ?? a['displayName'] ?? '').toString().toLowerCase();
@@ -413,7 +437,7 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
   }
 
   Future<void> _updateUserPermission(String uid, String roleKey) async {
-    if (!mounted) return;
+    if (!mounted || !_isViewerAdmin) return;
     setState(() {
       _permissionFeedbackUid = uid;
       _permissionFeedback = "Updating access levels via Auth Custom Claims...";
@@ -805,11 +829,15 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
   @override
   Component build(BuildContext context) {
-    final bool isViewerAdmin = component.viewerAccount?.isAdmin ?? false;
+    final bool isViewerAdmin = _isViewerAdmin;
+    if (!component.isMe && !isViewerAdmin) {
+      return div([]);
+    }
+
     final List<Component> subTabs = [];
 
-    // 1. Shortcodes segment
     if (isViewerAdmin) {
+      // 1. Shortcodes segment (Admin only)
       subTabs.add(span(
         [Component.text("shortcodes")],
         classes: _activeSubTab == 0 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
@@ -817,10 +845,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           'click': (e) => _selectSubTab(0),
         },
       ));
-    }
 
-    // 2. Managed Profiles segment
-    if (component.isMe || isViewerAdmin) {
+      // 2. Managed Profiles segment
       subTabs.add(span(
         [Component.text("managed profiles")],
         classes: _activeSubTab == 1 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
@@ -828,10 +854,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           'click': (e) => _selectSubTab(1),
         },
       ));
-    }
 
-    // 3. Permissions segment
-    if (isViewerAdmin) {
+      // 3. Permissions segment (Admin only)
       subTabs.add(span(
         [Component.text("permissions")],
         classes: _activeSubTab == 2 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
@@ -839,10 +863,8 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
           'click': (e) => _selectSubTab(2),
         },
       ));
-    }
 
-    // 4. Social Buttons segment
-    if (component.isMe) {
+      // 4. Social Buttons architecture matrix (Admin only)
       subTabs.add(span(
         [Component.text("social buttons")],
         classes: _activeSubTab == 3 ? 'text-xs font-bold text-black border-b border-black cursor-pointer' : 'text-xs text-gray cursor-pointer',
@@ -862,25 +884,23 @@ class _ProfileSettingsTabState extends State<ProfileSettingsTab> {
 
     return div(
       [
-        if (navItems.isNotEmpty)
+        if (isViewerAdmin && navItems.isNotEmpty)
           div(
             navItems,
             classes: 'bg-white rounded-md p-4 shadow-sm',
             attributes: const {'style': 'display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; box-sizing: border-box; width: 100%; margin-bottom: 16px;'},
           ),
-        if (_activeSubTab == 3)
+        if (isViewerAdmin && _activeSubTab == 3)
           SettingsSocialButtonsPage(
             targetUserId: component.targetUserId,
             viewerAccount: component.viewerAccount,
           )
-        else if (_activeSubTab == 1)
-          _buildManagedProfilesSettingsView()
-        else if (_activeSubTab == 0 && isViewerAdmin)
-            _buildShortcodesSettingsView()
-          else if (_activeSubTab == 2 && isViewerAdmin)
-              _buildPermissionsSettingsView()
-            else
-              div([]),
+        else if (isViewerAdmin && _activeSubTab == 0)
+          _buildShortcodesSettingsView()
+        else if (isViewerAdmin && _activeSubTab == 2)
+            _buildPermissionsSettingsView()
+          else
+            _buildManagedProfilesSettingsView(),
         if (_pendingDeleteProfileId != null)
           ConfirmModal(
             title: 'Delete Managed Profile?',
