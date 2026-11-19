@@ -8,10 +8,14 @@ import 'package:web/web.dart' as web;
 import 'spread_image_generator_stub.dart';
 export 'spread_image_generator_stub.dart'
     show
-        SpreadCompanionKind,
-        BusinessHoursRowData,
-        BusinessHoursSignData,
-        PrintableSpreadRequest;
+    SpreadDownloadFormat,
+    SpreadCompanionKind,
+    BusinessHoursRowData,
+    BusinessHoursSignData,
+    PrintableSpreadRequest,
+    FullIssueSpreadPage,
+    FullIssuePdfRequest,
+    buildSaddleStitchImpositionPairs;
 
 const List<String> _monthNames = [
   'JANUARY',
@@ -43,24 +47,24 @@ const List<String> _shortMonthNames = [
   'DEC',
 ];
 
-/// Generates a 300-DPI US Letter Landscape (3300 x 2550 px) two-page spread JPEG
-/// and triggers an immediate file download in the browser.
-Future<bool> generateAndDownloadSpreadJpg(PrintableSpreadRequest request) async {
+/// Generates a 300-DPI US Letter Landscape (`11.0" x 8.5"` / `3300 x 2550 px` / `792 x 612 pt`)
+/// printable two-page spread in either JPG or PDF format and triggers an immediate download.
+Future<bool> generateAndDownloadSpread(PrintableSpreadRequest request) async {
   try {
-    // 11.0" x 8.5" at 300 DPI = 3300 x 2550 px
+    final bool isPdf = request.format == SpreadDownloadFormat.pdf;
+
+    // Standard US Letter Landscape: 11.0" x 8.5" at 300 DPI = 3300 x 2550 px.
+    // Each half-sheet is 1650 x 2550 px (5.5" x 8.5"), leaving symmetric 75 px (0.25")
+    // margins around each 1500 x 2400 px (5.0" x 8.0") page.
     const int sheetWidth = 3300;
     const int sheetHeight = 2550;
-
-    // Each half-sheet is 1650 x 2550.
-    // A 1500 x 2400 content box leaves a symmetric 75px (0.25") safe print margin
-    // on all sides and matches the exact 5:8 (2000 x 3200 @ 0.75x) page ratio.
     const double leftPageX = 75.0;
     const double rightPageX = 1725.0;
     const double pageY = 75.0;
     const double pageScale = 0.75; // 2000 * 0.75 = 1500, 3200 * 0.75 = 2400
 
     final canvas =
-        web.document.createElement('canvas') as web.HTMLCanvasElement;
+    web.document.createElement('canvas') as web.HTMLCanvasElement;
     canvas.width = sheetWidth;
     canvas.height = sheetHeight;
 
@@ -71,17 +75,17 @@ Future<bool> generateAndDownloadSpreadJpg(PrintableSpreadRequest request) async 
     ctx.fillStyle = '#FFFFFF'.toJS;
     ctx.fillRect(0, 0, sheetWidth, sheetHeight);
 
-    // 2. Subtle center fold / cut guide in the 150px center gutter (x = 1650)
+    // 2. Subtle center fold / cut guide in the 150 px center gutter (x = 1650)
     _drawCenterFoldGuides(ctx, sheetWidth, sheetHeight);
 
     // 3. Preload primary & companion images in parallel (CORS-safe)
     final primaryImgFuture = _loadCorsSafeImage(request.primaryImageUrl);
     final Future<web.HTMLImageElement?> companionImgFuture =
-        (request.companionKind == SpreadCompanionKind.fanzinePage &&
-                request.companionImageUrl != null &&
-                request.companionImageUrl!.isNotEmpty)
-            ? _loadCorsSafeImage(request.companionImageUrl)
-            : Future.value(null);
+    (request.companionKind == SpreadCompanionKind.fanzinePage &&
+        request.companionImageUrl != null &&
+        request.companionImageUrl!.isNotEmpty)
+        ? _loadCorsSafeImage(request.companionImageUrl)
+        : Future.value(null);
 
     final results = await Future.wait([primaryImgFuture, companionImgFuture]);
     final primaryImg = results[0];
@@ -89,7 +93,7 @@ Future<bool> generateAndDownloadSpreadJpg(PrintableSpreadRequest request) async 
 
     final double primaryX = request.currentPageOnLeft ? leftPageX : rightPageX;
     final double companionX =
-        request.currentPageOnLeft ? rightPageX : leftPageX;
+    request.currentPageOnLeft ? rightPageX : leftPageX;
 
     // 4. Draw Primary Page (the page the user is viewing)
     ctx.save();
@@ -144,7 +148,7 @@ Future<bool> generateAndDownloadSpreadJpg(PrintableSpreadRequest request) async 
           _drawFallbackTextPage(
             ctx,
             title:
-                '${request.fanzineTitle} · Page ${request.companionPageNumber ?? ""}',
+            '${request.fanzineTitle} · Page ${request.companionPageNumber ?? ""}',
             body: request.companionFallbackText!,
             canonicalUrl: request.canonicalUrl,
           );
@@ -205,45 +209,388 @@ Future<bool> generateAndDownloadSpreadJpg(PrintableSpreadRequest request) async 
 
     ctx.restore();
 
-    // 6. Encode as high-quality print JPEG and download via Blob URL
+    // 6. Encode as high-quality print JPEG (and wrap as US Letter 11" x 8.5" PDF if requested)
     final String dataUrl = canvas.toDataURL('image/jpeg', 0.92.toJS);
     final int commaIdx = dataUrl.indexOf(',');
     if (commaIdx == -1) return false;
 
     final Uint8List jpegBytes = base64Decode(dataUrl.substring(commaIdx + 1));
-    final blob = web.Blob(
-      [jpegBytes.toJS].toJS,
-      web.BlobPropertyBag(type: 'image/jpeg'),
+
+    final Uint8List outputBytes;
+    final String mimeType;
+    if (isPdf) {
+      // Standard US Letter Landscape: 11.0" x 8.5" at 72 PDF points per inch = 792 x 612 pt
+      outputBytes = _buildMultiPageJpegPdf(
+        sheetJpegs: [jpegBytes],
+        pixelWidth: sheetWidth,
+        pixelHeight: sheetHeight,
+        pageWidthPt: 792,
+        pageHeightPt: 612,
+      );
+      mimeType = 'application/pdf';
+    } else {
+      outputBytes = jpegBytes;
+      mimeType = 'image/jpeg';
+    }
+
+    final String downloadName = _resolveDownloadFileName(
+      request.fileName,
+      isPdf: isPdf,
     );
-    final String blobUrl = web.URL.createObjectURL(blob);
 
-    final anchor = web.document.createElement('a') as web.HTMLAnchorElement;
-    anchor.href = blobUrl;
-    anchor.download = request.fileName;
-    anchor.style.display = 'none';
-    web.document.body?.append(anchor);
-    anchor.click();
-    anchor.remove();
-
-    web.window.setTimeout(
-      (() {
-        web.URL.revokeObjectURL(blobUrl);
-      }).toJS,
-      5000.toJS,
+    _triggerBrowserBlobDownload(
+      bytes: outputBytes,
+      mimeType: mimeType,
+      fileName: downloadName,
     );
 
     return true;
   } catch (e) {
-    print('[generateAndDownloadSpreadJpg Error] $e');
+    print('[generateAndDownloadSpread Error] $e');
     return false;
   }
 }
 
+/// Generates and downloads a multi-page US Letter Landscape `11" x 8.5"` (`792 x 612 pt`)
+/// saddle-stitch imposed PDF containing the entire fanzine issue in booklet sheet order:
+/// `[24|01], [02|23], [22|03], [04|21], ..., [12|13]`.
+Future<bool> generateAndDownloadFullIssuePdf(
+    FullIssuePdfRequest request, {
+      void Function(int currentSheet, int totalSheets)? onProgress,
+    }) async {
+  try {
+    if (request.pages.isEmpty) return false;
+
+    // Standard US Letter Landscape: 11.0" x 8.5" at 300 DPI = 3300 x 2550 px
+    const int sheetWidth = 3300;
+    const int sheetHeight = 2550;
+    const double leftPageX = 75.0;
+    const double rightPageX = 1725.0;
+    const double pageY = 75.0;
+    const double pageScale = 0.75; // 2000 * 0.75 = 1500, 3200 * 0.75 = 2400
+
+    // Map 1-based page slots in sequential issue order
+    final List<FullIssueSpreadPage> orderedPages =
+    List<FullIssueSpreadPage>.from(request.pages);
+    final Map<int, FullIssueSpreadPage> pageBySlot = {};
+    for (int i = 0; i < orderedPages.length; i++) {
+      pageBySlot[i + 1] = orderedPages[i];
+    }
+
+    final List<(int?, int?)> impositionPairs =
+    buildSaddleStitchImpositionPairs(orderedPages.length);
+    if (impositionPairs.isEmpty) return false;
+
+    // Preload all unique remote page images in batches of 6
+    final Set<String> uniqueUrls = orderedPages
+        .map((p) => p.imageUrl?.trim() ?? '')
+        .where((u) => u.isNotEmpty)
+        .toSet();
+    final Map<String, web.HTMLImageElement?> loadedImages = {};
+    final List<String> urlList = uniqueUrls.toList();
+    for (int i = 0; i < urlList.length; i += 6) {
+      final batch = urlList.sublist(i, math.min(i + 6, urlList.length));
+      final loadedBatch = await Future.wait(
+        batch.map((u) => _loadCorsSafeImage(u)),
+      );
+      for (int j = 0; j < batch.length; j++) {
+        loadedImages[batch[j]] = loadedBatch[j];
+      }
+    }
+
+    // Reuse a single offscreen canvas across all sheets to minimize peak RAM
+    final canvas =
+    web.document.createElement('canvas') as web.HTMLCanvasElement;
+    canvas.width = sheetWidth;
+    canvas.height = sheetHeight;
+    final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D?;
+    if (ctx == null) return false;
+
+    final List<Uint8List> sheetJpegs = [];
+
+    for (int s = 0; s < impositionPairs.length; s++) {
+      onProgress?.call(s + 1, impositionPairs.length);
+
+      // Yield briefly to the browser event loop so progress UI can repaint
+      await Future<void>.delayed(Duration.zero);
+
+      final (int? leftSlot, int? rightSlot) = impositionPairs[s];
+
+      // 1. Crisp white paper sheet background + center fold guides
+      ctx.fillStyle = '#FFFFFF'.toJS;
+      ctx.fillRect(0, 0, sheetWidth, sheetHeight);
+      _drawCenterFoldGuides(ctx, sheetWidth, sheetHeight);
+
+      // 2. Render Left Half of Sheet
+      if (leftSlot != null && pageBySlot.containsKey(leftSlot)) {
+        _renderIssueHalfPage(
+          ctx,
+          page: pageBySlot[leftSlot]!,
+          loadedImages: loadedImages,
+          offsetX: leftPageX,
+          offsetY: pageY,
+          scale: pageScale,
+          fanzineTitle: request.fanzineTitle,
+          canonicalUrl: request.canonicalUrl,
+          calendarStartMonth: request.calendarStartMonth,
+          calendarStartYear: request.calendarStartYear,
+        );
+      }
+
+      // 3. Render Right Half of Sheet
+      if (rightSlot != null && pageBySlot.containsKey(rightSlot)) {
+        _renderIssueHalfPage(
+          ctx,
+          page: pageBySlot[rightSlot]!,
+          loadedImages: loadedImages,
+          offsetX: rightPageX,
+          offsetY: pageY,
+          scale: pageScale,
+          fanzineTitle: request.fanzineTitle,
+          canonicalUrl: request.canonicalUrl,
+          calendarStartMonth: request.calendarStartMonth,
+          calendarStartYear: request.calendarStartYear,
+        );
+      }
+
+      final String dataUrl = canvas.toDataURL('image/jpeg', 0.90.toJS);
+      final int commaIdx = dataUrl.indexOf(',');
+      if (commaIdx == -1) return false;
+      sheetJpegs.add(base64Decode(dataUrl.substring(commaIdx + 1)));
+    }
+
+    // Standard US Letter Landscape: 11.0" x 8.5" at 72 PDF points per inch = 792 x 612 pt
+    final Uint8List pdfBytes = _buildMultiPageJpegPdf(
+      sheetJpegs: sheetJpegs,
+      pixelWidth: sheetWidth,
+      pixelHeight: sheetHeight,
+      pageWidthPt: 792,
+      pageHeightPt: 612,
+    );
+
+    final String downloadName = _resolveDownloadFileName(
+      request.fileName,
+      isPdf: true,
+    );
+
+    _triggerBrowserBlobDownload(
+      bytes: pdfBytes,
+      mimeType: 'application/pdf',
+      fileName: downloadName,
+    );
+
+    return true;
+  } catch (e) {
+    print('[generateAndDownloadFullIssuePdf Error] $e');
+    return false;
+  }
+}
+
+void _renderIssueHalfPage(
+    web.CanvasRenderingContext2D ctx, {
+      required FullIssueSpreadPage page,
+      required Map<String, web.HTMLImageElement?> loadedImages,
+      required double offsetX,
+      required double offsetY,
+      required double scale,
+      required String fanzineTitle,
+      required String canonicalUrl,
+      required int calendarStartMonth,
+      required int calendarStartYear,
+    }) {
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+
+  final String? url = page.imageUrl?.trim();
+  final web.HTMLImageElement? img =
+  (url != null && url.isNotEmpty) ? loadedImages[url] : null;
+
+  if (img != null) {
+    _drawContainedPageImage(ctx, img);
+  } else if (page.templateId == 'calendar_left' ||
+      page.templateId == 'calendar_right') {
+    _drawWallCalendarPage(
+      ctx,
+      startMonth: calendarStartMonth,
+      startYear: calendarStartYear,
+      fanzineTitle: fanzineTitle,
+      pageNumber: page.pageNumber,
+      canonicalUrl: canonicalUrl,
+    );
+  } else {
+    _drawFallbackTextPage(
+      ctx,
+      title: '$fanzineTitle · Page ${page.pageNumber}',
+      body: page.fallbackText ?? '',
+      canonicalUrl: canonicalUrl,
+    );
+  }
+
+  ctx.restore();
+}
+
+void _triggerBrowserBlobDownload({
+  required Uint8List bytes,
+  required String mimeType,
+  required String fileName,
+}) {
+  final blob = web.Blob(
+    [bytes.toJS].toJS,
+    web.BlobPropertyBag(type: mimeType),
+  );
+  final String blobUrl = web.URL.createObjectURL(blob);
+
+  final anchor = web.document.createElement('a') as web.HTMLAnchorElement;
+  anchor.href = blobUrl;
+  anchor.download = fileName;
+  anchor.style.display = 'none';
+  web.document.body?.append(anchor);
+  anchor.click();
+  anchor.remove();
+
+  web.window.setTimeout(
+    (() {
+      web.URL.revokeObjectURL(blobUrl);
+    }).toJS,
+    5000.toJS,
+  );
+}
+
+/// Backwards-compatible alias for [generateAndDownloadSpread].
+Future<bool> generateAndDownloadSpreadJpg(PrintableSpreadRequest request) {
+  return generateAndDownloadSpread(request);
+}
+
+String _resolveDownloadFileName(String rawName, {required bool isPdf}) {
+  final String trimmed = rawName.trim();
+  final String lower = trimmed.toLowerCase();
+  if (isPdf) {
+    if (lower.endsWith('.jpg')) {
+      return '${trimmed.substring(0, trimmed.length - 4)}.pdf';
+    }
+    if (lower.endsWith('.jpeg')) {
+      return '${trimmed.substring(0, trimmed.length - 5)}.pdf';
+    }
+    if (!lower.endsWith('.pdf')) {
+      return '$trimmed.pdf';
+    }
+    return trimmed;
+  } else {
+    if (lower.endsWith('.pdf')) {
+      return '${trimmed.substring(0, trimmed.length - 4)}.jpg';
+    }
+    if (!lower.endsWith('.jpg') && !lower.endsWith('.jpeg')) {
+      return '$trimmed.jpg';
+    }
+    return trimmed;
+  }
+}
+
+/// Packages one or more encoded JPEG sheet buffers into a spec-compliant PDF 1.4
+/// document using `/Filter /DCTDecode` at the requested physical page size in points.
+Uint8List _buildMultiPageJpegPdf({
+  required List<Uint8List> sheetJpegs,
+  required int pixelWidth,
+  required int pixelHeight,
+  required int pageWidthPt,
+  required int pageHeightPt,
+}) {
+  final out = BytesBuilder(copy: false);
+  final List<int> objOffsets = [0]; // Index 0 unused (free object 0)
+
+  void writeAscii(String s) {
+    out.add(latin1.encode(s));
+  }
+
+  // PDF 1.4 header + binary marker comment
+  writeAscii('%PDF-1.4\n');
+  out.add(const [0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]);
+
+  // 1 0 obj: Document Catalog
+  objOffsets.add(out.length);
+  writeAscii('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+
+  // 2 0 obj: Pages Tree
+  final List<String> kidRefs = [
+    for (int i = 0; i < sheetJpegs.length; i++) '${3 + i * 3} 0 R',
+  ];
+  objOffsets.add(out.length);
+  writeAscii(
+    '2 0 obj\n'
+        '<< /Type /Pages /Kids [${kidRefs.join(' ')}] /Count ${sheetJpegs.length} >>\n'
+        'endobj\n',
+  );
+
+  // Per-sheet objects: Page (3 + 3i), Image XObject (4 + 3i), Content Stream (5 + 3i)
+  for (int i = 0; i < sheetJpegs.length; i++) {
+    final Uint8List jpegBytes = sheetJpegs[i];
+    final int pageObjNum = 3 + i * 3;
+    final int imgObjNum = 4 + i * 3;
+    final int contentObjNum = 5 + i * 3;
+
+    // Page Object
+    objOffsets.add(out.length);
+    writeAscii(
+      '$pageObjNum 0 obj\n'
+          '<< /Type /Page /Parent 2 0 R '
+          '/MediaBox [0 0 $pageWidthPt $pageHeightPt] '
+          '/Resources << /ProcSet [/PDF /ImageC] /XObject << /Im$i $imgObjNum 0 R >> >> '
+          '/Contents $contentObjNum 0 R >>\n'
+          'endobj\n',
+    );
+
+    // Embedded JPEG Image XObject
+    objOffsets.add(out.length);
+    writeAscii(
+      '$imgObjNum 0 obj\n'
+          '<< /Type /XObject /Subtype /Image '
+          '/Width $pixelWidth /Height $pixelHeight '
+          '/ColorSpace /DeviceRGB /BitsPerComponent 8 '
+          '/Filter /DCTDecode /Length ${jpegBytes.length} >>\n'
+          'stream\n',
+    );
+    out.add(jpegBytes);
+    writeAscii('\nendstream\nendobj\n');
+
+    // Content Stream scaling the spread image to fill the 792 x 612 pt page
+    final String contentStream =
+        'q\n$pageWidthPt 0 0 $pageHeightPt 0 0 cm\n/Im$i Do\nQ\n';
+    final Uint8List contentBytes = latin1.encode(contentStream);
+    objOffsets.add(out.length);
+    writeAscii(
+      '$contentObjNum 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n',
+    );
+    out.add(contentBytes);
+    writeAscii('endstream\nendobj\n');
+  }
+
+  // Cross-reference table (each entry strictly 20 bytes)
+  final int xrefOffset = out.length;
+  writeAscii('xref\n0 ${objOffsets.length}\n');
+  writeAscii('0000000000 65535 f \r\n');
+  for (int i = 1; i < objOffsets.length; i++) {
+    final String paddedOffset = objOffsets[i].toString().padLeft(10, '0');
+    writeAscii('$paddedOffset 00000 n \r\n');
+  }
+
+  // Trailer
+  writeAscii(
+    'trailer\n'
+        '<< /Size ${objOffsets.length} /Root 1 0 R >>\n'
+        'startxref\n'
+        '$xrefOffset\n'
+        '%%EOF\n',
+  );
+
+  return out.toBytes();
+}
+
 void _drawCenterFoldGuides(
-  web.CanvasRenderingContext2D ctx,
-  int sheetWidth,
-  int sheetHeight,
-) {
+    web.CanvasRenderingContext2D ctx,
+    int sheetWidth,
+    int sheetHeight,
+    ) {
   final double centerX = sheetWidth / 2.0;
   ctx.save();
 
@@ -288,9 +635,9 @@ Future<web.HTMLImageElement?> _loadCorsSafeImage(String? rawUrl) async {
   try {
     final response = await web.window
         .fetch(
-          url.toJS,
-          web.RequestInit(mode: 'cors', cache: 'reload'),
-        )
+      url.toJS,
+      web.RequestInit(mode: 'cors', cache: 'reload'),
+    )
         .toDart;
     if (response.ok) {
       final blob = await response.blob().toDart;
@@ -309,9 +656,9 @@ Future<web.HTMLImageElement?> _loadCorsSafeImage(String? rawUrl) async {
 }
 
 Future<web.HTMLImageElement?> _loadHtmlImage(
-  String src, {
-  required bool useCors,
-}) {
+    String src, {
+      required bool useCors,
+    }) {
   final completer = Completer<web.HTMLImageElement?>();
   final img = web.document.createElement('img') as web.HTMLImageElement;
   Timer? timeoutTimer;
@@ -341,9 +688,9 @@ Future<web.HTMLImageElement?> _loadHtmlImage(
 /// Draws a loaded page image inside the 2000 x 3200 half-page canvas box
 /// preserving aspect ratio (`object-fit: contain`).
 void _drawContainedPageImage(
-  web.CanvasRenderingContext2D ctx,
-  web.HTMLImageElement img,
-) {
+    web.CanvasRenderingContext2D ctx,
+    web.HTMLImageElement img,
+    ) {
   const double boxW = 2000.0;
   const double boxH = 3200.0;
 
@@ -370,13 +717,13 @@ void _drawContainedPageImage(
 
 /// Renders a 6-month Pin-Up Wall Calendar in native 2000 x 3200 space.
 void _drawWallCalendarPage(
-  web.CanvasRenderingContext2D ctx, {
-  required int startMonth,
-  required int startYear,
-  required String fanzineTitle,
-  required int pageNumber,
-  required String canonicalUrl,
-}) {
+    web.CanvasRenderingContext2D ctx, {
+      required int startMonth,
+      required int startYear,
+      required String fanzineTitle,
+      required int pageNumber,
+      required String canonicalUrl,
+    }) {
   const double w = 2000.0;
   const double h = 3200.0;
 
@@ -412,7 +759,7 @@ void _drawWallCalendarPage(
       ? 'BQOPD FANZINE'
       : fanzineTitle.trim().toUpperCase();
   final String truncTitle =
-      cleanTitle.length > 30 ? '${cleanTitle.substring(0, 28)}…' : cleanTitle;
+  cleanTitle.length > 30 ? '${cleanTitle.substring(0, 28)}…' : cleanTitle;
   ctx.textAlign = 'right';
   ctx.fillStyle = '#FFFFFF'.toJS;
   ctx.font = 'bold 30px "Arimo", "Segoe UI", Arial, sans-serif';
@@ -501,15 +848,15 @@ void _drawWallCalendarPage(
 }
 
 void _drawSingleCalendarMonthCell(
-  web.CanvasRenderingContext2D ctx, {
-  required double x,
-  required double y,
-  required double width,
-  required double height,
-  required int year,
-  required int month,
-  required DateTime today,
-}) {
+    web.CanvasRenderingContext2D ctx, {
+      required double x,
+      required double y,
+      required double width,
+      required double height,
+      required int year,
+      required int month,
+      required DateTime today,
+    }) {
   const double pad = 22.0;
   final double innerX = x + pad;
   final double innerW = width - pad * 2;
@@ -579,7 +926,7 @@ void _drawSingleCalendarMonthCell(
     final double cellTop = gridStartY + r * rowH;
 
     final bool isToday =
-        (year == today.year && month == today.month && day == today.day);
+    (year == today.year && month == today.month && day == today.day);
     if (isToday) {
       ctx.fillStyle = '#000000'.toJS;
       ctx.fillRect(cellLeft + 4, cellTop + 4, colW - 8, 42);
@@ -596,12 +943,12 @@ void _drawSingleCalendarMonthCell(
 
 /// Renders a 2-column Comments & Letters companion page in 2000 x 3200 space.
 void _drawCommentsPage(
-  web.CanvasRenderingContext2D ctx, {
-  required String fanzineTitle,
-  required int pageNumber,
-  required List<Map<String, dynamic>> comments,
-  required String canonicalUrl,
-}) {
+    web.CanvasRenderingContext2D ctx, {
+      required String fanzineTitle,
+      required int pageNumber,
+      required List<Map<String, dynamic>> comments,
+      required String canonicalUrl,
+    }) {
   const double w = 2000.0;
   const double h = 3200.0;
 
@@ -805,14 +1152,14 @@ String _resolveCommentMeta(Map<String, dynamic> c) {
 
 /// Renders a vintage Zine / BQOPD House Ad plate when no separate scanned ad is selected.
 void _drawHouseAdPage(
-  web.CanvasRenderingContext2D ctx, {
-  required String fanzineTitle,
-  String? headline,
-  String? body,
-  String? indicia,
-  required String canonicalUrl,
-  required String shortCode,
-}) {
+    web.CanvasRenderingContext2D ctx, {
+      required String fanzineTitle,
+      String? headline,
+      String? body,
+      String? indicia,
+      required String canonicalUrl,
+      required String shortCode,
+    }) {
   const double w = 2000.0;
   const double h = 3200.0;
 
@@ -838,8 +1185,8 @@ void _drawHouseAdPage(
   final String mainTitle = (headline != null && headline.trim().isNotEmpty)
       ? headline.trim().toUpperCase()
       : (fanzineTitle.trim().isNotEmpty
-            ? fanzineTitle.trim().toUpperCase()
-            : 'INDEPENDENT PRINT & DIGITAL ZINES');
+      ? fanzineTitle.trim().toUpperCase()
+      : 'INDEPENDENT PRINT & DIGITAL ZINES');
 
   ctx.fillStyle = '#0F172A'.toJS;
   final titleLines = _wrapCanvasText(
@@ -871,7 +1218,7 @@ void _drawHouseAdPage(
   final String copyText = (body != null && body.trim().isNotEmpty)
       ? body.trim()
       : 'Every page on bqopd is formatted for real half-letter saddle-stitch print spreads. '
-            'Pin this sheet to your studio wall, fold it into a pocket folio, or hand it to a fellow reader.';
+      'Pin this sheet to your studio wall, fold it into a pocket folio, or hand it to a fellow reader.';
 
   final copyLines = _wrapCanvasText(
     ctx,
@@ -933,10 +1280,10 @@ void _drawHouseAdPage(
 
 /// Renders a classic storefront "BUSINESS HOURS" door sign in native 2000 x 3200 space.
 void _drawBusinessHoursPage(
-  web.CanvasRenderingContext2D ctx, {
-  required BusinessHoursSignData? sign,
-  required String canonicalUrl,
-}) {
+    web.CanvasRenderingContext2D ctx, {
+      required BusinessHoursSignData? sign,
+      required String canonicalUrl,
+    }) {
   const double w = 2000.0;
   const double h = 3200.0;
 
@@ -996,52 +1343,52 @@ void _drawBusinessHoursPage(
   ctx.stroke();
 
   final List<BusinessHoursRowData> rows =
-      (sign != null && sign.rows.isNotEmpty)
-          ? sign.rows
-          : const [
-              BusinessHoursRowData(
-                dayLabel: 'Monday',
-                isOpen: false,
-                open: '',
-                close: '',
-              ),
-              BusinessHoursRowData(
-                dayLabel: 'Tuesday',
-                isOpen: false,
-                open: '',
-                close: '',
-              ),
-              BusinessHoursRowData(
-                dayLabel: 'Wednesday',
-                isOpen: false,
-                open: '',
-                close: '',
-              ),
-              BusinessHoursRowData(
-                dayLabel: 'Thursday',
-                isOpen: false,
-                open: '',
-                close: '',
-              ),
-              BusinessHoursRowData(
-                dayLabel: 'Friday',
-                isOpen: false,
-                open: '',
-                close: '',
-              ),
-              BusinessHoursRowData(
-                dayLabel: 'Saturday',
-                isOpen: false,
-                open: '',
-                close: '',
-              ),
-              BusinessHoursRowData(
-                dayLabel: 'Sunday',
-                isOpen: false,
-                open: '',
-                close: '',
-              ),
-            ];
+  (sign != null && sign.rows.isNotEmpty)
+      ? sign.rows
+      : const [
+    BusinessHoursRowData(
+      dayLabel: 'Monday',
+      isOpen: false,
+      open: '',
+      close: '',
+    ),
+    BusinessHoursRowData(
+      dayLabel: 'Tuesday',
+      isOpen: false,
+      open: '',
+      close: '',
+    ),
+    BusinessHoursRowData(
+      dayLabel: 'Wednesday',
+      isOpen: false,
+      open: '',
+      close: '',
+    ),
+    BusinessHoursRowData(
+      dayLabel: 'Thursday',
+      isOpen: false,
+      open: '',
+      close: '',
+    ),
+    BusinessHoursRowData(
+      dayLabel: 'Friday',
+      isOpen: false,
+      open: '',
+      close: '',
+    ),
+    BusinessHoursRowData(
+      dayLabel: 'Saturday',
+      isOpen: false,
+      open: '',
+      close: '',
+    ),
+    BusinessHoursRowData(
+      dayLabel: 'Sunday',
+      isOpen: false,
+      open: '',
+      close: '',
+    ),
+  ];
 
   const double rowHeight = 220.0;
   final double rowsBottom = headerBottom + rows.length * rowHeight;
@@ -1117,9 +1464,9 @@ void _drawBusinessHoursPage(
 
   // 1. Display Name
   final String displayName =
-      (sign != null && sign.displayName.trim().isNotEmpty)
-          ? sign.displayName.trim().toUpperCase()
-          : 'BUSINESS';
+  (sign != null && sign.displayName.trim().isNotEmpty)
+      ? sign.displayName.trim().toUpperCase()
+      : 'BUSINESS';
   final List<String> nameLines = _wrapCanvasText(
     ctx,
     displayName,
@@ -1135,7 +1482,7 @@ void _drawBusinessHoursPage(
 
   // 2. @handle
   final String cleanHandle =
-      (sign?.username ?? '').trim().replaceAll('@', '');
+  (sign?.username ?? '').trim().replaceAll('@', '');
   if (cleanHandle.isNotEmpty) {
     cursorY += 6.0;
     ctx.fillStyle = '#4338CA'.toJS;
@@ -1185,11 +1532,11 @@ void _drawBusinessHoursPage(
 
 /// Fallback renderer for text-only pages that haven't been rasterized to an image yet.
 void _drawFallbackTextPage(
-  web.CanvasRenderingContext2D ctx, {
-  required String title,
-  required String body,
-  required String canonicalUrl,
-}) {
+    web.CanvasRenderingContext2D ctx, {
+      required String title,
+      required String body,
+      required String canonicalUrl,
+    }) {
   const double w = 2000.0;
   const double h = 3200.0;
 
@@ -1254,11 +1601,11 @@ void _drawFallbackTextPage(
 }
 
 List<String> _wrapCanvasText(
-  web.CanvasRenderingContext2D ctx,
-  String text, {
-  required double maxWidth,
-  required String font,
-}) {
+    web.CanvasRenderingContext2D ctx,
+    String text, {
+      required double maxWidth,
+      required String font,
+    }) {
   ctx.font = font;
   final words = text.split(RegExp(r'\s+'));
   final List<String> lines = [];

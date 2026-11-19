@@ -5,6 +5,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr/dom.dart';
 import '../../utils/spread_image_generator.dart';
 import '../../utils/web_utils.dart';
+import '../segmented_button.dart';
 
 /// Parsed business profile entry used by the Share Panel dropdown and Hours Sign generator.
 class ShareBusinessOption {
@@ -75,7 +76,7 @@ List<String> _extractMailingAddressLines(Map<String, dynamic> data) {
     if (state.isNotEmpty) state,
   ].join(', ');
   final String cityStateZip =
-      ('$cityState${zip.isNotEmpty ? " $zip" : ""}').trim();
+  ('$cityState${zip.isNotEmpty ? " $zip" : ""}').trim();
   if (cityStateZip.isNotEmpty) {
     lines.add(cityStateZip);
   }
@@ -93,7 +94,7 @@ List<String> _extractMailingAddressLines(Map<String, dynamic> data) {
       lines.add(loc);
     } else if (data['geo'] is Map) {
       final String formatted =
-          ((data['geo'] as Map)['formatted'] ?? '').toString().trim();
+      ((data['geo'] as Map)['formatted'] ?? '').toString().trim();
       if (formatted.isNotEmpty) {
         lines.add(formatted);
       }
@@ -146,9 +147,9 @@ Future<List<ShareBusinessOption>> _loadBusinessProfiles() {
         }
 
         final String displayName =
-            (data['displayName'] ?? data['username'] ?? 'Business')
-                .toString()
-                .trim();
+        (data['displayName'] ?? data['username'] ?? 'Business')
+            .toString()
+            .trim();
         final String username = (data['username'] ?? '').toString().trim();
         final hours = parseBusinessHours(data['businessHours']);
 
@@ -164,7 +165,7 @@ Future<List<ShareBusinessOption>> _loadBusinessProfiles() {
       }
 
       businesses.sort(
-        (a, b) =>
+            (a, b) =>
             a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
       );
       if (businesses.isNotEmpty) {
@@ -327,7 +328,7 @@ List<Map<String, dynamic>> detectFanzineAdPages({
 
     final String templateId = (p['templateId'] ?? '').toString().toLowerCase();
     final String category =
-        (p['category'] ?? stats['category'] ?? '').toString().toLowerCase();
+    (p['category'] ?? stats['category'] ?? '').toString().toLowerCase();
     final bool explicitAd = p['isAd'] == true ||
         stats['isAd'] == true ||
         templateId.contains('ad') ||
@@ -350,8 +351,8 @@ List<Map<String, dynamic>> detectFanzineAdPages({
     }
 
     final String textSample =
-        '${p['text'] ?? ''} ${stats['text_corrected'] ?? stats['text'] ?? ''}'
-            .toLowerCase();
+    '${p['text'] ?? ''} ${stats['text_corrected'] ?? stats['text'] ?? ''}'
+        .toLowerCase();
     final bool textLooksLikeAd = textSample.contains('sponsor ad') ||
         textSample.contains('advertisement') ||
         textSample.contains('classifieds');
@@ -528,6 +529,8 @@ class _ShareSpreadOptionsBody extends StatefulComponent {
 }
 
 class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
+  SpreadDownloadFormat _selectedFormat = SpreadDownloadFormat.jpg;
+  bool _fullIssue = false;
   late bool _currentPageOnLeft;
   bool _copiedFeedback = true;
   Timer? _copiedTimer;
@@ -542,6 +545,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
   String? _selectedBusinessUid;
 
   String? _generatingChoiceId;
+  String? _generatingStatusText;
   String? _downloadedChoiceId;
   String? _errorMessage;
   Timer? _downloadStatusTimer;
@@ -611,7 +615,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
 
   String get _canonicalUrl {
     final String sc = (component.shortCode != null &&
-            component.shortCode!.trim().isNotEmpty)
+        component.shortCode!.trim().isNotEmpty)
         ? component.shortCode!.trim()
         : component.fanzineId;
     final int pNum =
@@ -629,11 +633,11 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
     final String imgId = (page['imageId'] ?? '').toString();
     final stats = component.preloadedImageStats[imgId];
     return (page['gridUrl'] ??
-            page['listUrl'] ??
-            page['imageUrl'] ??
-            stats?['gridUrl'] ??
-            stats?['listUrl'] ??
-            stats?['fileUrl'])
+        page['listUrl'] ??
+        page['imageUrl'] ??
+        stats?['gridUrl'] ??
+        stats?['listUrl'] ??
+        stats?['fileUrl'])
         ?.toString();
   }
 
@@ -642,12 +646,12 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
     final String imgId = (page['imageId'] ?? '').toString();
     final stats = component.preloadedImageStats[imgId];
     return (stats?['fileUrl'] ??
-            page['fileUrl'] ??
-            page['imageUrl'] ??
-            stats?['imageUrl'] ??
-            page['listUrl'] ??
-            stats?['listUrl'] ??
-            page['gridUrl'])
+        page['fileUrl'] ??
+        page['imageUrl'] ??
+        stats?['imageUrl'] ??
+        page['listUrl'] ??
+        stats?['listUrl'] ??
+        page['gridUrl'])
         ?.toString();
   }
 
@@ -734,11 +738,108 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
     });
   }
 
+  List<Map<String, dynamic>> get _orderedIssuePages {
+    final List<Map<String, dynamic>> copy =
+    List<Map<String, dynamic>>.from(component.pages);
+    copy.sort((a, b) {
+      final int aNum = (a['pageNumber'] as int?) ?? 0;
+      final int bNum = (b['pageNumber'] as int?) ?? 0;
+      if (aNum > 0 && bNum > 0) return aNum.compareTo(bNum);
+      return 0;
+    });
+    return copy;
+  }
+
+  Future<void> _handleFullIssuePdfDownload() async {
+    if (_generatingChoiceId != null) return;
+
+    final ordered = _orderedIssuePages;
+    if (ordered.isEmpty) {
+      setState(() {
+        _errorMessage = 'No pages available to export for this issue.';
+      });
+      return;
+    }
+
+    setState(() {
+      _generatingChoiceId = 'full-issue-pdf';
+      _generatingStatusText = 'Loading issue pages…';
+      _downloadedChoiceId = null;
+      _errorMessage = null;
+    });
+
+    final DateTime now = DateTime.now();
+    final int calMonth = component.startMonth ?? now.month;
+    final int calYear = component.startYear ?? now.year;
+
+    final String cleanSlug = ((component.shortCode?.isNotEmpty == true)
+        ? component.shortCode!
+        : (component.fanzineTitle ?? 'bqopd'))
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_-]'), '-')
+        .replaceAll(RegExp(r'-+'), '-');
+
+    final String fileName = '$cleanSlug-full-issue.pdf';
+
+    final List<FullIssueSpreadPage> spreadPages = [
+      for (int i = 0; i < ordered.length; i++)
+        FullIssueSpreadPage(
+          pageNumber: (ordered[i]['pageNumber'] as int?) ?? (i + 1),
+          imageUrl: _bestHighResUrl(ordered[i]),
+          fallbackText: ordered[i]['text']?.toString(),
+          templateId: ordered[i]['templateId']?.toString(),
+        ),
+    ];
+
+    final request = FullIssuePdfRequest(
+      fileName: fileName,
+      fanzineTitle: component.fanzineTitle ?? 'bqopd Fanzine',
+      canonicalUrl: _canonicalUrl,
+      shortCode: component.shortCode ?? component.fanzineId,
+      masterIndicia: component.masterIndicia,
+      pages: spreadPages,
+      calendarStartMonth: calMonth,
+      calendarStartYear: calYear,
+    );
+
+    final bool ok = await generateAndDownloadFullIssuePdf(
+      request,
+      onProgress: (currentSheet, totalSheets) {
+        if (mounted) {
+          setState(() {
+            _generatingStatusText = 'Sheet $currentSheet/$totalSheets…';
+          });
+        }
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _generatingChoiceId = null;
+      _generatingStatusText = null;
+      if (ok) {
+        _downloadedChoiceId = 'full-issue-pdf';
+      } else {
+        _errorMessage = 'Could not generate full issue PDF. Please try again.';
+      }
+    });
+
+    if (ok) {
+      _downloadStatusTimer?.cancel();
+      _downloadStatusTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() => _downloadedChoiceId = null);
+        }
+      });
+    }
+  }
+
   Future<void> _handleThumbnailClick(_ShareChoiceDescriptor choice) async {
     if (_generatingChoiceId != null) return;
 
     setState(() {
       _generatingChoiceId = choice.id;
+      _generatingStatusText = null;
       _downloadedChoiceId = null;
       _errorMessage = null;
     });
@@ -753,16 +854,18 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
     final DateTime now = DateTime.now();
     final int calMonth = component.startMonth ?? now.month;
     final int calYear = component.startYear ?? now.year;
+    final bool isPdf = _selectedFormat == SpreadDownloadFormat.pdf;
+    final String formatExt = isPdf ? 'pdf' : 'jpg';
 
     final String cleanSlug = ((component.shortCode?.isNotEmpty == true)
-            ? component.shortCode!
-            : (component.fanzineTitle ?? 'bqopd'))
+        ? component.shortCode!
+        : (component.fanzineTitle ?? 'bqopd'))
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9_-]'), '-')
         .replaceAll(RegExp(r'-+'), '-');
 
     final String fileName =
-        '$cleanSlug-p$_resolvedPageNumber-${choice.id}-spread.jpg';
+        '$cleanSlug-p$_resolvedPageNumber-${choice.id}-spread.$formatExt';
 
     final companionPage = choice.companionPage;
     final int? companionNum = companionPage != null
@@ -771,6 +874,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
 
     final request = PrintableSpreadRequest(
       fileName: fileName,
+      format: _selectedFormat,
       fanzineTitle: component.fanzineTitle ?? 'bqopd Fanzine',
       canonicalUrl: _canonicalUrl,
       shortCode: component.shortCode ?? component.fanzineId,
@@ -790,7 +894,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
       businessSign: _selectedBusiness?.toSignData(),
     );
 
-    final bool ok = await generateAndDownloadSpreadJpg(request);
+    final bool ok = await generateAndDownloadSpread(request);
 
     if (!mounted) return;
     setState(() {
@@ -798,7 +902,9 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
       if (ok) {
         _downloadedChoiceId = choice.id;
       } else {
-        _errorMessage = 'Could not generate spread JPG. Please try again.';
+        _errorMessage = isPdf
+            ? 'Could not generate spread PDF. Please try again.'
+            : 'Could not generate spread JPG. Please try again.';
       }
     });
 
@@ -881,8 +987,8 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         title: 'Page Comments',
         subtitle: _commentsLoaded
             ? (_comments.isEmpty
-                  ? 'Reader notes & reply lines'
-                  : '${_comments.length} ${_comments.length == 1 ? "comment" : "comments"} + margin notes')
+            ? 'Reader notes & reply lines'
+            : '${_comments.length} ${_comments.length == 1 ? "comment" : "comments"} + margin notes')
             : 'Comments & letters on this page',
         iconName: 'forum',
         kind: SpreadCompanionKind.pageComments,
@@ -897,6 +1003,12 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
       ),
     ];
 
+    final bool isPdf = _selectedFormat == SpreadDownloadFormat.pdf;
+    final bool isFullIssuePdf = isPdf && _fullIssue;
+    final String formatLabel = isPdf ? 'PDF' : 'JPG';
+    final String fullIssueCheckboxId =
+        'share-full-issue-${component.isCompactRow ? "row" : "col"}-${component.pageIndex}';
+
     return div(
       classes: 'flex-col w-full',
       attributes: const {
@@ -907,13 +1019,13 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         div(
           attributes: const {
             'style':
-                'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background-color: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 8px; flex-wrap: wrap;'
+            'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background-color: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 8px; flex-wrap: wrap;'
           },
           [
             div(
               attributes: const {
                 'style':
-                    'display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;'
+                'display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;'
               },
               [
                 span(
@@ -931,7 +1043,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                     div(
                       attributes: const {
                         'style':
-                            'font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: #4338CA;'
+                        'font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: #4338CA;'
                       },
                       [
                         Component.text(
@@ -944,7 +1056,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                     div(
                       attributes: const {
                         'style':
-                            'font-size: 11px; color: #312E81; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+                        'font-size: 11px; color: #312E81; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
                       },
                       [Component.text(_canonicalUrl)],
                     ),
@@ -956,7 +1068,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
               attributes: const {
                 'type': 'button',
                 'style':
-                    'padding: 5px 10px; font-size: 11px; font-weight: 700; color: #4338CA; background-color: #FFFFFF; border: 1px solid #A5B4FC; border-radius: 999px; cursor: pointer; flex-shrink: 0;'
+                'padding: 5px 10px; font-size: 11px; font-weight: 700; color: #4338CA; background-color: #FFFFFF; border: 1px solid #A5B4FC; border-radius: 999px; cursor: pointer; flex-shrink: 0;'
               },
               events: {
                 'click': (e) {
@@ -969,11 +1081,11 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
           ],
         ),
 
-        // 2. Spread Header + Left/Right Side Orientation Toggle
+        // 2. Spread Header + [JPG | PDF] Format, Full Issue Checkbox & Side Orientation Controls
         div(
           attributes: const {
             'style':
-                'display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;'
+            'display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;'
           },
           [
             div(
@@ -981,9 +1093,15 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                 div(
                   attributes: const {
                     'style':
-                        'font-size: 12px; font-weight: 800; color: #0F172A; letter-spacing: 0.3px;'
+                    'font-size: 12px; font-weight: 800; color: #0F172A; letter-spacing: 0.3px;'
                   },
-                  [Component.text('Download Printable 2-Page Spread (JPG)')],
+                  [
+                    Component.text(
+                      isFullIssuePdf
+                          ? 'Download Full Issue Booklet (PDF)'
+                          : 'Download Printable 2-Page Spread ($formatLabel)',
+                    )
+                  ],
                 ),
                 div(
                   attributes: const {
@@ -991,220 +1109,497 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                   },
                   [
                     Component.text(
-                      'Click any thumbnail to download a 300-DPI 11×8.5" sheet to print, pin up, or share.',
+                      isFullIssuePdf
+                          ? 'Saddle-stitch imposed 300-DPI 11×8.5" US Letter sheets ([24|01] … [12|13]) ready for duplex printing.'
+                          : 'Click any thumbnail to download a 300-DPI 11×8.5" US Letter $formatLabel sheet to print, pin up, or share.',
                     )
                   ],
                 ),
               ],
             ),
-            button(
+            div(
               attributes: const {
-                'type': 'button',
-                'title': 'Swap which side of the spread this page appears on',
                 'style':
-                    'display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-size: 10px; font-weight: 700; color: #334155; background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 999px; cursor: pointer;'
-              },
-              events: {
-                'click': (e) {
-                  e.stopPropagation();
-                  setState(() => _currentPageOnLeft = !_currentPageOnLeft);
-                }
+                'display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;'
               },
               [
-                span(
-                  classes: 'material-symbols-outlined',
-                  attributes: const {'style': 'font-size: 14px;'},
-                  [Component.text('swap_horiz')],
+                SegmentedButton<SpreadDownloadFormat>(
+                  segments: const [
+                    SpreadDownloadFormat.jpg,
+                    SpreadDownloadFormat.pdf,
+                  ],
+                  selected: _selectedFormat,
+                  showSelectedCheckmark: true,
+                  labelBuilder: (fmt) =>
+                  fmt == SpreadDownloadFormat.jpg ? 'JPG' : 'PDF',
+                  onSelectionChanged: (fmt) {
+                    setState(() => _selectedFormat = fmt);
+                  },
                 ),
-                Component.text(
-                  _currentPageOnLeft
-                      ? 'Page $_resolvedPageNumber on Left'
-                      : 'Page $_resolvedPageNumber on Right',
-                ),
+                if (isPdf)
+                  div(
+                    attributes: {
+                      'style':
+                      'display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid ${_fullIssue ? "#6750A4" : "#CBD5E1"}; background-color: ${_fullIssue ? "rgba(232, 222, 248, 0.45)" : "#FFFFFF"}; cursor: pointer; user-select: none;'
+                    },
+                    events: {
+                      'click': (e) {
+                        e.stopPropagation();
+                        setState(() => _fullIssue = !_fullIssue);
+                      }
+                    },
+                    [
+                      input(
+                        key: ValueKey('full-issue-cb-$_fullIssue'),
+                        type: InputType.checkbox,
+                        attributes: {
+                          'id': fullIssueCheckboxId,
+                          if (_fullIssue) 'checked': 'true',
+                          'style':
+                          'width: 14px; height: 14px; margin: 0; padding: 0; cursor: pointer; accent-color: #6750A4;',
+                        },
+                        events: {
+                          'click': (e) => e.stopPropagation(),
+                          'change': (e) {
+                            e.stopPropagation();
+                            setState(() => _fullIssue = !_fullIssue);
+                          }
+                        },
+                      ),
+                      label(
+                        attributes: {
+                          'for': fullIssueCheckboxId,
+                          'style':
+                          'font-size: 11px; font-weight: 700; color: ${_fullIssue ? "#1D192B" : "#334155"}; cursor: pointer; user-select: none; line-height: 1;',
+                        },
+                        events: {
+                          'click': (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setState(() => _fullIssue = !_fullIssue);
+                          }
+                        },
+                        [Component.text('full issue')],
+                      ),
+                    ],
+                  ),
+                if (!isFullIssuePdf)
+                  button(
+                    attributes: const {
+                      'type': 'button',
+                      'title':
+                      'Swap which side of the spread this page appears on',
+                      'style':
+                      'display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-size: 10px; font-weight: 700; color: #334155; background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 999px; cursor: pointer;'
+                    },
+                    events: {
+                      'click': (e) {
+                        e.stopPropagation();
+                        setState(
+                                () => _currentPageOnLeft = !_currentPageOnLeft);
+                      }
+                    },
+                    [
+                      span(
+                        classes: 'material-symbols-outlined',
+                        attributes: const {'style': 'font-size: 14px;'},
+                        [Component.text('swap_horiz')],
+                      ),
+                      Component.text(
+                        _currentPageOnLeft
+                            ? 'Page $_resolvedPageNumber on Left'
+                            : 'Page $_resolvedPageNumber on Right',
+                      ),
+                    ],
+                  ),
               ],
             ),
           ],
         ),
 
         // 2B. Business Selector Dropdown for the Business Hours Door Sign
-        div(
-          attributes: const {
-            'style':
-                'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; flex-wrap: wrap;'
-          },
-          [
-            div(
-              attributes: const {
-                'style': 'display: flex; align-items: center; gap: 6px;'
-              },
-              [
-                span(
-                  classes: 'material-symbols-outlined',
-                  attributes: const {
-                    'style': 'font-size: 16px; color: #334155;'
-                  },
-                  [Component.text('storefront')],
-                ),
-                span(
-                  attributes: const {
-                    'style':
-                        'font-size: 11px; font-weight: 700; color: #1E293B;'
-                  },
-                  [Component.text('Business for Hours Sign:')],
-                ),
-              ],
-            ),
-            select(
-              attributes: {
-                'style':
-                    'padding: 5px 10px; font-size: 11px; font-weight: 600; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #FFFFFF; color: #0F172A; cursor: pointer; min-width: 170px; max-width: 100%;',
-                if (_businesses.isEmpty) 'disabled': 'true',
-              },
-              events: {
-                'click': (e) => e.stopPropagation(),
-                'change': (e) {
-                  final val = getInputValue(e);
-                  if (val.isNotEmpty) {
-                    setState(() => _selectedBusinessUid = val);
-                  }
-                }
-              },
-              [
-                if (_loadingBusinesses && _businesses.isEmpty)
-                  option(
-                    attributes: const {'value': ''},
-                    [Component.text('Loading businesses…')],
-                  )
-                else if (_businesses.isEmpty)
-                  option(
-                    attributes: const {'value': ''},
-                    [Component.text('No business profiles found')],
-                  )
-                else
-                  for (final biz in _businesses)
-                    option(
-                      attributes: {
-                        'value': biz.uid,
-                        if (_selectedBusiness?.uid == biz.uid)
-                          'selected': 'selected',
-                      },
-                      [Component.text(biz.dropdownLabel)],
-                    ),
-              ],
-            ),
-          ],
-        ),
-
-        if (_errorMessage != null)
+        if (!isFullIssuePdf)
           div(
             attributes: const {
               'style':
-                  'padding: 8px 10px; font-size: 11px; font-weight: 600; color: #B91C1C; background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px;'
-            },
-            [Component.text(_errorMessage!)],
-          ),
-
-        // 3. Thumbnail Grid of 2-Page Spread Choices
-        div(
-          attributes: {
-            'style': component.isCompactRow
-                ? 'display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 12px; width: 100%;'
-                : 'display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 12px; width: 100%;'
-          },
-          [
-            for (final choice in choices) _buildSpreadThumbnailCard(choice),
-          ],
-        ),
-
-        // 4. Optional Ad / Companion Page Picker when the fanzine has multiple pages
-        if (component.pages.length > 2)
-          div(
-            attributes: const {
-              'style':
-                  'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; border-top: 1px dashed #E2E8F0; flex-wrap: wrap;'
+              'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; flex-wrap: wrap;'
             },
             [
-              span(
+              div(
                 attributes: const {
-                  'style': 'font-size: 11px; color: #64748B; font-weight: 600;'
+                  'style': 'display: flex; align-items: center; gap: 6px;'
                 },
-                [Component.text('Ad / Zine page slot:')],
+                [
+                  span(
+                    classes: 'material-symbols-outlined',
+                    attributes: const {
+                      'style': 'font-size: 16px; color: #334155;'
+                    },
+                    [Component.text('storefront')],
+                  ),
+                  span(
+                    attributes: const {
+                      'style':
+                      'font-size: 11px; font-weight: 700; color: #1E293B;'
+                    },
+                    [Component.text('Business for Hours Sign:')],
+                  ),
+                ],
               ),
               select(
-                attributes: const {
+                attributes: {
                   'style':
-                      'padding: 4px 8px; font-size: 11px; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #FFFFFF; color: #1E293B; cursor: pointer;'
+                  'padding: 5px 10px; font-size: 11px; font-weight: 600; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #FFFFFF; color: #0F172A; cursor: pointer; min-width: 170px; max-width: 100%;',
+                  if (_businesses.isEmpty) 'disabled': 'true',
                 },
                 events: {
                   'click': (e) => e.stopPropagation(),
                   'change': (e) {
                     final val = getInputValue(e);
-                    setState(() {
-                      if (val == 'house') {
-                        _customAdPageIndex = -1;
-                      } else if (val.isEmpty) {
-                        _customAdPageIndex = null;
-                      } else {
-                        _customAdPageIndex = int.tryParse(val);
-                      }
-                    });
+                    if (val.isNotEmpty) {
+                      setState(() => _selectedBusinessUid = val);
+                    }
                   }
                 },
                 [
-                  option(
-                    attributes: {
-                      'value': '',
-                      if (_customAdPageIndex == null) 'selected': 'selected',
-                    },
-                    [
-                      Component.text(
-                        adPages.isNotEmpty
-                            ? 'Auto (Page ${adPages.first['pageNumber'] ?? ''})'
-                            : 'Auto (bqopd House Ad)',
-                      )
-                    ],
-                  ),
-                  if (adPages.isNotEmpty)
+                  if (_loadingBusinesses && _businesses.isEmpty)
                     option(
-                      attributes: {
-                        'value': 'house',
-                        if (_customAdPageIndex == -1) 'selected': 'selected',
-                      },
-                      [Component.text('bqopd Vintage House Ad')],
-                    ),
-                  for (int i = 0; i < component.pages.length; i++)
-                    if (i != component.pageIndex)
+                      attributes: const {'value': ''},
+                      [Component.text('Loading businesses…')],
+                    )
+                  else if (_businesses.isEmpty)
+                    option(
+                      attributes: const {'value': ''},
+                      [Component.text('No business profiles found')],
+                    )
+                  else
+                    for (final biz in _businesses)
                       option(
                         attributes: {
-                          'value': '$i',
-                          if (_customAdPageIndex == i) 'selected': 'selected',
+                          'value': biz.uid,
+                          if (_selectedBusiness?.uid == biz.uid)
+                            'selected': 'selected',
                         },
-                        [
-                          Component.text(
-                            'Page ${component.pages[i]['pageNumber'] ?? (i + 1)} from this zine',
-                          )
-                        ],
+                        [Component.text(biz.dropdownLabel)],
                       ),
                 ],
               ),
             ],
           ),
+
+        if (_errorMessage != null)
+          div(
+            attributes: const {
+              'style':
+              'padding: 8px 10px; font-size: 11px; font-weight: 600; color: #B91C1C; background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px;'
+            },
+            [Component.text(_errorMessage!)],
+          ),
+
+        // 3. Full Issue Imposition Card OR 2-Page Spread Thumbnail Grid
+        if (isFullIssuePdf)
+          _buildFullIssuePdfCard()
+        else ...[
+          div(
+            attributes: {
+              'style': component.isCompactRow
+                  ? 'display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 12px; width: 100%;'
+                  : 'display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 12px; width: 100%;'
+            },
+            [
+              for (final choice in choices) _buildSpreadThumbnailCard(choice),
+            ],
+          ),
+
+          // 4. Optional Ad / Companion Page Picker when the fanzine has multiple pages
+          if (component.pages.length > 2)
+            div(
+              attributes: const {
+                'style':
+                'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; border-top: 1px dashed #E2E8F0; flex-wrap: wrap;'
+              },
+              [
+                span(
+                  attributes: const {
+                    'style': 'font-size: 11px; color: #64748B; font-weight: 600;'
+                  },
+                  [Component.text('Ad / Zine page slot:')],
+                ),
+                select(
+                  attributes: const {
+                    'style':
+                    'padding: 4px 8px; font-size: 11px; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #FFFFFF; color: #1E293B; cursor: pointer;'
+                  },
+                  events: {
+                    'click': (e) => e.stopPropagation(),
+                    'change': (e) {
+                      final val = getInputValue(e);
+                      setState(() {
+                        if (val == 'house') {
+                          _customAdPageIndex = -1;
+                        } else if (val.isEmpty) {
+                          _customAdPageIndex = null;
+                        } else {
+                          _customAdPageIndex = int.tryParse(val);
+                        }
+                      });
+                    }
+                  },
+                  [
+                    option(
+                      attributes: {
+                        'value': '',
+                        if (_customAdPageIndex == null) 'selected': 'selected',
+                      },
+                      [
+                        Component.text(
+                          adPages.isNotEmpty
+                              ? 'Auto (Page ${adPages.first['pageNumber'] ?? ''})'
+                              : 'Auto (bqopd House Ad)',
+                        )
+                      ],
+                    ),
+                    if (adPages.isNotEmpty)
+                      option(
+                        attributes: {
+                          'value': 'house',
+                          if (_customAdPageIndex == -1) 'selected': 'selected',
+                        },
+                        [Component.text('bqopd Vintage House Ad')],
+                      ),
+                    for (int i = 0; i < component.pages.length; i++)
+                      if (i != component.pageIndex)
+                        option(
+                          attributes: {
+                            'value': '$i',
+                            if (_customAdPageIndex == i) 'selected': 'selected',
+                          },
+                          [
+                            Component.text(
+                              'Page ${component.pages[i]['pageNumber'] ?? (i + 1)} from this zine',
+                            )
+                          ],
+                        ),
+                  ],
+                ),
+              ],
+            ),
+        ],
       ],
     );
   }
 
+  Component _buildFullIssuePdfCard() {
+    final ordered = _orderedIssuePages;
+    final int totalPages = ordered.length;
+    final List<(int?, int?)> pairs =
+    buildSaddleStitchImpositionPairs(totalPages);
+    final int sheetCount = pairs.length;
+
+    final bool isGenerating = _generatingChoiceId == 'full-issue-pdf';
+    final bool isDownloaded = _downloadedChoiceId == 'full-issue-pdf';
+
+    final (int? firstLeftSlot, int? firstRightSlot) =
+    pairs.isNotEmpty ? pairs.first : (null, null);
+
+    final Map<String, dynamic>? outerLeftPage =
+    (firstLeftSlot != null && firstLeftSlot <= ordered.length)
+        ? ordered[firstLeftSlot - 1]
+        : null;
+    final Map<String, dynamic>? outerRightPage =
+    (firstRightSlot != null && firstRightSlot <= ordered.length)
+        ? ordered[firstRightSlot - 1]
+        : null;
+
+    String formatSlotNum(int? slot) =>
+        slot == null ? '--' : slot.toString().padLeft(2, '0');
+
+    final String impositionSummary = pairs
+        .map((p) => '[${formatSlotNum(p.$1)}|${formatSlotNum(p.$2)}]')
+        .join('  ');
+
+    return button(
+      attributes: {
+        'type': 'button',
+        'title':
+        'Click to download complete $totalPages-page issue imposed onto $sheetCount 11×8.5" US Letter PDF sheets',
+        'style':
+        'display: flex; flex-direction: column; align-items: stretch; text-align: left; padding: 12px; background-color: #FFFFFF; border: ${isDownloaded ? "2px solid #16A34A" : (isGenerating ? "2px solid #6750A4" : "1px solid #CBD5E1")}; border-radius: 8px; cursor: ${isGenerating ? "wait" : "pointer"}; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06); width: 100%; box-sizing: border-box;'
+      },
+      events: {
+        'click': (e) {
+          e.stopPropagation();
+          _handleFullIssuePdfDownload();
+        }
+      },
+      [
+        // Miniature 11 x 8.5 Outer Cover Sheet Preview ([24|01])
+        div(
+          attributes: const {
+            'style':
+            'position: relative; width: 100%; max-width: 340px; margin: 0 auto; aspect-ratio: 11 / 8.5; background-color: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 4px; padding: 6px; box-sizing: border-box; display: flex; align-items: stretch; justify-content: center; overflow: hidden;'
+          },
+          [
+            div(
+              attributes: const {
+                'style':
+                'position: relative; width: 100%; height: 100%; background-color: #FFFFFF; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10); border-radius: 2px; padding: 3%; box-sizing: border-box; display: flex; flex-direction: row; gap: 3%;'
+              },
+              [
+                // Left half (e.g. Page 24 - Back Cover)
+                div(
+                  attributes: const {
+                    'style':
+                    'flex: 1; height: 100%; overflow: hidden; border: 1px solid #E2E8F0; background-color: #FFFFFF; display: flex; align-items: center; justify-content: center;'
+                  },
+                  [_buildPageMiniPreview(outerLeftPage, firstLeftSlot)],
+                ),
+                // Center fold shadow line
+                div(
+                  attributes: const {
+                    'style':
+                    'width: 1px; align-self: stretch; background: repeating-linear-gradient(to bottom, #CBD5E1 0, #CBD5E1 3px, transparent 3px, transparent 6px); flex-shrink: 0;'
+                  },
+                  [],
+                ),
+                // Right half (Page 01 - Front Cover)
+                div(
+                  attributes: const {
+                    'style':
+                    'flex: 1; height: 100%; overflow: hidden; border: 1px solid #E2E8F0; background-color: #FFFFFF; display: flex; align-items: center; justify-content: center;'
+                  },
+                  [_buildPageMiniPreview(outerRightPage, firstRightSlot)],
+                ),
+              ],
+            ),
+
+            // Status overlay when generating or downloaded
+            if (isGenerating || isDownloaded)
+              div(
+                attributes: {
+                  'style':
+                  'position: absolute; inset: 0; background-color: ${isDownloaded ? "rgba(22, 163, 74, 0.88)" : "rgba(15, 23, 42, 0.78)"}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #FFFFFF; font-size: 11px; font-weight: 800;'
+                },
+                [
+                  span(
+                    classes: 'material-symbols-outlined',
+                    attributes: const {'style': 'font-size: 24px;'},
+                    [
+                      Component.text(
+                        isDownloaded ? 'download_done' : 'downloading',
+                      )
+                    ],
+                  ),
+                  span([
+                    Component.text(
+                      isDownloaded
+                          ? 'Full Issue PDF Downloaded!'
+                          : (_generatingStatusText ?? 'Rendering Full Issue…'),
+                    )
+                  ]),
+                ],
+              ),
+          ],
+        ),
+
+        // Action & Title Row
+        div(
+          attributes: const {
+            'style':
+            'display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px;'
+          },
+          [
+            div(
+              attributes: const {'style': 'min-width: 0; flex: 1;'},
+              [
+                div(
+                  attributes: const {
+                    'style':
+                    'display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 800; color: #0F172A;'
+                  },
+                  [
+                    span(
+                      classes: 'material-symbols-outlined',
+                      attributes: const {
+                        'style': 'font-size: 16px; color: #6750A4;'
+                      },
+                      [Component.text('auto_stories')],
+                    ),
+                    span([
+                      Component.text(
+                        'Full Issue Saddle-Stitch PDF ($sheetCount ${sheetCount == 1 ? "Sheet" : "Sheets"} · $totalPages Pages)',
+                      )
+                    ]),
+                  ],
+                ),
+                div(
+                  attributes: const {
+                    'style':
+                    'font-size: 10px; font-family: monospace; color: #475569; margin-top: 4px; line-height: 1.4; word-break: break-word;'
+                  },
+                  [Component.text(impositionSummary)],
+                ),
+              ],
+            ),
+            span(
+              classes: 'material-symbols-outlined',
+              attributes: const {
+                'style':
+                'font-size: 18px; color: #FFFFFF; background-color: #6750A4; padding: 6px; border-radius: 50%; flex-shrink: 0;'
+              },
+              [Component.text('download')],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Component _buildPageMiniPreview(Map<String, dynamic>? page, int? slotNumber) {
+    if (page == null || slotNumber == null) {
+      return div(
+        attributes: const {
+          'style':
+          'padding: 4px; font-size: 8px; font-weight: 700; color: #94A3B8; text-align: center;'
+        },
+        [Component.text('BLANK')],
+      );
+    }
+    final String? thumb = _bestThumbnailUrl(page);
+    if (thumb != null && thumb.isNotEmpty) {
+      return img(
+        src: thumb,
+        attributes: const {
+          'style':
+          'width: 100%; height: 100%; object-fit: contain; display: block;',
+          'loading': 'lazy',
+        },
+      );
+    }
+    return div(
+      attributes: const {
+        'style':
+        'padding: 4px; font-size: 8px; font-weight: 700; color: #334155; text-align: center;'
+      },
+      [Component.text('PAGE ${slotNumber.toString().padLeft(2, '0')}')],
+    );
+  }
+
   Component _buildSpreadThumbnailCard(_ShareChoiceDescriptor choice) {
+    final bool isPdf = _selectedFormat == SpreadDownloadFormat.pdf;
+    final String formatLabel = isPdf ? 'PDF' : 'JPG';
+
     // Allow explicit selection of House Ad when _customAdPageIndex == -1
     final _ShareChoiceDescriptor effectiveChoice =
-        (choice.id == 'fanzine-ad' && _customAdPageIndex == -1)
-            ? const _ShareChoiceDescriptor(
-                id: 'fanzine-ad',
-                title: 'Fanzine House Ad',
-                subtitle: 'Vintage zine print ad + issue link',
-                iconName: 'campaign',
-                kind: SpreadCompanionKind.houseAd,
-              )
-            : choice;
+    (choice.id == 'fanzine-ad' && _customAdPageIndex == -1)
+        ? const _ShareChoiceDescriptor(
+      id: 'fanzine-ad',
+      title: 'Fanzine House Ad',
+      subtitle: 'Vintage zine print ad + issue link',
+      iconName: 'campaign',
+      kind: SpreadCompanionKind.houseAd,
+    )
+        : choice;
 
     final bool isGenerating = _generatingChoiceId == effectiveChoice.id;
     final bool isDownloaded = _downloadedChoiceId == effectiveChoice.id;
@@ -1214,14 +1609,14 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
 
     final Component leftHalf = _currentPageOnLeft ? primaryHalf : companionHalf;
     final Component rightHalf =
-        _currentPageOnLeft ? companionHalf : primaryHalf;
+    _currentPageOnLeft ? companionHalf : primaryHalf;
 
     return button(
       attributes: {
         'type': 'button',
-        'title': 'Click to download ${effectiveChoice.title} spread JPG',
+        'title': 'Click to download ${effectiveChoice.title} spread $formatLabel',
         'style':
-            'display: flex; flex-direction: column; align-items: stretch; text-align: left; padding: 8px; background-color: #FFFFFF; border: ${isDownloaded ? "2px solid #16A34A" : (isGenerating ? "2px solid #6750A4" : "1px solid #CBD5E1")}; border-radius: 8px; cursor: ${isGenerating ? "wait" : "pointer"}; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06); transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;'
+        'display: flex; flex-direction: column; align-items: stretch; text-align: left; padding: 8px; background-color: #FFFFFF; border: ${isDownloaded ? "2px solid #16A34A" : (isGenerating ? "2px solid #6750A4" : "1px solid #CBD5E1")}; border-radius: 8px; cursor: ${isGenerating ? "wait" : "pointer"}; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06); transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;'
       },
       events: {
         'click': (e) {
@@ -1230,24 +1625,24 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         }
       },
       [
-        // Miniature 11 x 8.5 Paper Spread Preview
+        // Miniature 11 x 8.5 US Letter Paper Spread Preview
         div(
           attributes: const {
             'style':
-                'position: relative; width: 100%; aspect-ratio: 11 / 8.5; background-color: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 4px; padding: 5px; box-sizing: border-box; display: flex; align-items: stretch; justify-content: center; overflow: hidden;'
+            'position: relative; width: 100%; aspect-ratio: 11 / 8.5; background-color: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 4px; padding: 5px; box-sizing: border-box; display: flex; align-items: stretch; justify-content: center; overflow: hidden;'
           },
           [
             div(
               attributes: const {
                 'style':
-                    'position: relative; width: 100%; height: 100%; background-color: #FFFFFF; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10); border-radius: 2px; padding: 3%; box-sizing: border-box; display: flex; flex-direction: row; gap: 3%;'
+                'position: relative; width: 100%; height: 100%; background-color: #FFFFFF; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10); border-radius: 2px; padding: 3%; box-sizing: border-box; display: flex; flex-direction: row; gap: 3%;'
               },
               [
                 // Left half
                 div(
                   attributes: const {
                     'style':
-                        'flex: 1; height: 100%; overflow: hidden; border: 1px solid #E2E8F0; background-color: #FFFFFF; display: flex; align-items: center; justify-content: center;'
+                    'flex: 1; height: 100%; overflow: hidden; border: 1px solid #E2E8F0; background-color: #FFFFFF; display: flex; align-items: center; justify-content: center;'
                   },
                   [leftHalf],
                 ),
@@ -1255,7 +1650,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                 div(
                   attributes: const {
                     'style':
-                        'width: 1px; align-self: stretch; background: repeating-linear-gradient(to bottom, #CBD5E1 0, #CBD5E1 3px, transparent 3px, transparent 6px); flex-shrink: 0;'
+                    'width: 1px; align-self: stretch; background: repeating-linear-gradient(to bottom, #CBD5E1 0, #CBD5E1 3px, transparent 3px, transparent 6px); flex-shrink: 0;'
                   },
                   [],
                 ),
@@ -1263,7 +1658,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                 div(
                   attributes: const {
                     'style':
-                        'flex: 1; height: 100%; overflow: hidden; border: 1px solid #E2E8F0; background-color: #FFFFFF; display: flex; align-items: center; justify-content: center;'
+                    'flex: 1; height: 100%; overflow: hidden; border: 1px solid #E2E8F0; background-color: #FFFFFF; display: flex; align-items: center; justify-content: center;'
                   },
                   [rightHalf],
                 ),
@@ -1275,7 +1670,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
               div(
                 attributes: {
                   'style':
-                      'position: absolute; inset: 0; background-color: ${isDownloaded ? "rgba(22, 163, 74, 0.86)" : "rgba(15, 23, 42, 0.72)"}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #FFFFFF; font-size: 11px; font-weight: 800;'
+                  'position: absolute; inset: 0; background-color: ${isDownloaded ? "rgba(22, 163, 74, 0.86)" : "rgba(15, 23, 42, 0.72)"}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #FFFFFF; font-size: 11px; font-weight: 800;'
                 },
                 [
                   span(
@@ -1289,7 +1684,9 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                   ),
                   span([
                     Component.text(
-                      isDownloaded ? 'JPG Downloaded!' : 'Rendering 300 DPI…',
+                      isDownloaded
+                          ? '$formatLabel Downloaded!'
+                          : 'Rendering 300 DPI…',
                     )
                   ]),
                 ],
@@ -1301,7 +1698,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         div(
           attributes: const {
             'style':
-                'display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px;'
+            'display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px;'
           },
           [
             div(
@@ -1310,7 +1707,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                 div(
                   attributes: const {
                     'style':
-                        'display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+                    'display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
                   },
                   [
                     span(
@@ -1323,7 +1720,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                     span(
                       attributes: const {
                         'style':
-                            'overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'
+                        'overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'
                       },
                       [Component.text(effectiveChoice.title)],
                     ),
@@ -1332,7 +1729,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                 div(
                   attributes: const {
                     'style':
-                        'font-size: 10px; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;'
+                    'font-size: 10px; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;'
                   },
                   [Component.text(effectiveChoice.subtitle)],
                 ),
@@ -1342,7 +1739,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
               classes: 'material-symbols-outlined',
               attributes: const {
                 'style':
-                    'font-size: 16px; color: #475569; background-color: #F1F5F9; padding: 4px; border-radius: 50%; flex-shrink: 0;'
+                'font-size: 16px; color: #475569; background-color: #F1F5F9; padding: 4px; border-radius: 50%; flex-shrink: 0;'
               },
               [Component.text('download')],
             ),
@@ -1359,7 +1756,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         src: thumb,
         attributes: const {
           'style':
-              'width: 100%; height: 100%; object-fit: contain; display: block;',
+          'width: 100%; height: 100%; object-fit: contain; display: block;',
           'loading': 'lazy',
         },
       );
@@ -1367,7 +1764,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
     return div(
       attributes: const {
         'style':
-            'padding: 4px; font-size: 8px; font-weight: 700; color: #334155; text-align: center;'
+        'padding: 4px; font-size: 8px; font-weight: 700; color: #334155; text-align: center;'
       },
       [Component.text('PAGE $_resolvedPageNumber')],
     );
@@ -1385,7 +1782,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
             src: thumb,
             attributes: const {
               'style':
-                  'width: 100%; height: 100%; object-fit: contain; display: block;',
+              'width: 100%; height: 100%; object-fit: contain; display: block;',
               'loading': 'lazy',
             },
           );
@@ -1394,7 +1791,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         return div(
           attributes: const {
             'style':
-                'padding: 4px; font-size: 8px; font-weight: 700; color: #334155; text-align: center;'
+            'padding: 4px; font-size: 8px; font-weight: 700; color: #334155; text-align: center;'
           },
           [Component.text('PAGE $pNum')],
         );
@@ -1403,20 +1800,20 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         return div(
           attributes: const {
             'style':
-                'width: 100%; height: 100%; box-sizing: border-box; border: 2px solid #0F172A; background-color: #FFFDF7; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center;'
+            'width: 100%; height: 100%; box-sizing: border-box; border: 2px solid #0F172A; background-color: #FFFDF7; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center;'
           },
           [
             div(
               attributes: const {
                 'style':
-                    'width: 100%; background-color: #0F172A; color: #F1B255; font-size: 6px; font-weight: 900; padding: 2px 0; letter-spacing: 0.4px;'
+                'width: 100%; background-color: #0F172A; color: #F1B255; font-size: 6px; font-weight: 900; padding: 2px 0; letter-spacing: 0.4px;'
               },
               [Component.text('★ BQOPD PRESS ★')],
             ),
             div(
               attributes: const {
                 'style':
-                    'font-size: 8px; font-weight: 900; color: #0F172A; line-height: 1.15;'
+                'font-size: 8px; font-weight: 900; color: #0F172A; line-height: 1.15;'
               },
               [
                 Component.text(
@@ -1427,7 +1824,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
             div(
               attributes: const {
                 'style':
-                    'width: 90%; border: 1px dashed #334155; padding: 2px; font-size: 6px; font-weight: 800; color: #6750A4;'
+                'width: 90%; border: 1px dashed #334155; padding: 2px; font-size: 6px; font-weight: 800; color: #6750A4;'
               },
               [Component.text('bqopd.com')],
             ),
@@ -1454,40 +1851,40 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         return div(
           attributes: const {
             'style':
-                'width: 100%; height: 100%; box-sizing: border-box; border: 1.5px solid #0F172A; background-color: #FFFFFF; display: flex; flex-direction: column;'
+            'width: 100%; height: 100%; box-sizing: border-box; border: 1.5px solid #0F172A; background-color: #FFFFFF; display: flex; flex-direction: column;'
           },
           [
             div(
               attributes: const {
                 'style':
-                    'background-color: #0F172A; color: #FFFFFF; font-size: 6px; font-weight: 900; padding: 2px 3px; text-align: left; letter-spacing: 0.3px;'
+                'background-color: #0F172A; color: #FFFFFF; font-size: 6px; font-weight: 900; padding: 2px 3px; text-align: left; letter-spacing: 0.3px;'
               },
               [Component.text('WALL CALENDAR')],
             ),
             div(
               attributes: const {
                 'style':
-                    'flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; border-bottom: 1px solid #0F172A;'
+                'flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; border-bottom: 1px solid #0F172A;'
               },
               [
                 for (int m = 0; m < 6; m++)
                   div(
                     attributes: const {
                       'style':
-                          'border: 0.5px solid #CBD5E1; padding: 2px; display: flex; flex-direction: column; justify-content: space-between;'
+                      'border: 0.5px solid #CBD5E1; padding: 2px; display: flex; flex-direction: column; justify-content: space-between;'
                     },
                     [
                       div(
                         attributes: const {
                           'style':
-                              'font-size: 5.5px; font-weight: 900; color: #0F172A;'
+                          'font-size: 5.5px; font-weight: 900; color: #0F172A;'
                         },
                         [Component.text(shortM[(sm - 1 + m) % 12])],
                       ),
                       div(
                         attributes: const {
                           'style':
-                              'flex: 1; background-image: radial-gradient(#94A3B8 0.7px, transparent 0.7px); background-size: 4px 4px; opacity: 0.75;'
+                          'flex: 1; background-image: radial-gradient(#94A3B8 0.7px, transparent 0.7px); background-size: 4px 4px; opacity: 0.75;'
                         },
                         [],
                       ),
@@ -1498,7 +1895,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
             div(
               attributes: const {
                 'style':
-                    'height: 16%; padding: 2px 3px; display: flex; flex-direction: column; justify-content: space-evenly;'
+                'height: 16%; padding: 2px 3px; display: flex; flex-direction: column; justify-content: space-evenly;'
               },
               [
                 div(
@@ -1522,33 +1919,33 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         return div(
           attributes: const {
             'style':
-                'width: 100%; height: 100%; box-sizing: border-box; border: 1.5px solid #0F172A; background-color: #FFFFFF; display: flex; flex-direction: column;'
+            'width: 100%; height: 100%; box-sizing: border-box; border: 1.5px solid #0F172A; background-color: #FFFFFF; display: flex; flex-direction: column;'
           },
           [
             div(
               attributes: const {
                 'style':
-                    'background-color: #0F172A; color: #FFFFFF; font-size: 5.5px; font-weight: 900; padding: 2px 3px; letter-spacing: 0.3px;'
+                'background-color: #0F172A; color: #FFFFFF; font-size: 5.5px; font-weight: 900; padding: 2px 3px; letter-spacing: 0.3px;'
               },
               [Component.text('COMMENTS & NOTES')],
             ),
             div(
               attributes: const {
                 'style':
-                    'flex: 1; display: flex; flex-direction: row; padding: 3px; gap: 3px;'
+                'flex: 1; display: flex; flex-direction: row; padding: 3px; gap: 3px;'
               },
               [
                 div(
                   attributes: const {
                     'style':
-                        'flex: 1; display: flex; flex-direction: column; gap: 2px;'
+                    'flex: 1; display: flex; flex-direction: column; gap: 2px;'
                   },
                   [
                     if (_comments.isNotEmpty)
                       div(
                         attributes: const {
                           'style':
-                              'font-size: 5px; line-height: 1.2; color: #1E293B; overflow: hidden; text-align: left;'
+                          'font-size: 5px; line-height: 1.2; color: #1E293B; overflow: hidden; text-align: left;'
                         },
                         [
                           Component.text(
@@ -1587,7 +1984,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                 div(
                   attributes: const {
                     'style':
-                        'flex: 1; display: flex; flex-direction: column; gap: 3px;'
+                    'flex: 1; display: flex; flex-direction: column; gap: 3px;'
                   },
                   [
                     div(
@@ -1621,20 +2018,20 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         return div(
           attributes: const {
             'style':
-                'width: 100%; height: 100%; box-sizing: border-box; border: 2px solid #0F172A; background-color: #FFFFFF; padding: 2px; display: flex; flex-direction: column; justify-content: space-between;'
+            'width: 100%; height: 100%; box-sizing: border-box; border: 2px solid #0F172A; background-color: #FFFFFF; padding: 2px; display: flex; flex-direction: column; justify-content: space-between;'
           },
           [
             div(
               attributes: const {
                 'style':
-                    'background-color: #111111; color: #FFFFFF; font-size: 5.5px; font-weight: 900; padding: 2px 1px; text-align: center; letter-spacing: 0.3px;'
+                'background-color: #111111; color: #FFFFFF; font-size: 5.5px; font-weight: 900; padding: 2px 1px; text-align: center; letter-spacing: 0.3px;'
               },
               [Component.text('BUSINESS HOURS')],
             ),
             div(
               attributes: const {
                 'style':
-                    'flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 2px 3px; border-bottom: 1px solid #0F172A;'
+                'flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 2px 3px; border-bottom: 1px solid #0F172A;'
               },
               [
                 for (int d = 0; d < kBusinessDaysOfWeek.length; d++)
@@ -1648,13 +2045,13 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
             div(
               attributes: const {
                 'style':
-                    'padding: 2px 2px 1px 2px; text-align: center; overflow: hidden;'
+                'padding: 2px 2px 1px 2px; text-align: center; overflow: hidden;'
               },
               [
                 div(
                   attributes: const {
                     'style':
-                        'font-size: 5px; font-weight: 900; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+                    'font-size: 5px; font-weight: 900; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
                   },
                   [
                     Component.text(
@@ -1666,7 +2063,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                   div(
                     attributes: const {
                       'style':
-                          'font-size: 4.2px; font-weight: 700; color: #4338CA; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+                      'font-size: 4.2px; font-weight: 700; color: #4338CA; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
                     },
                     [
                       Component.text(
@@ -1678,7 +2075,7 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
                   div(
                     attributes: const {
                       'style':
-                          'font-size: 4px; font-weight: 600; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+                      'font-size: 4px; font-weight: 600; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
                     },
                     [Component.text(biz.addressLines.first)],
                   ),
@@ -1691,13 +2088,13 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
 
   Component _buildMiniBusinessDayRow(String shortDay, BusinessDayHours dh) {
     final String openStr =
-        dh.isOpen ? (dh.open.isNotEmpty ? dh.open : 'Open') : 'CLOSED';
+    dh.isOpen ? (dh.open.isNotEmpty ? dh.open : 'Open') : 'CLOSED';
     final String closeStr =
-        dh.isOpen ? (dh.close.isNotEmpty ? dh.close : '—') : '—';
+    dh.isOpen ? (dh.close.isNotEmpty ? dh.close : '—') : '—';
     return div(
       attributes: const {
         'style':
-            'display: grid; grid-template-columns: 1.1fr 1fr 1fr; align-items: center; font-size: 4.2px; line-height: 1;'
+        'display: grid; grid-template-columns: 1.1fr 1fr 1fr; align-items: center; font-size: 4.2px; line-height: 1;'
       },
       [
         span(
@@ -1709,14 +2106,14 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
         span(
           attributes: {
             'style':
-                'color: ${dh.isOpen ? "#0F172A" : "#94A3B8"}; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden;'
+            'color: ${dh.isOpen ? "#0F172A" : "#94A3B8"}; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden;'
           },
           [Component.text(openStr)],
         ),
         span(
           attributes: {
             'style':
-                'color: ${dh.isOpen ? "#0F172A" : "#94A3B8"}; font-weight: 700; text-align: right; white-space: nowrap; overflow: hidden;'
+            'color: ${dh.isOpen ? "#0F172A" : "#94A3B8"}; font-weight: 700; text-align: right; white-space: nowrap; overflow: hidden;'
           },
           [Component.text(closeStr)],
         ),
@@ -1724,4 +2121,3 @@ class _ShareSpreadOptionsBodyState extends State<_ShareSpreadOptionsBody> {
     );
   }
 }
-
